@@ -71,7 +71,7 @@ export function buildPayoutScheduleInfo(
   const y = from.getFullYear();
   const m = from.getMonth();
   const day = from.getDate();
-  const target = day < 10 ? new Date(y, m, 10) : new Date(y, m + 1, 10);
+  const target = day < 23 ? new Date(y, m, 23) : new Date(y, m + 1, 23);
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const progress = Math.min(100, Math.round((day / daysInMonth) * 100));
 
