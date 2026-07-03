@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getMentorUserPublic } from "@/lib/auth/mentorPublicRead";
 import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
 import { fetchThreadsForRooms } from "@/lib/qna/questionRoomQueries";
 import { readQuestionThreadWorkflowStatus } from "@/lib/qna/questionThreadStatus";
@@ -18,18 +17,23 @@ export async function loadStudentDisplaysForQuestionRooms(
     const sid = partyUserIdFromRoomRow(r, "student");
     if (sid) ids.add(sid);
   }
-
   const out: StudentDisplayById = {};
-  await Promise.all(
-    [...ids].map(async (id) => {
-      const userQ = await getMentorUserPublic(supabase, id);
+  const idList = [...ids];
+  if (idList.length === 0) return out;
+  try {
+    const { data } = await supabase.rpc("get_mentor_student_nicknames", { p_student_ids: idList });
+    const rows = (data as Row[]) ?? [];
+    for (const id of idList) {
+      const row = rows.find((u) => u.id === id);
       const name =
-        (userQ.data?.full_name && userQ.data.full_name.trim()) ||
-        (userQ.data?.nickname && userQ.data.nickname.trim()) ||
+        (row && typeof row.full_name === "string" && row.full_name.trim()) ||
+        (row && typeof row.nickname === "string" && row.nickname.trim()) ||
         "이름 미설정";
       out[id] = { displayName: name, initial: name.slice(0, 1) };
-    })
-  );
+    }
+  } catch {
+    for (const id of idList) out[id] = { displayName: "이름 미설정", initial: "?" };
+  }
   return out;
 }
 
