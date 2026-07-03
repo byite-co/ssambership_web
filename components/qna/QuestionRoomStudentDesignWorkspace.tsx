@@ -6,6 +6,7 @@ import { useFormStatus } from "react-dom";
 import { ConnectionNotesPanel } from "@/components/qna/ConnectionNotesPanel";
 import { listCardClassName, type ListCardTone } from "@/components/design-system/ListCard";
 import {
+  AlertTriangle,
   ArrowLeft,
   BadgeCheck,
   ChevronLeft,
@@ -628,11 +629,17 @@ export function QuestionRoomStudentDesignWorkspace(props: {
                 {/* 오답 표시 체크박스는 화면에서 숨김(데이터/API는 보존 — 추후 멘토용 기능으로 활용).
                     QuestionThreadWrongAnswerToggle / is_wrong_answer 컬럼·라우트는 그대로 둠. */}
                 {props.threadId && threadWorkflow === "answered" ? (
-                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2">
-                    <span className="text-[11px] font-bold text-slate-600">
-                      멘토 답변이 도착했어요. 확인하면 완료로 표시돼요.
-                    </span>
-                    <QuestionThreadConfirmButton roomId={props.roomId} threadId={props.threadId} compact />
+                  <div className="mt-3 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-200 bg-slate-50/70 px-3 py-2">
+                      <span className="text-[11px] font-bold text-slate-900">
+                        멘토 답변이 도착했어요. 확인하면 완료로 표시돼요.
+                      </span>
+                      <QuestionThreadConfirmButton roomId={props.roomId} threadId={props.threadId} compact />
+                    </div>
+                    <p className="flex items-start gap-1.5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-[11px] font-extrabold leading-relaxed text-amber-900">
+                      <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                      <span>답변이 완전히 이해된 뒤에 <span className="font-black">“답변 확인 완료”</span>를 눌러 주세요. 확인 완료 후에는 이 질문에서 <span className="font-black">더 이상 대화를 이어갈 수 없어요.</span></span>
+                    </p>
                   </div>
                 ) : props.threadId && threadWorkflow === "confirmed" ? (
                   <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-[11px] font-bold text-emerald-800">
