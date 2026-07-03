@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchMentorProfileForPublicMentor } from "@/lib/auth/mentorPublicRead";
 
 export const MENTOR_ACTIVITY_APPROVED_STATUSES = new Set(["approved", "verified", "active"]);
 
@@ -11,11 +12,7 @@ export async function assertMentorApprovedForAction(
   supabase: SupabaseClient,
   mentorId: string
 ): Promise<{ ok: true; status: string } | { ok: false; status: string | null; error: string }> {
-  const { data, error } = await supabase
-    .from("mentor_profiles")
-    .select("verification_status")
-    .eq("user_id", mentorId)
-    .maybeSingle();
+  const { row: data, error } = await fetchMentorProfileForPublicMentor(supabase, mentorId);
 
   if (error || !data) {
     return {
