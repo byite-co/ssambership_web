@@ -5,9 +5,8 @@ import {
   getSubscribeCatalogPlan,
 } from "@/lib/subscribe/subscribePlanCatalog";
 import { mentorPlanCashKrw } from "@/lib/subscribe/mentorPlanPricing";
-import { getMentorUserPublic } from "@/lib/auth/mentorPublicRead";
+import { getMentorUserPublic, fetchMentorProfileForPublicMentor } from "@/lib/auth/mentorPublicRead";
 import { buildMentorProfileDisplay, type MentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
-import { fetchMentorProfileRow } from "@/lib/mentor/mentorProfileQueries";
 import { fetchPlansForMentor, type MentorPlansLoad } from "@/lib/mentor/publicMentorBundle";
 import { getStringField, pickExistingColumn } from "@/lib/qna/safeSelect";
 import {
@@ -292,7 +291,7 @@ export async function loadStudentSubscribePage(
   }
 
   const [{ row: profileRow, error: profileError }, plans, promotions, subscription, payment] = await Promise.all([
-    fetchMentorProfileRow(supabase, mentorId),
+    fetchMentorProfileForPublicMentor(supabase, mentorId),
     fetchPlansForMentor(supabase, mentorId),
     fetchPromotionsProbe(supabase),
     fetchSubscriptionForPair(supabase, args.studentId, mentorId),

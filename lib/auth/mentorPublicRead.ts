@@ -17,6 +17,8 @@ export type PublicMentorProfileRow = {
   verified_major_category: string | null;
   school_tier: string | null;
   school_verified: boolean;
+  high_school_name: string | null;
+  profile_image_url: string | null;
   [key: string]: unknown;
 };
 
@@ -62,6 +64,8 @@ function mapRpcProfileRow(row: Record<string, unknown>): PublicMentorProfileRow 
     verified_major_category: (row.verified_major_category as string | null) ?? null,
     school_tier: (row.school_tier as string | null) ?? null,
     school_verified: Boolean(row.school_verified),
+    high_school_name: (row.high_school_name as string | null) ?? null,
+    profile_image_url: (row.profile_image_url as string | null) ?? null,
   };
 }
 
