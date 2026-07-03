@@ -13,6 +13,35 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  // 모듈 경계 규칙 (모듈 등기부: docs/architecture/modules.md §5–6)
+  // 개발 중 즉시 피드백용 warn — 기계 강제는 dependency-cruiser(Phase 2)가 담당.
+  {
+    name: "module-boundaries",
+    files: ["app/**/*.{ts,tsx}", "components/**/*.{ts,tsx}", "lib/**/*.{ts,tsx}"],
+    ignores: ["components/qna/FormSubmitButton.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "warn",
+        {
+          paths: [
+            {
+              name: "@/components/qna/FormSubmitButton",
+              importNames: ["FormSubmitButton"],
+              message:
+                "구경로 심(deprecated)입니다. @/components/common/FormSubmitButton 에서 import하세요.",
+            },
+          ],
+          patterns: [
+            {
+              group: ["@/lib/*/internal/*", "@/components/*/internal/*"],
+              message:
+                "타 모듈의 internal/ 딥 import는 금지입니다. 모듈 공개 표면(폴더 최상위 파일)을 사용하세요.",
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]);
 
 export default eslintConfig;

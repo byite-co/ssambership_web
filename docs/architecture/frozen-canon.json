@@ -1,0 +1,37 @@
+{
+  "$comment": "모듈화 기획서 §3(정본 계약 동결)·§4(정합 대기 구역)의 기계 검사용 목록. scripts/check-frozen-canon.mjs 가 경로 실존을 검증한다. frozen = 이동·분할·개명 전면 금지(앱 정합 문서가 경로·라인 참조). quarantine = 기획-코드 정합 작업 또는 feature/payout-postpaid 브랜치가 변경 예정 — 모듈화 PR에서 수정 금지.",
+  "frozen": [
+    "lib/subjects/subjectCatalog.ts",
+    "lib/qna/questionSubjects.ts",
+    "lib/community/communityBoardConstants.ts",
+    "lib/customRequest/orderLifecycleConstants.ts",
+    "lib/qna/weeklyQuestionUsage.ts",
+    "lib/qna/questionRoomThreadService.ts",
+    "lib/qna/questionThreadSubscriptionGuard.ts",
+    "lib/notifications/notificationDeepLink.ts",
+    "components/notifications/notificationTypeIcon.ts",
+    "components/qna/QuestionRoomStudentThreadForm.tsx",
+    "lib/reviews/checkReviewEligibility.ts",
+    "lib/shell/featureFlags.ts",
+    "lib/customRequest/bannedPhrases.ts"
+  ],
+  "frozenDirs": ["supabase/sql"],
+  "quarantine": [
+    "lib/mentor/mentorPayoutsService.ts",
+    "lib/mentor/mentorPayoutsQueries.ts",
+    "lib/mentor/mentorPayoutsDisplay.ts",
+    "lib/mentor/subscriptionSettlementItems.ts",
+    "lib/customRequest/orderSettlementService.ts",
+    "lib/subscribe/subscribeCheckoutService.ts",
+    "lib/subscribe/subscriptionRenewalBatch.ts",
+    "lib/mentor/publicMentorsListQueries.ts",
+    "lib/mentor/dashboard/mentorHubDashboardQueries.ts",
+    "lib/admin/refundActions.ts",
+    "lib/auth/minorConsentPlaceholders.ts"
+  ],
+  "quarantineDirs": ["app/(student)/support/reports"],
+  "quarantineNotes": {
+    "lib/mentor/mentorPayoutsDisplay.ts": "feature/payout-postpaid 브랜치의 즉시 충돌 파일(merge-base 대비 실변경 TS 1건)",
+    "lib/mentor/publicMentorsListQueries.ts": "avg_rating 갱신 트리거 신설(정합 작업) 이후에만 분할 가능"
+  }
+}
