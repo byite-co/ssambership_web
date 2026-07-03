@@ -42,6 +42,15 @@ export function readThreadLifecycleStatus(thread: Row | null | undefined): "open
   return "open";
 }
 
+/** 완료(학생 확인=confirmed) 또는 종료(closed/archived) 스레드는 더 이상 메시지를 보낼 수 없다. */
+export function isQuestionThreadLockedForMessages(thread: Row | null | undefined): boolean {
+  if (!thread) return false;
+  const workflow = readQuestionThreadWorkflowStatus(thread);
+  if (workflow === "confirmed") return true; // 학생 확인 완료 = 종료
+  const life = readThreadLifecycleStatus(thread);
+  return life === "closed" || life === "archived";
+}
+
 export function listFilterTabAndChip(
   variant: "student" | "mentor",
   room: Row,

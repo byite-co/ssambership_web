@@ -29,6 +29,7 @@ import {
 } from "@/lib/qna/formatQuestionRoomDisplay";
 import type { QuestionRoomListPreview } from "@/lib/qna/questionRoomQueries";
 import { readQuestionThreadWorkflowStatus } from "@/lib/qna/questionThreadStatus";
+import { isQuestionThreadLockedForMessages } from "@/lib/qna/questionRoomUiLabels";
 import {
   studentLabelForRoom,
   type StudentDisplayById,
@@ -226,6 +227,7 @@ export function QuestionRoomMentorDesignWorkspace(props: {
   const selectedThreadWorkflow = selectedThread
     ? readQuestionThreadWorkflowStatus(selectedThread)
     : ("pending" as const);
+  const selectedThreadLocked = isQuestionThreadLockedForMessages(selectedThread);
 
   /* 연결 노트 패널 (공용 컴포넌트 — 멘토/학생 통합) */
   /* 학생 구독 요금제·이번 주 잔여 질문 카드 (읽기 전용, 멘토 중앙 헤더 상주) */
@@ -336,25 +338,31 @@ export function QuestionRoomMentorDesignWorkspace(props: {
       </div>
 
       <div className="shrink-0 border-t border-slate-200 bg-white p-3">
-        <form key={`mentor-chat-${props.threadId ?? "x"}-${rev}`} action={sendQuestionMessageAction}>
-          <div className="flex items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
-            <QuestionRoomAttachmentButton roomId={props.roomId} threadId={props.threadId} actor="mentor" />
-            <textarea
-              name="messageBody"
-              required
-              disabled={!props.threadId}
-              defaultValue={props.draftMessageBody ?? ""}
-              rows={3}
-              placeholder={props.threadId ? "답변을 입력하세요..." : "질문을 먼저 선택해 주세요"}
-              className="min-h-[52px] flex-1 resize-none bg-transparent text-[12px] font-medium outline-none disabled:opacity-50"
-            />
-            {props.threadId ? <input type="hidden" name="threadId" value={props.threadId} /> : null}
-            <input type="hidden" name="roomId" value={props.roomId} />
-            <input type="hidden" name="actor" value="mentor" />
-            <input type="hidden" name="contextThreadId" value={props.threadId ?? ""} />
-            <ChatSendButton disabled={!props.threadId} />
-          </div>
-        </form>
+        {selectedThreadLocked ? (
+          <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-[12px] font-bold text-slate-500">
+            완료된 질문이에요. 새 질문을 작성해 주세요.
+          </p>
+        ) : (
+          <form key={`mentor-chat-${props.threadId ?? "x"}-${rev}`} action={sendQuestionMessageAction}>
+            <div className="flex items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+              <QuestionRoomAttachmentButton roomId={props.roomId} threadId={props.threadId} actor="mentor" />
+              <textarea
+                name="messageBody"
+                required
+                disabled={!props.threadId || selectedThreadLocked}
+                defaultValue={props.draftMessageBody ?? ""}
+                rows={3}
+                placeholder={props.threadId ? "답변을 입력하세요..." : "질문을 먼저 선택해 주세요"}
+                className="min-h-[52px] flex-1 resize-none bg-transparent text-[12px] font-medium outline-none disabled:opacity-50"
+              />
+              {props.threadId ? <input type="hidden" name="threadId" value={props.threadId} /> : null}
+              <input type="hidden" name="roomId" value={props.roomId} />
+              <input type="hidden" name="actor" value="mentor" />
+              <input type="hidden" name="contextThreadId" value={props.threadId ?? ""} />
+              <ChatSendButton disabled={!props.threadId || selectedThreadLocked} />
+            </div>
+          </form>
+        )}
       </div>
       {mobileNotesPanel}
     </main>

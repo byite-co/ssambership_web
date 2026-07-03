@@ -38,7 +38,7 @@ import {
 } from "@/lib/qna/formatQuestionRoomDisplay";
 import type { QuestionRoomSubscriptionContext } from "@/lib/qna/questionRoomStudentContext";
 import type { QuestionRoomListPreview } from "@/lib/qna/questionRoomQueries";
-import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
+import { partyUserIdFromRoomRow, isQuestionThreadLockedForMessages } from "@/lib/qna/questionRoomUiLabels";
 import { readQuestionThreadWorkflowStatus } from "@/lib/qna/questionThreadStatus";
 import {
   mentorDisplayForRoom,
@@ -258,6 +258,7 @@ export function QuestionRoomStudentDesignWorkspace(props: {
   const threadWorkflow = selectedThread
     ? readQuestionThreadWorkflowStatus(selectedThread)
     : ("pending" as const);
+  const threadLocked = isQuestionThreadLockedForMessages(selectedThread);
 
   const subjectChipsRoom = roomSubjectChips(currentRoom ?? {}, props.mentorDisplays, 4);
 
@@ -642,25 +643,31 @@ export function QuestionRoomStudentDesignWorkspace(props: {
               </div>
 
               <div className="shrink-0 border-t border-slate-200 bg-white p-3">
-                <form key={`chat-center-${props.threadId ?? "x"}-${rev}`} action={sendQuestionMessageAction}>
-                  <div className="flex items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
-                    <QuestionRoomAttachmentButton roomId={props.roomId} threadId={props.threadId} actor="student" />
-                    <textarea
-                      name="messageBody"
-                      required
-                      disabled={!props.threadId}
-                      defaultValue={props.draftMessageBody ?? ""}
-                      rows={2}
-                      placeholder={props.threadId ? "질문을 입력하세요..." : "질문을 먼저 선택해 주세요"}
-                      className="min-h-[44px] flex-1 resize-none bg-transparent text-[12px] font-medium outline-none disabled:opacity-50"
-                    />
-                    {props.threadId ? <input type="hidden" name="threadId" value={props.threadId} /> : null}
-                    <input type="hidden" name="roomId" value={props.roomId} />
-                    <input type="hidden" name="actor" value="student" />
-                    <input type="hidden" name="contextThreadId" value={props.threadId ?? ""} />
-                    <ChatSendButton disabled={!props.threadId} />
-                  </div>
-                </form>
+                {threadLocked ? (
+                  <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-[12px] font-bold text-slate-500">
+                    완료된 질문이에요. 새 질문을 작성해 주세요.
+                  </p>
+                ) : (
+                  <form key={`chat-center-${props.threadId ?? "x"}-${rev}`} action={sendQuestionMessageAction}>
+                    <div className="flex items-end gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2">
+                      <QuestionRoomAttachmentButton roomId={props.roomId} threadId={props.threadId} actor="student" />
+                      <textarea
+                        name="messageBody"
+                        required
+                        disabled={!props.threadId || threadLocked}
+                        defaultValue={props.draftMessageBody ?? ""}
+                        rows={2}
+                        placeholder={props.threadId ? "질문을 입력하세요..." : "질문을 먼저 선택해 주세요"}
+                        className="min-h-[44px] flex-1 resize-none bg-transparent text-[12px] font-medium outline-none disabled:opacity-50"
+                      />
+                      {props.threadId ? <input type="hidden" name="threadId" value={props.threadId} /> : null}
+                      <input type="hidden" name="roomId" value={props.roomId} />
+                      <input type="hidden" name="actor" value="student" />
+                      <input type="hidden" name="contextThreadId" value={props.threadId ?? ""} />
+                      <ChatSendButton disabled={!props.threadId || threadLocked} />
+                    </div>
+                  </form>
+                )}
               </div>
               </>
             ) : (

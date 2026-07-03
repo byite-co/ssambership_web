@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { draftToParam } from "@/lib/qna/draftQuery";
 import { QUESTION_THREADS_ROOM_FK_CANDIDATES, threadRowBelongsToMentorStudentRoom } from "@/lib/qna/questionThreadRoomRef";
 import { userMatchesMentorInRoomRow, userMatchesStudentInRoomRow } from "@/lib/qna/questionRoomQueries";
+import { isQuestionThreadLockedForMessages } from "@/lib/qna/questionRoomUiLabels";
 import { assertThreadCreationSubscriptionAllowed } from "@/lib/qna/questionThreadSubscriptionGuard";
 import { assertConnectionNoteWriteAllowed } from "@/lib/qna/connectionNoteSubscriptionGuard";
 import { assertMentorApprovedForAction } from "@/lib/mentor/mentorVerificationGate";
@@ -148,6 +149,26 @@ async function assertThreadBelongsToRoom(
       roomFkSnapshot,
     });
     return "이 thread는 현재 room에 속하지 않습니다.";
+  }
+  return null;
+}
+
+/** 완료(confirmed)·종료(closed/archived) 스레드에는 메시지 전송을 거절. 조회 실패 시엔 막지 않음(fail-open). */
+async function assertThreadNotLockedForMessages(
+  supabase: SupabaseClient,
+  threadId: string
+): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("question_threads")
+    .select("*")
+    .eq("id", threadId)
+    .maybeSingle();
+  if (error) {
+    console.error("[assertThreadNotLockedForMessages] question_threads select", { threadId, code: error.code, message: error.message });
+    return null;
+  }
+  if (data && isQuestionThreadLockedForMessages(data as Record<string, unknown>)) {
+    return "완료된 질문에는 더 이상 메시지를 보낼 수 없어요. 새 질문을 작성해 주세요.";
   }
   return null;
 }
@@ -310,6 +331,17 @@ export async function createQuestionMessageAction(formData: FormData) {
         })
       );
     }
+    const lockErr = await assertThreadNotLockedForMessages(supabase, threadId);
+    if (lockErr) {
+      redirect(
+        buildRedirectUrl(roomId, actor, {
+          thread: fallbackThread,
+          kind: "message",
+          error: lockErr,
+          draftMessage: content,
+        })
+      );
+    }
   }
 
   const result = await createQuestionMessage({
@@ -430,6 +462,12 @@ export async function sendQuestionAttachmentAction(formData: FormData) {
   if (tErr) {
     redirect(
       buildRedirectUrl(roomId, actor, { thread: fallbackThread, kind: "message", error: userFacingActionError("message", tErr) })
+    );
+  }
+  const lockErr = await assertThreadNotLockedForMessages(supabase, threadId);
+  if (lockErr) {
+    redirect(
+      buildRedirectUrl(roomId, actor, { thread: fallbackThread, kind: "message", error: lockErr })
     );
   }
 
