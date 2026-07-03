@@ -136,7 +136,7 @@ export default async function NewOpenIndividualQuestionPage(props: PageProps) {
               inputMode="numeric"
               required
               min={1}
-              step={100}
+              step={1}
               placeholder={String(OPEN_INDIVIDUAL_QUESTION_PRICE_PLACEHOLDER_CASH)}
               className="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
             />
