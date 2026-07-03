@@ -3,9 +3,9 @@ import "@/app/(public)/custom-request/landing.css";
 import {
   IndividualQuestionListCards,
   MentorIndividualQuestionSummaryStrip,
-  OpenIndividualQuestionBrowseCards,
 } from "@/components/individualQuestion/IndividualQuestionViews";
 import { MentorOwnedIndividualQuestionsSection } from "@/components/individualQuestion/MentorOwnedIndividualQuestionsSection";
+import { OpenQuestionBoard } from "@/components/individualQuestion/OpenQuestionBoard";
 import { requireRole } from "@/lib/auth/routeGuard";
 import {
   fetchMentorOwnedIndividualQuestions,
@@ -116,16 +116,9 @@ export default async function MentorIndividualQuestionsPage(props: PageProps) {
         <hr className="cr-detail-divider" />
 
         <section>
-          <div className="mb-4">
-            <h2 className="cr-section-title-v5">
-              <span className="bar" aria-hidden />
-              공개 질문 답변하기
-            </h2>
-            <p className="mt-1 text-sm text-slate-500">
-              학생 신원과 본문은 답변을 맡기 전에는 공개되지 않습니다. 먼저 답변하기를 누른 멘토 1명만 답변할 수 있어요.
-            </p>
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50/40 p-4 sm:p-6">
+            <OpenQuestionBoard rows={openList.rows} error={openList.error} />
           </div>
-          <OpenIndividualQuestionBrowseCards rows={openList.rows} error={openList.error} />
         </section>
       </article>
     </div>
