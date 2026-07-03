@@ -158,21 +158,17 @@ async function updateMentorSubscriptionPrices(
  */
 async function updateMentorIndividualQuestionPrice(
   supabase: SupabaseClient,
-  mentorId: string,
-  priceCash: number | null | undefined,
-  now: string
+  priceCash: number | null | undefined
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (priceCash == null) return { ok: true };
   if (!Number.isFinite(priceCash) || priceCash <= 0) {
     return { ok: false, error: "개별 질문 답변 단가는 1캐시 이상 숫자로 입력해 주세요." };
   }
-  // 입력은 캐시(=원). 정규 cents(=캐시×100)로 저장 — 구독 헬퍼 재사용으로 규약 일원화.
-  const { error } = await supabase
-    .from("mentor_individual_question_pricing")
-    .upsert(
-      { mentor_id: mentorId, amount_cents: amountCentsFromCashKrw(priceCash), updated_at: now },
-      { onConflict: "mentor_id" }
-    );
+  // mentor_individual_question_pricing 은 SELECT 전용 RLS라 직접 upsert 가 거부된다.
+  // SECURITY DEFINER RPC set_individual_question_price 로 본인(auth.uid()) 단가만 upsert.
+  const { error } = await supabase.rpc("set_individual_question_price", {
+    p_amount_cents: amountCentsFromCashKrw(priceCash),
+  });
   if (error) return { ok: false, error: error.message };
   return { ok: true };
 }
@@ -280,9 +276,7 @@ export async function updateMentorProfile(
 
   const iqPriceUpdate = await updateMentorIndividualQuestionPrice(
     supabase,
-    input.userId,
-    input.individualQuestionPriceCash,
-    now
+    input.individualQuestionPriceCash
   );
   if (!iqPriceUpdate.ok) return iqPriceUpdate;
 
