@@ -218,14 +218,21 @@ export async function updateMentorProfile(
     .select("user_id")
     .eq("user_id", input.userId)
     .maybeSingle();
-  if (!existingProfile) {
+  if (existingProfile) {
+    // 기존 행: UPDATE만 — university_name·department_name(학적 잠금·NOT NULL)은 건드리지 않는다.
+    // upsert(INSERT ... ON CONFLICT)는 INSERT 튜플에 NOT NULL 컬럼을 요구해 23502로 실패하므로 update 사용.
+    const { error: upErr } = await supabase.from("mentor_profiles").update(core).eq("user_id", input.userId);
+    if (upErr) {
+      return { ok: false, error: upErr.message };
+    }
+  } else {
+    // 신규 행(비정상 계정): NOT NULL 컬럼을 현재 표시값으로 채워 최초 INSERT 성립.
     core.university_name = input.university?.trim() || "";
     core.department_name = input.department?.trim() || "";
-  }
-
-  const { error: upErr } = await supabase.from("mentor_profiles").upsert(core, { onConflict: "user_id" });
-  if (upErr) {
-    return { ok: false, error: upErr.message };
+    const { error: insErr } = await supabase.from("mentor_profiles").insert(core);
+    if (insErr) {
+      return { ok: false, error: insErr.message };
+    }
   }
 
   // 프로필 사진: 새 URL이 있을 때만 갱신. core upsert와 분리해 컬럼 부재(SQL 미적용)
