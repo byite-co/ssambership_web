@@ -89,6 +89,7 @@ app/(public)/custom-request/orders/[orderId]/review/page.tsx
 app/(public)/custom-request/orders/page.tsx
 app/(public)/custom-request/page.tsx
 app/(public)/forgot-password/page.tsx
+app/(public)/goodbye/page.tsx
 app/(public)/layout.tsx
 app/(public)/legal/community-guidelines/page.tsx
 app/(public)/legal/copyright/page.tsx
@@ -110,6 +111,7 @@ app/(public)/notifications/page.tsx
 app/(public)/payments/page.tsx
 app/(public)/pricing/page.tsx
 app/(public)/support/page.tsx
+app/(student)/account/delete/page.tsx
 app/(student)/cash-history/page.tsx
 app/(student)/custom-request/[postId]/applications/loading.tsx
 app/(student)/custom-request/[postId]/applications/page.tsx
@@ -133,6 +135,7 @@ app/(student)/question-room/loading.tsx
 app/(student)/question-room/page.tsx
 app/(student)/questions/[roomId]/page.tsx
 app/(student)/questions/page.tsx
+app/(student)/settings/blocks/page.tsx
 app/(student)/subscribe/cancelled/page.tsx
 app/(student)/subscribe/fail/page.tsx
 app/(student)/subscribe/loading.tsx

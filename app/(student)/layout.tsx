@@ -5,15 +5,26 @@ import { AppShell } from "@/components/shell/AppShell";
 import { requireRole, requireWalletChargeAccess } from "@/lib/auth/routeGuard";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { getPostLoginPath } from "@/lib/auth/getPostLoginPath";
+import { isAccountDeletionFeatureEnabled, isUserBlocksEnabled } from "@/lib/shell/featureFlags";
 import type { AppRole } from "@/lib/types/user";
 
 function isWalletChargePath(pathname: string): boolean {
   return pathname === "/wallet" || pathname.startsWith("/wallet/charge");
 }
 
+/** 차단 관리 — 학생·멘토 공용(로그인 가드, 스펙 §4). 플래그 OFF면 /mypage로. */
+function isBlocksSettingsPath(pathname: string): boolean {
+  return pathname === "/settings/blocks";
+}
+
 /** 개별 질문 목록만 비로그인·학생에게 공개. 작성(/new)·상세는 가드 유지. */
 function isGuestViewableIndividualQuestionPath(pathname: string): boolean {
   return pathname === "/individual-questions";
+}
+
+/** 회원 탈퇴 — 학생·멘토 공용(로그인 가드, role 분기는 페이지 담당). 플래그 OFF 시 페이지가 /mypage로 리다이렉트. */
+function isAccountDeletePath(pathname: string): boolean {
+  return pathname === "/account/delete";
 }
 
 export default async function StudentLayout({ children }: { children: ReactNode }) {
@@ -28,6 +39,30 @@ export default async function StudentLayout({ children }: { children: ReactNode 
     const sessionRole: AppRole | null = profile?.role === "student" ? "student" : null;
     return (
       <AppShell area="student" sessionRole={sessionRole} userProfile={profile}>
+        {children}
+      </AppShell>
+    );
+  }
+
+  if (isAccountDeletePath(pathname) || isBlocksSettingsPath(pathname)) {
+    // 플래그 OFF: 접근 시 마이페이지 리다이렉트(로그인 유도조차 하지 않음)
+    const enabled = isAccountDeletePath(pathname)
+      ? isAccountDeletionFeatureEnabled()
+      : isUserBlocksEnabled();
+    if (!enabled) {
+      redirect("/mypage");
+    }
+    const { user, profile } = await getServerUserWithProfile();
+    if (!user) {
+      redirect(`/login/student?next=${encodeURIComponent(pathname)}`);
+    }
+    const sessionRole: AppRole = profile?.role === "mentor" ? "mentor" : "student";
+    return (
+      <AppShell
+        area={sessionRole === "mentor" ? "mentor" : "student"}
+        sessionRole={sessionRole}
+        userProfile={profile}
+      >
         {children}
       </AppShell>
     );

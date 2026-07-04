@@ -10,6 +10,9 @@ import {
 import { isCommunityPostUuid } from "@/lib/community/communityQueries";
 import { BoardViewTracker } from "@/components/community/BoardViewTracker";
 import { loadFavoriteMentorIdsForUser } from "@/lib/mentor/mentorFavorites";
+import { BlockUserButton } from "@/components/blocks/BlockUserButton";
+import { fetchBlockedUserIds, filterBlockedCommentNodes } from "@/lib/blocks/userBlocksQueries";
+import { isUserBlocksEnabled } from "@/lib/shell/featureFlags";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -55,9 +58,17 @@ export default async function CommunityBoardDetailPage(props: Props) {
   }
 
   const missing = !idOk || (!post && !loadError);
-  const { nodes: comments, error: commentsError } = post
+  const { nodes: rawComments, error: commentsError } = post
     ? await loadBoardComments(supabase, id, user?.id ?? null)
     : { nodes: [], error: null };
+
+  // W-blocks(v1): 플래그 ON + 로그인 시 차단 작성자의 댓글(답글 포함) 숨김 — OFF면 기존 결과 그대로 (스펙 §3)
+  const blocksOn = isUserBlocksEnabled() && Boolean(user);
+  const blockedIds = blocksOn && user ? await fetchBlockedUserIds(supabase, user.id) : [];
+  const comments = blocksOn ? filterBlockedCommentNodes(rawComments, blockedIds) : rawComments;
+  // 차단 버튼 노출 조건: 플래그 ON + 로그인 + 작성자 존재 + 본인 글 아님 + 아직 미차단
+  const canBlockAuthor =
+    blocksOn && user != null && !!post?.authorId && post.authorId !== user.id && !blockedIds.includes(post.authorId);
 
   const reactions = post ? await getPostReactionFlags(supabase, id, user?.id ?? null) : { liked: false, scrapped: false };
 
@@ -86,6 +97,12 @@ export default async function CommunityBoardDetailPage(props: Props) {
               authorMentorId={authorMentorId}
               authorFavorited={authorFavorited}
             />
+            {/* W-blocks(v1): 신고와 같은 화면에서 차단 접근(신고+차단 병존, 스펙 §4) */}
+            {canBlockAuthor && post.authorId ? (
+              <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
+                <BlockUserButton blockedUserId={post.authorId} returnTo="/community/board" />
+              </div>
+            ) : null}
           </>
         ) : null}
       </div>

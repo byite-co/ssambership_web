@@ -5,6 +5,8 @@ import { CommunityShortformGrid } from "@/components/community/CommunityShortfor
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { createClient } from "@/lib/supabase/server";
 import { listShortformFeed } from "@/lib/community/communityShortformQueries";
+import { fetchBlockedUserIds, filterBlockedAuthors } from "@/lib/blocks/userBlocksQueries";
+import { isUserBlocksEnabled } from "@/lib/shell/featureFlags";
 import type { ShortformCategorySlug } from "@/lib/community/communityShortformConstants";
 import { SURFACE_CARD } from "@/lib/ui/surfaceCard";
 import { CommunityShortformUploadFab } from "@/components/community/CommunityShortformUploadFab";
@@ -18,7 +20,14 @@ export default async function CommunityShortformPage(props: Props) {
   const { user, profile } = await getServerUserWithProfile();
   const supabase = await createClient();
 
-  const { items, error } = await listShortformFeed(supabase, { category, limit: 48, sort: sortTab });
+  const { items: rawItems, error } = await listShortformFeed(supabase, { category, limit: 48, sort: sortTab });
+
+  // W-blocks(v1): 플래그 ON + 로그인 시에만 차단 작성자 필터 — OFF면 기존 결과 그대로 (스펙 §3)
+  let items = rawItems;
+  if (isUserBlocksEnabled() && user) {
+    const blocked = await fetchBlockedUserIds(supabase, user.id);
+    items = filterBlockedAuthors(rawItems, blocked, (i) => i.authorId);
+  }
 
   const isLoggedIn = Boolean(user);
   const isMentor = profile?.role === "mentor";

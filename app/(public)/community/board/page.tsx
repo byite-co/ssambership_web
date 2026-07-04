@@ -5,6 +5,9 @@ import { parseCommunityBoardSortTab } from "@/lib/community/communityBoardSort";
 import { createClient } from "@/lib/supabase/server";
 import type { CommunityPostCategorySlug } from "@/lib/community/communityBoardConstants";
 import { listCommunityBoardPosts } from "@/lib/community/communityBoardQueries";
+import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
+import { fetchBlockedUserIds, filterBlockedAuthors } from "@/lib/blocks/userBlocksQueries";
+import { isUserBlocksEnabled } from "@/lib/shell/featureFlags";
 import { SURFACE_CARD } from "@/lib/ui/surfaceCard";
 
 type Props = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
@@ -21,6 +24,16 @@ export default async function CommunityBoardPage(props: Props) {
 
   if (feed.error) console.error("[community/board] feed", feed.error);
 
+  // W-blocks(v1): 플래그 ON + 로그인 시에만 차단 작성자 필터 — OFF면 기존 결과 그대로 (스펙 §3)
+  let posts = feed.posts;
+  if (isUserBlocksEnabled()) {
+    const { user } = await getServerUserWithProfile();
+    if (user) {
+      const blocked = await fetchBlockedUserIds(supabase, user.id);
+      posts = filterBlockedAuthors(posts, blocked, (p) => p.authorId);
+    }
+  }
+
   return (
     <CommunityLayoutShell activeNav="board">
       <header className={SURFACE_CARD}>
@@ -31,7 +44,7 @@ export default async function CommunityBoardPage(props: Props) {
       </header>
       <Suspense fallback={<p className="text-sm text-slate-500">불러오는 중…</p>}>
         <CommunityHomeFeed
-          initialPosts={feed.posts}
+          initialPosts={posts}
           initialCursor={feed.nextCursor}
           initialCategory={category}
           initialSort={sortTab}
