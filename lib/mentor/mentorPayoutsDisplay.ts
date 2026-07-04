@@ -4,7 +4,9 @@
 import {
   calcPayoutWithholding,
   CUSTOM_REQUEST_PLATFORM_FEE_LABEL,
+  INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL,
   MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
+  MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE,
   MENTOR_SUBSCRIPTION_PLATFORM_SHARE,
   SUBSCRIPTION_PLATFORM_FEE_LABEL,
 } from "@/lib/mentor/mentorPayoutsConstants";
@@ -17,11 +19,15 @@ import type {
 } from "@/lib/mentor/mentorPayoutsTypes";
 
 export function platformFeeLabelForType(type: PayoutLineType): string {
-  return type === "subscription" ? SUBSCRIPTION_PLATFORM_FEE_LABEL : CUSTOM_REQUEST_PLATFORM_FEE_LABEL;
+  if (type === "subscription") return SUBSCRIPTION_PLATFORM_FEE_LABEL;
+  if (type === "individual_question") return INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL;
+  return CUSTOM_REQUEST_PLATFORM_FEE_LABEL;
 }
 
 export function platformFeeRateForType(type: PayoutLineType): number {
-  return type === "subscription" ? MENTOR_SUBSCRIPTION_PLATFORM_SHARE : MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE;
+  if (type === "subscription") return MENTOR_SUBSCRIPTION_PLATFORM_SHARE;
+  if (type === "individual_question") return MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE;
+  return MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE;
 }
 
 /** DB fee_rate가 잘못 저장된 경우(예: 0.1) 유형별 잠금값으로 보정 */
@@ -33,6 +39,7 @@ export function resolvePlatformFeeRate(type: PayoutLineType, raw: unknown): numb
   if (Math.abs(asFraction - expected) < 0.02) return expected;
   if (type === "subscription" && asFraction <= 0.11) return MENTOR_SUBSCRIPTION_PLATFORM_SHARE;
   if (type === "custom_request" && asFraction <= 0.11) return MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE;
+  if (type === "individual_question" && asFraction <= 0.11) return MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE;
   return expected;
 }
 

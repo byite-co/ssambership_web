@@ -212,6 +212,7 @@ export function MentorPayoutsDetailView() {
             <option value="all">전체</option>
             <option value="subscription">구독</option>
             <option value="custom_request">맞춤의뢰</option>
+            <option value="individual_question">개별질문</option>
           </select>
         </label>
       </div>

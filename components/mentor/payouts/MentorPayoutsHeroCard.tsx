@@ -1,10 +1,11 @@
 import {
   CUSTOM_REQUEST_PLATFORM_FEE_LABEL,
+  INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL,
   PAYOUT_WITHHOLDING_LABEL,
   PAYOUT_WITHHOLDING_TOOLTIP,
   SUBSCRIPTION_PLATFORM_FEE_LABEL,
 } from "@/lib/mentor/mentorPayoutsConstants";
-import { Repeat, Briefcase, Wallet } from "lucide-react";
+import { Repeat, Briefcase, MessageCircleQuestion, Wallet } from "lucide-react";
 import type { MentorPayoutScheduleInfo, MentorPayoutSummary } from "@/lib/mentor/mentorPayoutsTypes";
 import { SURFACE_CARD } from "@/lib/ui/surfaceCard";
 import { formatCashKrw } from "./payoutUi";
@@ -51,7 +52,7 @@ export function MentorPayoutsHeroCard(props: Props) {
         </div>
       </div>
 
-      <div className="mt-6 grid grid-cols-1 gap-4 border-t border-slate-100 pt-6 sm:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-4 border-t border-slate-100 pt-6 sm:grid-cols-2 lg:grid-cols-4">
         <div>
           <div className="flex items-center gap-2">
             <span className={TILE_NEUTRAL}>
@@ -75,6 +76,19 @@ export function MentorPayoutsHeroCard(props: Props) {
             {formatCashKrw(summary.thisMonthCustomRequest)}
           </p>
           <p className="mt-1 text-[11px] text-slate-400">{CUSTOM_REQUEST_PLATFORM_FEE_LABEL}</p>
+        </div>
+        {/* W-04: 개별질문 수익 라인 */}
+        <div>
+          <div className="flex items-center gap-2">
+            <span className={TILE_NEUTRAL}>
+              <MessageCircleQuestion className="h-3.5 w-3.5" aria-hidden />
+            </span>
+            <p className="text-[12px] font-semibold text-slate-500">개별질문 수익</p>
+          </div>
+          <p className="mt-2 text-[20px] font-bold tabular-nums text-slate-900">
+            {formatCashKrw(summary.thisMonthIndividualQuestion)}
+          </p>
+          <p className="mt-1 text-[11px] text-slate-400">{INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL}</p>
         </div>
         <div>
           <div className="flex items-center gap-2">

@@ -1,6 +1,6 @@
 /** 멘토 정산 UI·API 공용 타입 — server-only 모듈 import 금지 */
 
-export type PayoutLineType = "subscription" | "custom_request";
+export type PayoutLineType = "subscription" | "custom_request" | "individual_question";
 
 export type MentorPayoutDetailLine = {
   id: string;
@@ -30,8 +30,12 @@ export type MentorPayoutSummary = {
   thisMonthScheduledPayout: number;
   thisMonthSubscription: number;
   thisMonthCustomRequest: number;
+  /** W-04: 이번 달 개별질문 수익(수수료 공제 후) */
+  thisMonthIndividualQuestion: number;
   lifetimeSubscription: number;
   lifetimeCustomRequest: number;
+  /** W-04: 누적 개별질문 수익 */
+  lifetimeIndividualQuestion: number;
   /** W-01 4단 구조: 이번 달 총 수익(수수료 공제 전) */
   thisMonthGross: number;
   /** W-01 4단 구조: 이번 달 플랫폼 수수료 합계 */
@@ -103,13 +107,19 @@ export type MentorPayoutsPageData = {
   revenueShare: {
     subscription: number;
     customRequest: number;
+    /** W-04 */
+    individualQuestion: number;
     total: number;
     subscriptionPct: number;
     customRequestPct: number;
+    /** W-04 */
+    individualQuestionPct: number;
   };
   kpis: {
     subscription: { amount: number; momPct: number | null };
     customRequest: { amount: number; momPct: number | null };
+    /** W-04 */
+    individualQuestion: { amount: number; momPct: number | null };
     total: { amount: number; momPct: number | null };
     lifetimePaid: number;
   };

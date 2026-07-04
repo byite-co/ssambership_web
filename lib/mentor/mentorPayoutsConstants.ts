@@ -1,13 +1,17 @@
 /** 잠금값 — 멘토 몫 비율 */
 export const MENTOR_SUBSCRIPTION_SHARE = 0.85 as const;
 export const MENTOR_CUSTOM_REQUEST_SHARE = 0.95 as const;
+/** W-04 — 개별질문 멘토 몫 85% (SQL 096/107/109 산식과 동일) */
+export const MENTOR_INDIVIDUAL_QUESTION_SHARE = 0.85 as const;
 
 export const MENTOR_SUBSCRIPTION_PLATFORM_SHARE = 0.15 as const;
 export const MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE = 0.05 as const;
+export const MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE = 0.15 as const;
 
 /** UI 표기 — 플랫폼 수수료(공제) */
 export const SUBSCRIPTION_PLATFORM_FEE_LABEL = "15% 공제 (플랫폼 수수료)" as const;
 export const CUSTOM_REQUEST_PLATFORM_FEE_LABEL = "5% 공제 (플랫폼 수수료)" as const;
+export const INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL = "15% 공제 (플랫폼 수수료)" as const;
 
 /** W-01 — 프리랜서 사업소득 원천징수 3.3% (23일 후불 지급 시점 공제, SQL 108/114와 동일 산식) */
 export const PAYOUT_WITHHOLDING_RATE = 0.033 as const;
