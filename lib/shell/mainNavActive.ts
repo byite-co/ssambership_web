@@ -46,7 +46,8 @@ export function isMainNavItemActive(pathname: string, itemHref: string, audience
         p === "/mentor/custom-request" ||
         p.startsWith("/mentor/custom-request/")
       );
-    case "/cash":
+    case "/cash": // 레거시 href (W-05 이전 네비 배열 호환)
+    case "/wallet/charge": // W-05: 정식 '캐시결제' href
       // 글로벌 "캐시결제"는 실제 충전·결제 화면에서만 활성.
       // /wallet/ledger·/cash-history(마이페이지 "캐시 내역" 서브탭)는 마이페이지 컨텍스트라 제외.
       return (
