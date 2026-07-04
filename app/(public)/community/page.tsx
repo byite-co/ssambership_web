@@ -4,6 +4,8 @@ import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { createClient } from "@/lib/supabase/server";
 import { listCommunityPopularPostsForHome } from "@/lib/community/communityBoardQueries";
 import { listShortformFeed } from "@/lib/community/communityShortformQueries";
+import { fetchBlockedUserIds, filterBlockedAuthors } from "@/lib/blocks/userBlocksQueries";
+import { isUserBlocksEnabled } from "@/lib/shell/featureFlags";
 
 export default async function CommunityLandingPage() {
   const { user, profile } = await getServerUserWithProfile();
@@ -18,6 +20,15 @@ export default async function CommunityLandingPage() {
   if (shortform.error) console.error("[community] shortform", shortform.error);
   if (popular.error) console.error("[community] popular posts", popular.error);
 
+  // W-blocks(v1): 플래그 ON + 로그인 시에만 차단 작성자 필터 — OFF면 기존 결과 그대로 (스펙 §3)
+  let shortformItems = shortform.items;
+  let popularPosts = popular.posts;
+  if (isUserBlocksEnabled() && user) {
+    const blocked = await fetchBlockedUserIds(supabase, user.id);
+    shortformItems = filterBlockedAuthors(shortformItems, blocked, (i) => i.authorId);
+    popularPosts = filterBlockedAuthors(popularPosts, blocked, (p) => p.authorId);
+  }
+
   return (
     <CommunityLayoutShell activeNav="home">
       <header className="px-1 py-2">
@@ -27,9 +38,9 @@ export default async function CommunityLandingPage() {
         </p>
       </header>
       <CommunityHomeSections
-        shortforms={shortform.items}
+        shortforms={shortformItems}
         shortformError={shortform.error}
-        popularPosts={popular.posts}
+        popularPosts={popularPosts}
         boardError={popular.error}
         viewerRole={profile?.role}
         loggedIn={Boolean(user)}

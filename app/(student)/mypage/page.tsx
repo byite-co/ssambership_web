@@ -15,7 +15,7 @@ import {
   ledgerReasonLabel,
 } from "@/lib/cash/ledgerRowDisplay";
 import { countActiveSubscriptionsForStudent } from "@/lib/mypage/studentActiveSubscriptions";
-import { isAccountDeletionFeatureEnabled } from "@/lib/shell/featureFlags";
+import { isAccountDeletionFeatureEnabled, isUserBlocksEnabled } from "@/lib/shell/featureFlags";
 import { MypageSubscriptionsCard } from "@/components/mypage/MypageSubscriptionsCard";
 
 function SectionTitle(props: { title: string; hint?: ReactNode }) {
@@ -156,6 +156,15 @@ export default async function StudentMyPage() {
               {bundle.reviews.valueText} · {bundle.reports.valueText}
             </span>
           </li>
+          {/* 차단 관리 진입 — 플래그 ON일 때만 렌더(OFF면 DOM에도 없음, 스펙 §4) */}
+          {isUserBlocksEnabled() ? (
+            <li className="flex items-center justify-between gap-2 py-2.5">
+              <span className="font-medium text-slate-700">계정</span>
+              <Link href="/settings/blocks" className="text-xs font-bold text-[#2563EB] hover:underline">
+                차단 관리 →
+              </Link>
+            </li>
+          ) : null}
           {/* 계정 삭제 진입 — 플래그 ON일 때만 렌더(OFF면 DOM에도 없음, 스펙 §3) */}
           {isAccountDeletionFeatureEnabled() ? (
             <li className="flex items-center justify-between gap-2 py-2.5">

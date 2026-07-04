@@ -10,6 +10,9 @@ import {
 } from "@/lib/community/communityShortformQueries";
 import Link from "next/link";
 import { VideoOff } from "lucide-react";
+import { BlockUserButton } from "@/components/blocks/BlockUserButton";
+import { fetchBlockedUserIds, filterBlockedAuthors } from "@/lib/blocks/userBlocksQueries";
+import { isUserBlocksEnabled } from "@/lib/shell/featureFlags";
 
 type Props = {
   params: Promise<{ id: string }>;
@@ -34,7 +37,15 @@ export default async function CommunityShortformDetailPage(props: Props) {
     }
   }
 
-  const { rows: comments } = item ? await loadCommunityComments(supabase, "shortform", id) : { rows: [] };
+  const { rows: rawComments } = item ? await loadCommunityComments(supabase, "shortform", id) : { rows: [] };
+
+  // W-blocks(v1): 플래그 ON + 로그인 시 차단 작성자 댓글 숨김 — OFF면 기존 결과 그대로 (스펙 §3)
+  const blocksOn = isUserBlocksEnabled() && Boolean(user);
+  const blockedIds = blocksOn && user ? await fetchBlockedUserIds(supabase, user.id) : [];
+  const comments = blocksOn ? filterBlockedAuthors(rawComments, blockedIds, (c) => c.authorId) : rawComments;
+  const canBlockAuthor =
+    blocksOn && user != null && !!item?.authorId && item.authorId !== user.id && !blockedIds.includes(item.authorId);
+
   const reaction = item ? await getShortformReactionFlags(supabase, id, user?.id ?? null) : { liked: false };
   const returnPath = `/community/shortform/${id}`;
   const likeError = typeof sp.likeError === "string" ? sp.likeError : null;
@@ -67,6 +78,12 @@ export default async function CommunityShortformDetailPage(props: Props) {
             liked={reaction.liked}
             likeErrorCode={likeError}
           />
+        ) : null}
+        {/* W-blocks(v1): 신고와 같은 화면에서 차단 접근(신고+차단 병존, 스펙 §4) */}
+        {item && canBlockAuthor && item.authorId ? (
+          <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
+            <BlockUserButton blockedUserId={item.authorId} returnTo="/community/shortform" />
+          </div>
         ) : null}
       </div>
     </CommunityLayoutShell>

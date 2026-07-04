@@ -23,7 +23,13 @@
       "Bash(echo \"tsc=$?\")",
       "Bash(npx next *)",
       "Bash(node scripts/route-inventory.mjs)",
-      "Bash(node scripts/check-frozen-canon.mjs --diff origin/main)"
+      "Bash(node scripts/check-frozen-canon.mjs --diff origin/main)",
+      "Bash(mkdir -p lib/blocks components/blocks app/\\\\\\(student\\\\\\)/settings/blocks)",
+      "Bash(cp \"/tmp/claude-0/-home-user-ssambership-web/eb3639f3-1815-539a-878d-08595d36a059/scratchpad/specs/쌤버십_스펙_B_사용자차단.md\" docs/plans/user-blocks-spec.md)",
+      "Bash(git stash *)",
+      "Bash(python3 -)",
+      "Bash(python3 -c \"import json; json.load\\(open\\('.claude/settings.local.json'\\)\\); print\\('json-ok'\\)\")",
+      "Bash(rm -rf .next)"
     ],
     "defaultMode": "acceptEdits"
   }

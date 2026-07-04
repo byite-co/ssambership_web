@@ -209,6 +209,8 @@ export type CommunityCommentListItem = {
   id: string;
   body: string;
   createdAt: string;
+  /** W-blocks(v1): 차단 필터용 — 표시에는 미사용(additive, 스펙 §3) */
+  authorId?: string | null;
   authorLabel: string;
   status: string;
 };
@@ -223,7 +225,7 @@ export async function loadCommunityComments(
 ): Promise<{ rows: CommunityCommentListItem[]; error: string | null }> {
   const { data, error } = await supabase
     .from("community_comments")
-    .select("id, body, created_at, author_label, status")
+    .select("id, body, created_at, author_id, author_label, status")
     .eq("post_type", postType)
     .eq("post_id", postId)
     .eq("status", "visible")
@@ -243,6 +245,7 @@ export async function loadCommunityComments(
       id: String(r.id ?? ""),
       body: String(r.body ?? ""),
       createdAt: typeof created === "string" ? created : new Date().toISOString(),
+      authorId: typeof r.author_id === "string" ? r.author_id : null,
       authorLabel:
         typeof r.author_label === "string" && r.author_label.trim() ? r.author_label.trim() : "쌤버십 회원",
       status: String(r.status ?? "visible"),
