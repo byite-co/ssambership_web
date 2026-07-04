@@ -9,7 +9,15 @@
 --    실제 송금이 일어나는 RPC 이므로 오너 검토 + 스테이징 검증 후에만 적용.
 --
 -- 선행(적용 시): 105(게이팅·accruing), 106(payout_runs/items), 107(due_payouts),
---   109(IQ release/지급 분리), 110(CR 즉시지급 perform 제거).
+--   109(IQ release/지급 분리), 110(CR 즉시지급 perform 제거), 114(원천징수 컬럼·뷰).
+--
+-- [W-01 개정] 프리랜서 사업소득 원천징수 3.3% — 지급 시점 공제:
+--   각 지급 건마다 withholding = floor(mentor_amount_cents * 0.033) 을 산출해
+--   ① cash_ledger 에 공제 라인(-withholding, reason='payout_withholding_3_3pct',
+--      idem 'wh:{source_type}:{source_id}') 을 남기고 지갑에서 차감(멱등),
+--   ② payout_run_items(114 컬럼)에 withholding_cents·net_paid_cents 스냅샷 적재.
+--   채널 primitive(055/096/109)는 무수정 — 전액 적립 후 공제 라인으로 순액화하여
+--   원장 추적성(적립·공제 각 1행)을 보장한다. 실지급액 = mentor_amount - withholding.
 --
 -- 핵심 안전 불변식(설계 검증 STEP2 근거):
 --   (A) cutoff 게이트: completion_ts <= cutoff 로 "기간 미완료(미래 period_end=accruing)"
@@ -47,6 +55,10 @@ declare
   v_paid integer := 0;
   v_skipped integer := 0;
   v_total bigint := 0;
+  -- [W-01] 원천징수 3.3%
+  v_withholding bigint;
+  v_net bigint;
+  v_wh_ledger_id uuid;
 begin
   -- 1) 멱등 run 헤더 확보(같은 달 재실행 방지). 이미 completed 면 그 결과만 반환.
   select * into v_run from public.payout_runs where idempotency_key = v_idem;
@@ -132,13 +144,35 @@ begin
       continue;
     end if;
 
-    -- 4) 불변 스냅샷 적재(106). 금액은 지급 시점 고정.
+    -- 3.5) [W-01] 원천징수 3.3% 공제 — 채널 무관 공통. 적립(전액) 뒤 공제 라인으로 순액화.
+    v_withholding := floor(rec.mentor_amount_cents::numeric * 0.033)::bigint;
+    v_net := rec.mentor_amount_cents - v_withholding;
+
+    if v_withholding > 0 then
+      v_wh_ledger_id := null;
+      insert into public.cash_ledger (user_id, delta_cents, reason, ref_type, ref_id, idempotency_key)
+      values (rec.mentor_id, -v_withholding, 'payout_withholding_3_3pct',
+              rec.source_type, rec.source_id, 'wh:' || rec.source_type || ':' || rec.source_id::text)
+      on conflict (idempotency_key) do nothing
+      returning id into v_wh_ledger_id;
+
+      -- 신규 공제 라인이 실제로 생겼을 때만 지갑 차감(재실행 멱등).
+      if v_wh_ledger_id is not null then
+        update public.cash_wallets w
+        set balance_cents = w.balance_cents - v_withholding
+        where w.user_id = rec.mentor_id;
+      end if;
+    end if;
+
+    -- 4) 불변 스냅샷 적재(106+114). 금액은 지급 시점 고정.
     insert into public.payout_run_items (
       payout_run_id, mentor_id, source_type, source_id,
-      gross_cents, platform_fee_cents, mentor_amount_cents, fee_rate, ledger_id
+      gross_cents, platform_fee_cents, mentor_amount_cents, fee_rate, ledger_id,
+      withholding_cents, net_paid_cents
     ) values (
       v_run_id, rec.mentor_id, rec.source_type, rec.source_id,
-      rec.gross_cents, rec.platform_fee_cents, rec.mentor_amount_cents, rec.fee_rate, v_ledger_id
+      rec.gross_cents, rec.platform_fee_cents, rec.mentor_amount_cents, rec.fee_rate, v_ledger_id,
+      v_withholding, v_net
     )
     on conflict (payout_run_id, source_type, source_id) do nothing;
 

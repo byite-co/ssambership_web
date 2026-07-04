@@ -63,6 +63,8 @@ export function MentorPayoutsMain(props: { data: MentorPayoutsPageData; hideHero
         총액: r.grossAmount,
         수수료: r.feeAmount,
         정산액: r.netAmount,
+        "원천징수 3.3%": r.withholdingAmount,
+        "실지급 예정액": r.payoutAmount,
         상태: st.label,
       };
     });

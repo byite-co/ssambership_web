@@ -10,12 +10,17 @@ import {
   subscriptionSettlementStatus,
 } from "@/lib/mentor/subscriptionSettlementItems";
 import {
+  calcPayoutWithholding,
   DEFAULT_MASKED_BANK_DISPLAY,
   MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
   MENTOR_CUSTOM_REQUEST_SHARE,
   minorUnitsToCash,
 } from "@/lib/mentor/mentorPayoutsConstants";
-import { buildPayoutScheduleInfo, detailLineToSettlementRow } from "@/lib/mentor/mentorPayoutsDisplay";
+import {
+  buildPayoutScheduleInfo,
+  detailLineToSettlementRow,
+  withPayoutWithholding,
+} from "@/lib/mentor/mentorPayoutsDisplay";
 import type {
   MentorPayoutDetailLine,
   MentorPayoutDetailResult,
@@ -151,7 +156,7 @@ async function loadSubscriptionLines(client: SupabaseClient, mentorId: string): 
   const rows = await loadSubscriptionSettlementRowsForMentor(client, mentorId, 300);
   return rows.map((r) => {
     const itemId = String(r.id ?? r.billing_event_id ?? r.subscription_id ?? "");
-    return {
+    return withPayoutWithholding({
       id: `sub-${itemId}`,
       type: "subscription" as const,
       date: subscriptionSettlementDate(r),
@@ -160,7 +165,7 @@ async function loadSubscriptionLines(client: SupabaseClient, mentorId: string): 
       feeAmount: minorCentsToCash(r.platform_fee_cents),
       netAmount: minorCentsToCash(r.mentor_amount_cents),
       status: subscriptionSettlementStatus(r.status),
-    };
+    });
   });
 }
 async function loadCustomRequestLines(client: SupabaseClient, mentorId: string): Promise<MentorPayoutDetailLine[]> {
@@ -177,7 +182,7 @@ async function loadCustomRequestLines(client: SupabaseClient, mentorId: string):
     const status =
       st === "paid" ? "지급완료" : st === "on_hold" ? "보류" : st === "payable" ? "지급가능" : "정산예정";
     const oid = String(s.custom_request_order_id ?? "");
-    return {
+    return withPayoutWithholding({
       id: `cr-${String(s.id ?? oid)}`,
       type: "custom_request" as const,
       date: pickTs(s),
@@ -186,7 +191,7 @@ async function loadCustomRequestLines(client: SupabaseClient, mentorId: string):
       feeAmount: fee,
       netAmount: net,
       status,
-    };
+    });
   });
 
   const seenOrder = new Set(
@@ -213,16 +218,18 @@ async function loadCustomRequestLines(client: SupabaseClient, mentorId: string):
     if (payment <= 0) continue;
     const net = Math.floor(payment * MENTOR_CUSTOM_REQUEST_SHARE);
     const fee = payment - net;
-    extra.push({
-      id: `cro-${oid}`,
-      type: "custom_request",
-      date: pickTs(o),
-      description: `맞춤의뢰 완료 · ${oid.slice(0, 8)}`,
-      paymentAmount: payment,
-      feeAmount: fee,
-      netAmount: net,
-      status: "정산예정",
-    });
+    extra.push(
+      withPayoutWithholding({
+        id: `cro-${oid}`,
+        type: "custom_request",
+        date: pickTs(o),
+        description: `맞춤의뢰 완료 · ${oid.slice(0, 8)}`,
+        paymentAmount: payment,
+        feeAmount: fee,
+        netAmount: net,
+        status: "정산예정",
+      })
+    );
   }
 
   return [...fromSettlement, ...extra];
@@ -300,6 +307,17 @@ export async function loadMentorPayoutSummary(supabase: SupabaseClient, mentorId
   const thisMonthScheduledPayout =
     expectedThisMonth > 0 ? expectedThisMonth : Math.max(0, thisMonthRevenue - paidThisMonth);
 
+  // W-01 4단 구조: 총 수익 → 플랫폼 수수료 → 원천징수 3.3% → 실지급 예정액(23일)
+  const monthLines = all.filter((l) => inYm(l.date, ym));
+  const thisMonthGross = monthLines.reduce((a, l) => a + l.paymentAmount, 0);
+  const thisMonthFee = monthLines.reduce((a, l) => a + l.feeAmount, 0);
+  const pendingWithholding = monthLines
+    .filter(isPendingPayoutLine)
+    .reduce((a, l) => a + l.withholdingAmount, 0);
+  const thisMonthWithholding =
+    expectedThisMonth > 0 ? pendingWithholding : calcPayoutWithholding(thisMonthScheduledPayout);
+  const thisMonthNetScheduledPayout = Math.max(0, thisMonthScheduledPayout - thisMonthWithholding);
+
   return {
     thisMonthRevenue,
     thisMonthScheduledPayout,
@@ -307,6 +325,10 @@ export async function loadMentorPayoutSummary(supabase: SupabaseClient, mentorId
     thisMonthCustomRequest,
     lifetimeSubscription: sumNetByType(all, "subscription"),
     lifetimeCustomRequest: sumNetByType(all, "custom_request"),
+    thisMonthGross,
+    thisMonthFee,
+    thisMonthWithholding,
+    thisMonthNetScheduledPayout,
     bankDisplay: bank.display,
     bankEditable: bank.editable,
     bankName: bank.bankName,
@@ -504,8 +526,9 @@ export async function loadMentorPayoutsPageData(
 
   const paidThisMonth = sumNetByStatus(all, ym, isPaidPayoutLine);
 
+  // W-01: 지급 예정액은 원천징수 3.3% 공제 후 실지급 기준
   const schedule = buildPayoutScheduleInfo(
-    summary.thisMonthScheduledPayout,
+    summary.thisMonthNetScheduledPayout,
     paidThisMonth > 0 ? paidThisMonth : lifetimePaid
   );
 
@@ -552,8 +575,10 @@ export async function loadMentorPayoutDetail(
       paymentAmount: acc.paymentAmount + l.paymentAmount,
       feeAmount: acc.feeAmount + l.feeAmount,
       netAmount: acc.netAmount + l.netAmount,
+      withholdingAmount: acc.withholdingAmount + l.withholdingAmount,
+      payoutAmount: acc.payoutAmount + l.payoutAmount,
     }),
-    { paymentAmount: 0, feeAmount: 0, netAmount: 0 }
+    { paymentAmount: 0, feeAmount: 0, netAmount: 0, withholdingAmount: 0, payoutAmount: 0 }
   );
 
   return { lines, totals };

@@ -2,6 +2,7 @@
  * 멘토 정산 UI 표시 헬퍼 — 클라이언트·서버 공용 (server-only import 없음)
  */
 import {
+  calcPayoutWithholding,
   CUSTOM_REQUEST_PLATFORM_FEE_LABEL,
   MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
   MENTOR_SUBSCRIPTION_PLATFORM_SHARE,
@@ -93,6 +94,14 @@ function mapLineStatusToUi(status: string, net: number): PayoutUiStatus {
   return "scheduled";
 }
 
+/** W-01: 라인 생성 시 원천징수 3.3%·실지급액을 산출해 채운다 (SQL 108/114와 동일 per-line floor) */
+export function withPayoutWithholding(
+  line: Omit<MentorPayoutDetailLine, "withholdingAmount" | "payoutAmount">
+): MentorPayoutDetailLine {
+  const withholdingAmount = calcPayoutWithholding(line.netAmount);
+  return { ...line, withholdingAmount, payoutAmount: line.netAmount - withholdingAmount };
+}
+
 export function detailLineToSettlementRow(line: MentorPayoutDetailLine): MentorPayoutSettlementTableRow {
   const uiStatus = mapLineStatusToUi(line.status, line.netAmount);
   const isCancelled = uiStatus === "cancelled";
@@ -104,6 +113,8 @@ export function detailLineToSettlementRow(line: MentorPayoutDetailLine): MentorP
     grossAmount: isCancelled ? -Math.abs(line.paymentAmount) : line.paymentAmount,
     feeAmount: isCancelled ? Math.abs(line.feeAmount) : line.feeAmount,
     netAmount: line.netAmount,
+    withholdingAmount: isCancelled ? 0 : line.withholdingAmount,
+    payoutAmount: isCancelled ? line.netAmount : line.payoutAmount,
     uiStatus,
     isCancelled,
   };

@@ -1,5 +1,7 @@
 import {
   CUSTOM_REQUEST_PLATFORM_FEE_LABEL,
+  PAYOUT_WITHHOLDING_LABEL,
+  PAYOUT_WITHHOLDING_TOOLTIP,
   SUBSCRIPTION_PLATFORM_FEE_LABEL,
 } from "@/lib/mentor/mentorPayoutsConstants";
 import { Repeat, Briefcase, Wallet } from "lucide-react";
@@ -24,9 +26,20 @@ export function MentorPayoutsHeroCard(props: Props) {
     <section className={`${SURFACE_CARD} border-l-[4px] border-l-[#059669]`}>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-[13px] font-medium text-slate-500">이번 달 예상 정산 · {schedule.monthLabel}</p>
+          <p className="text-[13px] font-medium text-slate-500">이번 달 실지급 예정액 · {schedule.monthLabel}</p>
           <p className="mt-2 text-[38px] font-bold leading-none tabular-nums tracking-tight text-slate-900">
-            {formatCashKrw(summary.thisMonthScheduledPayout)}
+            {formatCashKrw(summary.thisMonthNetScheduledPayout)}
+          </p>
+          {/* W-01 4단 구조: 총 수익 → 플랫폼 수수료 → 원천징수 3.3%(강조) → 실지급 예정액 */}
+          <p className="mt-3 text-[12px] leading-relaxed text-slate-500">
+            총 수익 <span className="font-semibold tabular-nums text-slate-700">{formatCashKrw(summary.thisMonthGross)}</span>
+            {" − "}플랫폼 수수료{" "}
+            <span className="font-semibold tabular-nums text-slate-700">{formatCashKrw(summary.thisMonthFee)}</span>
+            {" − "}
+            <strong className="font-extrabold text-rose-600" title={PAYOUT_WITHHOLDING_TOOLTIP}>
+              {PAYOUT_WITHHOLDING_LABEL} {formatCashKrw(summary.thisMonthWithholding)}
+            </strong>
+            {" = "}실지급 예정액
           </p>
         </div>
         <div className="sm:text-right">

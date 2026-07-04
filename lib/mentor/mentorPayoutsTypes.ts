@@ -10,6 +10,10 @@ export type MentorPayoutDetailLine = {
   paymentAmount: number;
   feeAmount: number;
   netAmount: number;
+  /** W-01: 원천징수 3.3% 공제액 = floor(netAmount × 0.033) */
+  withholdingAmount: number;
+  /** W-01: 실지급(예정)액 = netAmount − withholdingAmount */
+  payoutAmount: number;
   status: string;
 };
 
@@ -28,6 +32,14 @@ export type MentorPayoutSummary = {
   thisMonthCustomRequest: number;
   lifetimeSubscription: number;
   lifetimeCustomRequest: number;
+  /** W-01 4단 구조: 이번 달 총 수익(수수료 공제 전) */
+  thisMonthGross: number;
+  /** W-01 4단 구조: 이번 달 플랫폼 수수료 합계 */
+  thisMonthFee: number;
+  /** W-01 4단 구조: 이번 달 원천징수 3.3% 공제(예정)액 */
+  thisMonthWithholding: number;
+  /** W-01 4단 구조: 이번 달 실지급 예정액(수수료·원천징수 공제 후, 23일 지급) */
+  thisMonthNetScheduledPayout: number;
   bankDisplay: string;
   bankEditable: boolean;
   bankName: string | null;
@@ -40,6 +52,10 @@ export type MentorPayoutDetailResult = {
     paymentAmount: number;
     feeAmount: number;
     netAmount: number;
+    /** W-01: 원천징수 합계 */
+    withholdingAmount: number;
+    /** W-01: 실지급 합계 */
+    payoutAmount: number;
   };
 };
 
@@ -53,6 +69,10 @@ export type MentorPayoutSettlementTableRow = {
   grossAmount: number;
   feeAmount: number;
   netAmount: number;
+  /** W-01: 원천징수 3.3% (취소 행은 0) */
+  withholdingAmount: number;
+  /** W-01: 실지급(예정)액 */
+  payoutAmount: number;
   uiStatus: PayoutUiStatus;
   isCancelled: boolean;
 };
