@@ -11,7 +11,12 @@
       "Bash(xargs grep -l \"community_posts\\\\|shortform_posts\\\\|community_comments\\\\|hide.*post\\\\|delete.*post\")",
       "Bash(npx playwright *)",
       "PowerShell(Get-NetTCPConnection *)",
-      "Bash(netstat -ano)"
+      "Bash(netstat -ano)",
+      "Bash(git fetch *)",
+      "Bash(git checkout *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ],
     "defaultMode": "acceptEdits"
   }
