@@ -89,6 +89,7 @@ app/(public)/custom-request/orders/[orderId]/review/page.tsx
 app/(public)/custom-request/orders/page.tsx
 app/(public)/custom-request/page.tsx
 app/(public)/forgot-password/page.tsx
+app/(public)/goodbye/page.tsx
 app/(public)/layout.tsx
 app/(public)/legal/community-guidelines/page.tsx
 app/(public)/legal/copyright/page.tsx
@@ -110,6 +111,7 @@ app/(public)/notifications/page.tsx
 app/(public)/payments/page.tsx
 app/(public)/pricing/page.tsx
 app/(public)/support/page.tsx
+app/(student)/account/delete/page.tsx
 app/(student)/cash-history/page.tsx
 app/(student)/custom-request/[postId]/applications/loading.tsx
 app/(student)/custom-request/[postId]/applications/page.tsx

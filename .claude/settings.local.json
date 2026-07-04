@@ -16,7 +16,14 @@
       "Bash(git checkout *)",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
-      "Bash(git push *)"
+      "Bash(git push *)",
+      "Bash(mkdir -p docs/plans lib/account components/account app/\\\\\\(student\\\\\\)/account/delete app/\\\\\\(public\\\\\\)/goodbye)",
+      "Bash(cp \"/tmp/claude-0/-home-user-ssambership-web/eb3639f3-1815-539a-878d-08595d36a059/scratchpad/specs/쌤버십_스펙_A_계정삭제.md\" docs/plans/account-deletion-spec.md)",
+      "Bash(echo \"tsc_exit=$?\")",
+      "Bash(echo \"tsc=$?\")",
+      "Bash(npx next *)",
+      "Bash(node scripts/route-inventory.mjs)",
+      "Bash(node scripts/check-frozen-canon.mjs --diff origin/main)"
     ],
     "defaultMode": "acceptEdits"
   }
