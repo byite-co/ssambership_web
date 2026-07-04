@@ -17,6 +17,8 @@ type Row = Record<string, unknown>;
 export type ShortformCard = {
   id: string;
   title: string;
+  /** W-blocks(v1): 차단 필터용 — 표시에는 미사용(additive, 스펙 §3) */
+  authorId?: string | null;
   authorLabel: string;
   authorRole: string | null;
   category: string | null;
@@ -72,6 +74,7 @@ export function mapShortformRow(row: Row, userMap?: Map<string, CommunityAuthorN
   return {
     id: String(row.id ?? ""),
     title: pickTitle(row),
+    authorId,
     authorLabel: resolveCommunityAuthorLabel(row, user),
     authorRole: pickAuthorRoleSummary(row),
     category: typeof row.category === "string" ? row.category : null,

@@ -133,6 +133,7 @@ app/(student)/question-room/loading.tsx
 app/(student)/question-room/page.tsx
 app/(student)/questions/[roomId]/page.tsx
 app/(student)/questions/page.tsx
+app/(student)/settings/blocks/page.tsx
 app/(student)/subscribe/cancelled/page.tsx
 app/(student)/subscribe/fail/page.tsx
 app/(student)/subscribe/loading.tsx
