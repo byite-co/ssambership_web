@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageScaffold } from "@/components/shell/PageScaffold";
+import { StudentSupportTabs } from "@/components/support/StudentSupportTabs";
 import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { createClient } from "@/lib/supabase/server";
@@ -47,6 +48,7 @@ export default async function StudentSupportRefundsPage(props: PageProps) {
       ]}
     >
       <div className="mx-auto max-w-4xl space-y-5">
+        <StudentSupportTabs active="refunds" />
         {flashOk ? (
           <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-900">
             {flashOk}
