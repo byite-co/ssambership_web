@@ -3,8 +3,8 @@ import { BrandLogo } from "@/components/brand/BrandLogo";
 
 type FooterLink = { label: string; href: string; emphasis?: boolean };
 
-// 사업자등록번호: 환경변수로 관리. 비어 있으면 라인에 노출하지 않음(플레이스홀더 금지).
-const BUSINESS_NO = (process.env.NEXT_PUBLIC_BUSINESS_NO ?? "").trim();
+// 사업자등록번호: 기본값 실번호(항상 표시), 환경변수로 override 가능.
+const BUSINESS_NO = (process.env.NEXT_PUBLIC_BUSINESS_NO ?? "320-86-03865").trim();
 
 const SERVICE_LINKS: FooterLink[] = [
   { label: "멘토 찾기", href: "/mentors" },
@@ -87,7 +87,7 @@ export function SiteFooter() {
             ))}
           </nav>
           <p className="text-xs font-medium text-slate-500">
-            (주)쌤버십{BUSINESS_NO ? ` | 사업자등록번호: ${BUSINESS_NO}` : ""}
+            (주)바이트{BUSINESS_NO ? ` | 사업자등록번호: ${BUSINESS_NO}` : ""}
           </p>
         </div>
       </div>
