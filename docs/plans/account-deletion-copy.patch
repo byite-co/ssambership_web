@@ -1,0 +1,30 @@
+# 계정 삭제 — 기존 문구 교체 패치 (스펙 §4)
+# ⚠️ 적용 시점: NEXT_PUBLIC_FEATURE_ACCOUNT_DELETION ON 배포와 동시 커밋.
+#    OFF 동안에는 적용 금지 (이 파일은 준비본 — git apply docs/plans/account-deletion-copy.patch)
+#
+--- a/app/(public)/support/page.tsx
++++ b/app/(public)/support/page.tsx
+@@ -85,11 +85,10 @@
+   {
+     id: "account",
+     question: "학생·멘토 계정을 바꾸거나 탈퇴하려면?",
+     answer: (
+       <>
+-        역할(학생/멘토)은 가입 시 선택하며, 계정 정보 변경은 마이페이지에서 할 수 있습니다. 탈퇴·계정 문의는
+-        고객센터 이메일로 연락해 주세요.
++        역할(학생/멘토)은 가입 시 선택하며, 계정 정보 변경은 마이페이지에서 할 수 있습니다. 탈퇴는 마이페이지 하단
++        &lsquo;회원 탈퇴&rsquo;에서 직접 할 수 있어요. 거래·정산 기록은 법령에 따라 익명화되어 보존됩니다.
+       </>
+     ),
+   },
+--- a/app/(public)/legal/privacy/page.tsx
++++ b/app/(public)/legal/privacy/page.tsx
+@@ -12,6 +12,10 @@
+       <ul className="list-inside list-disc space-y-2 text-sm text-slate-700">
+         <li>회원가입·로그인·결제·문의 처리에 필요한 최소 범위의 정보를 처리할 수 있습니다.</li>
+         <li>알림·로그는 보안·분쟁 대응 목적의 보관 정책을 따릅니다.</li>
++        <li>
++          탈퇴 시 개인정보는 익명화하며, 전자상거래·세법상 거래기록(결제·캐시 원장·정산·주문)은 익명 상태로 별도
++          보존합니다. 탈퇴는 마이페이지 하단 &lsquo;회원 탈퇴&rsquo;에서 직접 진행할 수 있습니다.
++        </li>
+       </ul>
