@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Gauge, Inbox, Star, Users } from "lucide-react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireRole } from "@/lib/auth/routeGuard";
+import { isAccountDeletionFeatureEnabled } from "@/lib/shell/featureFlags";
 import { createClient } from "@/lib/supabase/server";
 import { loadMentorHubDashboardData } from "@/lib/mentor/dashboard/mentorHubDashboardQueries";
 import type {
@@ -473,6 +474,14 @@ function MentorSupportCard() {
       >
         분쟁 현황 보기 →
       </Link>
+      {/* 계정 삭제 진입 — 플래그 ON일 때만 렌더(OFF면 DOM에도 없음, 스펙 §3) */}
+      {isAccountDeletionFeatureEnabled() ? (
+        <p className="mt-3 border-t border-slate-100 pt-3">
+          <Link href="/account/delete" className="text-[12px] font-bold text-slate-400 hover:text-red-600 hover:underline">
+            회원 탈퇴 →
+          </Link>
+        </p>
+      ) : null}
     </section>
   );
 }
