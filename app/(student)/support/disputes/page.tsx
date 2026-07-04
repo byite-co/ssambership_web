@@ -1,4 +1,5 @@
 import { PageScaffold } from "@/components/shell/PageScaffold";
+import { StudentSupportTabs } from "@/components/support/StudentSupportTabs";
 import { StudentDisputesFilterableList } from "@/components/disputes/StudentDisputesFilterableList";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
@@ -21,6 +22,7 @@ export default async function StudentDisputesListPage() {
         </>
       }
     >
+      <StudentSupportTabs active="disputes" />
       <StudentDisputesFilterableList
         items={items}
         detailHrefBase="/support/disputes"

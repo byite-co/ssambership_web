@@ -3,12 +3,17 @@ import { isCustomRequestFeatureEnabled } from "@/lib/shell/featureFlags";
 
 export type MainNavItem = { href: string; label: string };
 
-/** 멘토가 접근하면 대시보드로 보낼 캐시·지갑 경로 (충전은 네비 허용) */
+/**
+ * 멘토가 접근하면 대시보드로 보낼 캐시·지갑 경로 (충전은 네비 허용).
+ * W-05: /cash 는 /wallet/charge 로 리다이렉트되는 레거시 URL — 멘토는 리다이렉트 후
+ * 충전 화면 도달이 허용(requireWalletChargeAccess)이므로 차단 목록에서 유지할 필요가
+ * 없어졌으나, /wallet/ledger(원장)는 계속 차단한다. /cash 매칭은 레거시 보호용 유지.
+ */
 export const MENTOR_BLOCKED_CASH_PATHS = ["/cash", "/wallet/ledger"] as const;
 
 export function isCashNavHref(href: string): boolean {
   return (
-    href === "/cash" ||
+    href === "/cash" || // 레거시 URL 매칭 유지 (W-05 리다이렉트 경유 보호)
     href.startsWith("/wallet") ||
     MENTOR_BLOCKED_CASH_PATHS.some((p) => href === p || href.startsWith(`${p}/`))
   );
@@ -45,7 +50,7 @@ export const publicMainNav: MainNavItem[] = [
   { href: "/individual-questions", label: "개별 질문" },
   { href: "/community", label: "커뮤니티" },
   { href: "/custom-request", label: "맞춤의뢰" },
-  { href: "/cash", label: "캐시결제" },
+  { href: "/wallet/charge", label: "캐시결제" },
 ];
 
 export const studentMainNav: MainNavItem[] = [
@@ -54,7 +59,7 @@ export const studentMainNav: MainNavItem[] = [
   { href: "/individual-questions", label: "개별 질문" },
   { href: "/community", label: "커뮤니티" },
   { href: "/custom-request", label: "맞춤의뢰" },
-  { href: "/cash", label: "캐시결제" },
+  { href: "/wallet/charge", label: "캐시결제" },
   { href: "/mypage", label: "마이페이지" },
 ];
 
@@ -80,7 +85,7 @@ export const adminMainNav: MainNavItem[] = [
   { href: "/question-room", label: "질문방" },
   { href: "/community", label: "커뮤니티" },
   { href: "/custom-request", label: "맞춤의뢰" },
-  { href: "/cash", label: "캐시결제" },
+  { href: "/wallet/charge", label: "캐시결제" },
   { href: "/admin", label: "관리" },
 ];
 
@@ -91,7 +96,7 @@ export const landingGuestNav: MainNavItem[] = [
   { href: "/individual-questions", label: "개별 질문" },
   { href: "/community", label: "커뮤니티" },
   { href: "/custom-request", label: "맞춤의뢰" },
-  { href: "/cash", label: "캐시결제" },
+  { href: "/wallet/charge", label: "캐시결제" },
   { href: "/mypage", label: "마이페이지" },
 ];
 

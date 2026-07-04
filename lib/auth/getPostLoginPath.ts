@@ -20,7 +20,7 @@ export function safeInternalNextPath(v: string | null | undefined): string | nul
  * `next`가 없거나 거부될 때 쓰는 **일반 로그인·권한 복귀** 기본 경로.
  * 멘토는 `/mentor/mypage` (마이페이지 = 통합 홈)를 쓴다.
  *
- * **회원가입 직후** 기본 멘토 목적지는 `getSignUpSuccessPath`에서 `/mentor/profile`로
+ * **회원가입 직후** 기본 멘토 목적지는 `getSignUpSuccessPath`에서 `/mentor/profile/edit`로
  * 별도 처리한다(프로필·인증 보강 우선). 가입 플로우는 그 함수만 사용할 것.
  */
 export function getPostLoginPath(role: AppRole): string {

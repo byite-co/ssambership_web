@@ -41,7 +41,8 @@ const NAV_ITEMS: { tab: Props["activeTab"]; href: string; label: string; Icon: L
   { tab: "subscriptions", href: "/subscriptions", label: "구독 현황", Icon: CalendarDays },
   { tab: "wallet", href: "/wallet/ledger", label: "캐시 내역", Icon: Wallet },
   { tab: "notifications", href: "/notifications", label: "알림", Icon: Bell },
-  { tab: "support", href: "/support/disputes", label: "분쟁·환불 현황", Icon: ShieldAlert },
+  // W-06: 지원 허브(분쟁·환불·신고 3탭) 진입 — 첫 탭 disputes로 연결
+  { tab: "support", href: "/support/disputes", label: "지원 (분쟁·환불·신고)", Icon: ShieldAlert },
 ];
 
 export function StudentDashboardShell({

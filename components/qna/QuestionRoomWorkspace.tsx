@@ -345,7 +345,7 @@ export function QuestionRoomWorkspace(props: {
             <div className="shrink-0 border-t border-slate-100 bg-white p-4">
               <p className="text-[11px] font-extrabold text-slate-600">새 질문 주제</p>
               <p className="mt-1 text-[10px] font-medium leading-relaxed text-slate-500">
-                확인 완료된 질문만 이번 주 한도에 포함됩니다.
+                질문을 등록하는 순간 주간 한도가 차감됩니다(확인 여부와 무관).
               </p>
               <QuestionRoomStudentThreadForm
                 roomId={props.roomId}

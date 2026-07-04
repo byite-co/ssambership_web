@@ -66,7 +66,7 @@ export function MentorPayoutsRightPanel(props: Props) {
             <dd className="text-right text-[13px] font-medium text-slate-700">익월 정산 반영</dd>
           </div>
         </dl>
-        <Link href="/support/disputes" className="mt-4 inline-flex text-xs font-bold text-[#059669] hover:underline">
+        <Link href="/mentor/support/disputes" className="mt-4 inline-flex text-xs font-bold text-[#059669] hover:underline">
           1:1 문의하기 →
         </Link>
       </section>

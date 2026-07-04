@@ -214,6 +214,7 @@ export default async function MentorMypagePage(props: MypageProps) {
           <RatingStatCard ratingAvg={ratingAvg} reviewCount={reviewCount} />
           <RecentReviewsCard reviews={recentReviews} />
           <CapStatCard usage={capUsage} />
+          <MentorSupportCard />
         </aside>
       </div>
     </main>
@@ -455,6 +456,24 @@ function RatingStatCard({ ratingAvg, reviewCount }: { ratingAvg: number | null; 
       </p>
       {reviewCount > 0 ? <p className="mt-1 text-[11px] text-slate-400">리뷰 {reviewCount}개 기준</p> : null}
     </StatCard>
+  );
+}
+
+/* W-07: 멘토 분쟁·지원 진입 — 알림 딥링크 외 상시 진입점(헤더 네비 잠금값 대신 마이페이지 카드) */
+function MentorSupportCard() {
+  return (
+    <section className={SURFACE_CARD}>
+      <p className="text-[13px] font-semibold text-slate-700">분쟁·지원</p>
+      <p className="mt-1 text-[12px] leading-relaxed text-slate-500">
+        진행 중인 주문 분쟁 현황을 확인하고 관리자 중재 진행 상황을 볼 수 있어요.
+      </p>
+      <Link
+        href="/mentor/support/disputes"
+        className="mt-3 inline-flex text-[12px] font-bold text-[#059669] hover:underline"
+      >
+        분쟁 현황 보기 →
+      </Link>
+    </section>
   );
 }
 

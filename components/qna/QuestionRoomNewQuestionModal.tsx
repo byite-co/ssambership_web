@@ -52,7 +52,7 @@ export function QuestionRoomNewQuestionModal(props: {
           </button>
         </div>
         <p className="mb-4 text-[12px] font-medium leading-relaxed text-slate-500">
-          과목·메모·제목은 모두 선택이에요. 제목을 비우면 “질문 N”으로 자동 생성됩니다. 확인 완료된 질문만 주간 한도에 포함됩니다.
+          과목·메모·제목은 모두 선택이에요. 제목을 비우면 “질문 N”으로 자동 생성됩니다. 질문을 등록하는 순간 주간 한도가 차감됩니다(확인 여부와 무관).
         </p>
         <QuestionRoomStudentThreadForm
           roomId={props.roomId}

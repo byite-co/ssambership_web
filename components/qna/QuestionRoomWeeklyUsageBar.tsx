@@ -97,11 +97,11 @@ export function QuestionRoomWeeklyUsageBar(props: {
           </div>
           {!usage.canAsk ? (
             <p className="mt-2 text-[10px] font-bold leading-relaxed text-amber-800">
-              이번 주 질문 한도를 모두 사용했습니다. 확인 완료된 질문만 주간 한도에 포함됩니다.
+              이번 주 질문 한도를 모두 사용했습니다. 한도는 구독 시작일 기준 7일 주기로 갱신됩니다.
             </p>
           ) : (
             <p className="mt-2 text-[10px] font-medium text-slate-500">
-              남은 질문 {unlimited ? "무제한" : `${usage.remaining}개`} · 확인 완료 시에만 차감됩니다.
+              남은 질문 {unlimited ? "무제한" : `${usage.remaining}개`} · 등록하는 순간 차감됩니다(구독 시작일 기준 7일 주기).
             </p>
           )}
         </>

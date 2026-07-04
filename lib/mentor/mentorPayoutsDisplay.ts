@@ -2,8 +2,11 @@
  * 멘토 정산 UI 표시 헬퍼 — 클라이언트·서버 공용 (server-only import 없음)
  */
 import {
+  calcPayoutWithholding,
   CUSTOM_REQUEST_PLATFORM_FEE_LABEL,
+  INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL,
   MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
+  MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE,
   MENTOR_SUBSCRIPTION_PLATFORM_SHARE,
   SUBSCRIPTION_PLATFORM_FEE_LABEL,
 } from "@/lib/mentor/mentorPayoutsConstants";
@@ -16,11 +19,15 @@ import type {
 } from "@/lib/mentor/mentorPayoutsTypes";
 
 export function platformFeeLabelForType(type: PayoutLineType): string {
-  return type === "subscription" ? SUBSCRIPTION_PLATFORM_FEE_LABEL : CUSTOM_REQUEST_PLATFORM_FEE_LABEL;
+  if (type === "subscription") return SUBSCRIPTION_PLATFORM_FEE_LABEL;
+  if (type === "individual_question") return INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL;
+  return CUSTOM_REQUEST_PLATFORM_FEE_LABEL;
 }
 
 export function platformFeeRateForType(type: PayoutLineType): number {
-  return type === "subscription" ? MENTOR_SUBSCRIPTION_PLATFORM_SHARE : MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE;
+  if (type === "subscription") return MENTOR_SUBSCRIPTION_PLATFORM_SHARE;
+  if (type === "individual_question") return MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE;
+  return MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE;
 }
 
 /** DB fee_rate가 잘못 저장된 경우(예: 0.1) 유형별 잠금값으로 보정 */
@@ -32,6 +39,7 @@ export function resolvePlatformFeeRate(type: PayoutLineType, raw: unknown): numb
   if (Math.abs(asFraction - expected) < 0.02) return expected;
   if (type === "subscription" && asFraction <= 0.11) return MENTOR_SUBSCRIPTION_PLATFORM_SHARE;
   if (type === "custom_request" && asFraction <= 0.11) return MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE;
+  if (type === "individual_question" && asFraction <= 0.11) return MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE;
   return expected;
 }
 
@@ -71,7 +79,7 @@ export function buildPayoutScheduleInfo(
   const y = from.getFullYear();
   const m = from.getMonth();
   const day = from.getDate();
-  const target = day < 10 ? new Date(y, m, 10) : new Date(y, m + 1, 10);
+  const target = day < 23 ? new Date(y, m, 23) : new Date(y, m + 1, 23);
   const daysInMonth = new Date(y, m + 1, 0).getDate();
   const progress = Math.min(100, Math.round((day / daysInMonth) * 100));
 
@@ -93,6 +101,14 @@ function mapLineStatusToUi(status: string, net: number): PayoutUiStatus {
   return "scheduled";
 }
 
+/** W-01: 라인 생성 시 원천징수 3.3%·실지급액을 산출해 채운다 (SQL 108/114와 동일 per-line floor) */
+export function withPayoutWithholding(
+  line: Omit<MentorPayoutDetailLine, "withholdingAmount" | "payoutAmount">
+): MentorPayoutDetailLine {
+  const withholdingAmount = calcPayoutWithholding(line.netAmount);
+  return { ...line, withholdingAmount, payoutAmount: line.netAmount - withholdingAmount };
+}
+
 export function detailLineToSettlementRow(line: MentorPayoutDetailLine): MentorPayoutSettlementTableRow {
   const uiStatus = mapLineStatusToUi(line.status, line.netAmount);
   const isCancelled = uiStatus === "cancelled";
@@ -104,6 +120,8 @@ export function detailLineToSettlementRow(line: MentorPayoutDetailLine): MentorP
     grossAmount: isCancelled ? -Math.abs(line.paymentAmount) : line.paymentAmount,
     feeAmount: isCancelled ? Math.abs(line.feeAmount) : line.feeAmount,
     netAmount: line.netAmount,
+    withholdingAmount: isCancelled ? 0 : line.withholdingAmount,
+    payoutAmount: isCancelled ? line.netAmount : line.payoutAmount,
     uiStatus,
     isCancelled,
   };

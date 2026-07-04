@@ -1,0 +1,35 @@
+{
+  "generatedBy": "scripts/dep-baseline.mjs",
+  "scope": [
+    "lib",
+    "components",
+    "app",
+    "middleware.ts"
+  ],
+  "moduleCount": 773,
+  "dependencyCount": 3000,
+  "cycleCount": 5,
+  "cycles": [
+    [
+      "components/shell/ShellHeaderInner.tsx",
+      "components/shell/ShellMobileNavMenu.tsx"
+    ],
+    [
+      "lib/subscribe/mentorPlanPricing.ts",
+      "lib/subscribe/subscribePageQueries.ts"
+    ],
+    [
+      "lib/subscribe/mentorPlanPricing.ts",
+      "lib/subscribe/subscribePlanCatalog.ts",
+      "lib/subscribe/subscribePageQueries.ts"
+    ],
+    [
+      "lib/subscribe/subscribePageQueries.ts",
+      "lib/subscribe/subscribePlanCatalog.ts"
+    ],
+    [
+      "lib/subscribe/subscribePageQueries.ts",
+      "lib/subscribe/subscriptionsTable.ts"
+    ]
+  ]
+}

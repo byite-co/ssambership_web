@@ -14,13 +14,15 @@ export function formatPayoutTableDate(iso: string): string {
 }
 
 export function typeBadgeClass(type: PayoutLineType): string {
-  return type === "subscription"
-    ? "border-slate-200 bg-slate-100 text-slate-600"
-    : "border-emerald-200 bg-emerald-50 text-emerald-800";
+  if (type === "subscription") return "border-slate-200 bg-slate-100 text-slate-600";
+  if (type === "individual_question") return "border-sky-200 bg-sky-50 text-sky-800";
+  return "border-emerald-200 bg-emerald-50 text-emerald-800";
 }
 
 export function typeBadgeLabel(type: PayoutLineType): string {
-  return type === "subscription" ? "구독" : "맞춤의뢰";
+  if (type === "subscription") return "구독";
+  if (type === "individual_question") return "개별질문";
+  return "맞춤의뢰";
 }
 
 export function settlementStatusBadge(status: PayoutUiStatus): { label: string; className: string } {

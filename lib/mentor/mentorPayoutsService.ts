@@ -10,12 +10,18 @@ import {
   subscriptionSettlementStatus,
 } from "@/lib/mentor/subscriptionSettlementItems";
 import {
+  calcPayoutWithholding,
   DEFAULT_MASKED_BANK_DISPLAY,
   MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
   MENTOR_CUSTOM_REQUEST_SHARE,
+  MENTOR_INDIVIDUAL_QUESTION_SHARE,
   minorUnitsToCash,
 } from "@/lib/mentor/mentorPayoutsConstants";
-import { buildPayoutScheduleInfo, detailLineToSettlementRow } from "@/lib/mentor/mentorPayoutsDisplay";
+import {
+  buildPayoutScheduleInfo,
+  detailLineToSettlementRow,
+  withPayoutWithholding,
+} from "@/lib/mentor/mentorPayoutsDisplay";
 import type {
   MentorPayoutDetailLine,
   MentorPayoutDetailResult,
@@ -151,7 +157,7 @@ async function loadSubscriptionLines(client: SupabaseClient, mentorId: string): 
   const rows = await loadSubscriptionSettlementRowsForMentor(client, mentorId, 300);
   return rows.map((r) => {
     const itemId = String(r.id ?? r.billing_event_id ?? r.subscription_id ?? "");
-    return {
+    return withPayoutWithholding({
       id: `sub-${itemId}`,
       type: "subscription" as const,
       date: subscriptionSettlementDate(r),
@@ -160,7 +166,7 @@ async function loadSubscriptionLines(client: SupabaseClient, mentorId: string): 
       feeAmount: minorCentsToCash(r.platform_fee_cents),
       netAmount: minorCentsToCash(r.mentor_amount_cents),
       status: subscriptionSettlementStatus(r.status),
-    };
+    });
   });
 }
 async function loadCustomRequestLines(client: SupabaseClient, mentorId: string): Promise<MentorPayoutDetailLine[]> {
@@ -177,7 +183,7 @@ async function loadCustomRequestLines(client: SupabaseClient, mentorId: string):
     const status =
       st === "paid" ? "지급완료" : st === "on_hold" ? "보류" : st === "payable" ? "지급가능" : "정산예정";
     const oid = String(s.custom_request_order_id ?? "");
-    return {
+    return withPayoutWithholding({
       id: `cr-${String(s.id ?? oid)}`,
       type: "custom_request" as const,
       date: pickTs(s),
@@ -186,7 +192,7 @@ async function loadCustomRequestLines(client: SupabaseClient, mentorId: string):
       feeAmount: fee,
       netAmount: net,
       status,
-    };
+    });
   });
 
   const seenOrder = new Set(
@@ -213,19 +219,69 @@ async function loadCustomRequestLines(client: SupabaseClient, mentorId: string):
     if (payment <= 0) continue;
     const net = Math.floor(payment * MENTOR_CUSTOM_REQUEST_SHARE);
     const fee = payment - net;
-    extra.push({
-      id: `cro-${oid}`,
-      type: "custom_request",
-      date: pickTs(o),
-      description: `맞춤의뢰 완료 · ${oid.slice(0, 8)}`,
-      paymentAmount: payment,
-      feeAmount: fee,
-      netAmount: net,
-      status: "정산예정",
-    });
+    extra.push(
+      withPayoutWithholding({
+        id: `cro-${oid}`,
+        type: "custom_request",
+        date: pickTs(o),
+        description: `맞춤의뢰 완료 · ${oid.slice(0, 8)}`,
+        paymentAmount: payment,
+        feeAmount: fee,
+        netAmount: net,
+        status: "정산예정",
+      })
+    );
   }
 
   return [...fromSettlement, ...extra];
+}
+
+/**
+ * W-04: 개별질문(IQ) 정산 라인 — individual_questions released 건 기반.
+ * 산식은 SQL 096/107/109와 동일: 멘토 85% = floor(price_cents * 0.85).
+ * 현행(즉시지급)은 release_ledger_id 설정 → "지급완료", 후불 분리(109) 전환 시
+ * released & ledger null 건이 자연히 "정산예정"으로 표시된다.
+ */
+async function loadIndividualQuestionLines(
+  client: SupabaseClient,
+  mentorId: string
+): Promise<MentorPayoutDetailLine[]> {
+  const { data, error } = await client
+    .from("individual_questions")
+    .select("*")
+    .or(`claimed_mentor_id.eq.${mentorId},designated_mentor_id.eq.${mentorId}`)
+    .not("released_at", "is", null)
+    .order("released_at", { ascending: false })
+    .limit(300);
+  if (error || !data) return [];
+
+  const lines: MentorPayoutDetailLine[] = [];
+  for (const q of data as Row[]) {
+    // 담당 멘토 확정 — claimed 우선(107 뷰와 동일). 지정만 되고 타 멘토가 claim한 건 제외.
+    const effectiveMentor = String(q.claimed_mentor_id ?? q.designated_mentor_id ?? "");
+    if (effectiveMentor !== mentorId) continue;
+    const st = String(q.status ?? "").toLowerCase();
+    if (["refunded", "expired", "canceled", "cancelled"].includes(st)) continue;
+    const priceCents = intWon(q.price_cents);
+    if (priceCents <= 0) continue;
+    const netCents = Math.floor(priceCents * MENTOR_INDIVIDUAL_QUESTION_SHARE);
+    const qid = String(q.id ?? "");
+    const date =
+      [q.released_at, q.answered_at, q.created_at].find((v) => typeof v === "string" && v) as string | undefined;
+    lines.push(
+      withPayoutWithholding({
+        id: `iq-${qid}`,
+        type: "individual_question",
+        date: date ?? new Date().toISOString(),
+        description: qid ? `개별질문 · ${qid.slice(0, 8)}` : "개별질문",
+        paymentAmount: minorCentsToCash(priceCents),
+        feeAmount: minorCentsToCash(priceCents - netCents),
+        netAmount: minorCentsToCash(netCents),
+        status: q.release_ledger_id ? "지급완료" : "정산예정",
+      })
+    );
+  }
+  return lines;
 }
 
 function sumNet(lines: MentorPayoutDetailLine[], ym?: string): number {
@@ -284,29 +340,48 @@ export async function loadMentorPayoutBankAccount(
 export async function loadMentorPayoutSummary(supabase: SupabaseClient, mentorId: string): Promise<MentorPayoutSummary> {
   const client = await readClient(supabase);
   const ym = currentYm();
-  const [subLines, crLines, bank] = await Promise.all([
+  const [subLines, crLines, iqLines, bank] = await Promise.all([
     loadSubscriptionLines(client, mentorId),
     loadCustomRequestLines(client, mentorId),
+    loadIndividualQuestionLines(client, mentorId),
     loadMentorPayoutBankAccount(client, mentorId),
   ]);
 
-  const all = [...subLines, ...crLines];
+  const all = [...subLines, ...crLines, ...iqLines];
   const thisMonthSubscription = sumNetByType(all, "subscription", ym);
   const thisMonthCustomRequest = sumNetByType(all, "custom_request", ym);
-  const thisMonthRevenue = thisMonthSubscription + thisMonthCustomRequest;
+  const thisMonthIndividualQuestion = sumNetByType(all, "individual_question", ym);
+  const thisMonthRevenue = thisMonthSubscription + thisMonthCustomRequest + thisMonthIndividualQuestion;
 
   const paidThisMonth = sumNetByStatus(all, ym, isPaidPayoutLine);
   const expectedThisMonth = sumNetByStatus(all, ym, isPendingPayoutLine);
   const thisMonthScheduledPayout =
     expectedThisMonth > 0 ? expectedThisMonth : Math.max(0, thisMonthRevenue - paidThisMonth);
 
+  // W-01 4단 구조: 총 수익 → 플랫폼 수수료 → 원천징수 3.3% → 실지급 예정액(23일)
+  const monthLines = all.filter((l) => inYm(l.date, ym));
+  const thisMonthGross = monthLines.reduce((a, l) => a + l.paymentAmount, 0);
+  const thisMonthFee = monthLines.reduce((a, l) => a + l.feeAmount, 0);
+  const pendingWithholding = monthLines
+    .filter(isPendingPayoutLine)
+    .reduce((a, l) => a + l.withholdingAmount, 0);
+  const thisMonthWithholding =
+    expectedThisMonth > 0 ? pendingWithholding : calcPayoutWithholding(thisMonthScheduledPayout);
+  const thisMonthNetScheduledPayout = Math.max(0, thisMonthScheduledPayout - thisMonthWithholding);
+
   return {
     thisMonthRevenue,
     thisMonthScheduledPayout,
     thisMonthSubscription,
     thisMonthCustomRequest,
+    thisMonthIndividualQuestion,
     lifetimeSubscription: sumNetByType(all, "subscription"),
     lifetimeCustomRequest: sumNetByType(all, "custom_request"),
+    lifetimeIndividualQuestion: sumNetByType(all, "individual_question"),
+    thisMonthGross,
+    thisMonthFee,
+    thisMonthWithholding,
+    thisMonthNetScheduledPayout,
     bankDisplay: bank.display,
     bankEditable: bank.editable,
     bankName: bank.bankName,
@@ -320,11 +395,12 @@ export async function loadMentorPayoutMonthlyCards(
   months = 6
 ): Promise<MentorPayoutMonthlyCard[]> {
   const client = await readClient(supabase);
-  const [subLines, crLines] = await Promise.all([
+  const [subLines, crLines, iqLines] = await Promise.all([
     loadSubscriptionLines(client, mentorId),
     loadCustomRequestLines(client, mentorId),
+    loadIndividualQuestionLines(client, mentorId),
   ]);
-  const all = [...subLines, ...crLines];
+  const all = [...subLines, ...crLines, ...iqLines];
 
   const cards: MentorPayoutMonthlyCard[] = [];
   const now = new Date();
@@ -473,39 +549,45 @@ export async function loadMentorPayoutsPageData(
   const ym = currentYm();
   const prev = prevYm(ym);
 
-  const [summary, months, subLines, crLines, lifetimePaid, performanceLines] =
+  const [summary, months, subLines, crLines, iqLines, lifetimePaid, performanceLines] =
     await Promise.all([
       loadMentorPayoutSummary(supabase, mentorId),
       loadMentorPayoutMonthlyCards(supabase, mentorId, 6),
       loadSubscriptionLines(client, mentorId),
       loadCustomRequestLines(client, mentorId),
+      loadIndividualQuestionLines(client, mentorId),
       loadLifetimePaidPayouts(client, mentorId),
       loadPerformanceLines(client, mentorId),
     ]);
 
-  const all = [...subLines, ...crLines];
+  const all = [...subLines, ...crLines, ...iqLines];
   const settlementLines = all.map(detailLineToSettlementRow).sort((a, b) => (a.date < b.date ? 1 : -1));
 
   const thisSub = sumNetByType(all, "subscription", ym);
   const thisCr = sumNetByType(all, "custom_request", ym);
+  const thisIq = sumNetByType(all, "individual_question", ym);
   const prevSub = sumNetByType(all, "subscription", prev);
   const prevCr = sumNetByType(all, "custom_request", prev);
-  const thisTotal = thisSub + thisCr;
-  const prevTotal = prevSub + prevCr;
+  const prevIq = sumNetByType(all, "individual_question", prev);
+  const thisTotal = thisSub + thisCr + thisIq;
+  const prevTotal = prevSub + prevCr + prevIq;
 
   const shareTotal = thisTotal > 0 ? thisTotal : 1;
   const revenueShare = {
     subscription: thisSub,
     customRequest: thisCr,
+    individualQuestion: thisIq,
     total: thisTotal,
     subscriptionPct: Math.round((thisSub / shareTotal) * 100),
     customRequestPct: Math.round((thisCr / shareTotal) * 100),
+    individualQuestionPct: Math.round((thisIq / shareTotal) * 100),
   };
 
   const paidThisMonth = sumNetByStatus(all, ym, isPaidPayoutLine);
 
+  // W-01: 지급 예정액은 원천징수 3.3% 공제 후 실지급 기준
   const schedule = buildPayoutScheduleInfo(
-    summary.thisMonthScheduledPayout,
+    summary.thisMonthNetScheduledPayout,
     paidThisMonth > 0 ? paidThisMonth : lifetimePaid
   );
 
@@ -517,6 +599,7 @@ export async function loadMentorPayoutsPageData(
     kpis: {
       subscription: { amount: thisSub, momPct: pctChange(thisSub, prevSub) },
       customRequest: { amount: thisCr, momPct: pctChange(thisCr, prevCr) },
+      individualQuestion: { amount: thisIq, momPct: pctChange(thisIq, prevIq) },
       total: { amount: thisTotal, momPct: pctChange(thisTotal, prevTotal) },
       lifetimePaid,
     },
@@ -532,12 +615,13 @@ export async function loadMentorPayoutDetail(
   opts: { month?: string | null; type?: PayoutLineType | "all" | null }
 ): Promise<MentorPayoutDetailResult> {
   const client = await readClient(supabase);
-  const [subLines, crLines] = await Promise.all([
+  const [subLines, crLines, iqLines] = await Promise.all([
     loadSubscriptionLines(client, mentorId),
     loadCustomRequestLines(client, mentorId),
+    loadIndividualQuestionLines(client, mentorId),
   ]);
 
-  let lines = [...subLines, ...crLines];
+  let lines = [...subLines, ...crLines, ...iqLines];
   if (opts.type && opts.type !== "all") {
     lines = lines.filter((l) => l.type === opts.type);
   }
@@ -552,8 +636,10 @@ export async function loadMentorPayoutDetail(
       paymentAmount: acc.paymentAmount + l.paymentAmount,
       feeAmount: acc.feeAmount + l.feeAmount,
       netAmount: acc.netAmount + l.netAmount,
+      withholdingAmount: acc.withholdingAmount + l.withholdingAmount,
+      payoutAmount: acc.payoutAmount + l.payoutAmount,
     }),
-    { paymentAmount: 0, feeAmount: 0, netAmount: 0 }
+    { paymentAmount: 0, feeAmount: 0, netAmount: 0, withholdingAmount: 0, payoutAmount: 0 }
   );
 
   return { lines, totals };

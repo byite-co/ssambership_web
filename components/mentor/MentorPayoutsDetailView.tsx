@@ -13,10 +13,26 @@ import {
   typeBadgeLabel,
 } from "@/components/mentor/payouts/payoutUi";
 
+type DetailTotals = {
+  paymentAmount: number;
+  feeAmount: number;
+  netAmount: number;
+  withholdingAmount: number;
+  payoutAmount: number;
+};
+
+const EMPTY_TOTALS: DetailTotals = {
+  paymentAmount: 0,
+  feeAmount: 0,
+  netAmount: 0,
+  withholdingAmount: 0,
+  payoutAmount: 0,
+};
+
 type DetailResponse = {
   ok: boolean;
   lines?: MentorPayoutDetailLine[];
-  totals?: { paymentAmount: number; feeAmount: number; netAmount: number };
+  totals?: DetailTotals;
   error?: string;
 };
 
@@ -38,7 +54,7 @@ export function MentorPayoutsDetailView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lines, setLines] = useState<MentorPayoutDetailLine[]>([]);
-  const [totals, setTotals] = useState({ paymentAmount: 0, feeAmount: 0, netAmount: 0 });
+  const [totals, setTotals] = useState<DetailTotals>(EMPTY_TOTALS);
   const [page, setPage] = useState(1);
 
   // 클라이언트 페이지네이션 — 데스크탑 10/page, 모바일(≤767px) 5/page.
@@ -78,7 +94,7 @@ export function MentorPayoutsDetailView() {
         return;
       }
       setLines(json.lines);
-      setTotals(json.totals ?? { paymentAmount: 0, feeAmount: 0, netAmount: 0 });
+      setTotals(json.totals ?? EMPTY_TOTALS);
     } catch {
       setError("내역을 불러오지 못했습니다.");
     } finally {
@@ -101,6 +117,8 @@ export function MentorPayoutsDetailView() {
         결제금액: r.grossAmount,
         수수료: r.feeAmount,
         순수령액: r.netAmount,
+        "원천징수 3.3%": r.withholdingAmount,
+        "실지급 예정액": r.payoutAmount,
         상태: st.label,
       };
     });
@@ -111,6 +129,8 @@ export function MentorPayoutsDetailView() {
       결제금액: totals.paymentAmount,
       수수료: totals.feeAmount,
       순수령액: totals.netAmount,
+      "원천징수 3.3%": totals.withholdingAmount,
+      "실지급 예정액": totals.payoutAmount,
       상태: "",
     });
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -142,11 +162,22 @@ export function MentorPayoutsDetailView() {
         </button>
       </div>
 
-      {/* 순수령액 합계 — 헤더 근처로 끌어올려 먼저 보이게(멘토 초록 강조). 값은 기존 totals.netAmount 그대로. */}
+      {/* W-01 4단 구조: 총 수익 → 수수료 → 원천징수 3.3%(강조) → 실지급 예정액 */}
       {!loading && !error ? (
-        <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl border-[0.5px] border-emerald-200 bg-emerald-50/60 px-5 py-4">
-          <span className="text-sm font-bold text-slate-700">순수령액 합계</span>
-          <span className="text-2xl font-black tabular-nums text-[#059669]">{formatCashKrw(totals.netAmount)}</span>
+        <div className="mb-4 rounded-2xl border-[0.5px] border-emerald-200 bg-emerald-50/60 px-5 py-4">
+          <div className="flex items-center justify-between gap-3">
+            <span className="text-sm font-bold text-slate-700">실지급 예정액 합계</span>
+            <span className="text-2xl font-black tabular-nums text-[#059669]">{formatCashKrw(totals.payoutAmount)}</span>
+          </div>
+          <p className="mt-2 text-[12px] text-slate-500">
+            총 수익 <span className="font-semibold tabular-nums text-slate-700">{formatCashKrw(totals.paymentAmount)}</span>
+            {" − "}플랫폼 수수료 <span className="font-semibold tabular-nums text-slate-700">{formatCashKrw(totals.feeAmount)}</span>
+            {" − "}
+            <strong className="font-extrabold text-rose-600" title="프리랜서 사업소득 원천징수">
+              원천징수 3.3% {formatCashKrw(totals.withholdingAmount)}
+            </strong>
+            {" = "}실지급 예정액 <span className="font-semibold tabular-nums text-slate-700">(매월 23일 지급)</span>
+          </p>
         </div>
       ) : null}
 
@@ -181,6 +212,7 @@ export function MentorPayoutsDetailView() {
             <option value="all">전체</option>
             <option value="subscription">구독</option>
             <option value="custom_request">맞춤의뢰</option>
+            <option value="individual_question">개별질문</option>
           </select>
         </label>
       </div>

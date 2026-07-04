@@ -2,6 +2,10 @@
 
 import { CalendarX } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
+import {
+  PAYOUT_WITHHOLDING_LABEL,
+  PAYOUT_WITHHOLDING_TOOLTIP,
+} from "@/lib/mentor/mentorPayoutsConstants";
 import type { MentorPayoutSettlementTableRow } from "@/lib/mentor/mentorPayoutsTypes";
 import {
   formatCashKrw,
@@ -18,6 +22,7 @@ export function MentorPayoutsSettlementTable(props: {
 }) {
   const grossLabel = props.variant === "detail" ? "결제금액" : "총액";
   const netLabel = props.variant === "detail" ? "순수령액" : "정산액";
+  const payoutLabel = "실지급 예정액";
   if (!props.rows.length) {
     return (
       <EmptyState
@@ -34,7 +39,7 @@ export function MentorPayoutsSettlementTable(props: {
     <>
     {/* 데스크탑(sm+): 기존 표 그대로 — lg+ 픽셀 동일 */}
     <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm sm:block">
-      <table className="w-full min-w-[880px] text-left text-sm">
+      <table className="w-full min-w-[1040px] text-left text-sm">
         <thead>
           <tr className="border-b border-slate-100 bg-slate-50/90 text-xs font-bold text-slate-500">
             <th className="px-4 py-3">일자</th>
@@ -43,6 +48,11 @@ export function MentorPayoutsSettlementTable(props: {
             <th className="px-4 py-3 text-right">{grossLabel}</th>
             <th className="px-4 py-3 text-right">수수료</th>
             <th className="px-4 py-3 text-right">{netLabel}</th>
+            {/* W-01: 원천징수 강조 열 — 굵게·색상 구분·툴팁 */}
+            <th className="px-4 py-3 text-right font-extrabold text-rose-700" title={PAYOUT_WITHHOLDING_TOOLTIP}>
+              {PAYOUT_WITHHOLDING_LABEL}
+            </th>
+            <th className="px-4 py-3 text-right">{payoutLabel}</th>
             <th className="px-4 py-3">상태</th>
           </tr>
         </thead>
@@ -74,8 +84,20 @@ export function MentorPayoutsSettlementTable(props: {
                 >
                   {row.isCancelled ? `+${formatCashKrw(row.feeAmount)}` : formatCashKrw(row.feeAmount)}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums font-black text-[#059669]">
+                <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-700">
                   {formatCashKrw(row.netAmount)}
+                </td>
+                {/* W-01: 원천징수 강조 셀 */}
+                <td
+                  className={`px-4 py-3 text-right tabular-nums font-extrabold ${
+                    row.isCancelled ? "text-slate-400" : "text-rose-600"
+                  }`}
+                  title={PAYOUT_WITHHOLDING_TOOLTIP}
+                >
+                  {row.withholdingAmount > 0 ? `-${formatCashKrw(row.withholdingAmount)}` : "—"}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums font-black text-[#059669]">
+                  {formatCashKrw(row.payoutAmount)}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-extrabold ${st.className}`}>
@@ -119,9 +141,22 @@ export function MentorPayoutsSettlementTable(props: {
                   {feeText}
                 </dd>
               </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="font-medium text-slate-500">{netLabel}</dt>
+                <dd className="tabular-nums font-semibold text-slate-700">{formatCashKrw(row.netAmount)}</dd>
+              </div>
+              {/* W-01: 원천징수 강조 행 */}
+              <div className="flex items-center justify-between gap-3">
+                <dt className="font-extrabold text-rose-700" title={PAYOUT_WITHHOLDING_TOOLTIP}>
+                  {PAYOUT_WITHHOLDING_LABEL}
+                </dt>
+                <dd className={`tabular-nums font-extrabold ${row.isCancelled ? "text-slate-400" : "text-rose-600"}`}>
+                  {row.withholdingAmount > 0 ? `-${formatCashKrw(row.withholdingAmount)}` : "—"}
+                </dd>
+              </div>
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-1.5">
-                <dt className="font-bold text-slate-700">{netLabel}</dt>
-                <dd className="text-base font-black tabular-nums text-[#059669]">{formatCashKrw(row.netAmount)}</dd>
+                <dt className="font-bold text-slate-700">{payoutLabel}</dt>
+                <dd className="text-base font-black tabular-nums text-[#059669]">{formatCashKrw(row.payoutAmount)}</dd>
               </div>
             </dl>
             <div className="mt-3 flex justify-end">
