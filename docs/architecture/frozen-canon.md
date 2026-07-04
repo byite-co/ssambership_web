@@ -33,12 +33,17 @@ HEAD `450e8d6`)가 변경할 예정인 파일. 모듈화가 먼저 건드리면 
 
 | 구역 | 파일 | 대기 사유 |
 |---|---|---|
-| 정산 파이프라인 | `mentorPayoutsService/Queries/Display.ts`, `subscriptionSettlementItems.ts`, `orderSettlementService.ts` | 후불 지급 배치(SQL 108/109/110) 배선 예정 — 별도 브랜치 진행 중. `mentorPayoutsDisplay.ts`는 그 브랜치의 즉시 충돌 파일 |
+| 정산 파이프라인 | `mentorPayoutsQueries.ts`, `subscriptionSettlementItems.ts`, `orderSettlementService.ts` | 후불 지급 배치(108/109/110 DRAFT — 리포 편입 완료, 가동 대기) 배선 시 변경 예정 |
 | 구독 체크아웃 | `subscribeCheckoutService.ts`, `subscriptionRenewalBatch.ts` | 정산 모델 전환과 연동 |
 | 리뷰 집계 | `publicMentorsListQueries.ts`, `mentorHubDashboardQueries.ts` | avg_rating 갱신 트리거 신설(stale 수정) 이후 분할 가능 |
 | 환불 | `lib/admin/refundActions.ts` | 실 PG 취소 연동 여부 결정 대기 |
-| 신고 내역 | `app/(student)/support/reports/` | 학생 신고내역 페이지 연결 예정 |
 | 미성년 동의 | `lib/auth/minorConsentPlaceholders.ts` | 법무 문구 확정 대기 |
+
+**격리 해제 이력 (2026-07-04, W-지시서 정합 수행)**: `mentorPayoutsService.ts`(W-01/04 — 원천징수 4단·IQ 라인),
+`mentorPayoutsDisplay.ts`(W-03 cherry-pick 10→23 — payout 브랜치와 내용 동기화, 충돌 소멸),
+`app/(student)/support/reports/`(W-06 — 신고내역 실화면 연결 완료). 후불 SQL 105~114 리포 편입 완료.
+Premium 주간한도 999는 "의도된 내부 한도(외부 표기 무제한)"로 확정 — quota 구역의 FUP16 결정 대기 사유 소멸
+(DB 강제·TOCTOU 해소는 여전히 대기 — `weeklyQuestionUsage`·`questionRoomThreadService` 동결 유지).
 
 **병행 브랜치 검사(1차)**: 각 모듈화 PR 전 `git fetch origin feature/payout-postpaid` 후
 `변경 파일 ∩ git diff main...origin/feature/payout-postpaid --name-only = ∅` 확인.

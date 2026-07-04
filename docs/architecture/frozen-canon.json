@@ -17,9 +17,7 @@
   ],
   "frozenDirs": ["supabase/sql"],
   "quarantine": [
-    "lib/mentor/mentorPayoutsService.ts",
     "lib/mentor/mentorPayoutsQueries.ts",
-    "lib/mentor/mentorPayoutsDisplay.ts",
     "lib/mentor/subscriptionSettlementItems.ts",
     "lib/customRequest/orderSettlementService.ts",
     "lib/subscribe/subscribeCheckoutService.ts",
@@ -29,9 +27,9 @@
     "lib/admin/refundActions.ts",
     "lib/auth/minorConsentPlaceholders.ts"
   ],
-  "quarantineDirs": ["app/(student)/support/reports"],
+  "quarantineDirs": [],
   "quarantineNotes": {
-    "lib/mentor/mentorPayoutsDisplay.ts": "feature/payout-postpaid 브랜치의 즉시 충돌 파일(merge-base 대비 실변경 TS 1건)",
-    "lib/mentor/publicMentorsListQueries.ts": "avg_rating 갱신 트리거 신설(정합 작업) 이후에만 분할 가능"
+    "lib/mentor/publicMentorsListQueries.ts": "avg_rating 갱신 트리거 신설(정합 작업) 이후에만 분할 가능",
+    "_resolved_2026_07_04": "W-지시서 정합 수행으로 격리 해제: mentorPayoutsService.ts(W-01/04 화면 4단·IQ 라인), mentorPayoutsDisplay.ts(W-03 cherry-pick 10→23 — payout 브랜치와 내용 동기화되어 충돌 소멸), app/(student)/support/reports(W-06 실화면 연결). 후불 SQL 105~114는 리포 편입 완료(108/109/110은 DRAFT 유지)"
   }
 }

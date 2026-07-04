@@ -6,8 +6,8 @@
     "app",
     "middleware.ts"
   ],
-  "moduleCount": 770,
-  "dependencyCount": 2988,
+  "moduleCount": 773,
+  "dependencyCount": 3000,
   "cycleCount": 5,
   "cycles": [
     [
