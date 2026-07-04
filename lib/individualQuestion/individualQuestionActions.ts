@@ -74,6 +74,9 @@ function claimErrorMessage(codeOrMessage: string | null | undefined): string {
   if (value.includes("mentor_qualification_not_met")) {
     return "이 질문은 학생이 지정한 학교군·전공계열 자격을 가진 멘토만 답변할 수 있어요.";
   }
+  if (value.includes("mentor_subject_not_met")) {
+    return "본인 담당 과목의 질문만 답변할 수 있어요.";
+  }
   if (value.includes("mentor_not_approved")) {
     return "승인 완료 후 공개 질문을 가져갈 수 있어요.";
   }
