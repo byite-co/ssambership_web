@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { BrandSymbol } from "@/components/brand/BrandLogo";
+
 type LoginPageFooterProps = {
   termsUrl?: string;
   privacyUrl?: string;
@@ -39,8 +41,9 @@ export function LoginPageFooter({ termsUrl, privacyUrl, supportUrl }: LoginPageF
         <div className="min-w-0 flex-1">
           <Link
             href="/"
-            className="inline-block text-lg font-extrabold tracking-[-0.02em] text-slate-950 sm:text-xl"
+            className="inline-flex items-center gap-2 text-lg font-extrabold tracking-[-0.02em] text-slate-950 sm:text-xl"
           >
+            <BrandSymbol className="h-7 w-7" />
             쌤버십
           </Link>
           <p className="mt-1 text-sm font-medium text-slate-500 sm:text-base">SsamBership</p>

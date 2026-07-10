@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import { BrandSymbol } from "@/components/brand/BrandLogo";
+
 const nav = [
   { href: "/login", label: "로그인" },
   { href: "/signup", label: "회원가입" },
@@ -82,8 +84,9 @@ export function AuthTopNav({ size = "default", showMarketingNav = false, content
           <div className="flex min-w-0 items-center justify-between sm:shrink-0 sm:justify-start sm:pr-2 md:pr-4">
             <Link
               href="/"
-              className="shrink-0 pl-0.5 text-xl font-extrabold tracking-[-0.02em] text-slate-900 sm:text-2xl md:text-[1.6rem] lg:text-[1.7rem]"
+              className="flex shrink-0 items-center gap-2 pl-0.5 text-xl font-extrabold tracking-[-0.02em] text-slate-900 sm:text-2xl md:text-[1.6rem] lg:text-[1.7rem]"
             >
+              <BrandSymbol className="h-8 w-8 sm:h-9 sm:w-9" />
               쌤버십
             </Link>
             <div className="flex items-center gap-1.5 sm:hidden" aria-label="빠른 액션">
@@ -159,10 +162,11 @@ export function AuthTopNav({ size = "default", showMarketingNav = false, content
           href="/"
           className={
             hero
-              ? "text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl md:text-[1.65rem]"
-              : "text-lg font-bold tracking-tight text-slate-900"
+              ? "flex items-center gap-2 text-xl font-extrabold tracking-tight text-slate-900 sm:text-2xl md:text-[1.65rem]"
+              : "flex items-center gap-2 text-lg font-bold tracking-tight text-slate-900"
           }
         >
+          <BrandSymbol className={hero ? "h-8 w-8 sm:h-9 sm:w-9" : "h-7 w-7"} />
           쌤버십
         </Link>
         <nav
