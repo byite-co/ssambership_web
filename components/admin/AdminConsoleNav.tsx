@@ -6,6 +6,7 @@ import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { UserNameWithRoleBadge } from "@/components/shell/UserNameWithRoleBadge";
 import { ADMIN_CONSOLE_NAV, adminNavItemIsActive } from "@/components/admin/adminConsoleNavConfig";
+import { BrandSymbol } from "@/components/brand/BrandLogo";
 
 function NavLinks({ collapsed }: { collapsed: boolean }) {
   const pathname = usePathname() || "";
@@ -38,9 +39,10 @@ function NavLinks({ collapsed }: { collapsed: boolean }) {
 function BrandBlock({ collapsed }: { collapsed: boolean }) {
   return (
     <Link href="/admin/dashboard" className="block">
-      <p className={["font-black tracking-tight text-[#2563EB]", collapsed ? "text-center text-sm" : "text-lg"].join(" ")}>
-        {collapsed ? "S" : "쌤버십 Admin"}
-      </p>
+      <div className={["flex items-center gap-2", collapsed ? "justify-center" : ""].join(" ")}>
+        <BrandSymbol className="h-7 w-7" />
+        {!collapsed ? <p className="text-lg font-black tracking-tight text-[#2563EB]">쌤버십 Admin</p> : null}
+      </div>
       {!collapsed ? <p className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">운영 백오피스</p> : null}
     </Link>
   );

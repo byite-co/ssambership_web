@@ -1,4 +1,21 @@
+import Image from "next/image";
 import Link from "next/link";
+
+/** 확정 브랜드 심볼(파란 사각 + 졸업모자·말풍선). 워드마크 좌측에 항상 함께 렌더링한다. */
+export const BRAND_LOGO_SRC = "/brand/ssambership-logo.svg";
+
+export function BrandSymbol({ className = "h-8 w-8" }: { className?: string }) {
+  return (
+    <Image
+      src={BRAND_LOGO_SRC}
+      alt=""
+      width={32}
+      height={32}
+      className={`shrink-0 ${className}`}
+      aria-hidden
+    />
+  );
+}
 
 type BrandLogoProps = {
   href?: string;
@@ -19,11 +36,7 @@ export function BrandLogo({ href = "/", className = "", variant = "landing", onC
       onClick={onClick}
       className={`flex min-w-fit shrink-0 items-center gap-2 whitespace-nowrap ${className}`}
     >
-      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#142d61] text-white">
-        <svg viewBox="0 0 24 24" className="h-5 w-5 fill-current" aria-hidden>
-          <path d="M3 10 12 4l9 6-9 6-9-6Zm2.5 2.8L12 17l6.5-4.2V16L12 20l-6.5-4v-3.2Z" />
-        </svg>
-      </div>
+      <BrandSymbol />
       <span className={textClass}>쌤버십</span>
     </Link>
   );

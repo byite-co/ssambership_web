@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="118" fill="#1A56DB"/>
+  <!-- speech bubble (body + tail) -->
+  <path d="M214 230h100a40 40 0 0 1 40 40v50a40 40 0 0 1-40 40h-60l-24 34a7 7 0 0 1-12.5-4.2V360h-3.5a40 40 0 0 1-40-40v-50a40 40 0 0 1 40-40Z" fill="#ffffff"/>
+  <!-- text lines -->
+  <rect x="205" y="281" width="112" height="15" rx="7.5" fill="#1A56DB"/>
+  <rect x="205" y="313" width="112" height="15" rx="7.5" fill="#1A56DB"/>
+  <!-- mortarboard: blue halo creates gap over bubble, then white board -->
+  <path d="M258 138 L379 199 L258 260 L137 199 Z" fill="none" stroke="#1A56DB" stroke-width="44" stroke-linejoin="round"/>
+  <path d="M258 138 L379 199 L258 260 L137 199 Z" fill="#ffffff" stroke="#ffffff" stroke-width="10" stroke-linejoin="round"/>
+  <!-- tassel -->
+  <rect x="144" y="201" width="9" height="72" fill="#ffffff"/>
+  <path d="M141 271 h15 l7 18 h-29 Z" fill="#ffffff"/>
+  <rect x="134" y="289" width="8" height="16" rx="4" fill="#ffffff"/>
+  <rect x="145" y="289" width="8" height="16" rx="4" fill="#ffffff"/>
+  <rect x="156" y="289" width="8" height="16" rx="4" fill="#ffffff"/>
+</svg>
