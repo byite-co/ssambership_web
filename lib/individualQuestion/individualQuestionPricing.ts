@@ -9,6 +9,36 @@ function positiveAmountCents(value: unknown): number | null {
   return amount > 0 ? amount : null;
 }
 
+/**
+ * 여러 멘토의 개별 질문 단가를 한 번에 조회(멘토 지정 게시판용 표시 전용).
+ * RLS: authenticated select-all — 비로그인 세션에서는 빈 Map이 반환된다(에러 아님).
+ */
+export async function fetchMentorIndividualQuestionPriceMap(
+  supabase: SupabaseClient,
+  mentorIds: string[]
+): Promise<{ byMentor: Map<string, number>; error: string | null }> {
+  const byMentor = new Map<string, number>();
+  if (!mentorIds.length) return { byMentor, error: null };
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select("mentor_id, amount_cents")
+    .in("mentor_id", mentorIds);
+
+  if (error) {
+    return { byMentor, error: error.message };
+  }
+
+  for (const row of (data as Array<{ mentor_id: unknown; amount_cents: unknown }> | null) ?? []) {
+    const mentorId = typeof row.mentor_id === "string" ? row.mentor_id : null;
+    const amount = positiveAmountCents(row.amount_cents);
+    if (mentorId && amount != null) {
+      byMentor.set(mentorId, amount);
+    }
+  }
+  return { byMentor, error: null };
+}
+
 export async function fetchMentorIndividualQuestionPrice(
   supabase: SupabaseClient,
   mentorId: string
