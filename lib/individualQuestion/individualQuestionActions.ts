@@ -222,19 +222,30 @@ export async function createDirectIndividualQuestionAction(formData: FormData) {
   const subject = optionalText(formData, "subject");
   const topic = optionalText(formData, "topic");
   const attachment = formData.get("attachment");
-  const returnPath = mentorId ? `/mentors/${encodeURIComponent(mentorId)}/individual-question/new` : "/mentors";
+  // origin=iq-tab: 개별 질문 탭 내 작성 화면(/individual-questions/direct/[mentorId])에서 제출.
+  // 허용값은 "iq-tab" 하나뿐이며 경로는 서버에서 조립한다(폼 값 그대로 redirect하지 않음 — open redirect 방지).
+  const fromTab = textValue(formData, "origin") === "iq-tab";
+  const returnPath = mentorId
+    ? fromTab
+      ? `${STUDENT_LIST_PATH}/direct/${encodeURIComponent(mentorId)}`
+      : `/mentors/${encodeURIComponent(mentorId)}/individual-question/new`
+    : fromTab
+      ? STUDENT_LIST_PATH
+      : "/mentors";
+  // 멘토 자체가 문제인 오류(미승인·단가 미설정)의 복귀 지점 — 탭 경로는 안내 문구가 있는 작성 화면 그대로.
+  const mentorFallbackPath = fromTab ? returnPath : `/mentors/${encodeURIComponent(mentorId)}`;
 
-  if (!mentorId) actionError("/mentors", "멘토 정보가 올바르지 않습니다.");
+  if (!mentorId) actionError(fromTab ? STUDENT_LIST_PATH : "/mentors", "멘토 정보가 올바르지 않습니다.");
   if (!idempotencyKey) actionError(returnPath, "제출 정보가 만료되었습니다. 다시 시도해 주세요.");
   if (!title || !body) actionError(returnPath, "제목과 내용을 모두 입력해 주세요.");
 
   const supabase = await createClient();
   const approval = await assertMentorApprovedForAction(supabase, mentorId);
-  if (!approval.ok) actionError(`/mentors/${encodeURIComponent(mentorId)}`, "승인된 멘토에게만 개별 질문을 보낼 수 있어요.");
+  if (!approval.ok) actionError(mentorFallbackPath, "승인된 멘토에게만 개별 질문을 보낼 수 있어요.");
 
   const price = await fetchMentorIndividualQuestionPrice(supabase, mentorId);
   if (!price.amountCents) {
-    actionError(`/mentors/${encodeURIComponent(mentorId)}`, "이 멘토는 아직 개별 질문 단가를 설정하지 않았어요.");
+    actionError(mentorFallbackPath, "이 멘토는 지금 지정 질문을 받지 않아요. 다른 멘토를 지정해 보세요.");
   }
 
   // [연락처 마스킹] 저장 전 명백한 외부 연락처만 가린다(질문방 메시지와 동일 정책).
