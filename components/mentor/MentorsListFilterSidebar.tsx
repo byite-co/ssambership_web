@@ -246,7 +246,7 @@ export function MentorsListFilterSidebar(props: {
             type="submit"
             className="min-h-[44px] w-full whitespace-nowrap rounded-xl bg-[#2563EB] px-4 text-sm font-extrabold text-white hover:bg-[#1D4ED8]"
           >
-            검색 결과 {props.totalCount.toLocaleString("ko-KR")}명 보기
+            검색 결과 보기
           </button>
           <Link
             href="/mentors"

@@ -63,10 +63,10 @@ export function WalletChargeSidebar(props: {
         <h2 className="text-sm font-extrabold text-blue-900">충전 혜택</h2>
         <ul className="mt-3 space-y-2 text-xs leading-relaxed text-blue-800">
           <li>
-            <span className="font-bold">200,000원</span> 충전 시 <span className="font-bold">+20,000캐시</span> (10% 보너스)
+            <span className="font-bold">200,000원</span> 충전 시 <span className="font-bold">+6,000캐시</span> (3% 보너스)
           </li>
           <li>
-            <span className="font-bold">300,000원</span> 충전 시 <span className="font-bold">+40,000캐시</span> (13.3% 보너스)
+            <span className="font-bold">300,000원</span> 충전 시 <span className="font-bold">+15,000캐시</span> (5% 보너스)
           </li>
         </ul>
         <p className="mt-2 text-[11px] text-blue-700/90">200,000원 이상 충전 시 보너스 캐시가 추가 지급됩니다.</p>

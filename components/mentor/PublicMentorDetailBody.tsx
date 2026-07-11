@@ -122,6 +122,17 @@ export function PublicMentorDetailBody(props: {
   const isSlowResponse =
     !stats.avgResponseLabel || stats.avgResponseLabel === "—" || stats.avgResponseLabel.includes("48시간 이상");
 
+  // 대상 학년: 멘토 목록 필터(gradeMatchesFilter)와 동일한 휴리스틱으로 프로필 텍스트에서 도출
+  const gradeBlob = [display.subjects, display.tags, display.intro].filter(Boolean).join(" ").toLowerCase();
+  const targetGradesLabel =
+    [
+      /중등|중학|중1|중2|중3/.test(gradeBlob) ? "중등" : null,
+      /고등|고1|고2|고3|내신|수능/.test(gradeBlob) ? "고등" : null,
+      /n수|재수|검정/.test(gradeBlob) ? "N수" : null,
+    ]
+      .filter(Boolean)
+      .join(" · ") || "전체 학년";
+
   const statCards = [
     {
       label: "누적 답변 수",
@@ -145,6 +156,7 @@ export function PublicMentorDetailBody(props: {
     enoughReviews
       ? { label: "답변 만족도", value: stats.satisfactionLabel, hint: "실제 학생 평가" }
       : { label: "멘토 등급", value: "신규 멘토", hint: "리뷰가 쌓이면 공개돼요" },
+    { label: "대상 학년", value: targetGradesLabel, hint: "멘토링 대상" },
   ];
 
   const trustBadges = [
@@ -255,8 +267,8 @@ export function PublicMentorDetailBody(props: {
             <p className="mt-3 text-xs text-slate-500">인증 상태: {verKo}</p>
           </SurfaceCard>
 
-          {/* 통계 4카드 */}
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {/* 통계 카드 */}
+          <div className={`grid grid-cols-2 gap-3 ${statCards.length === 5 ? "lg:grid-cols-5" : "lg:grid-cols-4"}`}>
             {statCards.map((s) => (
               <div
                 key={s.label}

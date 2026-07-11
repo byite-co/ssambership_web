@@ -1,14 +1,7 @@
 import Link from "next/link";
 import type { CommunityNavActive } from "@/components/community/CommunityNavTypes";
+import type { CommunityHashtagRow } from "@/lib/community/communityBoardQueries";
 import { SURFACE_CARD } from "@/lib/ui/surfaceCard";
-
-const HOT_TOPICS = [
-  { rank: 1, label: "학습 루틴 공유" },
-  { rank: 2, label: "포트폴리오 피드백" },
-  { rank: 3, label: "면접 질문 모음" },
-  { rank: 4, label: "내신 공부법" },
-  { rank: 5, label: "진로 탐색 팁" },
-] as const;
 
 function NavLink({ href, label, active }: { href: string; label: string; active: boolean }) {
   return (
@@ -24,9 +17,15 @@ function NavLink({ href, label, active }: { href: string; label: string; active:
   );
 }
 
-export function CommunityLeftSidebar(props: { active: CommunityNavActive; loggedIn: boolean }) {
+export function CommunityLeftSidebar(props: {
+  active: CommunityNavActive;
+  loggedIn: boolean;
+  /** 실시간 인기 주제 — community_hashtags(트리거 집계)에서 count 상위 순 (CommunityLayoutShell에서 조회) */
+  hotTopics?: CommunityHashtagRow[];
+}) {
   const a = props.active;
   const meActive = a === "me" || a === "my-posts" || a === "scraps";
+  const hotTopics = props.hotTopics ?? [];
 
   return (
     <aside className="hidden w-full lg:block lg:w-[200px]" aria-label="커뮤니티 메뉴">
@@ -41,14 +40,18 @@ export function CommunityLeftSidebar(props: { active: CommunityNavActive; logged
 
       <section className={`${SURFACE_CARD} !px-3 !py-3`}>
         <h3 className="text-xs font-extrabold text-slate-900">실시간 인기 주제</h3>
-        <ol className="mt-2 space-y-2">
-          {HOT_TOPICS.map((topic) => (
-            <li key={topic.rank} className="flex items-start gap-2">
-              <span className="w-4 shrink-0 text-sm font-extrabold text-[#2563EB]">{topic.rank}</span>
-              <span className="text-xs font-medium text-slate-700">{topic.label}</span>
-            </li>
-          ))}
-        </ol>
+        {hotTopics.length > 0 ? (
+          <ol className="mt-2 space-y-2">
+            {hotTopics.map((topic, i) => (
+              <li key={topic.tag} className="flex items-start gap-2">
+                <span className="w-4 shrink-0 text-sm font-extrabold text-[#2563EB]">{i + 1}</span>
+                <span className="min-w-0 truncate text-xs font-medium text-slate-700">#{topic.tag}</span>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="mt-2 text-xs font-medium text-slate-400">게시글이 쌓이면 인기 주제가 표시돼요.</p>
+        )}
       </section>
 
       {!props.loggedIn ? (

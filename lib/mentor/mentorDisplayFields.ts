@@ -60,7 +60,9 @@ export function buildMentorProfileDisplay(
   const verifiedUniversity = getProfileFieldString(profileRow, ["verified_university_name"]);
   const verifiedDepartment = getProfileFieldString(profileRow, ["verified_department_name"]);
   const verifiedMajorCategory = getProfileFieldString(profileRow, ["verified_major_category"]);
-  const schoolTier = getProfileFieldString(profileRow, ["school_tier"]);
+  const rawSchoolTier = getProfileFieldString(profileRow, ["school_tier"]);
+  // "그외" 학교군은 공개 화면·필터에서 "미분류"로 종속 처리
+  const schoolTier = rawSchoolTier === "그외" ? "미분류" : rawSchoolTier;
   const schoolVerified = getProfileFieldBool(profileRow, ["school_verified"]) ?? false;
 
   return {

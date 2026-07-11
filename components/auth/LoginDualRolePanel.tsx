@@ -64,6 +64,10 @@ export function LoginRoleCard(props: {
         </p>
       </header>
 
+      {isStudent ? (
+        <p className="mt-3 text-sm font-extrabold text-red-600 text-center sm:text-left">*가입 후 첫 주 한정혜택</p>
+      ) : null}
+
       <ul className="mt-5 space-y-2 border-y border-slate-100 py-4">
         {benefitLines(role).map((line) => (
           <li key={line} className="flex items-start gap-2 text-sm text-slate-700">

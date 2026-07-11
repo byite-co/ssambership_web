@@ -1,5 +1,6 @@
 "use client";
 
+import { FREE_TRIAL_PRIORITY_LABEL } from "@/lib/qna/freeTrialPriorityLabel";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
@@ -110,6 +111,8 @@ export function QuestionRoomWorkspace(props: {
   showChatPanel?: boolean;
   backHref?: string | null;
   threadDetailMode?: boolean;
+  /** 무료 체험(무료 질문권) 스레드 id — 멘토 목록에서 우선 노출 배지 표시용 (정렬은 서버에서 완료) */
+  freeTrialThreadIds?: string[];
 }) {
   const rev = props.formRevision ?? "0";
   const uid = props.currentUserId;
@@ -298,6 +301,7 @@ export function QuestionRoomWorkspace(props: {
                 const id = String(t.id);
                 const isActive = props.threadId === id || (!props.threadId && props.threads.rows[0]?.id === t.id);
                 const href = props.roomId ? threadInRoomPath(roomBase, props.roomId, id) : roomBase;
+                const isFreeTrial = props.variant === "mentor" && (props.freeTrialThreadIds?.includes(id) ?? false);
                 return (
                   <Link
                     key={id}
@@ -315,6 +319,11 @@ export function QuestionRoomWorkspace(props: {
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
+                      {isFreeTrial ? (
+                        <span className="inline-flex shrink-0 items-center rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">
+                          {FREE_TRIAL_PRIORITY_LABEL}
+                        </span>
+                      ) : null}
                       <QuestionThreadWorkflowBadge thread={t} />
                       <p className="text-[11px] font-medium text-slate-400 line-clamp-1 flex-1">
                         {pickRowString(t, ["last_message_body", "preview", "snippet"]) ?? "최근 대화 없음"}
