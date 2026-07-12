@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
+import { COMPANY } from "@/lib/legal/companyInfo";
 
 export type FaqItem = { id: string; question: string; answer: ReactNode };
 
@@ -49,17 +50,16 @@ export function SupportContactSection() {
           <dt className="font-extrabold text-slate-800">이메일</dt>
           <dd className="mt-0.5">
             <a
-              href="mailto:support@ssambership.example"
+              href={`mailto:${COMPANY.contactEmail}`}
               className="font-semibold text-[#2563EB] hover:underline"
             >
-              support@ssambership.example
+              {COMPANY.contactEmail}
             </a>
-            <span className="ml-1 text-xs text-slate-500">(추후 공식 주소로 안내됩니다)</span>
           </dd>
         </div>
         <div>
           <dt className="font-extrabold text-slate-800">운영 시간</dt>
-          <dd className="mt-0.5 text-slate-600">평일 10:00–18:00 (주말·공휴일 제외, 답변은 순차 처리)</dd>
+          <dd className="mt-0.5 text-slate-600">{COMPANY.supportHours} · 답변은 순차 처리됩니다</dd>
         </div>
       </dl>
       <p className="mt-4 text-xs text-slate-500">

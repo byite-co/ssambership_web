@@ -1,10 +1,8 @@
 import Link from "next/link";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { BUSINESS_NO, COMPANY } from "@/lib/legal/companyInfo";
 
 type FooterLink = { label: string; href: string; emphasis?: boolean };
-
-// 사업자등록번호: 기본값 실번호(항상 표시), 환경변수로 override 가능.
-const BUSINESS_NO = (process.env.NEXT_PUBLIC_BUSINESS_NO ?? "320-86-03865").trim();
 
 const SERVICE_LINKS: FooterLink[] = [
   { label: "멘토 찾기", href: "/mentors" },
@@ -16,7 +14,7 @@ const SUPPORT_LINKS: FooterLink[] = [
   { label: "자주 묻는 질문", href: "/support" },
   { label: "공지사항", href: "/notices" },
   { label: "고객센터", href: "/support#contact" },
-  { label: "서비스 소개", href: "/" },
+  { label: "서비스 소개", href: "/about" },
 ];
 
 const MENTOR_LINKS: FooterLink[] = [
@@ -87,7 +85,11 @@ export function SiteFooter() {
             ))}
           </nav>
           <p className="text-xs font-medium text-slate-500">
-            (주)바이트{BUSINESS_NO ? ` | 사업자등록번호: ${BUSINESS_NO}` : ""}
+            {COMPANY.name}
+            {BUSINESS_NO ? ` | 사업자등록번호: ${BUSINESS_NO}` : ""} | 고객센터:{" "}
+            <a href={`mailto:${COMPANY.contactEmail}`} className="hover:text-[#2563EB]">
+              {COMPANY.contactEmail}
+            </a>
           </p>
         </div>
       </div>
