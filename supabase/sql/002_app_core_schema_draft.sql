@@ -581,22 +581,26 @@ create table if not exists public.mentor_plans (
   updated_at timestamptz
 );
 
-create table if not exists public.reviews (
-  id uuid primary key default gen_random_uuid(),
-  mentor_id uuid references public.users (id) on delete cascade,
-  mentor_user_id uuid,
-  reviewee_id uuid,
-  to_user_id uuid,
-  target_user_id uuid,
-  user_id uuid references public.users (id) on delete set null,
-  rating int,
-  score int,
-  stars int,
-  comment text,
-  body text,
-  created_at timestamptz not null default now()
-);
-create index if not exists idx_reviews_mentor on public.reviews (mentor_id, reviewee_id);
+-- superseded by 042 (see 120) — BUG-C(2026-07-12): 아래 draft 블록이 신규 환경에서
+-- 042 정본보다 먼저 실행되면 create table if not exists 경합으로 042 가 no-op 되어
+-- 잘못된 형태가 고착된다. 정본은 042, 기존 DB 수렴 보정은 120. (무력화 주석 —
+-- 이동·분할 아님. 인덱스는 draft 전용 컬럼 reviewee_id 참조라 블록에 포함)
+-- create table if not exists public.reviews (
+--   id uuid primary key default gen_random_uuid(),
+--   mentor_id uuid references public.users (id) on delete cascade,
+--   mentor_user_id uuid,
+--   reviewee_id uuid,
+--   to_user_id uuid,
+--   target_user_id uuid,
+--   user_id uuid references public.users (id) on delete set null,
+--   rating int,
+--   score int,
+--   stars int,
+--   comment text,
+--   body text,
+--   created_at timestamptz not null default now()
+-- );
+-- create index if not exists idx_reviews_mentor on public.reviews (mentor_id, reviewee_id);
 
 -- --------------------------------------------------------------------------
 -- RLS (초안) — “전체 공개” 금지, 본인 연관 행 위주(관리자·멘토 혼선은 앱+정책에서 후속)

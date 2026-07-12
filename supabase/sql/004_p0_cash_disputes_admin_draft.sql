@@ -147,15 +147,19 @@ create trigger trg_mp_set_updated
   before update on public.mentor_plans
   for each row execute function public.set_updated_at();
 
-create table if not exists public.reviews (
-  id uuid primary key default gen_random_uuid(),
-  mentor_id uuid not null references public.users (id) on delete cascade,
-  author_id uuid not null references public.users (id) on delete cascade,
-  rating smallint not null check (rating between 1 and 5),
-  body text,
-  created_at timestamptz not null default now()
-);
-create index if not exists idx_rev_mentor on public.reviews (mentor_id, created_at desc);
+-- superseded by 042 (see 120) — BUG-C(2026-07-12): 아래 draft 블록이 신규 환경에서
+-- 042 정본과 create table if not exists 로 경합한다(002 주석 참조). 정본은 042,
+-- 기존 DB 수렴 보정은 120. (무력화 주석 — 이동·분할 아님. author_id 는 이미 고착된
+-- 운영 DB 계보에 존재하며 045·앱이 사용 — 신규 생성만 042 로 일원화)
+-- create table if not exists public.reviews (
+--   id uuid primary key default gen_random_uuid(),
+--   mentor_id uuid not null references public.users (id) on delete cascade,
+--   author_id uuid not null references public.users (id) on delete cascade,
+--   rating smallint not null check (rating between 1 and 5),
+--   body text,
+--   created_at timestamptz not null default now()
+-- );
+-- create index if not exists idx_rev_mentor on public.reviews (mentor_id, created_at desc);
 
 -- -----------------------------------------------------------------------------
 -- RLS
