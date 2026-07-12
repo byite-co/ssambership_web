@@ -17,6 +17,10 @@ import {
   loadQuestionRoomSubscriptionContext,
   loadUnreadCountsByRoomId,
 } from "@/lib/qna/questionRoomStudentContext";
+import {
+  loadLastAttachmentByThreadId,
+  loadThreadAttachmentsWithUrls,
+} from "@/lib/qna/questionRoomAttachmentsQueries";
 import { extractNoteText } from "@/lib/qna/questionRoomMutations";
 import { paramToDraft } from "@/lib/qna/draftQuery";
 import { mapDataErrorMessage } from "@/lib/utils/mapDataError";
@@ -66,7 +70,7 @@ export default async function StudentQuestionRoomDetailPage(props: Props) {
     loadQuestionRoomListBundle(supabase, "student", user.id),
     loadQuestionRoomDetailBundle(supabase, user.id, "student", roomId, null),
   ]);
-  const { ...bundle } = detail;
+  const { resolvedThreadId, ...bundle } = detail;
   const mentorDisplays = await loadMentorDisplaysForQuestionRooms(supabase, listBundle.rooms.rows);
   const currentRoom = listBundle.rooms.rows.find((r) => r && String(r.id) === String(roomId)) ?? null;
 
@@ -77,14 +81,23 @@ export default async function StudentQuestionRoomDetailPage(props: Props) {
     .map((r) => (r?.id != null ? String(r.id) : ""))
     .filter((id) => id.length > 0);
 
-  const [subscriptionContext, initialUsageByMentorId, messageCountsByThreadId, lastMessageByThreadId, unreadCountsByRoomId] =
-    await Promise.all([
-      loadQuestionRoomSubscriptionContext(supabase, user.id, currentRoom),
-      loadInitialWeeklyUsageSnapshots(supabase, user.id, listBundle.rooms.rows),
-      loadMessageCountsByThreadId(supabase, threadIds),
-      loadLastMessageByThreadId(supabase, threadIds),
-      loadUnreadCountsByRoomId(supabase, roomIds),
-    ]);
+  const [
+    subscriptionContext,
+    initialUsageByMentorId,
+    messageCountsByThreadId,
+    lastMessageByThreadId,
+    unreadCountsByRoomId,
+    attachments,
+    lastAttachmentByThreadId,
+  ] = await Promise.all([
+    loadQuestionRoomSubscriptionContext(supabase, user.id, currentRoom),
+    loadInitialWeeklyUsageSnapshots(supabase, user.id, listBundle.rooms.rows),
+    loadMessageCountsByThreadId(supabase, threadIds),
+    loadLastMessageByThreadId(supabase, threadIds),
+    loadUnreadCountsByRoomId(supabase, roomIds),
+    loadThreadAttachmentsWithUrls(supabase, resolvedThreadId),
+    loadLastAttachmentByThreadId(supabase, threadIds),
+  ]);
 
   const subjectOptions = currentRoom ? roomSubjectChips(currentRoom, mentorDisplays, 8) : [];
 
@@ -111,6 +124,8 @@ export default async function StudentQuestionRoomDetailPage(props: Props) {
         rooms={listBundle.rooms}
         threads={bundle.threads}
         messages={bundle.messages}
+        attachments={attachments}
+        lastAttachmentByThreadId={lastAttachmentByThreadId}
         notes={bundle.notes}
         roomId={roomId}
         threadId={null}

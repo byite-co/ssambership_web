@@ -21,6 +21,7 @@ import {
   threadInRoomPath,
 } from "@/lib/qna/formatQuestionRoomDisplay";
 import type { QuestionRoomListPreview } from "@/lib/qna/questionRoomQueries";
+import type { AttachmentPreviewInfo, ThreadAttachmentView } from "@/lib/qna/questionRoomAttachmentView";
 import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
 import { QuestionRoomStudentDesignWorkspace } from "@/components/qna/QuestionRoomStudentDesignWorkspace";
 import { QuestionRoomMentorDesignWorkspace } from "@/components/qna/QuestionRoomMentorDesignWorkspace";
@@ -87,6 +88,10 @@ export function QuestionRoomWorkspace(props: {
   rooms: { rows: Row[]; error: string | null; loading: boolean };
   threads: { rows: Row[]; error: string | null; loading: boolean };
   messages: { rows: Row[]; error: string | null; loading: boolean };
+  /** 첨부 v2: 선택 스레드의 첨부(서명 URL 포함). */
+  attachments?: { rows: ThreadAttachmentView[]; error: string | null };
+  /** 첨부 v2: 목록 미리보기 라벨용 thread별 마지막 첨부. */
+  lastAttachmentByThreadId?: Record<string, AttachmentPreviewInfo>;
   notes: { rows: Row[]; error: string | null; loading: boolean };
   roomId?: string;
   threadId?: string | null;
@@ -208,6 +213,8 @@ export function QuestionRoomWorkspace(props: {
         rooms={props.rooms}
         threads={props.threads}
         messages={props.messages}
+        attachments={props.attachments}
+        lastAttachmentByThreadId={props.lastAttachmentByThreadId}
         notes={props.notes}
         listPreviewsByRoomId={props.listPreviewsByRoomId ?? {}}
         studentDisplays={props.studentDisplays ?? {}}
@@ -239,6 +246,8 @@ export function QuestionRoomWorkspace(props: {
         rooms={props.rooms}
         threads={props.threads}
         messages={props.messages}
+        attachments={props.attachments}
+        lastAttachmentByThreadId={props.lastAttachmentByThreadId}
         notes={props.notes}
         listPreviewsByRoomId={props.listPreviewsByRoomId ?? {}}
         mentorDisplays={props.mentorDisplays ?? {}}

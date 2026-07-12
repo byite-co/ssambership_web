@@ -3,6 +3,7 @@ import { getMentorUserPublic, loadMentorProfilesForDirectory } from "@/lib/auth/
 import { buildMentorProfileDisplay, type MentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
 import { mentorSubjectChips } from "@/lib/mentor/mentorPublicProfileDisplay";
 import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
+import { attachmentPreviewLabel } from "@/lib/qna/questionRoomAttachmentView";
 import { readQuestionThreadWorkflowStatus } from "@/lib/qna/questionThreadStatus";
 import type { QuestionRoomListPreview } from "@/lib/qna/questionRoomQueries";
 import { questionSubjectLabelFromCode } from "@/lib/qna/questionSubjects";
@@ -140,7 +141,19 @@ export function roomSubjectLine(room: Row, mentorDisplays: MentorDisplayById): s
   return chips.length > 0 ? chips.join(" · ") : "과목 정보 없음";
 }
 
-export function threadPreviewText(t: Row, lastMessage: Row | null): string {
+export function threadPreviewText(
+  t: Row,
+  lastMessage: Row | null,
+  lastAttachment?: { isImage: boolean; fileName: string; createdAt: string } | null
+): string {
+  // 첨부 v2 계약 §2-7: 마지막 활동이 첨부이면 첨부 라벨을 우선한다.
+  const msgAt = lastMessage ? Date.parse(String(lastMessage.created_at ?? "")) : NaN;
+  const attAt = lastAttachment ? Date.parse(lastAttachment.createdAt) : NaN;
+  const attachmentIsLatest =
+    Number.isFinite(attAt) && (!Number.isFinite(msgAt) || attAt >= msgAt);
+  if (lastAttachment && attachmentIsLatest) {
+    return attachmentPreviewLabel(lastAttachment);
+  }
   const fromThread = pickRowString(t, ["preview", "snippet", "last_message_body", "body", "content"]);
   if (fromThread) return fromThread;
   if (lastMessage) {
@@ -148,5 +161,6 @@ export function threadPreviewText(t: Row, lastMessage: Row | null): string {
       pickRowString(lastMessage, ["body", "content", "text", "message"]) ?? "";
     if (body) return body;
   }
+  if (lastAttachment) return attachmentPreviewLabel(lastAttachment);
   return "질문 내용이 아직 없습니다.";
 }
