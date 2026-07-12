@@ -5,6 +5,8 @@ import { parseAdminListParams } from "@/lib/admin/adminListParams";
 import {
   loadAdminUsersListPaged,
   countAdminUsersByStatus,
+  loadRecentUserBlocks,
+  loadRecentDeletionLogs,
   type AdminUserRow,
 } from "@/lib/admin/accountStatusQueries";
 import { setUserStatusAction, issueUserWarningAction } from "@/lib/admin/accountStatusActions";
@@ -46,9 +48,11 @@ export default async function AdminUsersPage(props: PageProps) {
   const flashErr = typeof sp.error === "string" ? sp.error : null;
 
   const params = parseAdminListParams(sp, { defaultPageSize: 25, defaultStatus: "all" });
-  const [list, byStatus] = await Promise.all([
+  const [list, byStatus, blocks, deletions] = await Promise.all([
     loadAdminUsersListPaged(params),
     countAdminUsersByStatus(),
+    loadRecentUserBlocks(10),
+    loadRecentDeletionLogs(10),
   ]);
   const rows = list.rows;
 
@@ -259,6 +263,89 @@ export default async function AdminUsersPage(props: PageProps) {
             />
           </div>
         )}
+
+        {/* 신설 기능 조회(읽기 전용): 사용자 차단 · 회원 탈퇴 로그 */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-5 py-3.5">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">사용자 차단 현황</h2>
+              <span className="rounded bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600">
+                {blocks.ok ? `총 ${blocks.totalCount}건 · 최근 ${blocks.rows.length}건` : "조회 실패"}
+              </span>
+            </div>
+            {blocks.rows.length === 0 ? (
+              <p className="p-6 text-center text-sm font-semibold text-slate-400">
+                {blocks.ok ? "차단 기록이 없습니다." : "차단 현황을 불러오지 못했습니다."}
+              </p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200/60 bg-slate-50/40">
+                    <th className="px-5 py-2.5 text-xs font-bold text-slate-600">차단한 사용자</th>
+                    <th className="px-5 py-2.5 text-xs font-bold text-slate-600">차단 대상</th>
+                    <th className="px-5 py-2.5 text-xs font-bold text-slate-600">일시</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {blocks.rows.map((b) => (
+                    <tr key={`${b.blockerId}-${b.blockedId}`}>
+                      <td className="px-5 py-3 text-xs font-bold text-slate-800" title={b.blockerId}>
+                        {b.blockerNickname ?? `${b.blockerId.slice(0, 8)}…`}
+                      </td>
+                      <td className="px-5 py-3 text-xs font-bold text-slate-800" title={b.blockedId}>
+                        {b.blockedNickname ?? `${b.blockedId.slice(0, 8)}…`}
+                      </td>
+                      <td className="whitespace-nowrap px-5 py-3 text-xs text-slate-500">{fmtDate(b.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <p className="border-t border-slate-100 px-5 py-3 text-xs text-slate-400">
+              차단 생성·해제는 사용자 본인만 가능합니다(커뮤니티 노출 필터). 관리자 화면은 조회 전용입니다.
+            </p>
+          </section>
+
+          <section className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-5 py-3.5">
+              <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">회원 탈퇴 로그</h2>
+              <span className="rounded bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-600">
+                {deletions.ok ? `총 ${deletions.totalCount}건 · 최근 ${deletions.rows.length}건` : "조회 실패"}
+              </span>
+            </div>
+            {deletions.rows.length === 0 ? (
+              <p className="p-6 text-center text-sm font-semibold text-slate-400">
+                {deletions.ok ? "탈퇴 기록이 없습니다." : "탈퇴 로그를 불러오지 못했습니다."}
+              </p>
+            ) : (
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200/60 bg-slate-50/40">
+                    <th className="px-5 py-2.5 text-xs font-bold text-slate-600">사용자</th>
+                    <th className="px-5 py-2.5 text-xs font-bold text-slate-600">사유</th>
+                    <th className="px-5 py-2.5 text-xs font-bold text-slate-600">요청 일시</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {deletions.rows.map((d) => (
+                    <tr key={`${d.userId}-${d.requestedAt ?? ""}`}>
+                      <td className="px-5 py-3 text-xs font-bold text-slate-800" title={d.userId}>
+                        {d.nickname ?? `${d.userId.slice(0, 8)}… (익명화)`}
+                      </td>
+                      <td className="max-w-[220px] truncate px-5 py-3 text-xs text-slate-600" title={d.reason ?? ""}>
+                        {d.reason ?? "—"}
+                      </td>
+                      <td className="whitespace-nowrap px-5 py-3 text-xs text-slate-500">{fmtDate(d.requestedAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <p className="border-t border-slate-100 px-5 py-3 text-xs text-slate-400">
+              탈퇴 완료 계정은 PII가 익명화되어 닉네임이 표시되지 않을 수 있습니다.
+            </p>
+          </section>
+        </div>
       </div>
     </PageScaffold>
   );

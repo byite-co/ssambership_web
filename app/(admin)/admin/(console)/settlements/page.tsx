@@ -1,6 +1,5 @@
 import { PageScaffold } from "@/components/shell/PageScaffold";
 import { AdminStatusBadge } from "@/components/admin/AdminStatusBadge";
-import { AdminDetailPanelSlot } from "@/components/admin/AdminActionPlaceholders";
 import { createClient } from "@/lib/supabase/server";
 import {
   adminSettlementStatusLabel,
@@ -174,7 +173,6 @@ export default async function AdminSettlementsPage() {
             ) : (
               <SettlementTable rows={rows} />
             )}
-            <AdminDetailPanelSlot />
           </div>
         ) : null}
       </div>
