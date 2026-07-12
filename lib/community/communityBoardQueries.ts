@@ -11,8 +11,28 @@ import {
   type CommunityAuthorNameRow,
 } from "@/lib/community/communityAuthorLabels";
 import { pickAuthorRoleSummary, pickExcerpt, pickTitle } from "@/lib/community/communityQueries";
+import {
+  resolveCommunityImageUrls,
+} from "@/lib/community/communityImageStorage";
 
 type Row = Record<string, unknown>;
+
+/**
+ * 카드 배열의 imageUrls(현재 ref)를 표시용 서명 URL 로 일괄 변환(BUG-B).
+ * 카드별 이미지 수가 적어(≤5) N+? 서명이지만 목록당 총량은 작다.
+ */
+async function signBoardCardImages(
+  supabase: SupabaseClient,
+  cards: CommunityBoardPostCard[]
+): Promise<CommunityBoardPostCard[]> {
+  return Promise.all(
+    cards.map(async (c) =>
+      c.imageUrls.length
+        ? { ...c, imageUrls: await resolveCommunityImageUrls(supabase, c.imageUrls) }
+        : c
+    )
+  );
+}
 
 export type CommunityBoardPostCard = {
   id: string;
@@ -68,13 +88,18 @@ async function boardAuthorNameMap(supabase: SupabaseClient, rows: Row[]): Promis
   return fetchCommunityAuthorNamesByIds(supabase, collectAuthorIdsNeedingLookup(rows));
 }
 
-function pickImageUrls(row: Row): string[] {
+/**
+ * 저장된 이미지 참조 배열을 그대로 반환(BUG-B: 이제 `bucket/path` ref 저장).
+ * http 필터를 두지 않는다 — ref 는 http 로 시작하지 않으므로 필터하면 사라진다.
+ * 표시용 서명 URL 변환은 로더가 resolveCommunityImageUrls 로 후처리한다.
+ */
+function pickImageRefs(row: Row): string[] {
   const v = row.image_urls;
   if (Array.isArray(v)) {
-    return v.filter((u): u is string => typeof u === "string" && u.trim().toLowerCase().startsWith("http")).slice(0, 5);
+    return v.filter((u): u is string => typeof u === "string" && u.trim().length > 0).slice(0, 5);
   }
   const single = row.image_url ?? row.thumbnail_url;
-  if (typeof single === "string" && single.trim().startsWith("http")) return [single.trim()];
+  if (typeof single === "string" && single.trim()) return [single.trim()];
   return [];
 }
 
@@ -120,7 +145,7 @@ export function mapRowToBoardCard(
     authorId,
     authorLabel: resolveCommunityAuthorLabel(row, user),
     authorRole: pickAuthorRoleSummary(row),
-    imageUrls: pickImageUrls(row),
+    imageUrls: pickImageRefs(row),
     hashtags: pickHashtags(row),
     viewCount: typeof row.view_count === "number" ? row.view_count : 0,
     likeCount: typeof row.like_count === "number" ? row.like_count : 0,
@@ -211,7 +236,7 @@ export async function listCommunityBoardPosts(
   const hasMore = rows.length > limit;
   const slice = hasMore ? rows.slice(0, limit) : rows;
   const userMap = await boardAuthorNameMap(supabase, slice);
-  const posts = slice.map((r) => mapRowToBoardCard(r, userMap));
+  const posts = await signBoardCardImages(supabase, slice.map((r) => mapRowToBoardCard(r, userMap)));
   const nextCursor = hasMore
     ? isPopular
       ? `o:${offset + limit}`
@@ -242,7 +267,7 @@ async function listCommunityBoardPostsLegacy(
   const hasMore = rows.length > limit;
   const slice = hasMore ? rows.slice(0, limit) : rows;
   const userMap = await boardAuthorNameMap(supabase, slice);
-  const posts = slice.map((r) => mapRowToBoardCard(r, userMap));
+  const posts = await signBoardCardImages(supabase, slice.map((r) => mapRowToBoardCard(r, userMap)));
   const nextCursor = hasMore && slice.length ? String(slice[slice.length - 1].created_at ?? "") : null;
   return { posts, nextCursor: nextCursor || null, error: null };
 }
@@ -274,13 +299,13 @@ export async function listCommunityPopularPostsForHome(
       if (fb.error) return { posts: [], error: fb.error.message };
       const rows = (fb.data as Row[]) ?? [];
       const userMap = await boardAuthorNameMap(supabase, rows);
-      return { posts: rows.map((r) => mapRowToBoardCard(r, userMap)), error: null };
+      return { posts: await signBoardCardImages(supabase, rows.map((r) => mapRowToBoardCard(r, userMap))), error: null };
     }
     return { posts: [], error: error.message };
   }
   const rows = (data as Row[]) ?? [];
   const userMap = await boardAuthorNameMap(supabase, rows);
-  return { posts: rows.map((r) => mapRowToBoardCard(r, userMap)), error: null };
+  return { posts: await signBoardCardImages(supabase, rows.map((r) => mapRowToBoardCard(r, userMap))), error: null };
 }
 
 export async function getCommunityBoardPost(
@@ -299,7 +324,8 @@ export async function getCommunityBoardPost(
     return { post: null, row, error: null };
   }
   const userMap = await boardAuthorNameMap(supabase, [row]);
-  return { post: mapRowToBoardCard(row, userMap), row, error: null };
+  const post = mapRowToBoardCard(row, userMap);
+  return { post: { ...post, imageUrls: await resolveCommunityImageUrls(supabase, post.imageUrls) }, row, error: null };
 }
 
 export type CommunityBoardDraftRow = {
@@ -463,7 +489,7 @@ export async function listUserScrapPosts(
   const byId = new Map(((posts as Row[]) ?? []).map((r) => [String(r.id), r]));
   const ordered = ids.map((id) => byId.get(id)).filter((r): r is Row => Boolean(r));
   const userMap = await boardAuthorNameMap(supabase, ordered);
-  return { posts: ordered.map((r) => mapRowToBoardCard(r, userMap)), error: null };
+  return { posts: await signBoardCardImages(supabase, ordered.map((r) => mapRowToBoardCard(r, userMap))), error: null };
 }
 
 export function pickPostBody(row: Row | null): string {
