@@ -221,7 +221,7 @@ route-inventory.txt grep 결과 전수. (loading.tsx는 해당 페이지 절에 
 | ← 뒤로 (aria "질문 목록으로") + "{멘토명} / {질문 제목}" + "질문 상세 · 실시간 대화" | 브레드크럼 | StudentDesignWorkspace threadDetailMode | `backHref` = `/question-room/[roomId]` | 목록↔상세 2단 내비 |
 | 과목칩 + 상태 배지("답변 대기/진행 중/답변 완료") | 메타 | 〃 | — | 카드 상태 재확인 |
 | 질문 제목 + 본문 미리보기 + "등록 N분 전" | 본문 | 〃 (`threadPreviewText`) | — | 질문 원문 컨텍스트 |
-| "답변" 섹션 — 메시지 말풍선 (내 것 우측 파랑 / 멘토 좌측 흰색+이름, 시각) | 대화 | 〃 `.map()` — 메시지 수만큼 반복; 첨부 본문은 이미지 인라인/파일 다운로드 링크로 렌더(`parseAttachmentMessageBody`) | — | thread 안 문답 누적 열람 |
+| "답변" 섹션 — 메시지 말풍선 (내 것 우측 파랑 / 멘토 좌측 흰색+이름, 시각) | 대화 | 〃 `.map()` — 메시지 수만큼 반복; 첨부는 `question_attachments` 행 기준으로 렌더(linked=말풍선 내부 썸네일/파일칩, standalone=시간순 독립 행) — 본문 마커 폐지(XV-ATTACH) | — | thread 안 문답 누적 열람 |
 | "아직 답변 메시지가 없습니다." / "답변을 불러오는 중…" | 빈/로딩 | 〃 | — | 대기 상태 안내 |
 | "멘토 답변이 도착했어요. 확인하면 완료로 표시돼요." + "답변 확인 완료" (compact) | 확정 유도 | 〃 (조건: workflow==="answered") | `PATCH .../confirm` | answered→confirmed 전환 지점 |
 | 경고 "답변이 완전히 이해된 뒤에 “답변 확인 완료”를 눌러 주세요. 확인 완료 후에는 이 질문에서 더 이상 대화를 이어갈 수 없어요." | 경고 | 〃 (동일 조건) | — | confirmed = 대화 잠금이라는 비가역성 고지 |
