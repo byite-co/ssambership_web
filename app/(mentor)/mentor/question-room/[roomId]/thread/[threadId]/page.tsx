@@ -19,6 +19,10 @@ import {
 } from "@/lib/qna/questionRoomStudentContext";
 import { fetchWeeklyQuestionUsageWithFallback } from "@/lib/qna/weeklyQuestionUsage";
 import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
+import {
+  loadLastAttachmentByThreadId,
+  loadThreadAttachmentsWithUrls,
+} from "@/lib/qna/questionRoomAttachmentsQueries";
 import { extractNoteText } from "@/lib/qna/questionRoomMutations";
 import { paramToDraft } from "@/lib/qna/draftQuery";
 import { mapDataErrorMessage } from "@/lib/utils/mapDataError";
@@ -78,13 +82,21 @@ export default async function MentorQuestionThreadDetailPage(props: Props) {
     .map((r) => (r?.id != null ? String(r.id) : ""))
     .filter((id) => id.length > 0);
 
-  const [studentDisplays, messageCountsByThreadId, lastMessageByThreadId, unreadCountsByRoomId] =
-    await Promise.all([
-      loadStudentDisplaysForQuestionRooms(supabase, listBundle.rooms.rows),
-      loadMessageCountsByThreadId(supabase, threadIds),
-      loadLastMessageByThreadId(supabase, threadIds),
-      loadMentorUnreadCountsByRoomId(supabase, roomIds),
-    ]);
+  const [
+    studentDisplays,
+    messageCountsByThreadId,
+    lastMessageByThreadId,
+    unreadCountsByRoomId,
+    attachments,
+    lastAttachmentByThreadId,
+  ] = await Promise.all([
+    loadStudentDisplaysForQuestionRooms(supabase, listBundle.rooms.rows),
+    loadMessageCountsByThreadId(supabase, threadIds),
+    loadLastMessageByThreadId(supabase, threadIds),
+    loadMentorUnreadCountsByRoomId(supabase, roomIds),
+    loadThreadAttachmentsWithUrls(supabase, resolvedThreadId),
+    loadLastAttachmentByThreadId(supabase, threadIds),
+  ]);
 
   const initialNoteText = extractNoteText(bundle.notes.rows[0]);
 
@@ -119,6 +131,8 @@ export default async function MentorQuestionThreadDetailPage(props: Props) {
         rooms={listBundle.rooms}
         threads={bundle.threads}
         messages={bundle.messages}
+        attachments={attachments}
+        lastAttachmentByThreadId={lastAttachmentByThreadId}
         notes={bundle.notes}
         roomId={roomId}
         threadId={resolvedThreadId}

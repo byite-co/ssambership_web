@@ -23,7 +23,12 @@ import {
   Send,
 } from "lucide-react";
 import { QuestionRoomAttachmentButton } from "@/components/qna/QuestionRoomAttachmentButton";
-import { parseAttachmentMessageBody } from "@/lib/qna/questionRoomAttachmentDisplay";
+import {
+  buildChatTimeline,
+  splitThreadAttachments,
+  type AttachmentPreviewInfo,
+  type ThreadAttachmentView,
+} from "@/lib/qna/questionRoomAttachmentView";
 import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
 import { QuestionRoomNewQuestionModal } from "@/components/qna/QuestionRoomNewQuestionModal";
 import { QuestionThreadConfirmButton } from "@/components/qna/QuestionThreadConfirmButton";
@@ -85,27 +90,6 @@ function messageAuthorId(m: Row): string | null {
 function renderMessageContent(body: string) {
   const trimmed = body.trim();
   if (!trimmed) return null;
-  const attachment = parseAttachmentMessageBody(trimmed);
-  if (attachment?.kind === "image") {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={attachment.url} alt="첨부 이미지" className="max-h-56 rounded-lg object-contain" />
-    );
-  }
-  if (attachment?.kind === "file") {
-    return (
-      <a
-        href={attachment.url}
-        target="_blank"
-        rel="noreferrer"
-        className="inline-flex items-center gap-2 rounded-lg bg-white/15 px-2.5 py-1.5 underline-offset-2 hover:underline"
-      >
-        <FileText className="h-4 w-4 shrink-0" />
-        <span className="truncate">{attachment.filename}</span>
-        <Download className="h-3.5 w-3.5 shrink-0 opacity-70" />
-      </a>
-    );
-  }
   const imgMatch = trimmed.match(/^(https?:\/\/\S+\.(png|jpe?g|gif|webp)(\?\S*)?)$/i);
   if (imgMatch) {
     return (
@@ -114,6 +98,39 @@ function renderMessageContent(body: string) {
     );
   }
   return <span className="whitespace-pre-wrap break-words">{trimmed}</span>;
+}
+
+/** 첨부 v2(계약 §2-6): 행 기반 렌더 — 이미지 썸네일 / 파일 칩. url=null(서명 실패)은 파일명만. */
+function renderAttachmentContent(a: ThreadAttachmentView) {
+  if (a.isImage && a.url) {
+    return (
+      <a href={a.url} target="_blank" rel="noreferrer" aria-label="첨부 이미지 크게 보기">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={a.url} alt="첨부 이미지" className="max-h-56 rounded-lg object-contain" />
+      </a>
+    );
+  }
+  if (a.url) {
+    return (
+      <a
+        href={a.url}
+        target="_blank"
+        rel="noreferrer"
+        className="inline-flex max-w-full items-center gap-2 rounded-lg bg-white/15 px-2.5 py-1.5 underline-offset-2 hover:underline"
+      >
+        <FileText className="h-4 w-4 shrink-0" />
+        <span className="truncate">{a.fileName}</span>
+        <Download className="h-3.5 w-3.5 shrink-0 opacity-70" />
+      </a>
+    );
+  }
+  return (
+    <span className="inline-flex max-w-full items-center gap-2 rounded-lg bg-white/15 px-2.5 py-1.5 opacity-70">
+      <FileText className="h-4 w-4 shrink-0" />
+      <span className="truncate">{a.fileName}</span>
+      <span className="shrink-0 text-[10px]">(불러오기 실패)</span>
+    </span>
+  );
 }
 
 function ChatSendButton(props: { disabled?: boolean }) {
@@ -137,6 +154,10 @@ export function QuestionRoomStudentDesignWorkspace(props: {
   rooms: { rows: Row[]; error: string | null; loading: boolean };
   threads: { rows: Row[]; error: string | null; loading: boolean };
   messages: { rows: Row[]; error: string | null; loading: boolean };
+  /** 첨부 v2: 선택 스레드의 첨부(서명 URL 포함) — 서버 로더가 채움. */
+  attachments?: { rows: ThreadAttachmentView[]; error: string | null };
+  /** 첨부 v2: 목록 미리보기 라벨용 thread별 마지막 첨부. */
+  lastAttachmentByThreadId?: Record<string, AttachmentPreviewInfo>;
   notes: { rows: Row[]; error: string | null; loading: boolean };
   listPreviewsByRoomId: Record<string, QuestionRoomListPreview>;
   mentorDisplays: MentorDisplayById;
@@ -260,6 +281,19 @@ export function QuestionRoomStudentDesignWorkspace(props: {
     ? readQuestionThreadWorkflowStatus(selectedThread)
     : ("pending" as const);
   const threadLocked = isQuestionThreadLockedForMessages(selectedThread);
+
+  // 첨부 v2 계약 §2-4: linked(말풍선 내부) / standalone(시간순 독립 행) 분리 + 병합 타임라인.
+  const attachmentRows = props.attachments?.rows;
+  const { linkedByMessageId, standalone } = useMemo(() => {
+    const ids = new Set(
+      props.messages.rows.map((m) => (m?.id != null ? String(m.id) : "")).filter((id) => id.length > 0)
+    );
+    return splitThreadAttachments(attachmentRows ?? [], ids);
+  }, [attachmentRows, props.messages.rows]);
+  const chatTimeline = useMemo(
+    () => buildChatTimeline(props.messages.rows, standalone),
+    [props.messages.rows, standalone]
+  );
 
   const subjectChipsRoom = roomSubjectChips(currentRoom ?? {}, props.mentorDisplays, 4);
 
@@ -580,7 +614,7 @@ export function QuestionRoomStudentDesignWorkspace(props: {
                 </div>
                 <h2 className="mt-4 text-xl font-black text-slate-900">{threadTitleFromRow(selectedThread)}</h2>
                 <p className="mt-4 whitespace-pre-wrap text-sm font-medium leading-relaxed text-slate-700">
-                  {threadPreviewText(selectedThread, props.lastMessageByThreadId?.[String(selectedThread.id)] ?? null)}
+                  {threadPreviewText(selectedThread, props.lastMessageByThreadId?.[String(selectedThread.id)] ?? null, props.lastAttachmentByThreadId?.[String(selectedThread.id)] ?? null)}
                 </p>
                 <p className="mt-4 text-[11px] font-bold text-slate-400">
                   등록 {formatMinutesAgo(selectedThread.created_at ?? selectedThread.updated_at)}
@@ -590,18 +624,51 @@ export function QuestionRoomStudentDesignWorkspace(props: {
                   <h3 className="text-[13px] font-black text-slate-900">답변</h3>
                   {props.messages.loading ? (
                     <p className="mt-4 py-6 text-center text-[12px] font-bold text-slate-400">답변을 불러오는 중…</p>
-                  ) : props.messages.rows.length === 0 ? (
+                  ) : chatTimeline.length === 0 ? (
                     <p className="mt-4 py-6 text-center text-[12px] font-bold text-slate-400">아직 답변 메시지가 없습니다.</p>
                   ) : (
                     <div className="mt-4 space-y-4">
-                      {props.messages.rows.map((m) => {
+                      {chatTimeline.map((item) => {
+                        const mentorName = roomMentorLabel(currentRoom ?? {}, props.mentorDisplays);
+                        if (item.kind === "attachment") {
+                          const a = item.attachment;
+                          const neutral = a.authorId == null;
+                          const mine = !neutral && a.authorId === props.currentUserId;
+                          return (
+                            <div
+                              key={item.key}
+                              className={`flex ${neutral ? "justify-center" : mine ? "justify-end" : "justify-start"}`}
+                            >
+                              <div
+                                className={`max-w-[92%] flex flex-col ${neutral ? "items-center" : mine ? "items-end" : "items-start"}`}
+                              >
+                                {!mine && !neutral ? (
+                                  <span className="mb-1 text-[10px] font-bold text-slate-500">{mentorName}</span>
+                                ) : null}
+                                <div
+                                  className={`rounded-2xl px-3 py-2 text-[12px] font-medium shadow-sm ${
+                                    mine
+                                      ? "rounded-tr-sm bg-blue-600 text-white"
+                                      : `${neutral ? "" : "rounded-tl-sm "}border border-slate-200 bg-white text-slate-800`
+                                  }`}
+                                >
+                                  {renderAttachmentContent(a)}
+                                </div>
+                                <span className="mt-1 px-1 text-[9px] font-bold text-slate-400">
+                                  {formatQuestionRoomDateTime(a.createdAt) ?? formatMinutesAgo(a.createdAt)}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }
+                        const m = item.message;
                         const body = messageBody(m);
                         const author = messageAuthorId(m);
                         const mine = author === props.currentUserId;
-                        const mentorName = roomMentorLabel(currentRoom ?? {}, props.mentorDisplays);
+                        const linked = linkedByMessageId[m?.id != null ? String(m.id) : ""] ?? [];
 
                         return (
-                          <div key={String(m.id)} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+                          <div key={item.key} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
                             <div className={`max-w-[92%] ${mine ? "items-end" : "items-start"} flex flex-col`}>
                               {!mine ? (
                                 <span className="mb-1 text-[10px] font-bold text-slate-500">{mentorName}</span>
@@ -614,6 +681,13 @@ export function QuestionRoomStudentDesignWorkspace(props: {
                                 }`}
                               >
                                 {renderMessageContent(body)}
+                                {linked.length > 0 ? (
+                                  <div className={`flex flex-col gap-2 ${body.trim() ? "mt-2" : ""}`}>
+                                    {linked.map((a) => (
+                                      <div key={a.id}>{renderAttachmentContent(a)}</div>
+                                    ))}
+                                  </div>
+                                ) : null}
                               </div>
                               <span className="mt-1 px-1 text-[9px] font-bold text-slate-400">
                                 {formatQuestionRoomDateTime(m.created_at) ?? formatMinutesAgo(m.created_at)}
@@ -762,7 +836,7 @@ export function QuestionRoomStudentDesignWorkspace(props: {
                         </div>
                         <h3 className="mt-2 text-[14px] font-black text-slate-900">{threadTitleFromRow(t)}</h3>
                         <p className="mt-1 line-clamp-2 text-[12px] font-medium leading-relaxed text-slate-500">
-                          {threadPreviewText(t, lastMsg)}
+                          {threadPreviewText(t, lastMsg, props.lastAttachmentByThreadId?.[String(t.id)] ?? null)}
                         </p>
                         <div className="mt-3 flex flex-wrap items-center gap-3 text-[10px] font-bold text-slate-400">
                           <span className="inline-flex items-center gap-1">

@@ -403,14 +403,14 @@ export async function createQuestionMessageAction(formData: FormData) {
 export const sendQuestionMessageAction = createQuestionMessageAction;
 
 /**
- * STEP 5: 질문방 채팅 파일/사진 첨부 전송.
- * 파일을 private 버킷에 업로드 → 서명 URL을 메시지 본문(첨부 마커)으로 저장.
+ * STEP 5(첨부 v2): 질문방 채팅 파일/사진 첨부 전송.
+ * 파일을 private 버킷에 업로드 → `question_attachments` 행 insert(필수, standalone).
+ * 본문 마커·서명 URL 저장은 폐지(XV-ATTACH) — URL 은 표시 시점에 재발급된다.
  * room/thread/역할은 서버에서 재검증한다.
  */
 export async function sendQuestionAttachmentAction(formData: FormData) {
-  const { uploadQuestionRoomAttachment, buildAttachmentMessageBody, recordQuestionAttachmentMetadataBestEffort } = await import(
-    "@/lib/qna/questionRoomAttachmentStorage"
-  );
+  const { uploadQuestionRoomAttachment, insertQuestionAttachmentRecord, removeQuestionRoomAttachmentObjectBestEffort } =
+    await import("@/lib/qna/questionRoomAttachmentStorage");
   const { user, actor } = await requireQnaActor();
   const roomId = textFromForm(formData.get("roomId"));
   const threadId = textFromForm(formData.get("threadId"));
@@ -494,7 +494,7 @@ export async function sendQuestionAttachmentAction(formData: FormData) {
     mime: typedFile.type || "application/octet-stream",
     name: typedFile.name || "attachment",
   });
-  if (uploaded.error || !uploaded.url) {
+  if (uploaded.error || !uploaded.storagePath) {
     redirect(
       buildRedirectUrl(roomId, actor, {
         thread: threadId,
@@ -504,26 +504,26 @@ export async function sendQuestionAttachmentAction(formData: FormData) {
     );
   }
 
-  const body = buildAttachmentMessageBody({
-    isImage: uploaded.isImage,
-    filename: uploaded.filename,
-    url: uploaded.url,
-  });
-
-  const result = await createQuestionMessage({ supabase, role: actor, userId: user.id, roomId, threadId, content: body });
-  if (!result.ok) {
-    redirect(
-      buildRedirectUrl(roomId, actor, { thread: threadId, kind: "message", error: userFacingActionError("message", result.error) })
-    );
-  }
-
-  await recordQuestionAttachmentMetadataBestEffort(supabase, {
+  // 첨부 v2 계약 §2-1·§2-3: 행이 유일한 정본(insert 필수). 웹 첨부 버튼은 캡션이 없으므로
+  // standalone(message_id null)로 저장 — 렌더는 created_at 시간순 독립 행.
+  const recorded = await insertQuestionAttachmentRecord(supabase, {
     threadId,
-    messageId: typeof result.row?.id === "string" ? result.row.id : null,
+    messageId: null,
+    authorId: user.id,
     storagePath: uploaded.storagePath,
     fileName: uploaded.filename,
     mimeType: uploaded.mime,
   });
+  if (recorded.error) {
+    await removeQuestionRoomAttachmentObjectBestEffort(supabase, uploaded.storagePath);
+    redirect(
+      buildRedirectUrl(roomId, actor, {
+        thread: threadId,
+        kind: "message",
+        error: "첨부 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+      })
+    );
+  }
 
   if (actor === "mentor") {
     const answered = await markQuestionThreadAnsweredForMentor(supabase, user.id, roomId, threadId);

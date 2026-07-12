@@ -16,6 +16,10 @@ import {
 import { fetchWeeklyQuestionUsageWithFallback } from "@/lib/qna/weeklyQuestionUsage";
 import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
 import { loadFreeTrialThreadIdsForMentorRoom, sortThreadsFreeTrialFirst } from "@/lib/qna/freeTrialPriority";
+import {
+  loadLastAttachmentByThreadId,
+  loadThreadAttachmentsWithUrls,
+} from "@/lib/qna/questionRoomAttachmentsQueries";
 import { extractNoteText } from "@/lib/qna/questionRoomMutations";
 import { paramToDraft } from "@/lib/qna/draftQuery";
 import { mapDataErrorMessage } from "@/lib/utils/mapDataError";
@@ -66,13 +70,19 @@ export default async function MentorQuestionRoomDetailPage(props: Props) {
     .map((r) => (r?.id != null ? String(r.id) : ""))
     .filter((id) => id.length > 0);
 
-  const [studentDisplays, messageCountsByThreadId, lastMessageByThreadId, unreadCountsByRoomId] =
-    await Promise.all([
-      loadStudentDisplaysForQuestionRooms(supabase, listBundle.rooms.rows),
-      loadMessageCountsByThreadId(supabase, threadIds),
-      loadLastMessageByThreadId(supabase, threadIds),
-      loadMentorUnreadCountsByRoomId(supabase, roomIds),
-    ]);
+  const [
+    studentDisplays,
+    messageCountsByThreadId,
+    lastMessageByThreadId,
+    unreadCountsByRoomId,
+    lastAttachmentByThreadId,
+  ] = await Promise.all([
+    loadStudentDisplaysForQuestionRooms(supabase, listBundle.rooms.rows),
+    loadMessageCountsByThreadId(supabase, threadIds),
+    loadLastMessageByThreadId(supabase, threadIds),
+    loadMentorUnreadCountsByRoomId(supabase, roomIds),
+    loadLastAttachmentByThreadId(supabase, threadIds),
+  ]);
 
   const initialNoteText = extractNoteText(bundle.notes.rows[0]);
 
@@ -91,6 +101,7 @@ export default async function MentorQuestionRoomDetailPage(props: Props) {
     effectiveThreadId && effectiveThreadId !== resolvedThreadId
       ? { ...(await fetchMessagesForThread(supabase, effectiveThreadId)), loading: false }
       : bundle.messages;
+  const attachments = await loadThreadAttachmentsWithUrls(supabase, effectiveThreadId);
 
   const [subscriptionContext, weeklyUsageResult] = studentId
     ? await Promise.all([
@@ -121,6 +132,8 @@ export default async function MentorQuestionRoomDetailPage(props: Props) {
         rooms={listBundle.rooms}
         threads={threads}
         messages={messages}
+        attachments={attachments}
+        lastAttachmentByThreadId={lastAttachmentByThreadId}
         notes={bundle.notes}
         roomId={roomId}
         threadId={effectiveThreadId}
