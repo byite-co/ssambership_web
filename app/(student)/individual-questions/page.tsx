@@ -43,7 +43,7 @@ export default async function StudentIndividualQuestionsPage() {
         </header>
 
         <p className="hidden rounded-xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-900 md:block md:mb-4">
-          개별 질문은 <strong>구독 질문방과 별개</strong>로, 건마다 캐시를 안전 결제해 진행하는 단건 질문이에요. 구독 멘토와의 대화는 <Link href="/question-room" className="font-extrabold underline">질문방</Link>에서 이어집니다.
+          개별 질문은 <strong>구독 질문방과 별개</strong>로, 1건마다 캐시를 안전 결제해 진행하는 단건 질문이에요. 구독 멘토와의 대화는 <Link href="/question-room" className="font-extrabold underline">질문방</Link>에서 이어집니다.
         </p>
 
         {/* 작성 진입: 공개형·지정형 모두 이 탭 안에서 바로 진행 */}
@@ -61,8 +61,8 @@ export default async function StudentIndividualQuestionsPage() {
             <p className="mt-3 text-xs font-extrabold text-[#2563EB]">공개형</p>
             <h2 className="mt-1 text-base font-medium text-slate-900">멘토 지정 없이 질문하기</h2>
             <p className="mt-1 flex-grow text-[13px] leading-6 text-slate-600">
-              <span className="md:hidden">공개로 올리면 먼저 잡은 멘토가 답변해요.</span>
-              <span className="hidden md:inline">가격을 제시해 공개로 올리면, 먼저 잡은 멘토 1명이 답변해요.</span>
+              <span className="md:hidden">공개로 올리면 검증된 멘토가 답변해요.</span>
+              <span className="hidden md:inline">가격을 제시해 공개로 올리면, 검증된 멘토가 답변해요.</span>
             </p>
             <Link
               href="/individual-questions/new"

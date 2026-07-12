@@ -31,7 +31,7 @@ export function MentorDetailCTASection(props: {
         지금 <span className="text-[#2563EB]">{props.mentorName}</span> 멘토와 함께 공부를 시작하세요!
       </h2>
       <p className="mt-2 text-center text-sm font-medium text-slate-600">
-        궁금한 건 바로 질문하고, 함께 성장해요.
+        궁금한 건 바로 질문하고, 성장해요.
       </p>
 
       <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">

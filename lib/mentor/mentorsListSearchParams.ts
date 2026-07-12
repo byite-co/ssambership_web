@@ -87,15 +87,16 @@ export const MENTOR_PRICE_BAND_OPTIONS: {
   min: number | null;
   max: number | null;
 }[] = [
-  { id: "3to5", label: "3~5만", min: 55_000, max: 99_999 },
-  { id: "5to10", label: "5~10만", min: 100_000, max: 149_999 },
-  { id: "10to20", label: "10~20만", min: 150_000, max: 249_999 },
-  { id: "over20", label: "20만 이상", min: 249_900, max: null },
+  { id: "3to5", label: "3~5만", min: 30_000, max: 49_999 },
+  { id: "5to10", label: "5~10만", min: 50_000, max: 99_999 },
+  { id: "10to20", label: "10~20만", min: 100_000, max: 199_999 },
+  { id: "over20", label: "20만 이상", min: 200_000, max: null },
 ];
 
+// 공개 필터에서는 "그외"를 노출하지 않음 — 그외로 분류된 멘토는 "미분류"에 종속(표시·매칭 모두 mentorDisplayFields에서 정규화)
 export const MENTOR_SCHOOL_OPTIONS: { id: MentorSchoolFilter; label: string }[] = [
   { id: "", label: "전체" },
-  ...SCHOOL_TIERS.map((id) => ({ id, label: id })),
+  ...SCHOOL_TIERS.filter((id) => id !== "그외").map((id) => ({ id, label: id })),
 ];
 
 export const MENTOR_SORT_OPTIONS: { id: MentorsListSort; label: string }[] = [

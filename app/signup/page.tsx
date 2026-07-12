@@ -1,5 +1,6 @@
 "use client";
 
+import { FREE_QUESTION_PER_MENTOR_LIMIT, FREE_QUESTION_TOTAL_LIMIT } from "@/lib/mentor/freeQuestionPolicy";
 import { Suspense, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -80,8 +81,8 @@ function stepDescription(s: 1 | 2 | 3) {
     case 1:
       return (
         <>
-          <span className="md:hidden">역할에 따라 혜택이 달라요. 유형을 골라 주세요.</span>
-          <span className="hidden md:inline">학생과 멘토는 역할에 맞는 혜택이 달라요. 먼저 가입 유형을 골라 주세요.</span>
+          <span className="md:hidden">가입 유형을 골라주세요.</span>
+          <span className="hidden md:inline">가입 유형을 골라주세요.</span>
         </>
       );
     case 2:
@@ -94,7 +95,11 @@ function stepDescription(s: 1 | 2 | 3) {
 }
 
 const signupRoleBenefits: Record<SignupRole, string[]> = {
-  student: ["가입 시 무료 질문권 7장 제공", "무료 질문은 한 멘토당 최대 3개", "질문방·맞춤의뢰를 한곳에서 관리"],
+  student: [
+    `가입 시 무료 질문권 ${FREE_QUESTION_TOTAL_LIMIT}장 제공`,
+    `무료 질문은 한 멘토당 최대 ${FREE_QUESTION_PER_MENTOR_LIMIT}개`,
+    "프리미엄 구독 시 맞춤 리포트 제공",
+  ],
   mentor: ["질문방 관리 및 답변 작성", "요금제 직접 설정", "정산 확인 및 수익 관리"],
 };
 
@@ -119,8 +124,8 @@ function SignupRoleChoiceCard({
     </>
   ) : (
     <>
-      <span className="md:hidden">멘토 활동으로 보상을 받을 수 있어요.</span>
-      <span className="hidden md:inline">답변·콘텐츠·맞춤의뢰를 운영하고 수익을 관리해요.</span>
+      <span className="md:hidden">답변 콘텐츠를 통해 수익을 창출해요.</span>
+      <span className="hidden md:inline">답변 콘텐츠를 통해 수익을 창출해요.</span>
     </>
   );
 
@@ -167,6 +172,10 @@ function SignupRoleChoiceCard({
       </div>
       <h3 className="mt-3 text-xl font-black text-slate-900 sm:text-2xl">{title}</h3>
       <p className="mt-1.5 text-sm font-medium leading-relaxed text-slate-600">{description}</p>
+
+      {isStudent ? (
+        <p className="mt-2 text-sm font-extrabold text-red-600">*가입 후 첫 주 한정혜택</p>
+      ) : null}
 
       <ul className="mt-5 space-y-2 border-y border-slate-100 py-4">
         {signupRoleBenefits[role].map((line) => (
@@ -500,11 +509,11 @@ function SignupPageContent() {
         {step === 1 ? (
             <div>
               <h2 className="text-center text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
-                어떤 계정으로 가입하시나요?
+                어떤 유형으로 가입하시나요?
               </h2>
               <p className="mx-auto mt-3 max-w-2xl text-center text-base font-medium leading-relaxed text-slate-500 sm:text-lg">
-                <span className="md:hidden">역할을 한 가지 골라 주세요.</span>
-                <span className="hidden md:inline">역할에 따라 혜택·입력 항목·이후 흐름(인증, 심사)이 달라요. 한 가지를 골라 주세요.</span>
+                <span className="md:hidden">한 가지 유형을 골라주세요.</span>
+                <span className="hidden md:inline">한 가지 유형을 골라주세요.</span>
               </p>
               <div className="mt-6 grid grid-cols-1 items-stretch gap-6 lg:grid-cols-2 lg:gap-8">
                 <SignupRoleChoiceCard
@@ -560,7 +569,7 @@ function SignupPageContent() {
                     onClick={goBackToRoleSelect}
                     className="mt-3 min-h-11 w-full rounded-2xl bg-[#2563EB] py-2.5 text-sm font-extrabold text-white sm:text-base"
                   >
-                    역할 선택으로
+                    가입 유형 선택으로
                   </button>
                 </div>
               ) : null}

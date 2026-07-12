@@ -46,7 +46,13 @@ export default async function MentorsPage(props: Props) {
       list={list}
       favoriteIds={favoriteIds}
       isLoggedIn={Boolean(user)}
-      schoolOptions={[{ id: "", label: "전체" }, ...catalogs.schoolTiers.map((option) => ({ id: option.code, label: option.label }))]}
+      schoolOptions={[
+        { id: "", label: "전체" },
+        // "그외"는 필터에 노출하지 않음 — 해당 멘토는 "미분류"로 종속(mentorDisplayFields 정규화)
+        ...catalogs.schoolTiers
+          .filter((option) => option.code !== "그외")
+          .map((option) => ({ id: option.code, label: option.label })),
+      ]}
       mentorTypeOptions={catalogs.majorCategories.map((option) => ({ id: option.code, label: option.label }))}
     />
   );

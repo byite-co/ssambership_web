@@ -36,9 +36,9 @@ const FEATURES = [
 ] as const;
 
 const PLAN_BENEFITS: Record<string, string[]> = {
-  limited: ["주 4개 신규 질문", "1:1 질문방 이용", "연결노트 기록"],
-  standard: ["주 9개 신규 질문", "균형 잡힌 질문 한도", "연결노트 + 진행 관리"],
-  premium: ["질문 무제한", "집중 멘토링", "연결노트 + 맞춤 피드백"],
+  limited: ["주 4개 신규 질문", "1:1 질문방 이용", "연결노트 기능", "최저가 요금"],
+  standard: ["주 9개 신규 질문", "1:1 질문방 이용", "연결노트 기능", "균형 잡힌 질문 한도"],
+  premium: ["질문 무제한", "1:1 질문방 이용", "연결노트 기능", "*쌤버쉽 피드백 리포트 제공*"],
 };
 
 const STEPS = [
@@ -68,12 +68,12 @@ export function PublicGuestLanding(props: { stats: LandingPublicStats; heroCtas?
         <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 sm:py-18 lg:grid-cols-2 lg:items-center lg:gap-12 lg:px-8 lg:py-24">
           <div className="min-w-0 text-center lg:text-left">
             <p className="text-xs font-semibold tracking-wide text-[#2563EB] sm:text-sm">
-              학교·전공 인증 대학생 멘토 구독 멘토링
+              대학생 멘토링 구독 서비스
             </p>
             <h1 className="mt-3 text-4xl font-black leading-tight tracking-tight text-slate-900 sm:text-5xl lg:text-[56px] lg:leading-[1.1]">
-              공부는 혼자,
+              혼자 헤매던 길에,
               <br />
-              <span className="text-[#2563EB]">성장은 함께</span>
+              <span className="text-[#2563EB]">먼저 걸어본 발자국을 새깁니다.</span>
             </h1>
             <p className="mt-5 whitespace-pre-line text-sm font-medium leading-relaxed text-slate-600 sm:text-base">
               {"검증된 대학생 멘토와 1:1로 연결되어\n질문하고, 배우고, 함께 성장하세요."}
@@ -165,7 +165,7 @@ export function PublicGuestLanding(props: { stats: LandingPublicStats; heroCtas?
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <h2 className="text-center text-2xl font-black text-slate-900 sm:text-3xl">구독 플랜</h2>
           <p className="mx-auto mt-3 max-w-lg text-center text-sm font-medium text-slate-600">
-            학습량에 맞는 플랜을 선택하세요. 멘토별로 요금이 안내될 수 있어요.
+            학습량에 맞는 플랜을 선택하세요. 멘토별로 요금제 비용이 달라요.
           </p>
           <div className="mt-10 grid gap-6 md:grid-cols-3">
             {SUBSCRIBE_PLAN_CATALOG.map((plan) => {
@@ -186,18 +186,23 @@ export function PublicGuestLanding(props: { stats: LandingPublicStats; heroCtas?
                     </span>
                   ) : null}
                   <h3 className="text-lg font-black text-slate-900">{plan.label}</h3>
-                  <p className="mt-2 text-2xl font-black text-[#2563EB]">
-                    {plan.cashKrw.toLocaleString("ko-KR")}
-                    <span className="text-sm font-bold text-slate-500"> 캐시/월</span>
-                  </p>
+                  <p className="mt-2 text-2xl font-black text-[#2563EB]">멘토 재량</p>
                   <p className="mt-1 text-xs font-bold text-slate-500">{plan.weeklyLabel}</p>
                   <ul className="mt-5 flex-1 space-y-2 border-t border-slate-100 pt-5">
-                    {benefits.map((b) => (
-                      <li key={b} className="flex items-start gap-2 text-sm font-medium text-slate-700">
-                        <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#2563EB]" />
-                        {b}
-                      </li>
-                    ))}
+                    {benefits.map((b) => {
+                      const isHighlight = b.startsWith("*") && b.endsWith("*");
+                      return (
+                        <li
+                          key={b}
+                          className={`flex items-start gap-2 text-sm ${
+                            isHighlight ? "font-extrabold text-[#2563EB]" : "font-medium text-slate-700"
+                          }`}
+                        >
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[#2563EB]" />
+                          {b}
+                        </li>
+                      );
+                    })}
                   </ul>
                   <Link
                     href={`/mentors`}
@@ -219,7 +224,7 @@ export function PublicGuestLanding(props: { stats: LandingPublicStats; heroCtas?
       {/* Section 5 — How it works */}
       <section className="bg-slate-50 py-14 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <h2 className="text-center text-2xl font-black text-slate-900 sm:text-3xl">이용 흐름</h2>
+          <h2 className="text-center text-2xl font-black text-slate-900 sm:text-3xl">서비스 이용 방법</h2>
           <div className="mt-10 grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
             {STEPS.map((step, i) => (
               <div key={step.title} className="relative text-center">

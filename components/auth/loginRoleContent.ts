@@ -1,3 +1,4 @@
+import { FREE_QUESTION_PER_MENTOR_LIMIT, FREE_QUESTION_TOTAL_LIMIT } from "@/lib/mentor/freeQuestionPolicy";
 export type AuthLoginRole = "student" | "mentor";
 
 export const loginLandingCopy: Record<
@@ -21,8 +22,8 @@ export const loginLandingCopy: Record<
     line1Mobile: "학생용 화면으로 들어가요.",
     line2: "이어서 화면에서 이메일·비밀번호로 로그인할 수 있어요.",
     benefits: [
-      { line1: "가입 시 무료 질문권 7장", line2: "제공" },
-      { line1: "무료 질문은 한 멘토당", line2: "최대 3개" },
+      { line1: `가입 시 무료 질문권 ${FREE_QUESTION_TOTAL_LIMIT}장`, line2: "제공" },
+      { line1: "무료 질문은 한 멘토당", line2: `최대 ${FREE_QUESTION_PER_MENTOR_LIMIT}개` },
       { line1: "여러 멘토에게", line2: "나눠서 사용 가능" },
     ],
     signupCta: "학생 회원가입",

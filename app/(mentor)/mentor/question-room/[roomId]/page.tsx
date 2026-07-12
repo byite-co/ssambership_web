@@ -3,7 +3,7 @@ import { PageScaffold } from "@/components/shell/PageScaffold";
 import { QuestionRoomWorkspace } from "@/components/qna/QuestionRoomWorkspace";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
-import { loadQuestionRoomDetailBundle, loadQuestionRoomListBundle, userCanAccessMentorStudentRoom } from "@/lib/qna/questionRoomQueries";
+import { fetchMessagesForThread, loadQuestionRoomDetailBundle, loadQuestionRoomListBundle, userCanAccessMentorStudentRoom } from "@/lib/qna/questionRoomQueries";
 import {
   loadMentorUnreadCountsByRoomId,
   loadStudentDisplaysForQuestionRooms,
@@ -15,6 +15,7 @@ import {
 } from "@/lib/qna/questionRoomStudentContext";
 import { fetchWeeklyQuestionUsageWithFallback } from "@/lib/qna/weeklyQuestionUsage";
 import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
+import { loadFreeTrialThreadIdsForMentorRoom, sortThreadsFreeTrialFirst } from "@/lib/qna/freeTrialPriority";
 import { extractNoteText } from "@/lib/qna/questionRoomMutations";
 import { paramToDraft } from "@/lib/qna/draftQuery";
 import { mapDataErrorMessage } from "@/lib/utils/mapDataError";
@@ -78,6 +79,19 @@ export default async function MentorQuestionRoomDetailPage(props: Props) {
   // 이 학생의 구독 요금제·이번 주 잔여 질문(읽기 전용 표시용). 기존 학생 로직 재사용.
   const currentRoom = listBundle.rooms.rows.find((r) => r && String(r.id) === String(roomId)) ?? null;
   const studentId = currentRoom ? partyUserIdFromRoomRow(currentRoom, "student") : null;
+
+  // 무료 체험(무료 질문권) 스레드 우선 노출: 목록 최상단 고정 + 명시 선택이 없으면 자동 선택
+  const freeTrialThreadIds = await loadFreeTrialThreadIdsForMentorRoom(supabase, user.id, studentId, roomId);
+  const sortedThreadRows = sortThreadsFreeTrialFirst(bundle.threads.rows, freeTrialThreadIds);
+  const threads = { ...bundle.threads, rows: sortedThreadRows };
+  const effectiveThreadId =
+    !threadFromQuery && sortedThreadRows[0]?.id != null ? String(sortedThreadRows[0].id) : resolvedThreadId;
+  // 자동 선택 스레드가 바뀌었으면(무료 체험 우선) 메시지도 해당 스레드 기준으로 재조회
+  const messages =
+    effectiveThreadId && effectiveThreadId !== resolvedThreadId
+      ? { ...(await fetchMessagesForThread(supabase, effectiveThreadId)), loading: false }
+      : bundle.messages;
+
   const [subscriptionContext, weeklyUsageResult] = studentId
     ? await Promise.all([
         loadQuestionRoomSubscriptionContext(supabase, studentId, currentRoom),
@@ -105,11 +119,12 @@ export default async function MentorQuestionRoomDetailPage(props: Props) {
         title="질문방"
         subtitle=""
         rooms={listBundle.rooms}
-        threads={bundle.threads}
-        messages={bundle.messages}
+        threads={threads}
+        messages={messages}
         notes={bundle.notes}
         roomId={roomId}
-        threadId={resolvedThreadId}
+        threadId={effectiveThreadId}
+        freeTrialThreadIds={freeTrialThreadIds}
         listPreviewsByRoomId={listBundle.listPreviewsByRoomId}
         studentDisplays={studentDisplays}
         messageCountsByThreadId={messageCountsByThreadId}

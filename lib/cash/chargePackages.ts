@@ -11,8 +11,8 @@ export const CASH_CHARGE_PACKAGES: readonly CashChargePackage[] = [
   { payKrw: 30_000, cashKrw: 30_000, bonusKrw: 0, bonusPercentLabel: null },
   { payKrw: 60_000, cashKrw: 60_000, bonusKrw: 0, bonusPercentLabel: null },
   { payKrw: 120_000, cashKrw: 120_000, bonusKrw: 0, bonusPercentLabel: null },
-  { payKrw: 200_000, cashKrw: 220_000, bonusKrw: 20_000, bonusPercentLabel: "10%" },
-  { payKrw: 300_000, cashKrw: 340_000, bonusKrw: 40_000, bonusPercentLabel: "13.3%" },
+  { payKrw: 200_000, cashKrw: 206_000, bonusKrw: 6_000, bonusPercentLabel: "3%" },
+  { payKrw: 300_000, cashKrw: 315_000, bonusKrw: 15_000, bonusPercentLabel: "5%" },
 ] as const;
 
 export function findChargePackageByPayKrw(payKrw: number): CashChargePackage | null {

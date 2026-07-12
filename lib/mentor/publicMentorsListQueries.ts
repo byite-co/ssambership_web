@@ -330,12 +330,23 @@ function cardMatchesFilters(f: MentorsListFilters, card: MentorPublicListCard): 
   if (!gradeMatchesFilter(f.grades, blob)) return false;
   if (!mentorTypeMatchesFilter(f.mentorTypes, d)) return false;
 
-  const price = card.minPriceKrw;
-  if (f.priceBand && price != null) {
-    if (f.priceBand === "3to5" && !(price >= 55_000 && price < 100_000)) return false;
-    if (f.priceBand === "5to10" && !(price >= 100_000 && price < 150_000)) return false;
-    if (f.priceBand === "10to20" && !(price >= 150_000 && price < 250_000)) return false;
-    if (f.priceBand === "over20" && !(price >= 249_900)) return false;
+  // 구독 요금 필터: 멘토의 세 플랜(라이트/스탠다드/프리미엄) 중 하나라도 밴드에 들어가면 매칭.
+  // 범위는 라벨(3~5만 / 5~10만 / 10~20만 / 20만 이상)과 일치하도록 정정.
+  if (f.priceBand) {
+    const prices = (card.tierPrices ?? [])
+      .map((t) => t.cashKrw)
+      .filter((p): p is number => typeof p === "number" && Number.isFinite(p));
+    if (card.minPriceKrw != null) prices.push(card.minPriceKrw);
+    if (prices.length) {
+      const inBand = (p: number) => {
+        if (f.priceBand === "3to5") return p >= 30_000 && p < 50_000;
+        if (f.priceBand === "5to10") return p >= 50_000 && p < 100_000;
+        if (f.priceBand === "10to20") return p >= 100_000 && p < 200_000;
+        if (f.priceBand === "over20") return p >= 200_000;
+        return true;
+      };
+      if (!prices.some(inBand)) return false;
+    }
   }
   return true;
 }

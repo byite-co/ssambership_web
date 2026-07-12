@@ -79,7 +79,7 @@ export function LoginInformationBlock() {
             </svg>
           }
         >
-          학생·멘토 역할에 따라 화면·기능이 달라집니다. 아래는 무료 질문권이 어떻게 쓰이는지 요약이에요. 자세한 조건은 약관·정책·요금
+          학생·멘토 유형에 따라 화면·기능이 달라집니다. 아래는 무료 질문권이 어떻게 쓰이는지 요약이에요. 자세한 조건은 약관·정책·요금
           안내를 봐 주세요.
         </Cell>
         <Cell
@@ -92,7 +92,7 @@ export function LoginInformationBlock() {
           }
         >
           회원가입·정책이 정한 절차를 완료하면, 안내에 따라{" "}
-          <strong className="font-extrabold text-slate-800">{FREE_QUESTION_TOTAL_LIMIT}장</strong>이 부여돼 요. 가입 후{" "}
+          <strong className="font-extrabold text-slate-800">{FREE_QUESTION_TOTAL_LIMIT}장</strong>이 부여돼요. 가입 후{" "}
           {FREE_QUESTION_EXPIRY_DAYS}일간 사용할 수 있어요.
         </Cell>
         <Cell
