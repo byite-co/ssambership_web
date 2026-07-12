@@ -75,13 +75,15 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
   const safeBody = maskContactInUserText(body);
 
   const supabase = await createClient();
-  const imageUrls: string[] = [];
+  // 저장 형식은 이제 `bucket/path` ref(BUG-B). 편집 시 유지되는 기존 이미지는
+  // ref 또는 (레거시) http URL 둘 다 수용 — 빈 문자열만 제외.
+  const imageRefs: string[] = [];
   const existingImagesRaw = String(formData.get("existingImageUrls") ?? "").trim();
   if (existingImagesRaw) {
     try {
       const parsed = JSON.parse(existingImagesRaw) as unknown;
       if (Array.isArray(parsed)) {
-        imageUrls.push(...parsed.filter((u): u is string => typeof u === "string" && u.startsWith("http")));
+        imageRefs.push(...parsed.filter((u): u is string => typeof u === "string" && u.trim().length > 0));
       }
     } catch {
       /* ignore */
@@ -89,11 +91,11 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
   }
 
   const files = formData.getAll("images").filter((f): f is File => f instanceof File && f.size > 0);
-  if (files.length + imageUrls.length > COMMUNITY_IMAGE_MAX) redirect(errRedirect(returnPath, "images"));
+  if (files.length + imageRefs.length > COMMUNITY_IMAGE_MAX) redirect(errRedirect(returnPath, "images"));
 
   if (files.length) {
     const buffers = await Promise.all(
-      files.slice(0, COMMUNITY_IMAGE_MAX - imageUrls.length).map(async (f) => ({
+      files.slice(0, COMMUNITY_IMAGE_MAX - imageRefs.length).map(async (f) => ({
         buffer: Buffer.from(await f.arrayBuffer()),
         mime: (f.type || "image/jpeg").toLowerCase(),
         name: f.name || "image",
@@ -101,7 +103,7 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
     );
     const up = await uploadCommunityPostImages(supabase, user.id, buffers);
     if (up.error) redirect(errRedirect(returnPath, "upload"));
-    imageUrls.push(...up.urls);
+    imageRefs.push(...up.refs);
   }
 
   const { label, role } = await authorLabelFor(user.id);
@@ -109,7 +111,7 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
     title: safeTitle,
     body: safeBody,
     category,
-    imageUrls,
+    imageUrls: imageRefs,
     hashtags: [] as string[],
     status: status as "draft" | "published",
     authorLabel: label,
