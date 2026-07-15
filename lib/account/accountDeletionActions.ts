@@ -54,25 +54,14 @@ export async function requestAccountDeletion(formData: FormData): Promise<void> 
     back("남은 캐시가 있습니다. 환불 신청을 먼저 진행하거나, 잔액 소멸에 동의해야 탈퇴할 수 있습니다.");
   }
 
-  // 5) 잔액 소멸 상계 (동의 시) — append-only: 원장 -상계 라인 1건 + 지갑 0화 (멱등)
+  // 5) 잔액 소멸 상계 (동의 시) — 단일 tx·행잠금 RPC 로 원자화 (SQL 124, 멱등).
+  //    지갑을 잠그고 '실제 현재 잔액'만큼만 상계하므로 스냅샷 경합/비원자성이 없다.
   if (pre.walletBalanceCents > 0 && forfeitConsent) {
-    const { data: forfeitRow, error: forfeitErr } = await admin
-      .from("cash_ledger")
-      .insert({
-        user_id: user.id,
-        delta_cents: -pre.walletBalanceCents,
-        reason: "forfeit_on_deletion",
-        ref_type: "account_deletion",
-        ref_id: user.id,
-        idempotency_key: `forfeit_on_deletion:${user.id}`,
-      })
-      .select("id")
-      .maybeSingle();
-    if (forfeitErr && !forfeitErr.message.includes("duplicate")) {
+    const { error: forfeitErr } = await admin.rpc("forfeit_wallet_on_deletion", {
+      p_user_id: user.id,
+    });
+    if (forfeitErr) {
       back("잔액 소멸 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.");
-    }
-    if (forfeitRow) {
-      await admin.from("cash_wallets").update({ balance_cents: 0 }).eq("user_id", user.id);
     }
   }
 
