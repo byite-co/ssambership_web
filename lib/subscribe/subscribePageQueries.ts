@@ -53,7 +53,7 @@ function detectTier(row: Row): SubscribePlanTier | null {
     return tierCol;
   }
   const title = (getStringField(row, ["title", "name", "label", "plan_name", "tier_name"]) ?? "").toLowerCase();
-  if (/limited|리미티드|라이트|light/.test(title)) return "limited";
+  if (/limited|리미티드|라이트|베이직|light/.test(title)) return "limited";
   if (/standard|스탠다드/.test(title)) return "standard";
   if (/premium|프리미엄|pro|프로/.test(title)) return "premium";
   return null;

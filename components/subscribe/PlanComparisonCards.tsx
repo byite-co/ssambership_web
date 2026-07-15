@@ -14,7 +14,7 @@ const TIERS = SUBSCRIBE_PLAN_CATALOG.map((p) => ({
   recommend: p.recommend,
 }));
 
-/** 멘토 상세 사이드바: 스탠다드 → 베이직 → 프리미엄 */
+/** 멘토 상세 사이드바: 스탠다드 → 라이트 → 프리미엄 */
 const RADIO_RAIL_ORDER: SubscribePlanTier[] = ["standard", "limited", "premium"];
 
 export type PlanComparisonLayout = "checkout" | "rail" | "grid" | "radio-rail";
