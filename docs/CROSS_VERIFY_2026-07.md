@@ -17,29 +17,32 @@
 
 ---
 
-## §1 판정 요약 — **조건부 GO**
+## §1 판정 요약 — **NO-GO** (XV-01 라이브 P0 미해결)
 
-**출시 차단(P0) 미해결 0건.** 직전 P0(XV-01 권한상승)은 SQL119로 폐쇄됨을 재현 DB에서 실증했다. 단 **출시 전 처리 권고(P1) 2건**이 열려 있어, 이를 처리(또는 명시적 축소)하기 전에는 무조건 GO 아님.
+> 개정(적대 검토 반영): 초판은 XV-01을 SQL119로 폐쇄됐다고 보아 '조건부 GO'로 판정했으나, **독립 적대 검토가 가입(INSERT) 경로의 잔존 P0를 발견**했고 재현 DB로 실증됨(§2 XV-01, §적대검토 반영). 게이트를 **NO-GO**로 정정한다.
 
-- **결제 표면 한정으로는 NO-GO에 가깝다** — XV-REFUND(P1)는 실제 캐시 이중지급 경로이고 현재 main에 상재한다. 환불/맞춤의뢰 에스크로 기능을 출시 범위에 넣는다면 이 SQL 픽스가 선행돼야 한다.
-- 그 외 도메인은 조건부 GO: 커뮤니티 숏폼 스크랩(P1)은 출시 전 '숨김 또는 DB 허용' 결정 필요, 나머지는 P2 이하.
+**미해결 P0 1건 — XV-01(가입 시 admin 자가 provisioning).** SQL119 가드는 `users` UPDATE 경로만 막고, 가입 트리거 `handle_new_auth_user()`는 클라이언트 가입 메타데이터의 `app_role='admin'`을 그대로 수용한다(필터가 `'admin'`을 화이트리스트). → **미인증 인터넷 사용자가 가입만으로 admin 계정을 만들 수 있다**(재현 DB 실증). 이 픽스 전에는 출시 불가.
 
-근거 요약: RLS 실효성 24개 시나리오 구멍 0 · 시크릿 누출 0 · 돈테이블 직접쓰기 차단 확인 · 캐시/에스크로 이동은 service_role RPC 단일경로 유지(XV-REFUND는 그 RPC '내부' 회귀). 아래 §2.
+- **XV-SCRAP(P1)** — 숏폼 스크랩이 DB CHECK 위반으로 상시 실패(CONFIRMED). 출시 전 '숨김 또는 DB 허용' 결정.
+- **XV-REFUND(P2-잠재)** — 099 에스크로 분기 소실은 실재하나, `refunds`행에 `custom_request_order_id`를 세팅하는 경로가 제품에 없어(앱 insert 2곳 전부 구독 전용 + DB 함수 insert 0) **현재 도달 불가**. 맞춤의뢰 환불/분쟁환불 흐름을 출시하기 전 SQL 픽스 필요.
+
+근거 요약: RLS 실효성 24개 시나리오 구멍 0 · 시크릿 누출 0 · 돈테이블 직접쓰기 차단 확인 · 캐시/에스크로 이동은 service_role RPC 단일경로 유지. 그러나 위 XV-01(권한 경계)이 게이트를 지배한다. 아래 §2.
 
 ---
 
 ## §2 발견 목록
 
-### P0 (출시 차단) — 미해결 0
+### P0 (출시 차단) — 미해결 1
 
-- **XV-01 · users.role 자가 승격 — ✅ 해소(SQL119)·CONFIRMED.** 직전 P0. `119_users_role_guard.sql`의 BEFORE UPDATE 트리거 `trg_users_role_guard`가 재현 DB에서: ① authenticated 학생 자가 `role='admin'` → **`ROLE_CHANGE_FORBIDDEN` 차단** ② role 무변경 UPDATE(full_name) → 정상 통과 ③ service_role role 변경 → 정상 통과. 부작용 없이 폐쇄. (근거: 재현 DB 실행 로그.)
+- **XV-01 · admin 권한 자가 provisioning — 🔴 미해결(가입 INSERT 경로)·CONFIRMED.**
+  - **UPDATE 경로는 SQL119로 폐쇄됨**(부분): `trg_users_role_guard`(BEFORE UPDATE, `when old.role is distinct from new.role`)가 재현 DB에서 ① authenticated 학생 자가 `role='admin'` UPDATE → `ROLE_CHANGE_FORBIDDEN` 차단 ② role 무변경 UPDATE 통과 ③ service_role 변경 통과. 여기까지는 정상.
+  - **그러나 가입(INSERT) 경로가 무방비**: `handle_new_auth_user()`(SQL `001`, `AFTER INSERT ON auth.users`, SECURITY DEFINER)가 `r := lower(trim(m->>'app_role'))`로 **클라이언트 가입 메타데이터**를 읽고, 유일한 필터 `if r not in ('student','mentor','admin') then r:='student'` — 즉 **`'admin'`을 명시적으로 허용**. SQL119는 UPDATE 트리거라 신규 가입 시 public.users **INSERT에는 발화하지 않음**.
+  - **재현(재현 DB 실증)**: `insert into auth.users(..., raw_user_meta_data => '{"app_role":"admin"}')` → `public.users.role = admin`, `is_admin() = t`.
+  - **도달성**: 웹 `lib/auth/buildSignupUserMetadata.ts` 가 `app_role: o.role` 를 `supabase.auth.signUp({ options:{ data }})`(`app/signup/page.tsx:344-347`)로 전송. GoTrue `/signup`은 임의 `options.data`로 공개 호출 가능하며 TS `Exclude<AppRole,"admin">`는 서버 통제가 아님 → **미인증 공격자가 signup 엔드포인트에 `app_role:"admin"`을 직접 실어 admin 계정 생성 가능.** `users` CHECK는 admin 허용, `users_insert_own` WITH CHECK는 `id=auth.uid()`만, BEFORE INSERT 가드 부재 → 다른 층에서도 안 걸림.
+  - **조치(P0)**: `handle_new_auth_user()`의 role 허용목록에서 `'admin'` 제거(→ `('student','mentor')`만) 그리고/또는 `users`에 BEFORE INSERT role 가드 추가. admin은 서버 전용 경로로만 승격.
+  - (초판 오판 사유: XV-01 검증이 UPDATE 벡터만 재현하고 가입/INSERT 벡터를 놓침 — 적대 검토가 교정.)
 
 ### P1 (출시 전 처리 권고)
-
-- **XV-REFUND · 맞춤의뢰 에스크로 이중환불 회귀 — CONFIRMED.**
-  - 근거: `056_p0_custom_order_escrow_refund.sql:177`이 `approve_refund_request_admin`을 **에스크로 분기 포함**으로 재정의(`:81-84` `if v_hold_cents is not null then v_escrow_refund:=true; perform record_custom_order_escrow_refund(...)`, 주석 `:370-371` "no refund_credit double pay"). 그러나 `099_subscription_refund_settlement_paid_guard.sql` 헤더가 명시: *"Full 030 approve body reproduced verbatim; ONLY the new subscription guard block is inserted"* → **030 본문 기반 재정의라 056의 에스크로 분기 소실**. 재현 DB 최종 함수 본문에 `record_custom_order_escrow_refund` 호출 없음(직접 확인).
-  - 실패 시나리오: escrowed 맞춤의뢰에서 학생 직접취소 환불(`orderStudentActions.ts` → `record_custom_order_escrow_refund`, idem `cr_refund_{order}`)로 예치금 반환 후, 관리자가 별도 `refunds`행을 승인(`refundActions.ts` → 099 RPC, idem `refund_credit:{refund_id}`)하면 **키가 달라 이중 적립**. 099의 유일한 맞춤의뢰 가드는 `settlement='paid'` 확인인데 에스크로 환불은 이를 설정하지 않아 통과.
-  - 조치: SQL120급 마이그레이션으로 056의 에스크로 분기를 099 본문 위에 재적용(웹 호출부는 RPC를 신뢰만 하므로 코드 무변경). 운영 반영 여부 확인 필요.
 
 - **XV-SCRAP · 숏폼 스크랩이 DB CHECK 위반으로 상시 실패 — CONFIRMED.**
   - 근거: DB `shortform_reactions_type_check = CHECK (type = 'like')`(재현 DB 실측) — scrap 불허. 그런데 앱 `community_write_repository.dart:62` `toggleShortformReaction`이 `type='scrap'`을 insert(`shortform_detail_screen.dart:102-114`에서 scrap 토글). → 매 스크랩 탭마다 `23514 check_violation`, 앱 catch가 `_scrapped` 상태를 revert(`:114`). **스크랩이 '되는 척' 하고 실패**. 웹은 숏폼 like만(scrap 없음) → 웹·DB는 정합, 앱만 계약 위반.
@@ -48,12 +51,17 @@
 
 ### P2 (다음 마일스톤)
 
+- **XV-REFUND · 맞춤의뢰 에스크로 환불 회귀(잠재, 현재 도달 불가) — CONFIRMED(회귀)·도달성 반증됨.**
+  - 회귀 실재: `056:177`이 `approve_refund_request_admin`을 에스크로 분기 포함(`:257-260` `perform record_custom_order_escrow_refund(...)`, 주석 "no refund_credit double pay")으로 재정의했으나, `099`가 헤더대로 *"Full 030 approve body reproduced verbatim + subscription guard만 삽입"* → 030 기반이라 **056 에스크로 분기 소실**(재현 DB 최종 함수에 `record_custom_order_escrow_refund` 호출 없음).
+  - **그러나 현재 도달 불가(적대 검토 반증)**: 이중지급의 두 번째 크레딧은 `custom_request_order_id`가 설정된 `refunds`행이 있어야 발화하는데, 제품의 `refunds` insert 2곳(`subscriptionCancelActions.ts:230`, `mentorActivityService.ts:203`)이 **전부 `subscription_id`+구독 request_type만 세팅, `custom_request_order_id` 미설정**이고, `refunds`에 insert 하는 DB 함수도 **0건**(재현 DB 확인). 즉 099의 `r.custom_request_order_id is not null` 분기는 실사용 refunds에 대해 **dead**.
+  - **판정: 잠재 회귀(P2)**, 라이브 이중지급 아님. 단 맞춤의뢰 환불/분쟁환불 흐름을 도입하는 순간 활성화되므로 그 전에 SQL로 056 분기 재적용 필요.
+
 - **XV-REALTIME · 실시간 채팅 메시지가 실제로는 비실시간 — CONFIRMED.** 재현 DB `supabase_realtime` publication에 **`question_attachments`만** 포함(SQL117 §E `:134`가 첨부만 add). `question_messages`·`question_threads` 미포함. 앱 `thread_realtime.dart:46-82`는 3개 테이블 모두 구독하나 메시지·상태변경 이벤트는 발화 안 됨 → 첨부만 실시간, 새 메시지/상태는 재조회 폴백(앱 docstring 명시)으로만 반영. 웹은 realtime 미사용(폴백 설계). 조치: `question_messages`·`question_threads`를 publication에 추가(SQL 1줄) 시 실시간 채팅 완성. **미포함이어도 앱은 폴백 동작**이라 P2.
 - **XV-PRICE · 요금제 라벨 드리프트(`베이직`↔`라이트`) — CONFIRMED.** 실제 카탈로그 라벨은 `라이트`(`subscribePlanCatalog.ts:17`)이고 CLAUDE.md canon도 `라이트`로 개정됨. 그러나 `베이직` 잔존: 약관 `app/(public)/legal/terms/page.tsx:95`, FAQ `app/(public)/support/page.tsx:31,45`(2026-07 legal PR에서 유입), 멘토 목록 헤더 `components/mentor/MentorsListBody.tsx:63`, 비교카드 주석 `components/subscribe/PlanComparisonCards.tsx:17`. tier id(`limited/standard/premium`)는 전부 정합. 조치: `베이직`→`라이트` 카피 일괄 교체(사용자 노출 텍스트 3곳 + 주석 1곳).
 - **XV-QUERY-1 · 질문 목록 정렬 비대칭 — PLAUSIBLE.** 웹 `questionRoomQueries.ts:177-186` `updated_at desc` vs 앱 `question_room_read_repository.dart:38-44` `created_at desc` → 같은 방의 스레드가 웹/앱에서 다른 순서. UX 불일치.
 - **XV-QUERY-2 · 멘토 목록 기본 정렬·정렬메뉴 비대칭 — PLAUSIBLE.** 웹 기본 `인기순`(`publicMentorsListQueries.ts:356-360`) vs 앱 기본 `최신순`(`mentors_screen.dart:43`), 정렬 옵션 집합도 상이(앱 '별점높은순' 웹 미노출 등). 첫 화면 노출 멘토 순서 다름.
 - **XV-CASH-FORFEIT · 계정삭제 캐시 몰수 비원자성 — PLAUSIBLE(이월).** `accountDeletionActions.ts:59-70` `cash_ledger` 직접 INSERT 후 별도 `cash_wallets` UPDATE(`:75`) — 비트랜잭션·UPDATE 결과 미확인. idempotency_key(`:67`)+`if(forfeitRow)` 가드로 완화되나 중간 실패 시 원장↔지갑 불일치 가능. (돈 경로 단일화 취지의 국소 예외.)
-- **XV-CR-NOTIF · 맞춤의뢰 알림이 앱 질문방에 노출 — PLAUSIBLE.** 웹 `orderMessageActions.ts:289` `type="new_order_message"` → 앱 `classifyNotificationType`(`app_notification.dart:30-68`)가 `message` 키워드로 질문방 분류, CR 제외 단계는 `custom_order`만 확인 → 숨겨야 할 CR 알림이 노출.
+- **XV-CR-NOTIF · 맞춤의뢰 알림이 앱 질문방에 노출 — CONFIRMED(적대 검토 재확인).** 웹 `orderMessageActions.ts:289` `type="new_order_message"` → 앱 `classifyNotificationType`(`app_notification.dart:35-68`)의 CR 제외 토큰집합(`custom_request`/`custom_order`/`refund`/`cr_`) 어디에도 매칭 안 됨 → 그 다음 `t.contains('message')`가 질문방으로 분류 → 숨겨야 할 CR 알림이 앱 질문방에 노출.
 - **XV-REVIEWS-POLICY · reviews INSERT 정책 이중 → 자격검증 우회(DB층) — CONFIRMED.** 최종 reviews에 permissive INSERT 정책 2개 활성: `rev_ins`(author_id=auth.uid())와 `reviews_insert_student`(author_id+`check_review_eligibility`). Postgres OR 결합이라 약한 `rev_ins`가 자격검증을 우회(앱/웹은 코드에서 자격 검증). 데이터형상은 정합(author_id, 004형)이라 **출시 비차단**. SQL120(미머지 #31)이 정책 정리에 해당하나 필수는 아님.
 
 ### P3 (사소)
@@ -108,7 +116,7 @@ RLS 구멍 **0건**. 저심각 1건: question_attachments INSERT의 author_id NU
 ## §5 기존 보고 대비 델타
 
 **해결(머지로):**
-- **XV-01**(P0 권한상승) → SQL119 머지·**재현 DB로 폐쇄 실증**.
+- **XV-01**(P0 권한상승) → SQL119로 **UPDATE 경로만 폐쇄**. **가입(INSERT) 경로는 미해결(라이브 P0, §2)** — 부분 해결.
 - **XV-ATTACH**(첨부 계약 비대칭) → 첨부 v2(웹#28/앱#27)+SQL117: 본문 마커 폐지·`question_attachments` 단일정본 렌더·표시시점 재서명(7일 부패 소멸). **단 realtime는 첨부만 반영 → XV-REALTIME 잔여**.
 - **BUG-B**(커뮤니티 이미지 7일 부패) → 웹#29+SQL118: ref 저장+표시시점 서명.
 - **XV-HEIC** → v2 웹 파일칩 강등으로 완화(P3).
@@ -129,15 +137,33 @@ RLS 구멍 **0건**. 저심각 1건: question_attachments INSERT의 author_id NU
 
 ## §7 출시 전 잔여 액션 (우선순위)
 
-1. **XV-REFUND(P1)** — 056 에스크로 분기를 099 위에 재적용하는 SQL 마이그레이션(신규 번호). 결제/에스크로를 출시 범위에 넣으면 **선행 필수**.
+1. **XV-01(P0·출시 차단)** — `handle_new_auth_user()`의 role 허용목록에서 `'admin'` 제거(→ `('student','mentor')`), 그리고/또는 `users` BEFORE INSERT role 가드 추가. **미인증 admin provisioning을 막기 전엔 NO-GO.**
 2. **XV-SCRAP(P1)** — 숏폼 스크랩: 앱 버튼 숨김 또는 DB CHECK에 `'scrap'` 추가. 출시 전 택1.
 3. **XV-REALTIME(P2)** — `question_messages`·`question_threads`를 `supabase_realtime` publication에 추가(실시간 채팅 완성). 미적용이어도 폴백 동작.
-4. **XV-PRICE(P2)** — `베이직`→`라이트` 카피 교체(약관·FAQ·MentorsListBody·PlanComparisonCards 주석) + tier 파서 정리.
-5. **XV-CR-NOTIF/MENTOR-NOTICE(P2/P3)** — 앱 `classifyNotificationType` 키워드 분류 보정(CR 알림 노출·구독영향 알림 누락).
-6. **XV-QUERY-1/2(P2)** — 질문목록/멘토목록 정렬 규약 통일.
-7. **XV-CASH-FORFEIT(P2)** — 계정삭제 캐시 몰수를 원자적 RPC로.
-8. (선택) **SQL120/#31** — reviews 정책 이중 정리(하드닝).
+4. **XV-REFUND(P2·잠재)** — 맞춤의뢰 환불/분쟁환불 흐름을 도입하기 전에 056 에스크로 분기를 099 위에 재적용하는 SQL. (현재 도달 불가라 즉시 차단 아님.)
+5. **XV-PRICE(P2)** — `베이직`→`라이트` 카피 교체(약관·FAQ·MentorsListBody·PlanComparisonCards 주석) + tier 파서 정리.
+6. **XV-CR-NOTIF/MENTOR-NOTICE(P2/P3)** — 앱 `classifyNotificationType` 키워드 분류 보정(CR 알림 노출·구독영향 알림 누락).
+7. **XV-QUERY-1/2(P2)** — 질문목록/멘토목록 정렬 규약 통일.
+8. **XV-CASH-FORFEIT(P2)** — 계정삭제 캐시 몰수를 원자적 RPC로.
+9. (선택) **SQL120/#31** — reviews 정책 이중 정리(하드닝).
 
 ---
 
-_(끝) 본 검증은 재현 DB(`ssam_verify`) 정본 기준이며, '미확인'은 통과로 승격하지 않았다. 제품 코드·스키마 변경 0건, 산출물은 본 문서뿐이다. 독립 적대 검토 반영 내역은 §6 뒤에 별도 추가한다._
+## §8 독립 적대 검토 반영 내역
+
+초판(commit `4f4ecf3`/`420a232`) 작성 후, 새 컨텍스트의 독립 적대 검토를 1회 수행했다. 검토는 재현 DB·양 레포로 6개 load-bearing 주장을 반증 시도했고, 아래 2건의 **판정 오류를 잡아 반영**했다(둘 다 검토 지적 후 본 검증자가 재현 DB로 직접 재확인).
+
+| # | 초판 | 적대 검토 판정 | 반영 |
+|---|---|---|---|
+| 1 | XV-01 "SQL119로 폐쇄·P0 미해결 0" | **OVERSTATED** — SQL119는 UPDATE만 가드. `handle_new_auth_user()`가 가입 메타 `app_role='admin'`을 허용 → 미인증 admin provisioning. 재현: `auth.users` INSERT(app_role=admin) → `users.role=admin`, `is_admin()=t` | **XV-01 라이브 P0로 재개**, 게이트 **조건부 GO → NO-GO** |
+| 2 | XV-REFUND "P1·라이브 이중지급·near NO-GO" | **OVERSTATED(도달성)** — 회귀는 실재하나 `custom_request_order_id`를 세팅하는 `refunds` insert가 제품에 없음(앱 2곳 구독전용 + DB 함수 0) → 099 에스크로 분기 dead | **P1 → P2(잠재)** 강등, 도달성 반증 명기 |
+| 3 | XV-SCRAP(P1) | CONFIRMED-AS-WRITTEN(버튼 미숨김, 상시 실패) | 유지 |
+| 4 | XV-REALTIME(P2) | CONFIRMED-AS-WRITTEN(publication=attachments만, 대체 전달 없음) | 유지 |
+| 5 | XV-QUERY-1 / XV-CR-NOTIF | CONFIRMED-AS-WRITTEN(스팟체크) | XV-CR-NOTIF PLAUSIBLE→CONFIRMED, 제외 토큰집합 문구 정정 |
+| 6 | 게이트 "조건부 GO" | NOT DEFENSIBLE(P0 오폐쇄 + P1 과대) | §1 NO-GO로 정정 |
+
+검토가 확인해 준 것(변경 불요): RLS 24시나리오 구멍 0 · 시크릿 누출 0 · XV-SCRAP·XV-REALTIME·정렬비대칭·CR-NOTIF 근거 정확.
+
+---
+
+_(끝) 본 검증은 재현 DB(`ssam_verify`) 정본 기준이며, '미확인'은 통과로 승격하지 않았다. 제품 코드·스키마 변경 0건, 산출물은 본 문서뿐이다. 적대 검토 반영으로 게이트는 **NO-GO**(XV-01 가입 경로 P0)로 확정됐다._
