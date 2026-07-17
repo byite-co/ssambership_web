@@ -70,3 +70,18 @@ export async function insertAdminNoticeDraft(
   if (!id) return { ok: false, error: "저장 후 식별자를 확인할 수 없습니다." };
   return { ok: true, id };
 }
+
+export async function setAdminNoticeActive(
+  supabase: SupabaseClient,
+  input: { resource: "notice" | "promotion"; id: string; active: boolean; actorUserId: string | null }
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const table = input.resource === "promotion" ? TABLE_PROMOTION : TABLE_NOTICE;
+  const { data, error } = await supabase
+    .from(table)
+    .update({ is_active: input.active, updated_by: input.actorUserId })
+    .eq("id", input.id)
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+  if (!data?.length) return { ok: false, error: "대상을 찾을 수 없습니다." };
+  return { ok: true };
+}

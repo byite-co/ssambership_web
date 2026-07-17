@@ -113,8 +113,6 @@ export default async function AdminMentorApprovalPage(props: PageProps) {
     const stored =
       (typeof (r as Record<string, unknown>).student_id_image_url === "string" &&
         (r as Record<string, unknown>).student_id_image_url) ||
-      (typeof (r as Record<string, unknown>).id_card_url === "string" &&
-        (r as Record<string, unknown>).id_card_url) ||
       null;
     studentIdImageSignedUrlByUserId[uid] = await resolveStudentIdImageSignedUrl(readDb, String(stored ?? ""));
   }

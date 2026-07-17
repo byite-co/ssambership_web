@@ -148,3 +148,30 @@ export async function directRestoreCommentAction(formData: FormData) {
     reason: textFromForm(formData.get("reason")),
   });
 }
+
+export async function directHideBoardCommentAction(formData: FormData) {
+  await runDirectModeration({
+    targetType: "board_comment",
+    targetId: textFromForm(formData.get("targetId")),
+    intent: "hidden",
+    reason: textFromForm(formData.get("reason")),
+  });
+}
+
+export async function directDeleteBoardCommentAction(formData: FormData) {
+  await runDirectModeration({
+    targetType: "board_comment",
+    targetId: textFromForm(formData.get("targetId")),
+    intent: "deleted",
+    reason: textFromForm(formData.get("reason")),
+  });
+}
+
+export async function directRestoreBoardCommentAction(formData: FormData) {
+  await runDirectModeration({
+    targetType: "board_comment",
+    targetId: textFromForm(formData.get("targetId")),
+    intent: "restored",
+    reason: textFromForm(formData.get("reason")),
+  });
+}

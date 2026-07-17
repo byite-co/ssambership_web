@@ -6,6 +6,7 @@ import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { checkAccountDeletionPreconditions } from "@/lib/account/accountDeletionPreconditions";
 import { isAccountDeletionFeatureEnabled } from "@/lib/shell/featureFlags";
 import { MENTOR_AVATAR_BUCKET } from "@/lib/storage/mentorAvatarStorage";
+import { STUDENT_ID_IMAGES_BUCKET } from "@/lib/storage/studentIdImageStorage";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -90,6 +91,23 @@ export async function requestAccountDeletion(formData: FormData): Promise<void> 
     if (paths.length > 0) await admin.storage.from(MENTOR_AVATAR_BUCKET).remove(paths);
   } catch {
     // best-effort — 스토리지 실패가 탈퇴 자체를 막지 않는다 (PII 익명화는 이미 완료)
+  }
+
+  // 7-1) 인증 서류 삭제 (student-id-images/{userId}/** — 학생증·학교인증·학적변경 서류)
+  //      민감 PII이므로 탈퇴 시 스토리지에서도 제거한다. list는 비재귀라 하위 폴더를 함께 순회.
+  try {
+    const dirs = [user.id, `${user.id}/school-verifications`, `${user.id}/academic-record-changes`];
+    const docPaths: string[] = [];
+    for (const dir of dirs) {
+      const { data: objects } = await admin.storage.from(STUDENT_ID_IMAGES_BUCKET).list(dir);
+      for (const o of objects ?? []) {
+        // list는 하위 폴더를 파일처럼 돌려줄 수 있다 — metadata 없는 항목(폴더)은 제외
+        if (o.id || o.metadata) docPaths.push(`${dir}/${o.name}`);
+      }
+    }
+    if (docPaths.length > 0) await admin.storage.from(STUDENT_ID_IMAGES_BUCKET).remove(docPaths);
+  } catch {
+    // best-effort — 위와 동일
   }
 
   // 8) auth soft-delete (행 보존·로그인 영구 차단 — 하드삭제 금지, 스펙 §0)

@@ -93,7 +93,7 @@ function requireDisputesTable(table: string | null, disputeId: string): string {
 
 /** 검토 중: open · escalated → under_review */
 export async function setDisputeUnderReviewAction(formData: FormData) {
-  await requireRole("admin");
+  const { user } = await requireRole("admin");
   const disputeId = textFromForm(formData.get("disputeId"));
   if (!disputeId) redirect(`${LIST_PATH}?error=${encodeURIComponent(safeMsg("분쟁을 식별할 수 없습니다."))}`);
 
@@ -111,6 +111,14 @@ export async function setDisputeUnderReviewAction(formData: FormData) {
   const { touched, errorMsg } = await runDisputeUpdate(table, disputeId, patch, ["open", "escalated"]);
   if (errorMsg) redirect(errUrlDetail(disputeId, safeMsg(errorMsg)));
   if (!touched) redirect(errUrlDetail(disputeId, safeMsg("이미 검토 중이거나 변경할 수 없는 상태입니다.")));
+
+  await logAdminAction(admin, {
+    adminId: user.id,
+    actionType: "dispute_under_review",
+    targetType: "dispute",
+    targetId: disputeId,
+    detail: {},
+  });
 
   revalidatePath(LIST_PATH);
   revalidatePath("/admin");
@@ -144,6 +152,14 @@ export async function resolveDisputeAction(formData: FormData) {
   if (errorMsg) redirect(errUrlDetail(disputeId, safeMsg(errorMsg)));
   if (!touched) redirect(errUrlDetail(disputeId, safeMsg("이미 종료되었거나 변경할 수 없는 상태입니다.")));
 
+  await logAdminAction(admin, {
+    adminId: user.id,
+    actionType: "dispute_resolved",
+    targetType: "dispute",
+    targetId: disputeId,
+    detail: {},
+  });
+
   revalidatePath(LIST_PATH);
   revalidatePath("/admin");
   revalidatePath(`/admin/disputes/${disputeId}`);
@@ -175,6 +191,14 @@ export async function dismissDisputeAction(formData: FormData) {
   const { touched, errorMsg } = await runDisputeUpdate(table, disputeId, patch, ["open", "under_review", "escalated"]);
   if (errorMsg) redirect(errUrlDetail(disputeId, safeMsg(errorMsg)));
   if (!touched) redirect(errUrlDetail(disputeId, safeMsg("이미 종료되었거나 변경할 수 없는 상태입니다.")));
+
+  await logAdminAction(admin, {
+    adminId: user.id,
+    actionType: "dispute_dismissed",
+    targetType: "dispute",
+    targetId: disputeId,
+    detail: {},
+  });
 
   revalidatePath(LIST_PATH);
   revalidatePath("/admin");

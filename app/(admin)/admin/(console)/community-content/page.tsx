@@ -3,17 +3,21 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
   countAdminCommunityByStatus,
+  loadAdminBoardCommentsListPaged,
   loadAdminCommunityCommentsListPaged,
   loadAdminCommunityPostsListPaged,
   loadAdminShortformPostsListPaged,
 } from "@/lib/admin/adminCommunityContentQueries";
 import {
+  directDeleteBoardCommentAction,
   directDeleteCommentAction,
   directDeleteCommunityPostAction,
   directDeleteShortformAction,
+  directHideBoardCommentAction,
   directHideCommentAction,
   directHideCommunityPostAction,
   directHideShortformAction,
+  directRestoreBoardCommentAction,
   directRestoreCommentAction,
   directRestoreCommunityPostAction,
   directRestoreShortformAction,
@@ -26,11 +30,11 @@ type PageProps = { searchParams?: Promise<Record<string, string | string[] | und
 
 const BASE_PATH = "/admin/community-content";
 
-type ContentType = "posts" | "shortforms" | "comments";
+type ContentType = "posts" | "shortforms" | "board-comments" | "comments";
 
 function parseType(raw: string | string[] | undefined): ContentType {
   const v = typeof raw === "string" ? raw.trim() : Array.isArray(raw) ? raw[0] : "";
-  if (v === "shortforms" || v === "comments") return v;
+  if (v === "shortforms" || v === "board-comments" || v === "comments") return v;
   return "posts";
 }
 
@@ -73,6 +77,7 @@ export default async function AdminCommunityContentPage(props: PageProps) {
   let listPromise:
     | ReturnType<typeof loadAdminCommunityPostsListPaged>
     | ReturnType<typeof loadAdminShortformPostsListPaged>
+    | ReturnType<typeof loadAdminBoardCommentsListPaged>
     | ReturnType<typeof loadAdminCommunityCommentsListPaged>;
   let countPromise: ReturnType<typeof countAdminCommunityByStatus>;
   let statusTabs: Array<{ value: string; label: string; count?: number }> = [];
@@ -85,6 +90,10 @@ export default async function AdminCommunityContentPage(props: PageProps) {
     listPromise = loadAdminShortformPostsListPaged(supabase, params);
     countPromise = countAdminCommunityByStatus(supabase, "shortform_posts");
     searchPlaceholder = "숏폼 ID/제목/설명/카테고리/작성자 검색";
+  } else if (type === "board-comments") {
+    listPromise = loadAdminBoardCommentsListPaged(supabase, params);
+    countPromise = countAdminCommunityByStatus(supabase, "comments");
+    searchPlaceholder = "댓글 ID/내용/post_id/작성자 검색";
   } else {
     listPromise = loadAdminCommunityCommentsListPaged(supabase, params);
     countPromise = countAdminCommunityByStatus(supabase, "community_comments");
@@ -93,7 +102,7 @@ export default async function AdminCommunityContentPage(props: PageProps) {
 
   const [list, byStatus] = await Promise.all([listPromise, countPromise]);
 
-  if (type === "comments") {
+  if (type === "comments" || type === "board-comments") {
     statusTabs = [
       { value: "all", label: "전체", count: byStatus.all ?? 0 },
       { value: "visible", label: "노출", count: byStatus.visible ?? 0 },
@@ -111,7 +120,8 @@ export default async function AdminCommunityContentPage(props: PageProps) {
   const typeTabs: Array<{ value: ContentType; label: string }> = [
     { value: "posts", label: "글" },
     { value: "shortforms", label: "숏폼" },
-    { value: "comments", label: "댓글" },
+    { value: "board-comments", label: "게시판 댓글" },
+    { value: "comments", label: "댓글(레거시)" },
   ];
 
   return (
@@ -175,7 +185,13 @@ export default async function AdminCommunityContentPage(props: PageProps) {
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50/60 px-5 py-3">
           <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">
-            {type === "posts" ? "커뮤니티 글" : type === "shortforms" ? "숏폼" : "댓글"}
+            {type === "posts"
+              ? "커뮤니티 글"
+              : type === "shortforms"
+                ? "숏폼"
+                : type === "board-comments"
+                  ? "게시판 댓글"
+                  : "댓글(레거시)"}
           </h2>
           <span className="rounded-full bg-blue-50 px-2.5 py-0.5 text-[11px] font-bold text-blue-700">
             {list.totalCount.toLocaleString("ko-KR")}건
@@ -204,16 +220,24 @@ export default async function AdminCommunityContentPage(props: PageProps) {
                 list.rows.map((row) => {
                   const id = String(row.id ?? "");
                   const idPv = previewId(id);
-                  const status = String(row.status ?? "");
+                  // 게시판 v2 댓글은 status 컬럼이 없고 is_deleted 로 노출을 제어한다.
+                  const status =
+                    type === "board-comments"
+                      ? row.is_deleted === true
+                        ? "hidden"
+                        : "visible"
+                      : String(row.status ?? "");
                   const isHidden = status === "hidden";
                   const titleOrBody =
                     typeof row.title === "string" && row.title.trim()
                       ? row.title
                       : typeof row.body === "string" && row.body.trim()
                         ? (row.body as string).slice(0, 80)
-                        : typeof row.description === "string" && row.description.trim()
-                          ? (row.description as string).slice(0, 80)
-                          : "—";
+                        : typeof row.content === "string" && row.content.trim()
+                          ? (row.content as string).slice(0, 80)
+                          : typeof row.description === "string" && row.description.trim()
+                            ? (row.description as string).slice(0, 80)
+                            : "—";
                   const authorPv = previewId(row.author_id);
                   const authorLabel = typeof row.author_label === "string" ? row.author_label : null;
 
@@ -222,19 +246,25 @@ export default async function AdminCommunityContentPage(props: PageProps) {
                       ? directHideCommunityPostAction
                       : type === "shortforms"
                         ? directHideShortformAction
-                        : directHideCommentAction;
+                        : type === "board-comments"
+                          ? directHideBoardCommentAction
+                          : directHideCommentAction;
                   const restoreAction =
                     type === "posts"
                       ? directRestoreCommunityPostAction
                       : type === "shortforms"
                         ? directRestoreShortformAction
-                        : directRestoreCommentAction;
+                        : type === "board-comments"
+                          ? directRestoreBoardCommentAction
+                          : directRestoreCommentAction;
                   const deleteAction =
                     type === "posts"
                       ? directDeleteCommunityPostAction
                       : type === "shortforms"
                         ? directDeleteShortformAction
-                        : directDeleteCommentAction;
+                        : type === "board-comments"
+                          ? directDeleteBoardCommentAction
+                          : directDeleteCommentAction;
 
                   return (
                     <tr key={id} className="align-top">

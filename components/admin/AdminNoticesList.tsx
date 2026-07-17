@@ -1,5 +1,6 @@
 import type { NoticeListRow } from "@/lib/admin/adminNoticesQueries";
 import { ADMIN_LIST_ERROR_TITLE, adminNoticesSectionDescription } from "@/lib/admin/adminDisplayError";
+import { toggleAdminNoticeActiveAction } from "@/lib/admin/adminNoticesActions";
 
 const badge = (on: boolean) =>
   on ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-slate-50 text-slate-600 border-slate-100";
@@ -40,11 +41,13 @@ export function AdminNoticesList(props: { label: string; table: string; rows: No
             <th className="px-5 py-3 text-xs font-bold text-slate-600">노출 상태</th>
             <th className="px-5 py-3 text-xs font-bold text-slate-600">노출 기간</th>
             <th className="px-5 py-3 text-xs font-bold text-slate-600">생성일</th>
+            <th className="px-5 py-3 text-xs font-bold text-slate-600">조치</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {rows.map((r, i) => {
             const key = r.id || `row-${i}`;
+            const resource = label === "프로모션" ? "promotion" : "notice";
             return (
               <tr key={key} className="hover:bg-slate-50/30 transition-colors">
                 <td className="max-w-[220px] truncate px-5 py-4 font-bold text-slate-900">{r.title}</td>
@@ -57,6 +60,25 @@ export function AdminNoticesList(props: { label: string; table: string; rows: No
                 </td>
                 <td className="whitespace-nowrap px-5 py-4 text-xs font-medium text-slate-500">{r.periodLabel}</td>
                 <td className="whitespace-nowrap px-5 py-4 text-xs font-medium text-slate-500">{r.createdLabel}</td>
+                <td className="whitespace-nowrap px-5 py-4">
+                  {r.id ? (
+                    <form action={toggleAdminNoticeActiveAction}>
+                      <input type="hidden" name="id" value={r.id} />
+                      <input type="hidden" name="resource" value={resource} />
+                      <input type="hidden" name="nextActive" value={r.exposure.isOn ? "false" : "true"} />
+                      <button
+                        type="submit"
+                        className={
+                          r.exposure.isOn
+                            ? "rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                            : "rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500"
+                        }
+                      >
+                        {r.exposure.isOn ? "비활성화" : "활성화"}
+                      </button>
+                    </form>
+                  ) : null}
+                </td>
               </tr>
             );
           })}

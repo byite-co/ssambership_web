@@ -66,7 +66,10 @@ export function RoleLoginForm({
   onPasswordChange,
 }: RoleLoginFormProps) {
   const searchParams = useSearchParams();
-  const signupFollowUp = searchParams.get("message") === "signup-check-email";
+  const signupMessage = searchParams.get("message");
+  const signupFollowUp = signupMessage === "signup-check-email" || signupMessage === "signup-check-email-doc";
+  // 이메일 인증 가입 경로에서는 가입 화면의 학생증 파일이 저장되지 않는다 — 재제출 안내.
+  const signupDocFollowUp = signupMessage === "signup-check-email-doc";
   const [emailState, setEmailState] = useState("");
   const [passwordState, setPasswordState] = useState("");
   const email = emailProp ?? emailState;
@@ -206,6 +209,13 @@ export function RoleLoginForm({
         >
           회원가입이 접수됐어요. 이메일을 열고 인증 링크를 눌러 주시면, 이어서 아래에서 로그인하실 수 있어요. 메일이 안
           보이면 스팸함을 확인해 주세요.
+          {signupDocFollowUp ? (
+            <>
+              {" "}
+              가입 화면에서 선택한 학생증 파일은 이메일 인증 전에는 저장되지 않아요. 로그인 후{" "}
+              <span className="font-bold">인증 상태(멘토 → 인증)</span> 화면에서 학생증 서류를 다시 제출해 주세요.
+            </>
+          ) : null}
         </p>
       ) : null}
       {error ? (
