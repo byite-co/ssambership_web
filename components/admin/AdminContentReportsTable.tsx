@@ -151,8 +151,14 @@ export function AdminContentReportsTable(props: {
                     />
                   ) : null}
                 </td>
-                <td className="max-w-[120px] truncate px-3 py-2 font-mono text-xs text-slate-800" title={idPrev.title}>
-                  {idPrev.display}
+                <td className="max-w-[120px] truncate px-3 py-2 font-mono text-xs" title={idPrev.title}>
+                  <a
+                    href={`/admin/reports/${encodeURIComponent(String(row.id ?? ""))}`}
+                    className="font-extrabold text-indigo-800 underline"
+                    title="신고 상세·증거 보기"
+                  >
+                    {idPrev.display}
+                  </a>
                 </td>
                 <td className="max-w-[120px] truncate px-3 py-2 text-slate-800" title={whoPrev.title}>
                   {whoPrev.display}

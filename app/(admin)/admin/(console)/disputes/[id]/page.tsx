@@ -9,6 +9,7 @@ import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { loadAdminDisputeEscrowSplitPanelState } from "@/lib/admin/adminDisputeEscrowSplitQueries";
 import { CUSTOM_ORDER_PLATFORM_FEE_RATE } from "@/lib/customRequest/orderSettlementAmounts";
 import { loadAdminDisputeNotes } from "@/lib/admin/adminCaseNotes";
+import { loadAdminDisputeDeliverables } from "@/lib/admin/adminDisputeDeliverables";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -65,6 +66,18 @@ export default async function AdminDisputeDetailPage(props: PageProps) {
 
   const safeLoadError = row ? null : toAdminDisplayError(bundle.dispute.error, "disputes");
 
+  // 납품물 증거: 분쟁이 걸린 주문의 납품 파일을 5분 signed URL로 열람.
+  const disputeOrderId = row
+    ? String(
+        (row as Record<string, unknown>).custom_request_order_id ??
+          (bundle.customOrder.row as Record<string, unknown> | null)?.id ??
+          ""
+      ).trim()
+    : "";
+  const deliverables = disputeOrderId
+    ? await loadAdminDisputeDeliverables(escrowReadClient, disputeOrderId)
+    : { files: [], error: null };
+
   return (
     <PageScaffold
       hideFooterPlaceholderCards
@@ -102,14 +115,61 @@ export default async function AdminDisputeDetailPage(props: PageProps) {
           <p className="rounded-2xl border border-red-200 bg-red-50/80 p-3 text-sm font-semibold text-red-950">{flashErr}</p>
         ) : null}
         {row ? (
-          <DisputeAdminPageBody
-            bundle={bundle}
-            actors={actors}
-            disputeId={id}
-            adminNotes={adminNotes}
-            escrowSplitPanelState={escrowSplitPanelState}
-            platformFeeRate={CUSTOM_ORDER_PLATFORM_FEE_RATE}
-          />
+          <>
+            <DisputeAdminPageBody
+              bundle={bundle}
+              actors={actors}
+              disputeId={id}
+              adminNotes={adminNotes}
+              escrowSplitPanelState={escrowSplitPanelState}
+              platformFeeRate={CUSTOM_ORDER_PLATFORM_FEE_RATE}
+            />
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+              <p className="text-sm font-extrabold text-slate-900">납품물 증거</p>
+              <p className="mt-1 text-xs text-slate-500">
+                분쟁이 걸린 주문의 납품 파일입니다. 링크는 5분 동안 유효합니다.
+              </p>
+              {deliverables.error ? (
+                <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">
+                  납품물 목록을 불러오지 못했습니다.
+                </p>
+              ) : deliverables.files.length === 0 ? (
+                <p className="mt-3 text-sm font-semibold text-slate-500">
+                  {disputeOrderId ? "제출된 납품물이 없습니다." : "연결된 맞춤의뢰 주문이 없어 납품물이 없습니다."}
+                </p>
+              ) : (
+                <ul className="mt-3 divide-y divide-slate-100 rounded-xl border border-slate-200">
+                  {deliverables.files.map((f) => (
+                    <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-bold text-slate-900">
+                          {f.fileName ?? "파일명 없음"}
+                          {f.version != null ? <span className="ml-2 text-xs font-extrabold text-slate-500">{f.version}차</span> : null}
+                        </p>
+                        <p className="mt-0.5 text-xs text-slate-500">
+                          {f.status ?? "—"} · {f.mimeType ?? "형식 미상"}
+                          {f.createdAt ? ` · ${new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(f.createdAt))}` : ""}
+                        </p>
+                      </div>
+                      {f.signedUrl ? (
+                        <a
+                          href={f.signedUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="shrink-0 rounded-lg bg-[#2563EB] px-3.5 py-1.5 text-xs font-extrabold text-white hover:bg-[#1D4ED8]"
+                        >
+                          파일 열기
+                        </a>
+                      ) : (
+                        <span className="shrink-0 text-xs font-semibold text-slate-400">링크 생성 불가</span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </section>
+          </>
         ) : (
           <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm text-amber-950">
             <p className="font-semibold">분쟁을 불러오지 못했습니다.</p>
