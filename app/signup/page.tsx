@@ -426,7 +426,10 @@ function SignupPageContent() {
 
     if (newUser) {
       const q = new URLSearchParams();
-      q.set("message", "signup-check-email");
+      // 이메일 인증 경로에서는 세션이 없어 학생증 파일을 저장할 수 없다 —
+      // 로그인 후 /mentor/verification 에서 제출하도록 별도 안내 메시지를 붙인다.
+      const mentorDocDropped = currentRole === "mentor" && !!mentor.studentIdFile;
+      q.set("message", mentorDocDropped ? "signup-check-email-doc" : "signup-check-email");
       const safeNext = safeInternalNextPath(nextRaw);
       if (safeNext) {
         q.set("next", safeNext);

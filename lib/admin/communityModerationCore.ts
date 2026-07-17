@@ -8,7 +8,8 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 export type ModerationTargetType =
   | "community_post"
   | "shortform_post"
-  | "community_comment";
+  | "community_comment"
+  | "board_comment";
 
 export type ModerationIntent = "hidden" | "deleted" | "restored";
 
@@ -18,6 +19,7 @@ export function normalizeModerationTargetType(raw: string | null | undefined): M
   if (s === "community_post" || s === "community" || s === "post") return "community_post";
   if (s === "shortform_post" || s === "shortform") return "shortform_post";
   if (s === "community_comment" || s === "comment") return "community_comment";
+  if (s === "board_comment" || s === "board_comment_v2") return "board_comment";
   return null;
 }
 
@@ -30,6 +32,7 @@ const TARGET_TABLE_BY_TYPE: Record<ModerationTargetType, string> = {
   community_post: "community_posts",
   shortform_post: "shortform_posts",
   community_comment: "community_comments",
+  board_comment: "comments",
 };
 
 function publishedStatusFor(targetType: ModerationTargetType): string {
@@ -80,6 +83,21 @@ export async function applyContentModeration(args: {
       return { ok: true, applied: false, note: "이미 삭제되었거나 대상 행이 없습니다." };
     }
     return { ok: true, applied: true, note: `${table} 행 삭제 완료` };
+  }
+
+  // 게시판 v2 댓글(comments)은 status 컬럼이 없고 is_deleted 플래그로 노출을 제어한다.
+  if (targetType === "board_comment") {
+    const nextDeleted = args.intent === "hidden";
+    const { data, error } = await admin
+      .from(table)
+      .update({ is_deleted: nextDeleted })
+      .eq("id", targetId)
+      .select("id, is_deleted");
+    if (error) return { ok: false, error: error.message };
+    if (!data?.length) {
+      return { ok: true, applied: false, note: "대상 행을 찾을 수 없거나 이미 동일 상태입니다." };
+    }
+    return { ok: true, applied: true, note: `${table}.is_deleted=${nextDeleted}` };
   }
 
   const nextStatus =

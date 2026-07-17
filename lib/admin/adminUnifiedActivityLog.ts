@@ -217,6 +217,41 @@ export async function loadAdminUnifiedActivityLog(
     ? "id, body, moderation_state, moderated_at, moderated_by, mentor_id, author_id, created_at"
     : "id, body, mentor_id, author_id, created_at";
 
+  // admin_action_logs — 관리자 조치의 정본 감사 트레일(logAdminAction 기록)
+  {
+    const { data, error } = await withReadFallback(sessionClient, bypass, async (c) => {
+      const { data: d, error: e } = await c
+        .from("admin_action_logs")
+        .select("id, admin_id, action_type, target_type, target_id, detail, created_at")
+        .order("created_at", { ascending: false })
+        .limit(perSource);
+      return { data: d as JsonRow[] | null, error: e };
+    });
+    markPartial(partial, error);
+    for (const row of (data ?? []) as JsonRow[]) {
+      const id = String(row.id ?? "");
+      const iso = firstTs(row, ["created_at"]);
+      const actionType = String(row.action_type ?? "").trim();
+      const targetType = String(row.target_type ?? "").trim();
+      const detail = asMetaRecord(row.detail);
+      const note = detail && typeof detail.note === "string" ? detail.note : "";
+      entries.push({
+        key: `adminaction:${id}`,
+        occurredAtIso: iso,
+        occurredAtLabel: formatTsKo(iso),
+        categoryLabel: "관리자 조치",
+        targetLine: targetType ? `${targetType} · ${shortId(row.target_id)}` : shortId(row.target_id),
+        targetTooltip: [targetType, row.target_id == null ? "" : String(row.target_id)].filter(Boolean).join(" · ") || null,
+        actorLine: `관리자 ${idPrefix8(row.admin_id)}`,
+        statusLine: actionType || "—",
+        statusTooltip: actionType || null,
+        summaryLine: note ? clipText(note, 140) : "관리자 조치가 기록되었습니다.",
+        detailHref: null,
+        detailLabel: null,
+      });
+    }
+  }
+
   // content_reports
   {
     const { data, error } = await withReadFallback(sessionClient, bypass, async (c) => {

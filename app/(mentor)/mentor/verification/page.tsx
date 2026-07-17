@@ -9,6 +9,7 @@ import { buildMentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
 import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
 import { fetchLatestMentorSchoolVerification, type MentorSchoolVerificationRow } from "@/lib/mentor/mentorSchoolVerification";
 import { submitMentorSchoolVerificationAction } from "@/lib/mentor/mentorSchoolVerificationActions";
+import { submitMentorStudentIdImageAction } from "@/lib/mentor/mentorStudentIdActions";
 import { mapDataErrorMessage } from "@/lib/utils/mapDataError";
 
 type PageProps = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
@@ -111,6 +112,8 @@ export default async function MentorVerificationPage(props: PageProps) {
   const sp = (await props.searchParams) ?? {};
   const schoolDocOk = firstParam(sp.schoolDoc);
   const schoolDocError = firstParam(sp.schoolDocError);
+  const studentIdDocOk = firstParam(sp.studentIdDoc);
+  const studentIdDocError = firstParam(sp.studentIdDocError);
   const supabase = await createClient();
   const { row } = await fetchMentorProfileRow(supabase, user.id);
   const { data: userRow } = await getUserProfileById(supabase, user.id);
@@ -123,6 +126,11 @@ export default async function MentorVerificationPage(props: PageProps) {
   const canSubmitSchoolDocument = schoolStatus !== "pending";
   const isPending = schoolStatus === "pending";
   const submitLabel = schoolRow ? "학교·전공 인증 서류 다시 제출" : "학교·전공 인증 서류 제출";
+  // 가입 시 학생증 업로드가 누락된 경우(이메일 인증 가입 경로) 여기서 사후 제출한다.
+  const studentIdStoredRef =
+    row && typeof row.student_id_image_url === "string" && row.student_id_image_url.trim().length > 0
+      ? row.student_id_image_url
+      : null;
 
   // 서류 업로드 폼(미터치 동작) — pending은 토글 안으로, 그 외는 펼침.
   const schoolForm = (
@@ -173,6 +181,16 @@ export default async function MentorVerificationPage(props: PageProps) {
         {schoolDocError ? (
           <p className="rounded-xl border-[0.5px] border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-800">
             {schoolDocError}
+          </p>
+        ) : null}
+        {studentIdDocOk ? (
+          <p className="rounded-xl border-[0.5px] border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
+            {studentIdDocOk}
+          </p>
+        ) : null}
+        {studentIdDocError ? (
+          <p className="rounded-xl border-[0.5px] border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-800">
+            {studentIdDocError}
           </p>
         ) : null}
         {schoolVerification.error ? (
@@ -265,6 +283,49 @@ export default async function MentorVerificationPage(props: PageProps) {
               {schoolForm}
             </>
           )}
+        </section>
+
+        <section className="space-y-5 rounded-2xl border-[0.5px] border-slate-300 bg-white p-6">
+          <div className="border-b border-slate-100 pb-4">
+            <p className="text-xs font-black tracking-wider text-slate-500">신분 확인</p>
+            <h2 className="mt-1 text-xl font-black text-slate-900">학생증 서류</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">
+              가입 시 첨부한 학생증·재학증명서가 저장되지 않았다면 여기서 제출해 주세요.
+              이메일 인증을 거쳐 가입한 경우 가입 화면의 파일은 저장되지 않습니다.
+            </p>
+          </div>
+
+          {studentIdStoredRef ? (
+            <p className="rounded-xl border-[0.5px] border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-800">
+              학생증 서류가 제출되어 있습니다. 다른 서류로 바꾸려면 아래에서 다시 제출해 주세요.
+            </p>
+          ) : (
+            <p className="rounded-xl border-[0.5px] border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">
+              아직 제출된 학생증 서류가 없습니다. 관리자 승인 심사에 필요하니 지금 제출해 주세요.
+            </p>
+          )}
+
+          <form action={submitMentorStudentIdImageAction} className="space-y-3">
+            <div>
+              <p className="text-sm font-black text-slate-900">학생증 또는 재학증명서</p>
+              <div className="mt-2">
+                <CommunityFileDropzone
+                  name="studentIdDocument"
+                  accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                  buttonLabel="파일 선택"
+                  hint="JPG, PNG, PDF · 클릭하거나 파일을 끌어다 놓으세요"
+                />
+              </div>
+              <p className="mt-2 text-xs leading-5 text-slate-500">
+                JPG, PNG, PDF 형식을 지원합니다. 제출한 서류는 비공개 저장소에 보관되고, 관리자만 열람합니다.
+              </p>
+            </div>
+            <FormSubmitButton
+              idleLabel={studentIdStoredRef ? "학생증 서류 다시 제출" : "학생증 서류 제출"}
+              pendingLabel="제출 중…"
+              className="min-h-12 w-full rounded-xl bg-[#059669] px-5 text-sm font-black text-white transition hover:bg-[#047857] disabled:cursor-not-allowed disabled:bg-slate-300"
+            />
+          </form>
         </section>
       </div>
     </PageScaffold>

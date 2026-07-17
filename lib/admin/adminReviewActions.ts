@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
+import { logAdminAction } from "@/lib/admin/adminActionLog";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -165,6 +166,15 @@ export async function moderateAdminReviewAction(formData: FormData) {
   if (!touched) {
     redirect(errUrl(safeMsg("대상 리뷰를 찾지 못했거나 이미 동일한 상태입니다.")));
   }
+
+  const session = await createClient();
+  await logAdminAction(session, {
+    adminId: adminUserId,
+    actionType: `review_${action}`,
+    targetType: "review",
+    targetId: reviewId,
+    detail: { table },
+  });
 
   revalidatePath(PATH);
   revalidatePath("/admin");

@@ -152,18 +152,63 @@ export async function loadAdminCommunityCommentsListPaged(
   });
 }
 
+/** 게시판 v2 댓글(comments) 페이지네이션 — status 대신 is_deleted 플래그 기준. */
+export async function loadAdminBoardCommentsListPaged(
+  supabase: SupabaseClient,
+  args: { search: string; status: string; page: number; pageSize: number }
+): Promise<AdminListPagedResult> {
+  const from = Math.max(0, (args.page - 1) * args.pageSize);
+  const to = from + args.pageSize - 1;
+  return runPaged({
+    client: supabase,
+    table: "comments",
+    from,
+    to,
+    applyFilters: (q) => {
+      let r = q;
+      if (args.status === "visible") r = r.eq("is_deleted", false);
+      if (args.status === "hidden") r = r.eq("is_deleted", true);
+      if (args.search) {
+        const s = args.search.replace(/[%_,]/g, " ").trim();
+        if (s) {
+          const looksLikeUuid = /^[0-9a-fA-F-]+$/.test(s);
+          const parts: string[] = [];
+          if (looksLikeUuid) {
+            parts.push(`id.ilike.${s}%`);
+            parts.push(`author_id.ilike.${s}%`);
+            parts.push(`post_id.ilike.${s}%`);
+          }
+          parts.push(`content.ilike.%${s}%`);
+          r = r.or(parts.join(","));
+        }
+      }
+      return r;
+    },
+  });
+}
+
 /** 각 콘텐츠 테이블별 상태별 카운트. */
 export async function countAdminCommunityByStatus(
   supabase: SupabaseClient,
-  table: "community_posts" | "shortform_posts" | "community_comments"
+  table: "community_posts" | "shortform_posts" | "community_comments" | "comments"
 ): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
+  const { count: total } = await supabase.from(table).select("*", { count: "exact", head: true });
+  out.all = total ?? 0;
+  // 게시판 v2 댓글은 status 컬럼이 없고 is_deleted 로 노출을 제어한다.
+  if (table === "comments") {
+    const { count: visible } = await supabase
+      .from(table)
+      .select("*", { count: "exact", head: true })
+      .eq("is_deleted", false);
+    out.visible = visible ?? 0;
+    out.hidden = (total ?? 0) - (visible ?? 0);
+    return out;
+  }
   const statuses =
     table === "community_comments"
       ? ["visible", "hidden"]
       : ["draft", "published", "hidden"];
-  const { count: total } = await supabase.from(table).select("*", { count: "exact", head: true });
-  out.all = total ?? 0;
   for (const s of statuses) {
     const { count } = await supabase
       .from(table)
