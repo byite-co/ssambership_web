@@ -57,7 +57,7 @@ export function SiteFooter() {
         <div className="grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-4 lg:gap-8">
           <div>
             <BrandLogo href="/" variant="shell" />
-            <p className="mt-4 max-w-xs text-sm font-medium leading-relaxed text-slate-600">
+            <p className="mt-4 max-w-xs break-keep text-sm font-medium leading-relaxed text-slate-600">
               전국 현직 대학생 멘토와 1:1로 연결되어 질문하고, 배우고, 함께 성장하세요.
             </p>
           </div>

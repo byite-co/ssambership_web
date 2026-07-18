@@ -70,12 +70,16 @@ export function PublicGuestLanding(props: { stats: LandingPublicStats; heroCtas?
             <p className="text-xs font-semibold tracking-wide text-[#2563EB] sm:text-sm">
               대학생 멘토링 구독 서비스
             </p>
-            <h1 className="mt-3 text-4xl font-black leading-tight tracking-tight text-slate-900 sm:text-5xl lg:text-[56px] lg:leading-[1.1]">
+            <h1 className="mt-3 break-keep text-4xl font-black leading-tight tracking-tight text-slate-900 sm:text-5xl lg:text-[56px] lg:leading-[1.1]">
               혼자 헤매던 길에,
               <br />
-              <span className="text-[#2563EB]">먼저 걸어본 발자국을 새깁니다.</span>
+              <span className="text-[#2563EB]">
+                먼저 걸어본
+                <br />
+                발자국을 새깁니다.
+              </span>
             </h1>
-            <p className="mt-5 whitespace-pre-line text-sm font-medium leading-relaxed text-slate-600 sm:text-base">
+            <p className="mt-5 whitespace-pre-line break-keep text-sm font-medium leading-relaxed text-slate-600 sm:text-base">
               {"검증된 대학생 멘토와 1:1로 연결되어\n질문하고, 배우고, 함께 성장하세요."}
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-center lg:justify-start">
@@ -140,7 +144,7 @@ export function PublicGuestLanding(props: { stats: LandingPublicStats; heroCtas?
       <section className="bg-slate-50 py-14 sm:py-20">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <h2 className="text-center text-2xl font-black text-slate-900 sm:text-3xl">쌤버십만의 학습 방식</h2>
-          <p className="mx-auto mt-3 max-w-xl text-center text-sm font-medium text-slate-600">
+          <p className="mx-auto mt-3 max-w-xl break-keep text-center text-sm font-medium text-slate-600">
             질문을 쌓고, 기록을 남기고, 검증된 멘토와 함께 성장하세요
           </p>
           <div className="mt-10 grid gap-6 md:grid-cols-3">

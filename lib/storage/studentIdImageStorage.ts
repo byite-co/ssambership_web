@@ -4,6 +4,8 @@ import { createSignedStorageUrl } from "@/lib/storage/signedStorageUrl";
 export const STUDENT_ID_IMAGES_BUCKET = "student-id-images" as const;
 export const STUDENT_ID_IMAGE_SIGNED_URL_TTL_SEC = 300;
 export const STUDENT_ID_IMAGE_ALLOWED_EXTENSIONS = ["jpg", "jpeg", "png", "pdf"] as const;
+export const STUDENT_ID_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
+export const STUDENT_ID_IMAGE_MAX_BYTES_LABEL = "20MB";
 const SCHOOL_VERIFICATION_DIR = "school-verifications";
 const ACADEMIC_RECORD_CHANGE_DIR = "academic-record-changes";
 

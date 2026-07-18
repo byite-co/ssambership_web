@@ -8,6 +8,8 @@ import {
   buildStudentIdImageObjectPath,
   formatStudentIdImageStoredRef,
   safeStudentIdImageFileExtension,
+  STUDENT_ID_IMAGE_MAX_BYTES,
+  STUDENT_ID_IMAGE_MAX_BYTES_LABEL,
   STUDENT_ID_IMAGES_BUCKET,
 } from "@/lib/storage/studentIdImageStorage";
 import { validateJpgPngPdfMagicBytes } from "@/lib/storage/uploadMagicBytes";
@@ -22,9 +24,10 @@ function redirectWith(kind: "ok" | "error", message: string): never {
 }
 
 /**
- * 학생증(신분 확인) 서류 제출 — 가입 시 업로드가 누락된 멘토의 사후 제출 경로.
- * 이메일 인증이 필요한 가입 플로우에서는 세션이 없어 가입 화면의 학생증 파일이
- * 저장되지 못하므로, 로그인 후 이 액션으로 제출해 `mentor_profiles.student_id_image_url`을 채운다.
+ * 학생증(신분 확인) 서류 제출 — 가입 시 업로드가 실패·누락된 멘토의 사후 제출 경로.
+ * 가입 화면의 학생증은 세션이 없어도 서버 액션(uploadMentorStudentIdAfterSignUpAction)이
+ * 저장하지만, 그 업로드가 실패했거나 파일을 첨부하지 않은 멘토는 로그인 후 이 액션으로
+ * 제출해 `mentor_profiles.student_id_image_url`을 채운다.
  */
 export async function submitMentorStudentIdImageAction(formData: FormData) {
   const { user } = await requireRole("mentor");
@@ -33,6 +36,9 @@ export async function submitMentorStudentIdImageAction(formData: FormData) {
 
   if (!file || file.size <= 0) {
     redirectWith("error", "학생증 또는 재학증명서 파일을 선택해 주세요.");
+  }
+  if (file.size > STUDENT_ID_IMAGE_MAX_BYTES) {
+    redirectWith("error", `학생증 서류는 최대 ${STUDENT_ID_IMAGE_MAX_BYTES_LABEL}까지 업로드할 수 있습니다.`);
   }
   const extension = safeStudentIdImageFileExtension(file.name);
   if (!extension) {

@@ -12,6 +12,7 @@ import { StudentSignupForm, type StudentSignupFormValues } from "@/components/au
 import { MentorSignupForm, type MentorSignupFormValues } from "@/components/auth/MentorSignupForm";
 import { SignupTrustBlock } from "@/components/auth/SignupTrustBlock";
 import { buildSignupUserMetadata } from "@/lib/auth/buildSignupUserMetadata";
+import { uploadMentorStudentIdAfterSignUpAction } from "@/lib/auth/mentorSignupStudentIdAction";
 import { syncAfterSignUpWithSession } from "@/lib/auth/syncAfterSignUpSession";
 import { safeInternalNextPath } from "@/lib/auth/getPostLoginPath";
 import { signupFieldErrorsByRole, type SignupFieldErrors } from "@/lib/auth/signupValidation";
@@ -426,9 +427,25 @@ function SignupPageContent() {
 
     if (newUser) {
       const q = new URLSearchParams();
-      // 이메일 인증 경로에서는 세션이 없어 학생증 파일을 저장할 수 없다 —
-      // 로그인 후 /mentor/verification 에서 제출하도록 별도 안내 메시지를 붙인다.
-      const mentorDocDropped = currentRole === "mentor" && !!mentor.studentIdFile;
+      // 세션이 없는 가입 경로(이메일 인증 대기 등)에서는 클라이언트가 Storage에 쓸 수 없으므로
+      // 서버 액션(service role)으로 학생증을 저장한다. 실패한 경우에만
+      // 로그인 후 /mentor/verification 에서 재제출하도록 별도 안내 메시지를 붙인다.
+      let mentorDocDropped = false;
+      if (currentRole === "mentor" && mentor.studentIdFile) {
+        try {
+          const docForm = new FormData();
+          docForm.set("userId", newUser.id);
+          docForm.set("studentIdDocument", mentor.studentIdFile);
+          const uploaded = await uploadMentorStudentIdAfterSignUpAction(docForm);
+          mentorDocDropped = !uploaded.ok;
+          if (!uploaded.ok) {
+            console.warn("[signup] 학생증 서버 업로드 실패 (비차단):", uploaded.message);
+          }
+        } catch (e) {
+          mentorDocDropped = true;
+          console.warn("[signup] 학생증 서버 업로드 실패 (비차단):", e);
+        }
+      }
       q.set("message", mentorDocDropped ? "signup-check-email-doc" : "signup-check-email");
       const safeNext = safeInternalNextPath(nextRaw);
       if (safeNext) {

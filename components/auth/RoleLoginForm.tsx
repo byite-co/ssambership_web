@@ -68,7 +68,7 @@ export function RoleLoginForm({
   const searchParams = useSearchParams();
   const signupMessage = searchParams.get("message");
   const signupFollowUp = signupMessage === "signup-check-email" || signupMessage === "signup-check-email-doc";
-  // 이메일 인증 가입 경로에서는 가입 화면의 학생증 파일이 저장되지 않는다 — 재제출 안내.
+  // 가입 화면의 학생증 서버 업로드가 실패한 경우에만 붙는 재제출 안내.
   const signupDocFollowUp = signupMessage === "signup-check-email-doc";
   const [emailState, setEmailState] = useState("");
   const [passwordState, setPasswordState] = useState("");
@@ -106,18 +106,9 @@ export function RoleLoginForm({
         return;
       }
       userId = data.user.id;
-      if (!data.user.email_confirmed_at) {
-        try {
-          await supabase.auth.signOut();
-        } catch {
-          /* */
-        }
-        setLoading(false);
-        setError(
-          "이메일 인증이 아직 완료되지 않았습니다. 메일함(스팸 함 포함)의 링크로 인증한 뒤 다시 시도해 주세요."
-        );
-        return;
-      }
+      // email_confirmed_at 클라이언트 이중 차단은 두지 않는다 — 인증이 필요한 환경이면
+      // signInWithPassword가 이미 "Email not confirmed"로 실패하고, 인증 요구를 끈 환경에서
+      // 이 차단이 남아 있으면 과거 미인증 계정의 로그인까지 영구히 막는다.
     } catch (e) {
       const m = e instanceof Error ? e.message : String(e);
       setError(mapSupabaseAuthError(m));
@@ -212,8 +203,8 @@ export function RoleLoginForm({
           {signupDocFollowUp ? (
             <>
               {" "}
-              가입 화면에서 선택한 학생증 파일은 이메일 인증 전에는 저장되지 않아요. 로그인 후{" "}
-              <span className="font-bold">인증 상태(멘토 → 인증)</span> 화면에서 학생증 서류를 다시 제출해 주세요.
+              가입 화면에서 첨부한 학생증 파일이 저장되지 못했어요. 로그인 후{" "}
+              <span className="font-bold">마이페이지 → 인증 상태 확인하기</span>에서 학생증 서류를 다시 제출해 주세요.
             </>
           ) : null}
         </p>

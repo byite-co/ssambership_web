@@ -78,7 +78,7 @@ export default async function AdminMentorApprovalPage(props: PageProps) {
     ...schoolVerificationMentorIds,
   ];
   const userMap = await fetchAdminUsersDisplayByIds(readDb, userIds);
-  const userById: Record<string, { nickname: string | null; full_name: string | null }> = {};
+  const userById: Record<string, { nickname: string | null; full_name: string | null; email: string | null }> = {};
   userMap.forEach((v, k) => {
     userById[k] = v;
   });
@@ -107,6 +107,8 @@ export default async function AdminMentorApprovalPage(props: PageProps) {
   }
 
   const studentIdImageSignedUrlByUserId: Record<string, string | null> = {};
+  // 저장값 유무를 함께 내려 "미제출"과 "signed URL 발급 실패"를 구분 표기한다.
+  const studentIdImageStoredByUserId: Record<string, boolean> = {};
   for (const r of list.rows) {
     const uid = String((r as Record<string, unknown>).user_id ?? "").trim();
     if (!uid) continue;
@@ -114,6 +116,7 @@ export default async function AdminMentorApprovalPage(props: PageProps) {
       (typeof (r as Record<string, unknown>).student_id_image_url === "string" &&
         (r as Record<string, unknown>).student_id_image_url) ||
       null;
+    studentIdImageStoredByUserId[uid] = Boolean(stored && String(stored).trim());
     studentIdImageSignedUrlByUserId[uid] = await resolveStudentIdImageSignedUrl(readDb, String(stored ?? ""));
   }
   const schoolVerificationSignedUrlById: Record<string, string | null> = {};
@@ -135,6 +138,7 @@ export default async function AdminMentorApprovalPage(props: PageProps) {
         rows={list.rows as Record<string, unknown>[]}
         userById={userById}
         studentIdImageSignedUrlByUserId={studentIdImageSignedUrlByUserId}
+        studentIdImageStoredByUserId={studentIdImageStoredByUserId}
         schoolVerificationRows={schoolVerificationList.rows}
         schoolVerificationLoadError={schoolVerificationList.error}
         schoolVerificationProfileByMentorId={schoolVerificationProfileByMentorId}

@@ -290,8 +290,7 @@ export default async function MentorVerificationPage(props: PageProps) {
             <p className="text-xs font-black tracking-wider text-slate-500">신분 확인</p>
             <h2 className="mt-1 text-xl font-black text-slate-900">학생증 서류</h2>
             <p className="mt-1 text-sm leading-6 text-slate-600">
-              가입 시 첨부한 학생증·재학증명서가 저장되지 않았다면 여기서 제출해 주세요.
-              이메일 인증을 거쳐 가입한 경우 가입 화면의 파일은 저장되지 않습니다.
+              가입 시 첨부한 학생증·재학증명서가 저장되지 않았거나 다른 서류로 바꾸려면 여기서 제출해 주세요.
             </p>
           </div>
 
