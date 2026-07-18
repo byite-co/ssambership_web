@@ -419,6 +419,24 @@ function SignupPageContent() {
       if (w.warningMessages.length > 0) {
         console.warn("[signup] post-signup sync warnings (비차단):", w.warningMessages);
       }
+      // 클라이언트 학생증 업로드가 실패했으면(경고로만 남음) 서버 경유 업로드로 1회 재시도 —
+      // 세션 유무와 무관하게 동작하는 경로라 스토리지 RLS·네트워크 문제를 이중으로 방어한다.
+      const studentIdSyncFailed = w.warningMessages.some(
+        (m) => m.includes("[학생증 업로드]") || m.includes("[학생증 경로 반영]")
+      );
+      if (studentIdSyncFailed && currentRole === "mentor" && mentor.studentIdFile) {
+        try {
+          const docForm = new FormData();
+          docForm.set("userId", newUser.id);
+          docForm.set("studentIdDocument", mentor.studentIdFile);
+          const retried = await uploadMentorStudentIdAfterSignUpAction(docForm);
+          if (!retried.ok) {
+            console.warn("[signup] 학생증 서버 재시도 실패 (비차단):", retried.message);
+          }
+        } catch (e) {
+          console.warn("[signup] 학생증 서버 재시도 실패 (비차단):", e);
+        }
+      }
       setLoading(false);
       setCompletedRole(currentRole);
       setStep(3);
