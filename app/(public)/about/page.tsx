@@ -47,7 +47,7 @@ export default function AboutPage() {
     <div className="mx-auto max-w-4xl space-y-14 px-4 py-12 sm:px-6">
       <header className="text-center">
         <p className="text-xs font-extrabold uppercase tracking-wide text-[#2563EB]">서비스 소개</p>
-        <h1 className="mt-2 text-3xl font-black leading-tight text-slate-900 sm:text-4xl">
+        <h1 className="mt-2 break-keep text-3xl font-black leading-tight text-slate-900 sm:text-4xl">
           현직 대학생 멘토와 1:1로,<br className="hidden sm:block" /> 질문하고 배우고 함께 성장하세요
         </h1>
         <p className="mx-auto mt-4 max-w-2xl text-sm leading-relaxed text-slate-600 sm:text-base">

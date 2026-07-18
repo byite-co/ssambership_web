@@ -572,16 +572,16 @@ export async function loadMentorApprovalsList(supabase: SupabaseClient, limit = 
 export async function fetchAdminUsersDisplayByIds(
   supabase: SupabaseClient,
   ids: string[]
-): Promise<Map<string, { nickname: string | null; full_name: string | null }>> {
-  const map = new Map<string, { nickname: string | null; full_name: string | null }>();
+): Promise<Map<string, { nickname: string | null; full_name: string | null; email: string | null }>> {
+  const map = new Map<string, { nickname: string | null; full_name: string | null; email: string | null }>();
   const unique = [...new Set(ids.filter((x) => typeof x === "string" && x.length > 0))] as string[];
   const slice = unique.slice(0, 80);
   if (!slice.length) return map;
-  const { data } = await supabase.from("users").select("id, nickname, full_name").in("id", slice);
-  const rows = (data ?? []) as { id?: string; nickname?: string | null; full_name?: string | null }[];
+  const { data } = await supabase.from("users").select("id, nickname, full_name, email").in("id", slice);
+  const rows = (data ?? []) as { id?: string; nickname?: string | null; full_name?: string | null; email?: string | null }[];
   for (const r of rows) {
     const id = r.id != null ? String(r.id) : "";
-    if (id) map.set(id, { nickname: r.nickname ?? null, full_name: r.full_name ?? null });
+    if (id) map.set(id, { nickname: r.nickname ?? null, full_name: r.full_name ?? null, email: r.email ?? null });
   }
   return map;
 }

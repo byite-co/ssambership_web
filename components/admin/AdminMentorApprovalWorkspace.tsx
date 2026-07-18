@@ -18,7 +18,7 @@ import type { MentorSchoolVerificationRow } from "@/lib/mentor/mentorSchoolVerif
 import type { SchoolTier, VerifiedMajorCategory } from "@/lib/mentor/schoolVerificationConstants";
 
 type Row = Record<string, unknown>;
-type UserDisplay = { nickname: string | null; full_name: string | null };
+type UserDisplay = { nickname: string | null; full_name: string | null; email: string | null };
 type SchoolVerificationProfile = {
   user_id: string;
   university_name: string | null;
@@ -33,6 +33,8 @@ type Props = {
   userById: Record<string, UserDisplay>;
   /** 서버에서 createSignedUrl(300s)로 발급한 학생증 미리보기 URL */
   studentIdImageSignedUrlByUserId?: Record<string, string | null>;
+  /** 학생증 저장값 존재 여부 — "미제출"과 "발급 실패"를 구분 표기하기 위함 */
+  studentIdImageStoredByUserId?: Record<string, boolean>;
   schoolVerificationRows: MentorSchoolVerificationRow[];
   schoolVerificationLoadError: string | null;
   schoolVerificationProfileByMentorId: Record<string, SchoolVerificationProfile>;
@@ -237,7 +239,10 @@ export function AdminMentorApprovalWorkspace(props: Props) {
                         className={["cursor-pointer hover:bg-slate-50", selectedId === id ? "bg-blue-50/50" : ""].join(" ")}
                         onClick={() => setSelectedId(id)}
                       >
-                        <td className="px-4 py-3 font-semibold">{displayName(r, props.userById[id])}</td>
+                        <td className="px-4 py-3">
+                          <p className="font-semibold text-slate-900">{displayName(r, props.userById[id])}</p>
+                          <p className="text-xs text-slate-500">{props.userById[id]?.email || "—"}</p>
+                        </td>
                         <td className="px-4 py-3 text-slate-600">{String(r.university_name ?? "-")}</td>
                         <td className="px-4 py-3 text-slate-600">{String(r.department_name ?? "-")}</td>
                         <td className="px-4 py-3 text-slate-500">{formatTs(r.created_at ?? r.submitted_at)}</td>
@@ -263,7 +268,8 @@ export function AdminMentorApprovalWorkspace(props: Props) {
                   <div>
                     <h2 className="text-lg font-black text-slate-900">학교·전공 검증</h2>
                     <p className="mt-1 text-xs text-slate-500">
-                      {displayName(null, selectedSchoolUser, selectedSchoolProfile)} ·{" "}
+                      {displayName(null, selectedSchoolUser, selectedSchoolProfile)}
+                      {selectedSchoolUser?.email ? ` · ${selectedSchoolUser.email}` : ""} ·{" "}
                       {schoolVerificationStatusLabel(selectedSchoolVerification.status)}
                     </p>
                   </div>
@@ -431,15 +437,26 @@ export function AdminMentorApprovalWorkspace(props: Props) {
               {selected ? (
                 <section className="space-y-4 border-t border-slate-100 pt-5">
                   <h2 className="text-lg font-black text-slate-900">{displayName(selected, user)}</h2>
+                  {user?.email ? (
+                    <a href={`mailto:${user.email}`} className="block text-xs font-semibold text-blue-700 hover:underline">
+                      {user.email}
+                    </a>
+                  ) : (
+                    <p className="text-xs text-slate-500">—</p>
+                  )}
                   <p className="text-xs text-slate-500">
                     멘토 승인 상태: {mentorApprovalStatusLabel(mentorApprovalStatusRaw(selected, props.statusColumn))}
                   </p>
                   {img ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={img} alt="학생증" className="max-h-48 w-full rounded-xl border object-contain" />
+                  ) : props.studentIdImageStoredByUserId?.[mentorUserId] ? (
+                    <p className="rounded-xl border border-dashed border-amber-300 bg-amber-50 py-8 text-center text-xs font-semibold text-amber-900">
+                      학생증 이미지를 불러오지 못했습니다. 잠시 후 새로고침하거나 스토리지 설정을 확인해 주세요.
+                    </p>
                   ) : (
                     <p className="rounded-xl border border-dashed border-slate-200 py-8 text-center text-xs text-slate-500">
-                      학생증 이미지 없음
+                      학생증 미제출 — 아래 &lsquo;추가 서류 요청&rsquo;으로 재제출을 안내해 주세요.
                     </p>
                   )}
                   {mentorUserId ? (
