@@ -6,7 +6,12 @@ import { requireRole } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
 import { updateMentorProfile } from "@/lib/mentor/mentorProfileMutations";
 import { uploadMentorAvatar } from "@/lib/storage/mentorAvatarStorage";
-import { SUBSCRIBE_PLAN_TIERS } from "@/lib/subscribe/mentorPlanPricing";
+import {
+  isOutsideMentorPriceGuide,
+  mentorSubscriptionPriceRule,
+  SUBSCRIBE_PLAN_TIERS,
+} from "@/lib/subscribe/mentorPlanPricing";
+import { getSubscribeCatalogPlan } from "@/lib/subscribe/subscribePlanCatalog";
 import type { SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
 
 const PATH = "/mentor/profile/edit";
@@ -50,6 +55,20 @@ export async function submitMentorProfileEdit(formData: FormData) {
 
   if (SUBSCRIBE_PLAN_TIERS.some((tier) => subscriptionPricesKrw[tier] == null)) {
     redirect(errQ("구독 요금은 1캐시 이상 숫자로 입력해 주세요."));
+  }
+
+  // 가격 밴드는 어떤 쓰기도 일어나기 전에 검증한다 — 뮤테이션 도중 실패하면
+  // 프로필 일부만 저장된 채 "저장 실패"가 표시되는 부분 저장이 생긴다.
+  for (const tier of SUBSCRIBE_PLAN_TIERS) {
+    const cashKrw = subscriptionPricesKrw[tier];
+    if (cashKrw != null && isOutsideMentorPriceGuide(cashKrw, tier)) {
+      const rule = mentorSubscriptionPriceRule(tier);
+      redirect(
+        errQ(
+          `${getSubscribeCatalogPlan(tier).label} 구독 요금은 ${rule.minCashKrw.toLocaleString("ko-KR")}~${rule.maxCashKrw.toLocaleString("ko-KR")}캐시 범위에서 설정할 수 있습니다.`
+        )
+      );
+    }
   }
 
   // 프로필 사진(선택): 새 파일이 있을 때만 profile-avatars 버킷에 업로드 후 public URL 확보.

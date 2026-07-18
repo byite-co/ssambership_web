@@ -549,7 +549,7 @@ export function QuestionRoomStudentDesignWorkspace(props: {
                 <div className="mt-4 max-w-md">
                   <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
                     <span>{weeklyQuestionQuotaLabel(weeklyUsage)}</span>
-                    <span className="text-slate-400">{subCtx?.planLabel ?? "플랜"}</span>
+                    <span className="text-slate-400">{weeklyUsage?.freeQuota ? "무료 체험" : subCtx?.planLabel ?? "플랜"}</span>
                   </div>
                   {/* ★잔여(남은) 질문 = 파랑, 사용 = 회색 트랙 (반전) */}
                   <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-200">
@@ -566,12 +566,18 @@ export function QuestionRoomStudentDesignWorkspace(props: {
                     />
                   </div>
                   {/* ★상단 구독 메타 한 줄 압축 (상세는 마우스오버 툴팁) */}
-                  <p
-                    className="mt-1.5 truncate text-[10px] text-slate-500"
-                    title={`${subCtx?.weekRenewalLabel ?? ""} · 다음 갱신 ${subCtx?.nextRenewalLabel ?? "—"}`}
-                  >
-                    {subCtx?.planLabel ?? "구독 플랜"} 플랜 · 다음 갱신 {subCtx?.nextRenewalShort ?? "—"}
-                  </p>
+                  {weeklyUsage?.freeQuota ? (
+                    <p className="mt-1.5 truncate text-[10px] text-slate-500">
+                      무료 질문권 사용 중 · 구독하면 주간 질문 한도가 열려요
+                    </p>
+                  ) : (
+                    <p
+                      className="mt-1.5 truncate text-[10px] text-slate-500"
+                      title={`${subCtx?.weekRenewalLabel ?? ""} · 다음 갱신 ${subCtx?.nextRenewalLabel ?? "—"}`}
+                    >
+                      {subCtx?.planLabel ?? "구독 플랜"} 플랜 · 다음 갱신 {subCtx?.nextRenewalShort ?? "—"}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -775,7 +781,9 @@ export function QuestionRoomStudentDesignWorkspace(props: {
                   </div>
                   <h3 className="mt-3 text-[15px] font-black text-slate-900">이 멘토에게 첫 질문을 남겨보세요</h3>
                   <p className="mt-1.5 text-[12px] font-medium leading-relaxed text-slate-500">
-                    구독이 시작됐어요. 궁금한 점을 질문하면 멘토가 답변하고, 연결노트로 기록이 쌓여요.
+                    {weeklyUsage?.freeQuota
+                      ? "무료 질문권으로 바로 질문할 수 있어요. 멘토가 답변하고, 연결노트로 기록이 쌓여요."
+                      : "구독이 시작됐어요. 궁금한 점을 질문하면 멘토가 답변하고, 연결노트로 기록이 쌓여요."}
                   </p>
                   <ol className="mt-5 w-full max-w-[300px] space-y-2.5 text-left">
                     {[

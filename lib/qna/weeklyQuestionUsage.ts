@@ -1,4 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { FREE_QUESTION_PER_MENTOR_LIMIT, FREE_QUESTION_TOTAL_LIMIT } from "@/lib/mentor/freeQuestionPolicy";
+import { countFreeQuestionsTotal, loadFreeQuestionRemainingForMentor } from "@/lib/qna/freeQuestionUsage";
 import { findActiveSubscriptionForPair } from "@/lib/subscribe/subscribeCheckoutService";
 import { isSubscribePlanTier, type SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
 import { pickExistingColumn } from "@/lib/qna/safeSelect";
@@ -121,6 +123,34 @@ export async function fetchWeeklyQuestionUsageWithFallback(
   }
 
   const active = await findActiveSubscriptionForPair(supabase, studentId, mentorId);
+
+  // 구독이 없는 방(무료 질문권 진입)은 주간 한도 대신 무료 질문권 쿼터로 스냅샷을 만든다.
+  // 서버 게이트(questionThreadSubscriptionGuard/questionRoomThreadService)는 구독이 없으면
+  // 무료 질문 경로를 먼저 타므로 이 값은 UI 표시·버튼 활성화에만 쓰인다.
+  if (!active) {
+    const freeRemainingForMentor = await loadFreeQuestionRemainingForMentor(supabase, studentId, mentorId);
+    if (freeRemainingForMentor != null) {
+      const total = await countFreeQuestionsTotal(supabase, studentId);
+      const totalRemaining = total.error
+        ? freeRemainingForMentor
+        : Math.max(0, FREE_QUESTION_TOTAL_LIMIT - total.count);
+      const remaining = Math.min(freeRemainingForMentor, totalRemaining);
+      return {
+        usage: {
+          used: FREE_QUESTION_PER_MENTOR_LIMIT - remaining,
+          limit: FREE_QUESTION_PER_MENTOR_LIMIT,
+          remaining,
+          canAsk: remaining > 0,
+          planTier: null,
+          freeQuota: true,
+          weekStart: null,
+          weekEnd: null,
+        },
+        error: error?.message ?? null,
+      };
+    }
+  }
+
   const tierRaw = active?.row.plan_tier;
   const planTier =
     typeof tierRaw === "string" && isSubscribePlanTier(tierRaw) ? tierRaw : null;

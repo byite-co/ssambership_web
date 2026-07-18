@@ -111,6 +111,13 @@ export function MentorProfileEditForm(props: {
       ? String(initial.individualQuestionPriceCash)
       : "",
   );
+  // 서버가 가격 밴드를 강제하므로, 밴드 밖·무효 가격이면 제출 자체를 막아
+  // "일부만 저장된 채 실패" 상태를 예방한다.
+  const planPriceBlocked = SUBSCRIBE_PLAN_CATALOG.some((plan) => {
+    const rule = mentorSubscriptionPriceRule(plan.tier);
+    const n = Number(planPrices[plan.tier] ?? String(rule.recommendedCashKrw));
+    return !Number.isFinite(n) || n <= 0 || isOutsideMentorPriceGuide(n, plan.tier);
+  });
 
   // 프로필 사진: 숨김 file input + 클라이언트 검증(5MB·이미지) + 원형 미리보기.
   // 실제 업로드는 폼 제출 시 서버액션(submitMentorProfileEdit)에서 처리.
@@ -637,6 +644,7 @@ export function MentorProfileEditForm(props: {
             <FormSubmitButton
               idleLabel="저장하기"
               pendingLabel="저장 중…"
+              disabled={planPriceBlocked}
               className="min-h-[52px] flex-[2] rounded-xl bg-emerald-600 px-8 text-sm font-extrabold text-white shadow-md transition hover:bg-emerald-700 disabled:bg-slate-300"
             />
             <p className="hidden text-[11px] font-bold text-slate-400 sm:block">변경 사항은 저장 즉시 반영됩니다.</p>

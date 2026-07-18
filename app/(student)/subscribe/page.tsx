@@ -101,6 +101,12 @@ export default async function StudentSubscribePage(props: Props) {
             </p>
           </header>
 
+          {balance.error ? (
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900" role="status">
+              캐시 잔액을 불러오지 못했습니다. 표시된 잔액이 실제와 다를 수 있으니 새로고침 후 다시 확인해 주세요.
+            </p>
+          ) : null}
+
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <SubscribeCheckoutClient
               mentorId={data.mentorId}
