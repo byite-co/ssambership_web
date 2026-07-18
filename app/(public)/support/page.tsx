@@ -28,7 +28,7 @@ const FAQ_ITEMS: FaqItem[] = [
         <Link href="/mentors" className="font-bold text-[#2563EB] hover:underline">
           멘토 찾기
         </Link>
-        에서 관심 있는 멘토를 고른 뒤 구독 플랜을 선택하면 질문방이 열립니다. 플랜은 베이직·스탠다드(추천)·프리미엄으로
+        에서 관심 있는 멘토를 고른 뒤 구독 플랜을 선택하면 질문방이 열립니다. 플랜은 라이트·스탠다드(추천)·프리미엄으로
         나뉘며, 플랜별 가격·질문 한도·혜택은{" "}
         <Link href="/subscribe" className="font-bold text-[#2563EB] hover:underline">
           구독 안내
@@ -42,7 +42,7 @@ const FAQ_ITEMS: FaqItem[] = [
     question: "질문은 얼마나 자주 할 수 있나요?",
     answer: (
       <>
-        구독 플랜마다 주간 질문 가능 횟수가 다릅니다. 베이직은 주 4회, 스탠다드는 주 9회이며, 프리미엄은 공정 사용
+        구독 플랜마다 주간 질문 가능 횟수가 다릅니다. 라이트는 주 4회, 스탠다드는 주 9회이며, 프리미엄은 공정 사용
         정책(FUP) 범위 내에서 이용할 수 있습니다. 자세한 한도는 멘토별 구독 화면과 질문방 안내를 참고해 주세요.
       </>
     ),
