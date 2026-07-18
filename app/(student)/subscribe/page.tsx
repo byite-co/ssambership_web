@@ -3,8 +3,8 @@ import { requireRole } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
 import { fetchWalletBalanceByUserId } from "@/lib/cash/cashQueries";
 import { parseWalletBalanceBreakdown } from "@/lib/cash/parseWalletBalanceKrw";
-import { WalletChargeSidebar } from "@/components/cash/WalletChargeSidebar";
 import { MentorSubscribeSummaryCard } from "@/components/subscribe/MentorSubscribeSummaryCard";
+import { PromotionNoticeBox } from "@/components/subscribe/PromotionNoticeBox";
 import { SubscribeCheckoutClient, type SubscribePlanOption } from "@/components/subscribe/SubscribeCheckoutClient";
 import { loadStudentSubscribePage } from "@/lib/subscribe/subscribePageQueries";
 import {
@@ -91,16 +91,21 @@ export default async function StudentSubscribePage(props: Props) {
       <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
         <div className="space-y-4 lg:sticky lg:top-8">
           <MentorSubscribeSummaryCard mentorId={data.mentorId} display={data.display} />
-          <WalletChargeSidebar breakdown={breakdown} balanceError={balance.error} variant="balance-only" />
         </div>
 
-        <main className="min-w-0">
-          <header className="mb-6">
+        <main className="min-w-0 space-y-6">
+          <header>
             <h1 className="text-2xl font-black tracking-tight text-slate-900">멘토 구독</h1>
             <p className="mt-1 text-sm text-slate-500">
               {data.display.displayName} 멘토와 연결할 플랜을 선택하세요.
             </p>
           </header>
+
+          {balance.error ? (
+            <p className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-900" role="status">
+              캐시 잔액을 불러오지 못했습니다. 표시된 잔액이 실제와 다를 수 있으니 새로고침 후 다시 확인해 주세요.
+            </p>
+          ) : null}
 
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <SubscribeCheckoutClient
@@ -110,6 +115,8 @@ export default async function StudentSubscribePage(props: Props) {
               closedTiers={closedTiers}
             />
           </section>
+
+          <PromotionNoticeBox promotions={data.promotions} />
         </main>
       </div>
     </div>

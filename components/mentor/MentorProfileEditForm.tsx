@@ -111,6 +111,13 @@ export function MentorProfileEditForm(props: {
       ? String(initial.individualQuestionPriceCash)
       : "",
   );
+  // 서버가 가격 밴드를 강제하므로, 밴드 밖·무효 가격이면 제출 자체를 막아
+  // "일부만 저장된 채 실패" 상태를 예방한다.
+  const planPriceBlocked = SUBSCRIBE_PLAN_CATALOG.some((plan) => {
+    const rule = mentorSubscriptionPriceRule(plan.tier);
+    const n = Number(planPrices[plan.tier] ?? String(rule.recommendedCashKrw));
+    return !Number.isFinite(n) || n <= 0 || isOutsideMentorPriceGuide(n, plan.tier);
+  });
 
   // 프로필 사진: 숨김 file input + 클라이언트 검증(5MB·이미지) + 원형 미리보기.
   // 실제 업로드는 폼 제출 시 서버액션(submitMentorProfileEdit)에서 처리.
@@ -428,7 +435,7 @@ export function MentorProfileEditForm(props: {
           <section className="space-y-4 rounded-2xl border border-l-[4px] border-slate-300 border-l-[#059669] bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.05)] sm:p-6">
             <SectionHeader number="4" title="요금제 설정" icon={<Coins className="h-4 w-4" aria-hidden />} />
             <p className="text-xs font-medium text-slate-500">
-              구독 요금은 멘토가 직접 설정할 수 있어요. 권장 범위를 벗어나면 경고만 표시되고 저장은 가능합니다.
+              구독 요금은 멘토가 직접 설정할 수 있어요. 각 플랜의 가격 범위 안에서만 저장할 수 있습니다.
             </p>
             <div className="grid gap-3 sm:grid-cols-3">
               {SUBSCRIBE_PLAN_CATALOG.map((plan) => {
@@ -480,8 +487,8 @@ export function MentorProfileEditForm(props: {
                         1캐시 이상 입력해 주세요.
                       </p>
                     ) : outsideGuide ? (
-                      <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] font-bold text-amber-800">
-                        권장 범위 밖이에요. 그래도 저장할 수 있어요.
+                      <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] font-bold text-red-700">
+                        가격 범위를 벗어나 저장할 수 없어요.
                       </p>
                     ) : null}
                   </div>
@@ -637,6 +644,7 @@ export function MentorProfileEditForm(props: {
             <FormSubmitButton
               idleLabel="저장하기"
               pendingLabel="저장 중…"
+              disabled={planPriceBlocked}
               className="min-h-[52px] flex-[2] rounded-xl bg-emerald-600 px-8 text-sm font-extrabold text-white shadow-md transition hover:bg-emerald-700 disabled:bg-slate-300"
             />
             <p className="hidden text-[11px] font-bold text-slate-400 sm:block">변경 사항은 저장 즉시 반영됩니다.</p>

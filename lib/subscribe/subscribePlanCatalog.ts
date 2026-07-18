@@ -30,7 +30,7 @@ export const SUBSCRIBE_PLAN_CATALOG: readonly SubscribePlanCatalogItem[] = [
   {
     tier: "premium",
     label: "프리미엄",
-    cashKrw: 179_000,
+    cashKrw: 174_900,
     weeklyLabel: "질문 무제한",
     priorityLabel: "",
   },

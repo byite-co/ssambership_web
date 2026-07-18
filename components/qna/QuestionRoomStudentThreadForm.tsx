@@ -130,7 +130,9 @@ export function QuestionRoomStudentThreadForm(props: {
       <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3">
         {limitBlocked ? (
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold leading-relaxed text-amber-900">
-            {WEEKLY_QUESTION_LIMIT_MESSAGE}
+            {props.usage?.freeQuota
+              ? "무료 질문권을 모두 사용했어요. 멘토를 구독하면 계속 질문할 수 있어요."
+              : WEEKLY_QUESTION_LIMIT_MESSAGE}
           </p>
         ) : null}
         {subjectField}

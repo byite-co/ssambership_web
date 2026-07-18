@@ -1066,12 +1066,13 @@ type RoomR = { ok: true; roomId: string } | { ok: false; error: string };
 
 /**
  * room이 있으면 재사용(멱등) — 별도 행이 없을 때만 insert
+ * paymentId는 구독 체크아웃 경로에서만 전달되고, 무료 질문방 생성 경로에서는 null.
  */
 export async function ensureMentorStudentRoom(
   supabase: SupabaseClient,
   studentId: string,
   mentorId: string,
-  paymentId: string,
+  paymentId: string | null,
   subscriptionId?: string | null
 ): Promise<RoomR> {
   const stu = await fetchRoomsForUser(supabase, "student", studentId);
@@ -1114,7 +1115,7 @@ export async function ensureMentorStudentRoom(
     [sCol]: studentId,
     [mCol]: mentorId,
   };
-  if (payCol) payload[payCol] = paymentId;
+  if (payCol && paymentId) payload[payCol] = paymentId;
   if (subCol && subscriptionId) payload[subCol] = subscriptionId;
   const { data, error } = await supabase
     .from(ROOM_TABLE)

@@ -1,21 +1,15 @@
 import Link from "next/link";
 import Image from "next/image";
 import type { MentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
-
-function subjectTags(subjects: string): string[] {
-  return subjects
-    .split(/[,·/|]/)
-    .map((s) => s.trim())
-    .filter(Boolean)
-    .slice(0, 6);
-}
+import { mentorSubjectChips } from "@/lib/mentor/mentorPublicProfileDisplay";
 
 export function MentorSubscribeSummaryCard(props: {
   mentorId: string;
   display: MentorProfileDisplay;
 }) {
   const { mentorId, display: d } = props;
-  const tags = subjectTags(d.subjects);
+  // 과목 정본 칩 헬퍼 사용 — 저장된 과목 코드(korean_reading 등)를 한글 라벨로 변환
+  const tags = mentorSubjectChips(d.subjects, 6);
   const schoolLine = [d.university, d.department].filter(Boolean).join(" · ");
 
   return (
