@@ -428,7 +428,7 @@ export function MentorProfileEditForm(props: {
           <section className="space-y-4 rounded-2xl border border-l-[4px] border-slate-300 border-l-[#059669] bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.05)] sm:p-6">
             <SectionHeader number="4" title="요금제 설정" icon={<Coins className="h-4 w-4" aria-hidden />} />
             <p className="text-xs font-medium text-slate-500">
-              구독 요금은 멘토가 직접 설정할 수 있어요. 권장 범위를 벗어나면 경고만 표시되고 저장은 가능합니다.
+              구독 요금은 멘토가 직접 설정할 수 있어요. 각 플랜의 가격 범위 안에서만 저장할 수 있습니다.
             </p>
             <div className="grid gap-3 sm:grid-cols-3">
               {SUBSCRIBE_PLAN_CATALOG.map((plan) => {
@@ -480,8 +480,8 @@ export function MentorProfileEditForm(props: {
                         1캐시 이상 입력해 주세요.
                       </p>
                     ) : outsideGuide ? (
-                      <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-[10px] font-bold text-amber-800">
-                        권장 범위 밖이에요. 그래도 저장할 수 있어요.
+                      <p className="mt-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5 text-[10px] font-bold text-red-700">
+                        가격 범위를 벗어나 저장할 수 없어요.
                       </p>
                     ) : null}
                   </div>

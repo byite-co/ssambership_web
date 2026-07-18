@@ -9,20 +9,21 @@ export type MentorSubscriptionPriceRule = {
   maxCashKrw: number;
 };
 
+/** 개정 2026-07-18: 권장가를 29,900/84,900/174,900으로 하향(오너 확정). min은 권장가와 동일하게 조정. */
 export const MENTOR_SUBSCRIPTION_PRICE_RULES: Record<SubscribePlanTier, MentorSubscriptionPriceRule> = {
   limited: {
-    minCashKrw: 39_900,
-    recommendedCashKrw: 55_000,
+    minCashKrw: 29_900,
+    recommendedCashKrw: 29_900,
     maxCashKrw: 69_900,
   },
   standard: {
     minCashKrw: 84_900,
-    recommendedCashKrw: 114_900,
+    recommendedCashKrw: 84_900,
     maxCashKrw: 149_900,
   },
   premium: {
-    minCashKrw: 189_900,
-    recommendedCashKrw: 249_900,
+    minCashKrw: 174_900,
+    recommendedCashKrw: 174_900,
     maxCashKrw: 329_900,
   },
 };

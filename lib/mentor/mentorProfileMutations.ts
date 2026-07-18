@@ -3,9 +3,12 @@ import { insertNotificationBestEffort } from "@/lib/notifications/notificationIn
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import {
   amountCentsFromCashKrw,
+  isOutsideMentorPriceGuide,
   mentorPlanDebitAmountCents,
+  mentorSubscriptionPriceRule,
   SUBSCRIBE_PLAN_TIERS,
 } from "@/lib/subscribe/mentorPlanPricing";
+import { getSubscribeCatalogPlan } from "@/lib/subscribe/subscribePlanCatalog";
 import type { SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
 import { SUBSCRIPTIONS_TABLE } from "@/lib/subscribe/subscriptionsTable";
 
@@ -123,6 +126,16 @@ async function updateMentorSubscriptionPrices(
     const cashKrw = pricesKrw[tier];
     if (typeof cashKrw !== "number" || !Number.isFinite(cashKrw) || cashKrw <= 0) {
       return { ok: false, error: "구독 요금은 1캐시 이상 숫자로 입력해 주세요." };
+    }
+    // 가격 밴드는 서버에서 강제한다 — UI 경고만으로는 밴드 밖 금액이 저장돼
+    // 구독 화면에 비정상 가격이 그대로 노출·차감되는 사고가 났다.
+    const rule = mentorSubscriptionPriceRule(tier);
+    if (isOutsideMentorPriceGuide(Math.trunc(cashKrw), tier)) {
+      const label = getSubscribeCatalogPlan(tier).label;
+      return {
+        ok: false,
+        error: `${label} 구독 요금은 ${rule.minCashKrw.toLocaleString("ko-KR")}~${rule.maxCashKrw.toLocaleString("ko-KR")}캐시 범위에서 설정할 수 있습니다.`,
+      };
     }
     const amountCents = amountCentsFromCashKrw(Math.trunc(cashKrw));
     const existing = byTier.get(tier) ?? null;
