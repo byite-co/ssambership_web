@@ -1,12 +1,16 @@
 -- --------------------------------------------------------------------------
 -- 125_dispute_split_fee_5pct.sql   (P0-6 · 맞춤의뢰 분쟁 분배 플랫폼 수수료 20%→5%)
--- [DRAFT — DB 미적용]  (staging 적용은 오너 승인 후 · 적용 이력은 docs/audit/sql_apply_manifest.md)
+-- [적용됨 — ssambership-staging 에 2026-07-19 단일 트랜잭션(lock_timeout 3s) 적용·검증 통과
+--   (구조 assertion T1~T9 + 시나리오 S1~S5 전부 PASS). def md5 5cceee2f…→c60df394…, COMMENT gross−5%,
+--   ACL service_role 전용 확인. fixture 전량 rollback·baseline 0행 복원.
+--   원장 미기재 — 적용 이력: docs/audit/sql_apply_manifest.md]
 -- 목적: record_custom_order_dispute_split 의 플랫폼 수수료율만 0.20 → 0.05 로 확정한다
---   (맞춤의뢰 정본 수수료 5% · 멘토 수령 95%). 운영 실정의(057 → 072_harden_linter_warnings 재정의가
---   반영된 최신 유효 본문)를 기준으로, 계산 순서·반올림(floor)·불변식·멱등키·원장 사유/참조·반환 계약·
---   권한은 그대로 보존한다. helper 함수·테이블·다른 금융 RPC 는 수정하지 않는다.
--- 선행: 057
--- ⚠️ 운영 함수와 유일한 의미 있는 차이 = v_fee_rate 0.20→0.05 (그 외 차이는 라인엔딩 정규화뿐).
+--   (맞춤의뢰 정본 수수료 5% · 멘토 수령 95%). 기준 = 운영 실행 본문(057 정의) + 운영 ACL(072까지 반영).
+--   ⚠️ 072_harden_linter_warnings.sql 은 이 함수의 본문을 재정의하지 않고 EXECUTE 권한만 재확인한다.
+--   계산 순서·반올림(floor)·불변식·멱등키·원장 사유/참조·반환 계약·권한은 그대로 보존한다.
+--   helper 함수·테이블·다른 금융 RPC·057·072 파일은 수정하지 않는다.
+-- 선행: 057, 072
+-- ⚠️ 운영 실행 로직과 유일한 의미 있는 차이 = v_fee_rate 0.20→0.05 (COMMENT도 20%→5%로 정정; 그 외는 라인엔딩 정규화뿐).
 -- --------------------------------------------------------------------------
 
 CREATE OR REPLACE FUNCTION public.record_custom_order_dispute_split(p_order_id uuid, p_mentor_gross_won integer, p_student_refund_won integer, p_admin_id uuid)
@@ -283,3 +287,18 @@ begin
   );
 end;
 $function$;
+
+-- 메타데이터 COMMENT 정정 (기존 gross−20% → 5%)
+comment on function public.record_custom_order_dispute_split(
+  uuid, integer, integer, uuid
+) is
+  'P0: Custom order dispute escrow split — mentor net (gross−5%) + student refund; hold gross must match sum. service_role only.';
+
+-- service_role 전용 EXECUTE 권한 재확정 (멱등)
+revoke all on function public.record_custom_order_dispute_split(
+  uuid, integer, integer, uuid
+) from public, anon, authenticated;
+
+grant execute on function public.record_custom_order_dispute_split(
+  uuid, integer, integer, uuid
+) to service_role;
