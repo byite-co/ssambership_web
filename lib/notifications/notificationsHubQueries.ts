@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { pickExistingColumn } from "@/lib/qna/safeSelect";
+import {
+  notificationCategoryTypeList,
+  type NotificationCategory,
+} from "@/lib/notifications/notificationCategories";
 
 type Row = Record<string, unknown>;
 
@@ -8,6 +12,7 @@ type QB = {
   eq: (c: string, v: unknown) => QB;
   is: (c: string, v: unknown) => QB;
   not: (c: string, o: string, v: unknown) => QB;
+  in: (c: string, v: readonly unknown[]) => QB;
   or: (f: string) => QB;
   filter: (c: string, o: string, v: unknown) => QB;
   order: (c: string, o: { ascending: boolean }) => QB;
@@ -148,6 +153,7 @@ export async function loadNotificationsHub(
   userId: string,
   options: {
     filter: "all" | "unread";
+    category?: NotificationCategory;
     cursor?: NotificationCursor | null;
     dir?: NotificationPageDir;
     pageSize?: number;
@@ -197,11 +203,16 @@ export async function loadNotificationsHub(
   }
 
   const uCol = userColumn;
-  // 스코프(수신자 + 읽지 않음) 적용기 — count/page 공통.
+  // 카테고리 → event type allowlist(서버 필터). typeCol 없으면 필터 생략(=전체).
+  const categoryTypes = notificationCategoryTypeList(options.category ?? "all");
+  // 스코프(수신자 → 읽음 여부 → 카테고리 event type 집합) 적용기 — cursor 이전 단계.
   const withScope = (q: QB): QB => {
     let qq = q.eq(uCol, userId);
     if (options.filter === "unread" && readCol) {
       qq = BOOL_READ_COLS.has(readCol) ? qq.not(readCol, "is", true) : qq.is(readCol, null);
+    }
+    if (categoryTypes && typeCol) {
+      qq = qq.in(typeCol, categoryTypes);
     }
     return qq;
   };

@@ -4,6 +4,7 @@ import { NotificationsHubView } from "@/components/notifications/NotificationsHu
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { createClient } from "@/lib/supabase/server";
 import { decodeNotificationCursor, loadNotificationsHub } from "@/lib/notifications/notificationsHubQueries";
+import { parseNotificationCategory } from "@/lib/notifications/notificationCategories";
 import type { AppRole } from "@/lib/types/user";
 
 type Props = {
@@ -22,11 +23,12 @@ export default async function NotificationsPage(props: Props) {
 
   const sp = (await props.searchParams) ?? {};
   const f = firstParam(sp.filter) === "unread" ? "unread" : "all";
+  const category = parseNotificationCategory(firstParam(sp.category));
   const dir = firstParam(sp.dir) === "prev" ? "prev" : "next";
   const cursor = decodeNotificationCursor(firstParam(sp.cursor));
 
   const supabase = await createClient();
-  const hub = await loadNotificationsHub(supabase, user.id, { filter: f, cursor, dir });
+  const hub = await loadNotificationsHub(supabase, user.id, { filter: f, category, cursor, dir });
   if (hub.error) {
     console.error("[notifications] hub load", hub.error);
   }
@@ -43,7 +45,7 @@ export default async function NotificationsPage(props: Props) {
       title="알림"
       description="받은 알림을 확인하고, 관련 화면으로 이동할 수 있습니다."
     >
-      <NotificationsHubView hub={hub} filter={f} role={role} />
+      <NotificationsHubView hub={hub} filter={f} category={category} role={role} />
     </PageScaffold>
   );
 }

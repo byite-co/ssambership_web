@@ -3,29 +3,30 @@ import type { AppRole } from "@/lib/types/user";
 import { NotificationItemCard } from "@/components/notifications/NotificationItemCard";
 import { NotificationEmptyState } from "@/components/notifications/NotificationEmptyState";
 import type { NotificationHubLoad } from "@/lib/notifications/notificationsHubQueries";
+import { notificationsHref, type NotificationCategory } from "@/lib/notifications/notificationCategories";
 
 type Row = Record<string, unknown>;
 type Filter = "all" | "unread";
 
 // P2-26: 서버 키셋 페이지네이션. 클라이언트 상태 없이 URL(searchParam) 로만 페이지를 이동한다
-// → 브라우저 뒤로/앞으로가 각 페이지 URL 을 그대로 복원한다.
+// → 브라우저 뒤로/앞으로가 각 페이지 URL(filter·category·cursor) 을 그대로 복원한다.
 export function NotificationList(props: {
   hub: NotificationHubLoad;
   filter: Filter;
+  category: NotificationCategory;
   role: AppRole;
 }) {
-  const { hub, filter, role } = props;
+  const { hub, filter, category, role } = props;
 
-  const hrefWith = (extra: Record<string, string>): string => {
-    const p = new URLSearchParams();
-    if (filter === "unread") p.set("filter", "unread");
-    for (const [k, v] of Object.entries(extra)) p.set(k, v);
-    const s = p.toString();
-    return s ? `/notifications?${s}` : "/notifications";
-  };
-  const resetHref = hrefWith({});
-  const prevHref = hub.hasPrev && hub.prevCursor ? hrefWith({ dir: "prev", cursor: hub.prevCursor }) : null;
-  const nextHref = hub.hasNext && hub.nextCursor ? hrefWith({ dir: "next", cursor: hub.nextCursor }) : null;
+  const resetHref = notificationsHref({ filter, category });
+  const prevHref =
+    hub.hasPrev && hub.prevCursor
+      ? notificationsHref({ filter, category, dir: "prev", cursor: hub.prevCursor })
+      : null;
+  const nextHref =
+    hub.hasNext && hub.nextCursor
+      ? notificationsHref({ filter, category, dir: "next", cursor: hub.nextCursor })
+      : null;
 
   // 로드 실패/빈 상태 — 카드 구조 이전에 처리.
   if (hub.unreadFilterBlocked) {

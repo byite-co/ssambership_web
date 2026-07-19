@@ -1,7 +1,14 @@
+import Link from "next/link";
 import { NotificationFilterTabs } from "@/components/notifications/NotificationFilterTabs";
 import { NotificationList } from "@/components/notifications/NotificationList";
 import type { NotificationHubLoad } from "@/lib/notifications/notificationsHubQueries";
 import { markAllNotificationsReadFormAction } from "@/lib/notifications/notificationReadActions";
+import {
+  NOTIFICATION_CATEGORY_LABELS,
+  NOTIFICATION_CATEGORY_ORDER,
+  notificationsHref,
+  type NotificationCategory,
+} from "@/lib/notifications/notificationCategories";
 import type { AppRole } from "@/lib/types/user";
 import { USER_UI_LOAD_FAILED } from "@/lib/constants/userFacingMessages";
 
@@ -10,9 +17,10 @@ type Filter = "all" | "unread";
 export function NotificationsHubView(props: {
   hub: NotificationHubLoad;
   filter: Filter;
+  category: NotificationCategory;
   role: AppRole;
 }) {
-  const { hub, filter, role } = props;
+  const { hub, filter, category, role } = props;
   if (hub.error) {
     console.error("[NotificationsHubView] hub.error", hub.error, hub.probe);
   }
@@ -45,8 +53,34 @@ export function NotificationsHubView(props: {
             </form>
           ) : null}
         </div>
-        <NotificationFilterTabs current={filter} />
+        <NotificationFilterTabs current={filter} category={category} />
       </header>
+
+      {/* P2-26: 카테고리 서브탭 — URL(category) 구동, 선택 시 cursor 초기화(서버 필터). */}
+      <div
+        className="notif-cat-scroll -mx-1 flex flex-nowrap gap-2 overflow-x-auto px-1 [-ms-overflow-style:none] [scrollbar-width:none] md:mx-0 md:flex-wrap md:overflow-visible md:px-0"
+        role="tablist"
+        aria-label="알림 카테고리"
+      >
+        {NOTIFICATION_CATEGORY_ORDER.map((cat) => {
+          const active = category === cat;
+          return (
+            <Link
+              key={cat}
+              href={notificationsHref({ filter, category: cat })}
+              role="tab"
+              aria-selected={active}
+              className={`shrink-0 whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs font-extrabold transition ${
+                active
+                  ? "border-[#2563EB] bg-[#2563EB] text-white"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300"
+              }`}
+            >
+              {NOTIFICATION_CATEGORY_LABELS[cat]}
+            </Link>
+          );
+        })}
+      </div>
 
       {hub.error ? (
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-2 text-sm text-amber-950">{USER_UI_LOAD_FAILED}</p>
@@ -58,7 +92,7 @@ export function NotificationsHubView(props: {
         <p className="text-xs text-slate-500">읽지 않은 알림만 모아 보여 드리고 있어요.</p>
       ) : null}
 
-      <NotificationList hub={hub} filter={filter} role={role} />
+      <NotificationList hub={hub} filter={filter} category={category} role={role} />
     </div>
   );
 }
