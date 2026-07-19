@@ -154,3 +154,16 @@
 2. 결과를 `docs/audit/db_expected_state.md`와 대조한다.
 3. 차이가 있으면 결과를 Claude에게 전달해 드리프트 목록과 새 보정 SQL 초안을 만든다.
 4. 보정 SQL도 기존 SQL 수정이 아니라 다음 빈 번호로 생성한다.
+
+## 수동 staging 적용 이력 (ssambership-staging)
+
+> 오너 방침: 아래 수동 적용은 `supabase_migrations` 원장에 직접 기재하지 않고 이 표로 관리한다.
+> 모두 오너 개별 승인 후, 단일 트랜잭션(`SET LOCAL lock_timeout='3s'` + `LOCK TABLE reviews`)으로 적용.
+
+| 적용일 | 파일(커밋) | 대상 | 방식 | 검증 |
+|---|---|---|---|---|
+| 2026-07-19 | `123_reviews_converge.sql` (`abe2cd5`) | ssambership-staging | execute_sql 단일 트랜잭션 | reviews 0행, `student_id`/`content` 제거·`body`/`author_id` NOT NULL·`subscription_count` nullable·레거시 FK/인덱스 제거·`uq_reviews_mentor_author` 생성·정책 0개(fail-closed)·아카이브 2종 RLS·service_role 전용 — 전부 통과 |
+| 2026-07-19 | `126_reviews_rls_hardening.sql` (`f1bba12`) | ssambership-staging | execute_sql 단일 트랜잭션 (본문+검증 동일 트랜잭션, 최종 게이트 FAIL 시 롤백) | 구조 assertion 7건(정책 정확히 5·레거시 0·함수/트리거 존재·학생 UPDATE 정책 없음) + 역할 스모크 5건(무자격 학생 INSERT 거부·작성자 UPDATE 거부·멘토 답글 1회·관리자 is_blinded 허용/body 거부·익명 블라인드 제외) — 전부 PASS, 테스트 데이터 미잔존 |
+
+- ⚠️ 위 2건은 저장소 파일 번호와 `supabase_migrations` 원장이 불일치(드리프트). 클린설치 정본은 `042`(교정) + `123` + `126`을 순서대로 반영해야 한다.
+- `042_reviews_system.sql`(클린설치 교정)·`bundle_2_features_032_061.sql`(인라인 042 동기화)는 staging **미적용**(클린설치 전용). 검증은 §0-3 클린 DB 테스트 필요.

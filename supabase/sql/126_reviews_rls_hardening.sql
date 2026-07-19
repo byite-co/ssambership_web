@@ -1,6 +1,7 @@
 -- --------------------------------------------------------------------------
 -- 126_reviews_rls_hardening.sql   (P1-7 · 리뷰 RLS 정본화 — 다세대 정책 정리 + 컬럼 강제)
--- [DRAFT — staging(ssambership-staging) 미적용 · 123 검증 통과 후 별도 승인 대기. 적용 시 표식 제거 + 원장 기재]
+-- [적용됨 — ssambership-staging 에 2026-07-19 단일 트랜잭션(lock_timeout 3s) 적용·검증 통과
+--   (구조 assertion 7 + 역할 스모크 5 전부 PASS). 원장 미기재 — 적용 이력은 docs/audit/sql_apply_manifest.md.]
 -- 목적: reviews 의 중복/레거시 정책을 전부 제거하고, 자격검증 INSERT·역할별 UPDATE·
 --   숨김/블라인드 보호 SELECT 정책만 남긴다. 행 접근은 정책이, 컬럼 범위는 트리거가 강제.
 --   ⚠️ 004의 rev_select USING(true) 가 남으면 모든 SELECT 정책과 OR 결합되어 숨김·블라인드
