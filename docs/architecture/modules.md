@@ -101,8 +101,14 @@ L0  커널: auth, data, ui, shell, notifications, reference
 
 ## 8. 검증 기준선 (무변경 증명)
 
-- 라우트: `npm run inventory:routes` ↔ `route-inventory.txt` diff 공백 (182 파일)
-- 서버 액션: `npm run inventory:actions` ↔ `action-inventory.txt` diff 공백 (44 파일)
-- 의존 그래프: `npm run dep:baseline` ↔ `dep-baseline.json` — 순환 수 단조 감소·원장 외 신규 에지 0 (기준: 모듈 770 · 에지 2,988 · 순환 5)
-- 동결·격리: `npm run check:frozen-canon` (+ `--diff main`)
-- 시각: 기획 캡처 264장(132화면 × desktop/mobile, `screenshots_full_detail.zip` — 리포지토리에 커밋하지 않음, 파일명 규약 `desktop/<화면명>.png`) + 기존 `npm run screenshots` 하네스
+> ⚠️ (P3-3 정합, 2026-07-19) 아래 자동 검사 스크립트(`inventory:routes`/`inventory:actions`·`dep:baseline`·
+> `check:frozen-canon`·`screenshots` 캡처)는 **미구현 유령 참조**여서 해당 npm 스크립트를 제거했다.
+> 스냅샷 데이터 파일(`route-inventory.txt`·`action-inventory.txt`·`dep-baseline.json`·`frozen-canon.json`)은
+> Phase 0 실측본으로 존재하며, 현재 검증은 이 스냅샷과 **수동 대조**로 수행한다. 동작 사양이 확정되면
+> 스크립트를 추가하고 npm 스크립트·본 문서를 함께 정합화한다.
+
+- 라우트: `route-inventory.txt` 스냅샷 수동 대조 (182 파일)
+- 서버 액션: `action-inventory.txt` 스냅샷 수동 대조 (44 파일)
+- 의존 그래프: `dep-baseline.json` 스냅샷 대조 — 순환 수 단조 감소·원장 외 신규 에지 0 (기준: 모듈 770 · 에지 2,988 · 순환 5)
+- 동결·격리: `frozen-canon.json` 목록 수동 대조
+- 시각: 기획 캡처(리포지토리 미커밋, `desktop/<화면명>.png` 규약) 수동 확인

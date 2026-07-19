@@ -1,7 +1,9 @@
 # 정본 계약 동결 목록 · 정합 대기 구역
 
-> 모듈화 기획서 §3·§4의 실행 문서. 기계 검사 목록은 `frozen-canon.json`,
-> 검사 실행은 `npm run check:frozen-canon` (경로 실존) / `node scripts/check-frozen-canon.mjs --diff main` (위반 감지).
+> 모듈화 기획서 §3·§4의 실행 문서. 기계 검사 목록은 `frozen-canon.json`.
+> ⚠️ (P3-3 정합, 2026-07-19) 자동 검사 스크립트 `scripts/check-frozen-canon.mjs` 는 **미구현**이라
+> 해당 npm 스크립트(`check:frozen-canon`)와 유령 참조를 제거했다. 현재 이 목록의 준수는 **수동 대조**로 확인한다.
+> (동작 사양이 확정되면 새 스크립트를 추가하고 npm 스크립트·본 문서를 함께 정합화한다.)
 
 ## 1. 동결(frozen) — 이동·분할·개명 전면 금지
 
