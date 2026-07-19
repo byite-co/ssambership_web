@@ -1,6 +1,7 @@
 -- --------------------------------------------------------------------------
 -- 123_reviews_converge.sql   (P0-2 · 리뷰 스키마/데이터 수렴 — 멱등, 단일 트랜잭션)
--- [DRAFT — staging(ssambership-staging) 미적용 · 오너 승인 대기. 적용 시 이 표식 제거 + 원장 기재]
+-- [적용됨 — ssambership-staging 에 2026-07-19 단일 트랜잭션(lock_timeout 3s) 적용·검증 통과.
+--   ⚠️ execute_sql 로 적용해 supabase_migrations 원장에는 미기재(드리프트) — 원장 기재는 별도 승인 후.]
 -- 목적: 하이브리드(042형 student_id/content NOT NULL + 004형 author_id/body) 상태를
 --   정본(author_id/body, subscription_count nullable, unique(mentor_id,author_id))으로 수렴.
 --   현재 웹 write(author_id/body만 INSERT)가 레거시 NOT NULL(student_id/content) 위반으로
