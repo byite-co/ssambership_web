@@ -1,6 +1,8 @@
 -- --------------------------------------------------------------------------
 -- 124_iq_refund_state_gate.sql   (P0-5 · 개별질문 답변후 셀프환불 차단 — 경쟁조건 제거)
--- [DRAFT — DB 미적용]  (staging 적용은 오너 승인 후 · 적용 이력은 docs/audit/sql_apply_manifest.md)
+-- [적용됨 — ssambership-staging 에 2026-07-19 단일 트랜잭션(lock_timeout 3s) 적용·검증 통과
+--   (구조 assertion 5 + 시나리오 A~D PASS · 동시성 E는 독립 2세션 필요로 PENDING). core 정의 해시 불변 확인.
+--   원장 미기재 — 적용 이력: docs/audit/sql_apply_manifest.md]
 -- 목적: 학생 셀프환불 래퍼 refund_individual_question(p_question_id) 에 상태 게이트를 추가해,
 --   답변받은(answered) 개별질문의 셀프환불을 차단하고 경쟁조건(claimed↔answer 전이)을 제거한다.
 --   현재 래퍼(091)는 "본인 여부"만 확인하고 core(refund_individual_question_hold, 070)는
