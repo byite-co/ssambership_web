@@ -80,3 +80,24 @@ export async function resolveCommunityImageUrls(
   const urls = await Promise.all(stored.map((s) => resolveCommunityImageUrl(supabase, s)));
   return urls.filter((u): u is string => typeof u === "string" && u.length > 0);
 }
+
+/**
+ * 저장된 커뮤니티 이미지 ref 들을 Storage 에서 삭제한다(고아·교체 구이미지 보상용).
+ *  - parseCommunityImageRef 로 `community-post-images` 버킷 형식만 대상(임의 버킷/ref 삭제 방지).
+ *  - 파싱 불가(빈 값·레거시 http 원문 등)는 건너뛴다 → 삭제하지 않는다.
+ *  - 삭제 오류를 조용히 삼키지 않고 { ok, error, failed } 로 반환해 호출자가 primary 오류와 함께 기록한다.
+ */
+export async function deleteCommunityImageStoredRefs(
+  supabase: SupabaseClient,
+  storedRefs: readonly (string | null | undefined)[]
+): Promise<{ ok: true } | { ok: false; error: string; failed: string[] }> {
+  const paths: string[] = [];
+  for (const s of storedRefs) {
+    const ref = parseCommunityImageRef(s);
+    if (ref) paths.push(ref.path);
+  }
+  if (paths.length === 0) return { ok: true };
+  const { error } = await supabase.storage.from(COMMUNITY_POST_IMAGES_BUCKET).remove(paths);
+  if (error) return { ok: false, error: error.message, failed: paths };
+  return { ok: true };
+}

@@ -18,6 +18,7 @@ import {
 } from "@/lib/community/communityBoardMutations";
 import { communityComposePath } from "@/lib/community/communityComposeTab";
 import { uploadCommunityPostImages } from "@/lib/community/communityStorage";
+import { deleteCommunityImageStoredRefs } from "@/lib/community/communityImageStorage";
 import { createClient } from "@/lib/supabase/server";
 import { assertAccountActive } from "@/lib/auth/accountStatus";
 import {
@@ -45,8 +46,23 @@ async function authorLabelFor(userId: string): Promise<{ label: string; role: st
   const supabase = await createClient();
   const { data: profile } = await getUserProfileById(supabase, userId);
   const label = authorStoredLabelFromProfile(profile);
-  const role = profile?.role === "mentor" ? "멘토" : profile?.role === "student" ? "학생" : null;
+  // DB CHECK(community_posts_author_role_chk)는 영문 mentor/student/admin/user 만 허용한다.
+  // 한글('멘토'/'학생')을 저장하면 INSERT 가 CHECK 를 위반하므로 영문으로 정규화한다(그 외는 null).
+  const role = profile?.role === "mentor" ? "mentor" : profile?.role === "student" ? "student" : null;
   return { label, role };
+}
+
+// 이번 요청에서 새로 업로드했으나 DB write 가 실패한 이미지 객체를 보상 삭제한다.
+// 삭제 실패는 은폐하지 않고 구조화 로그로 남긴다(primary 오류는 호출자가 redirect 로 전달).
+async function compensateNewBoardImages(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  newRefs: readonly string[]
+): Promise<void> {
+  if (newRefs.length === 0) return;
+  const del = await deleteCommunityImageStoredRefs(supabase, newRefs);
+  if (!del.ok) {
+    console.error("[board] orphan 이미지 보상 삭제 실패", { newRefs, error: del.error });
+  }
 }
 
 export async function submitCommunityBoardPostAction(formData: FormData) {
@@ -75,6 +91,24 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
   const safeBody = maskContactInUserText(body);
 
   const supabase = await createClient();
+  const isUpdate = Boolean(draftId) && UUID_RE.test(draftId);
+
+  // 편집 시: 새 업로드 전에 소유권 조건으로 기존 image_urls 를 조회한다(교체 제거분 차집합 삭제용).
+  let oldImageRefs: string[] = [];
+  if (isUpdate) {
+    const { data: existing } = await supabase
+      .from("community_posts")
+      .select("image_urls")
+      .eq("id", draftId)
+      .eq("author_id", user.id)
+      .maybeSingle();
+    const arr =
+      existing && Array.isArray((existing as { image_urls?: unknown }).image_urls)
+        ? (existing as { image_urls: unknown[] }).image_urls
+        : [];
+    oldImageRefs = arr.filter((u): u is string => typeof u === "string" && u.trim().length > 0);
+  }
+
   // 저장 형식은 이제 `bucket/path` ref(BUG-B). 편집 시 유지되는 기존 이미지는
   // ref 또는 (레거시) http URL 둘 다 수용 — 빈 문자열만 제외.
   const imageRefs: string[] = [];
@@ -93,6 +127,8 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
   const files = formData.getAll("images").filter((f): f is File => f instanceof File && f.size > 0);
   if (files.length + imageRefs.length > COMMUNITY_IMAGE_MAX) redirect(errRedirect(returnPath, "images"));
 
+  // 이번 요청에서 새로 업로드한 ref(부분 성공 포함) — DB 실패/업로드 부분 실패 시 보상 삭제 대상.
+  let newUploadedRefs: string[] = [];
   if (files.length) {
     const buffers = await Promise.all(
       files.slice(0, COMMUNITY_IMAGE_MAX - imageRefs.length).map(async (f) => ({
@@ -102,7 +138,11 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
       }))
     );
     const up = await uploadCommunityPostImages(supabase, user.id, buffers);
-    if (up.error) redirect(errRedirect(returnPath, "upload"));
+    newUploadedRefs = up.refs; // 부분 업로드 실패 시에도 성공분 ref 를 반환하므로 보상 가능.
+    if (up.error) {
+      await compensateNewBoardImages(supabase, newUploadedRefs);
+      redirect(errRedirect(returnPath, "upload"));
+    }
     imageRefs.push(...up.refs);
   }
 
@@ -118,12 +158,28 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
     authorRole: role,
   };
 
-  const r =
-    draftId && UUID_RE.test(draftId)
-      ? await updateCommunityBoardPost(supabase, user.id, draftId, payload)
-      : await insertCommunityBoardPost(supabase, user.id, payload);
+  const r = isUpdate
+    ? await updateCommunityBoardPost(supabase, user.id, draftId, payload)
+    : await insertCommunityBoardPost(supabase, user.id, payload);
 
-  if (!r.ok) redirect(errRedirect(returnPath, r.error));
+  if (!r.ok) {
+    // DB 실패(INSERT/UPDATE 오류·UPDATE 0행) → 이번 요청 신규 업로드 이미지 고아 방지 보상 삭제.
+    await compensateNewBoardImages(supabase, newUploadedRefs);
+    redirect(errRedirect(returnPath, r.error));
+  }
+
+  // DB 성공(UPDATE) → 제거된 구이미지 차집합(old − final) 삭제(post-commit 실패는 구조화 로그).
+  // 썸네일 등 다른 도메인은 미변경. 삭제는 owner-scoped RLS(cpi_auth_delete_own)로 본인 객체만.
+  if (isUpdate && oldImageRefs.length > 0) {
+    const finalSet = new Set(imageRefs);
+    const removed = oldImageRefs.filter((ref) => !finalSet.has(ref));
+    if (removed.length > 0) {
+      const del = await deleteCommunityImageStoredRefs(supabase, removed);
+      if (!del.ok) {
+        console.error("[board] 교체 구이미지 정리 실패", { postId: r.id, removed, error: del.error });
+      }
+    }
+  }
 
   revalidatePath("/community");
   revalidatePath("/community/board");

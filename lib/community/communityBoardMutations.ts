@@ -42,23 +42,10 @@ export async function insertCommunityBoardPost(
     author_role: input.authorRole,
   };
 
+  // 폴백 INSERT 제거: image_urls·status·author_label·author_role 을 누락한 채
+  // status default('published') 로 강제공개되던 경로를 없앤다. DB 오류는 그대로 실패.
   const { data, error } = await supabase.from("community_posts").insert(payload).select("id").maybeSingle();
-  if (error) {
-    const fb = await supabase
-      .from("community_posts")
-      .insert({
-        author_id: userId,
-        title,
-        body,
-        category: input.category,
-      })
-      .select("id")
-      .maybeSingle();
-    if (fb.error) return { ok: false, error: "db" };
-    const id = fb.data && typeof (fb.data as { id: string }).id === "string" ? (fb.data as { id: string }).id : null;
-    if (!id) return { ok: false, error: "db" };
-    return { ok: true, id };
-  }
+  if (error) return { ok: false, error: "db" };
   const id = data && typeof (data as { id: string }).id === "string" ? (data as { id: string }).id : null;
   if (!id) return { ok: false, error: "db" };
   return { ok: true, id };
@@ -98,8 +85,10 @@ export async function updateCommunityBoardPost(
     .select("id")
     .maybeSingle();
 
+  // 0행 UPDATE(비존재·비소유)를 성공으로 오판하지 않는다: 반환 행이 있을 때만 성공.
   if (error) return { ok: false, error: "db" };
-  const id = data && typeof (data as { id: string }).id === "string" ? (data as { id: string }).id : postId;
+  const id = data && typeof (data as { id: string }).id === "string" ? (data as { id: string }).id : null;
+  if (!id) return { ok: false, error: "db" };
   return { ok: true, id };
 }
 
