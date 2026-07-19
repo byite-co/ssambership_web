@@ -121,3 +121,19 @@ export async function markNotificationReadByIdAction(notificationId: string): Pr
   }
   return { ok: false };
 }
+
+/**
+ * P2-15: 로드한 ID 가 아니라 **본인 전체 미읽음 알림**을 서버 RPC(mark_all_notifications_read)로
+ * 읽음 처리한다. 소유권은 서버(auth.uid())가 판정하고 갱신 행수를 반환한다(멱등).
+ */
+export async function markAllNotificationsReadAction(): Promise<{ ok: boolean; count: number }> {
+  const { user } = await getServerUserWithProfile();
+  if (!user) return { ok: false, count: 0 };
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("mark_all_notifications_read");
+  if (error) return { ok: false, count: 0 };
+
+  revalidatePath("/notifications");
+  return { ok: true, count: typeof data === "number" ? data : 0 };
+}
