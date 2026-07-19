@@ -137,3 +137,8 @@ export async function markAllNotificationsReadAction(): Promise<{ ok: boolean; c
   revalidatePath("/notifications");
   return { ok: true, count: typeof data === "number" ? data : 0 };
 }
+
+/** 폼(progressive-enhancement)용 래퍼 — 서버 RPC 로 본인 전체 미읽음 처리 후 목록 갱신. */
+export async function markAllNotificationsReadFormAction(): Promise<void> {
+  await markAllNotificationsReadAction();
+}

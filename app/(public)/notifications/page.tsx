@@ -3,12 +3,16 @@ import { PageScaffold } from "@/components/shell/PageScaffold";
 import { NotificationsHubView } from "@/components/notifications/NotificationsHubView";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { createClient } from "@/lib/supabase/server";
-import { loadNotificationsHub } from "@/lib/notifications/notificationsHubQueries";
+import { decodeNotificationCursor, loadNotificationsHub } from "@/lib/notifications/notificationsHubQueries";
 import type { AppRole } from "@/lib/types/user";
 
 type Props = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
+
+function firstParam(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? v[0] : v;
+}
 
 export default async function NotificationsPage(props: Props) {
   const { user, profile, error: authErr } = await getServerUserWithProfile();
@@ -17,11 +21,12 @@ export default async function NotificationsPage(props: Props) {
   }
 
   const sp = (await props.searchParams) ?? {};
-  const rawF = sp.filter;
-  const f = (Array.isArray(rawF) ? rawF[0] : rawF) === "unread" ? "unread" : "all";
+  const f = firstParam(sp.filter) === "unread" ? "unread" : "all";
+  const dir = firstParam(sp.dir) === "prev" ? "prev" : "next";
+  const cursor = decodeNotificationCursor(firstParam(sp.cursor));
 
   const supabase = await createClient();
-  const hub = await loadNotificationsHub(supabase, user.id, { filter: f });
+  const hub = await loadNotificationsHub(supabase, user.id, { filter: f, cursor, dir });
   if (hub.error) {
     console.error("[notifications] hub load", hub.error);
   }
