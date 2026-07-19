@@ -23,9 +23,10 @@ type Q = {
   media: { rows: Record<string, unknown>[]; table: string | null; error: string | null };
   byTier?: Record<string, Record<string, unknown> | null> | null;
 };
-type I = { 
-  intro: string; 
-  university: string; 
+type I = {
+  intro: string;
+  bio?: string;
+  university: string;
   department: string; 
   subjects: string; 
   highSchool: string; 
@@ -92,7 +93,7 @@ export function MentorProfileEditForm(props: {
     highSchool: initial.highSchool || "",
     grade: initial.grade || "",
     intro: initial.intro || "",
-    bio: "", // Actual bio column would need to be added to lib/mentor/mentorDisplayFields.ts
+    bio: initial.bio || "",
     career: "", // Actual career column would need to be added to lib/mentor/mentorDisplayFields.ts
     subjects: initial.subjects || "",
     answerStyle: "",
@@ -169,6 +170,39 @@ export function MentorProfileEditForm(props: {
     setFormData((prev) => ({ ...prev, subjects: [...next].join(",") }));
   };
 
+  // 취소: 저장 전 staged 상태(입력·가격·사진 미리보기)를 원래 값으로 복원한다.
+  const handleReset = () => {
+    setFormData({
+      nickname: initial.displayName || "",
+      university: initial.university || "",
+      department: initial.department || "",
+      highSchool: initial.highSchool || "",
+      grade: initial.grade || "",
+      intro: initial.intro || "",
+      bio: initial.bio || "",
+      career: "",
+      subjects: initial.subjects || "",
+      answerStyle: "",
+      subOpen: initial.subOpen,
+    });
+    setPlanPrices(
+      Object.fromEntries(
+        SUBSCRIBE_PLAN_CATALOG.map((plan) => [
+          plan.tier,
+          String(mentorPlanCashKrw(query.byTier?.[plan.tier] ?? null, plan.tier)),
+        ]),
+      ) as Record<string, string>,
+    );
+    setIndividualQuestionPrice(
+      initial.individualQuestionPriceCash != null && initial.individualQuestionPriceCash > 0
+        ? String(initial.individualQuestionPriceCash)
+        : "",
+    );
+    setPhotoPreview(null);
+    setPhotoError(null);
+    if (photoInputRef.current) photoInputRef.current.value = "";
+  };
+
   const previewDisplay: MentorProfileDisplay = {
     displayName: formData.nickname || initial.displayName || "",
     university: formData.university,
@@ -176,6 +210,7 @@ export function MentorProfileEditForm(props: {
     highSchool: formData.highSchool,
     grade: formData.grade,
     intro: formData.intro,
+    bio: formData.bio,
     subjects: formData.subjects,
     tags: initial.tags,
     subOpen: formData.subOpen,
@@ -540,16 +575,11 @@ export function MentorProfileEditForm(props: {
                 학생증 업로드 상태:{" "}
                 <span className="text-[#059669]">{mentorVerificationKo(initial.verification)}</span>
               </p>
-              {initial.photoUrl ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={initial.photoUrl}
-                  alt="학생증 미리보기"
-                  className="mt-3 max-h-40 rounded-lg border object-contain"
-                />
-              ) : (
-                <p className="mt-2 text-xs font-medium text-slate-500">아직 업로드된 학생증이 없어요.</p>
-              )}
+              {/* [보안] 학생증(민감 문서)·아바타 이미지를 이 영역에 미리보기로 노출하지 않는다.
+                  제출 상태 배지와 인증 페이지 링크만 제공한다(학생증 원본은 인증 페이지에서만 확인). */}
+              <p className="mt-2 text-xs font-medium text-slate-500">
+                학생증 원본은 보안을 위해 이 화면에 표시하지 않아요. 제출·재제출은 인증 페이지에서 진행할 수 있어요.
+              </p>
               <Link
                 href="/mentor/verification"
                 className="mt-3 inline-block text-xs font-bold text-[#059669] hover:underline"
@@ -638,7 +668,11 @@ export function MentorProfileEditForm(props: {
           </div>
 
           <div className="flex items-center justify-between gap-4 pt-6">
-            <button type="button" className="min-h-[52px] flex-1 rounded-xl border border-slate-200 bg-white px-8 text-sm font-extrabold text-slate-600 transition hover:bg-slate-50">
+            <button
+              type="button"
+              onClick={handleReset}
+              className="min-h-[52px] flex-1 rounded-xl border border-slate-200 bg-white px-8 text-sm font-extrabold text-slate-600 transition hover:bg-slate-50"
+            >
               취소
             </button>
             <FormSubmitButton

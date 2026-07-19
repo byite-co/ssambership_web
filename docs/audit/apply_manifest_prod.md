@@ -71,7 +71,7 @@
 
 `132_notification_outbox_foundation.sql` = P1-11F 알림 outbox foundation(적용됨). **클린설치에서 127(P1-8)·131(P1-13)보다 선행** 적용해야 한다(도메인 RPC 가 `record_domain_notification` 호출).
 
-다음 신규 임의번호는 위 예약을 건너뛴 **`133`**부터.
+`133`(P2-15 mark_all_notifications_read)·`134`(P2-24 mentor_profiles.bio) 적용됨. 다음 신규 임의번호는 예약(130 사용됨·131 P1-13)을 건너뛴 **`135`**부터.
 
 ## 7. 클린 DB 재현 (검증 부채 — 미실행)
 

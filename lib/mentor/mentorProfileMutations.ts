@@ -20,6 +20,8 @@ function isMissingColumnError(err: PostgrestError | null): boolean {
 export type MentorProfileFormInput = {
   userId: string;
   intro: string;
+  /** 상세 소개(500자). intro_line(한줄 소개)과 별개. */
+  bio: string;
   university: string;
   department: string;
   grade: string;
@@ -216,6 +218,7 @@ export async function updateMentorProfile(
   const core: Record<string, unknown> = {
     user_id: input.userId,
     intro_line: input.intro || null,
+    bio: input.bio || null,
     teaching_subjects: subjects,
     high_school_name: input.highSchool || null,
     updated_at: now,

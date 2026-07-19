@@ -32,6 +32,7 @@ export default async function MentorProfileEditPage(props: PageProps) {
   const display = buildMentorProfileDisplay(row, userRow ?? null);
   const initial = {
     intro: display.intro,
+    bio: display.bio,
     university: display.university,
     department: display.department,
     subjects: display.subjects,

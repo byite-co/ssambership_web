@@ -29,16 +29,16 @@ export async function uploadMentorAvatar(
   supabase: SupabaseClient,
   userId: string,
   file: { buffer: Buffer; mime: string }
-): Promise<{ url: string | null; error: string | null }> {
+): Promise<{ url: string | null; path: string | null; error: string | null }> {
   if (!ALLOWED.has(file.mime)) {
-    return { url: null, error: MENTOR_AVATAR_TYPE_ERROR };
+    return { url: null, path: null, error: MENTOR_AVATAR_TYPE_ERROR };
   }
   if (file.buffer.length > MAX_BYTES) {
-    return { url: null, error: MENTOR_AVATAR_SIZE_ERROR };
+    return { url: null, path: null, error: MENTOR_AVATAR_SIZE_ERROR };
   }
   const magicError = validateMagicBytesForMime(file.buffer, file.mime);
   if (magicError) {
-    return { url: null, error: magicError };
+    return { url: null, path: null, error: magicError };
   }
 
   const path = buildMentorAvatarObjectPath(userId, file.mime);
@@ -48,9 +48,39 @@ export async function uploadMentorAvatar(
     upsert: false,
   });
   if (error) {
-    return { url: null, error: error.message };
+    return { url: null, path: null, error: error.message };
   }
 
   const { data } = supabase.storage.from(MENTOR_AVATAR_BUCKET).getPublicUrl(path);
-  return { url: data.publicUrl, error: null };
+  return { url: data.publicUrl, path, error: null };
+}
+
+/** public URL 또는 `bucket/path`/`path` 문자열에서 profile-avatars 객체 경로를 추출한다. */
+function mentorAvatarObjectPath(urlOrPath: string | null | undefined): string | null {
+  const raw = typeof urlOrPath === "string" ? urlOrPath.trim() : "";
+  if (!raw) return null;
+  const marker = `/${MENTOR_AVATAR_BUCKET}/`;
+  const idx = raw.indexOf(marker);
+  if (idx >= 0) {
+    const p = raw.slice(idx + marker.length).split("?")[0]?.split("#")[0]?.trim() ?? "";
+    return p || null;
+  }
+  // 이미 순수 경로(userId/uuid.ext)인 경우
+  if (!raw.startsWith("http")) return raw.replace(/^\/+/, "") || null;
+  return null;
+}
+
+/**
+ * 멘토 아바타 객체를 삭제한다(고아·교체 구객체 보상용). profile-avatars 버킷만 대상.
+ * 삭제 오류를 은폐하지 않고 { ok, error } 로 반환한다.
+ */
+export async function deleteMentorAvatarObject(
+  supabase: SupabaseClient,
+  urlOrPath: string | null | undefined
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const path = mentorAvatarObjectPath(urlOrPath);
+  if (!path) return { ok: false, error: "invalid_avatar_ref" };
+  const { error } = await supabase.storage.from(MENTOR_AVATAR_BUCKET).remove([path]);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
 }
