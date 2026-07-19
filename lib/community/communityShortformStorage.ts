@@ -69,6 +69,22 @@ export function isShortformStoredThumbnailRef(value: string | null | undefined):
   return parseStorageRef(value, SHORTFORM_THUMB_BUCKET) != null;
 }
 
+/**
+ * 저장된 숏폼 video ref 를 Storage 에서 삭제한다(고아·교체 구파일 보상용).
+ * - parseStorageRef 로 검증해 `shortform-videos` 버킷 형식이 아니면 삭제하지 않는다(임의 ref 삭제 방지).
+ * - 삭제 오류를 조용히 삼키지 않고 { ok, error } 로 반환 → 호출자가 primary DB 오류와 함께 기록한다.
+ */
+export async function deleteShortformVideoStoredRef(
+  supabase: SupabaseClient,
+  storedRef: string | null | undefined
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const ref = parseStorageRef(storedRef, SHORTFORM_VIDEO_BUCKET);
+  if (!ref) return { ok: false, error: "invalid_ref" };
+  const { error } = await supabase.storage.from(ref.bucket).remove([ref.path]);
+  if (error) return { ok: false, error: error.message };
+  return { ok: true };
+}
+
 export function resolveShortformVideoUrl(
   supabase: SupabaseClient,
   stored: string | null | undefined

@@ -12,7 +12,11 @@ import {
   updateShortformPost,
 } from "@/lib/community/communityShortformMutations";
 import type { ShortformCategorySlug } from "@/lib/community/communityShortformConstants";
-import { uploadShortformVideo } from "@/lib/community/communityShortformStorage";
+import {
+  deleteShortformVideoStoredRef,
+  isShortformStoredVideoRef,
+  uploadShortformVideo,
+} from "@/lib/community/communityShortformStorage";
 import { createClient } from "@/lib/supabase/server";
 import { assertAccountActive } from "@/lib/auth/accountStatus";
 import {
@@ -37,6 +41,19 @@ function appendQuery(path: string, key: string, value: string): string {
   return `${path}${sep}${key}=${encodeURIComponent(value)}`;
 }
 
+// 이번 요청에서 새로 업로드했으나 DB write 가 실패한 video 객체를 보상 삭제한다.
+// 삭제 실패는 은폐하지 않고 구조화 로그로 남긴다(primary 오류는 호출자가 redirect 로 전달).
+async function compensateNewShortformVideo(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  uploadedRef: string | null
+): Promise<void> {
+  if (!uploadedRef) return;
+  const del = await deleteShortformVideoStoredRef(supabase, uploadedRef);
+  if (!del.ok) {
+    console.error("[shortform] orphan video 보상 삭제 실패", { uploadedRef, error: del.error });
+  }
+}
+
 export async function submitShortformUploadAction(formData: FormData) {
   const returnPath = communityComposePath("shortform");
   const { user } = await getServerAuthUser();
@@ -51,12 +68,14 @@ export async function submitShortformUploadAction(formData: FormData) {
   const intent = String(formData.get("intent") ?? "publish");
   const status = intent === "draft" ? "draft" : "published";
   const draftId = String(formData.get("draftId") ?? "").trim();
+  const isUpdate = Boolean(draftId) && UUID_RE.test(draftId);
   const title = String(formData.get("title") ?? "").trim();
   const category = String(formData.get("category") ?? "study") as ShortformCategorySlug;
   const body = String(formData.get("body") ?? "").trim();
   const source = String(formData.get("source") ?? "").trim();
   const rights = formData.get("rightsAck") === "on";
 
+  // 인증·입력 검증은 업로드 전에 끝낸다(고아 업로드 방지).
   if (!rights && status === "published") err(returnPath, "rights");
   if (!title) err(returnPath, "title");
   if (findRestrictedPhraseInText(title, body)) err(returnPath, TRUST_SAFETY_COMMUNITY_ERROR_CODE);
@@ -64,15 +83,36 @@ export async function submitShortformUploadAction(formData: FormData) {
   const safeTitle = maskContactInUserText(title);
   const safeBody = maskContactInUserText(body);
 
+  // UPDATE 경로: 새 업로드 전에 소유권 조건으로 기존 video_url 을 조회한다(교체 시 구파일 차집합 삭제용).
+  let oldVideoRef: string | null = null;
+  if (isUpdate) {
+    const { data: existing } = await supabase
+      .from("shortform_posts")
+      .select("video_url")
+      .eq("id", draftId)
+      .eq("author_id", user.id)
+      .maybeSingle();
+    const ev = existing && typeof (existing as { video_url?: unknown }).video_url === "string"
+      ? (existing as { video_url: string }).video_url
+      : null;
+    oldVideoRef = ev;
+  }
+
   const videoFile = formData.get("video");
   let videoUrl = String(formData.get("videoUrl") ?? "").trim();
+  let uploadedRef: string | null = null; // 이번 요청에서 새로 업로드한 ref(실패 시 보상 대상)
   if (videoFile instanceof File && videoFile.size > 0) {
     const buf = Buffer.from(await videoFile.arrayBuffer());
     const up = await uploadShortformVideo(supabase, user.id, buf, videoFile.type || "video/mp4");
     if (up.error) err(returnPath, up.error === "size" ? "video_size" : "video_upload");
     videoUrl = up.url ?? "";
+    uploadedRef = up.url ?? null;
   }
-  if (!videoUrl && status === "published") err(returnPath, "video");
+  if (!videoUrl && status === "published") {
+    // 아직 DB write 전. 방금 업로드한 새 객체가 있으면 고아 방지 위해 보상 삭제 후 오류.
+    await compensateNewShortformVideo(supabase, uploadedRef);
+    err(returnPath, "video");
+  }
 
   const label = authorStoredLabelFromProfile(profile);
   const payload = {
@@ -87,13 +127,24 @@ export async function submitShortformUploadAction(formData: FormData) {
     authorLabel: label,
   };
 
-  const r =
-    draftId && UUID_RE.test(draftId)
-      ? await updateShortformPost(supabase, user.id, draftId, payload)
-      : await insertShortformPost(supabase, user.id, payload);
+  const r = isUpdate
+    ? await updateShortformPost(supabase, user.id, draftId, payload)
+    : await insertShortformPost(supabase, user.id, payload);
 
   if (!r.ok) {
+    // DB 실패(INSERT/UPDATE 오류·UPDATE 0행) → 이번 요청 신규 video 고아 방지 보상 삭제.
+    await compensateNewShortformVideo(supabase, uploadedRef);
     err(returnPath, r.error);
+  }
+
+  // DB 성공 → 교체된 구영상 차집합 삭제(old != final 이고 old 가 우리 stored video ref 일 때만).
+  // 썸네일은 현재 액션이 업로드하지 않으므로 보상 대상 제외.
+  if (isUpdate && oldVideoRef && oldVideoRef !== videoUrl && isShortformStoredVideoRef(oldVideoRef)) {
+    const del = await deleteShortformVideoStoredRef(supabase, oldVideoRef);
+    if (!del.ok) {
+      // post-commit 실패는 DB 성공을 되돌릴 수 없다 → 구조화 경고 로그, 은폐 금지, 재정리 대상.
+      console.error("[shortform] 교체 구영상 정리 실패", { postId: r.id, oldVideoRef, error: del.error });
+    }
   }
 
   revalidatePath("/community/shortform");

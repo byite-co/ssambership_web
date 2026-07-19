@@ -39,23 +39,10 @@ export async function insertShortformPost(
     author_label: input.authorLabel,
   };
 
+  // 폴백 INSERT 제거: video_url·status·author_label 을 누락한 채 status default('published') 로
+  // 강제공개되던 결함 경로를 없앤다. DB 오류는 그대로 실패로 반환한다.
   const { data, error } = await supabase.from("shortform_posts").insert(payload).select("id").maybeSingle();
-  if (error) {
-    const fb = await supabase
-      .from("shortform_posts")
-      .insert({
-        author_id: userId,
-        title,
-        body,
-        category: input.category === "all" ? "study" : input.category,
-        source: input.source || null,
-      })
-      .select("id")
-      .maybeSingle();
-    if (fb.error) return { ok: false, error: "db" };
-    const id = fb.data && typeof (fb.data as { id: string }).id === "string" ? (fb.data as { id: string }).id : "";
-    return id ? { ok: true, id } : { ok: false, error: "db" };
-  }
+  if (error) return { ok: false, error: "db" };
   const id = data && typeof (data as { id: string }).id === "string" ? (data as { id: string }).id : "";
   return id ? { ok: true, id } : { ok: false, error: "db" };
 }
@@ -92,9 +79,10 @@ export async function updateShortformPost(
     .select("id")
     .maybeSingle();
 
+  // 0행 UPDATE(비존재·비소유)를 성공으로 오판하지 않는다: 반환 행이 있을 때만 성공.
   if (error) return { ok: false, error: "db" };
-  const id = data && typeof (data as { id: string }).id === "string" ? (data as { id: string }).id : postId;
-  return { ok: true, id };
+  const id = data && typeof (data as { id: string }).id === "string" ? (data as { id: string }).id : "";
+  return id ? { ok: true, id } : { ok: false, error: "db" };
 }
 
 export async function toggleShortformLike(
