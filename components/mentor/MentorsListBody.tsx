@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { SearchX } from "lucide-react";
 import type { MentorsListFilters } from "@/lib/mentor/mentorsListSearchParams";
@@ -33,6 +34,10 @@ export function MentorsListBody(props: {
   isLoggedIn: boolean;
   schoolOptions: { id: MentorSchoolFilter; label: string }[];
   mentorTypeOptions: { id: MentorTypeFilter; label: string }[];
+  /** P2-27: scope 배너(찜/최근). 있으면 메인 상단에 표시 */
+  scopeBanner?: ReactNode;
+  /** P2-27: 메인 목록 대체 슬롯(예: 최근 본 멘토 클라이언트 뷰·로그인 필요 안내) */
+  mainOverride?: ReactNode;
 }) {
   const { filters, list } = props;
   const hrefBase = filtersToHrefRecord(filters);
@@ -88,6 +93,12 @@ export function MentorsListBody(props: {
         </aside>
 
         <main className="min-w-0 xl:col-span-7">
+          {props.scopeBanner ? <div className="mb-4">{props.scopeBanner}</div> : null}
+
+          {props.mainOverride ? (
+            props.mainOverride
+          ) : (
+          <>
           <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
             <p className="text-sm font-bold text-slate-700">
               {list.totalCount > 0 ? (
@@ -166,6 +177,8 @@ export function MentorsListBody(props: {
                 </span>
               </div>
             </>
+          )}
+          </>
           )}
         </main>
 
