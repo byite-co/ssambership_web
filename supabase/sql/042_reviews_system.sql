@@ -1,65 +1,43 @@
--- 멘토 리뷰 (학생 작성, 멘토 답글 1회, 관리자 숨김)
+-- 멘토 리뷰 (학생 작성, 멘토 답글 1회, 관리자 모더레이션)
+-- P0-2 교정: 004(reviews base = author_id/body) 위 멱등 정합.
+--   구 042형(student_id/content NOT NULL · unique(mentor_id,student_id) · idx_reviews_student ·
+--   student_id 기반 정책)을 폐기한다. 정책은 033_* / 045_* / 126_reviews_rls_hardening.sql 정본이므로
+--   여기서 재정의하지 않는다(특히 is_blinded 미검사 reviews_select_public 생성 금지).
+--   실차감액/자격은 서버(RPC·check_review_eligibility)에서 검증.
+
 create table if not exists public.reviews (
   id uuid primary key default gen_random_uuid(),
-  mentor_id uuid not null references public.mentor_profiles (user_id) on delete cascade,
-  student_id uuid not null references auth.users (id) on delete cascade,
-  subscription_count integer not null,
+  mentor_id uuid not null references public.users (id) on delete cascade,
+  author_id uuid not null references public.users (id) on delete cascade,
   rating integer not null check (rating between 1 and 5),
-  content text not null,
+  body text not null,
+  subscription_count integer,
   mentor_reply text,
   mentor_replied_at timestamptz,
   is_hidden boolean not null default false,
-  created_at timestamptz not null default now(),
-  constraint reviews_one_per_pair unique (mentor_id, student_id)
+  is_blinded boolean not null default false,
+  moderation_state text not null default 'visible',
+  moderated_at timestamptz,
+  moderated_by uuid references auth.users (id) on delete set null,
+  created_at timestamptz not null default now()
 );
 
+-- 004형 base 위 멱등 정합 (기존 설치가 author_id/body 최소형이면 부가 컬럼 보강)
+alter table public.reviews add column if not exists author_id uuid;
+alter table public.reviews add column if not exists body text;
+alter table public.reviews add column if not exists subscription_count integer;
+alter table public.reviews add column if not exists mentor_reply text;
+alter table public.reviews add column if not exists mentor_replied_at timestamptz;
+alter table public.reviews add column if not exists is_blinded boolean not null default false;
+alter table public.reviews add column if not exists moderation_state text not null default 'visible';
+alter table public.reviews add column if not exists moderated_at timestamptz;
+alter table public.reviews add column if not exists moderated_by uuid;
+
 create index if not exists idx_reviews_mentor_created on public.reviews (mentor_id, created_at desc);
-create index if not exists idx_reviews_student on public.reviews (student_id);
+create index if not exists idx_reviews_author on public.reviews (author_id);
+create unique index if not exists uq_reviews_mentor_author on public.reviews (mentor_id, author_id);
 
 alter table public.reviews enable row level security;
+-- 정책 미정의(정본: 033_* / 045_* / 126_reviews_rls_hardening.sql).
 
--- 공개 읽기: 숨김 제외 (본인·멘토·관리자는 숨김 포함 조회)
-drop policy if exists "reviews_select_public" on public.reviews;
-create policy "reviews_select_public" on public.reviews
-  for select
-  using (
-    is_hidden = false
-    or (select auth.uid()) = student_id
-    or (select auth.uid()) = mentor_id
-    or exists (
-      select 1 from public.users u
-      where u.id = (select auth.uid()) and u.role = 'admin'
-    )
-  );
-
--- 학생 작성 (자격은 서버/API에서 검증)
-drop policy if exists "reviews_insert_student" on public.reviews;
-create policy "reviews_insert_student" on public.reviews
-  for insert to authenticated
-  with check ((select auth.uid()) = student_id);
-
--- 멘토 답글 (본인 리뷰에만)
-drop policy if exists "reviews_update_mentor_reply" on public.reviews;
-create policy "reviews_update_mentor_reply" on public.reviews
-  for update to authenticated
-  using ((select auth.uid()) = mentor_id)
-  with check ((select auth.uid()) = mentor_id);
-
--- 관리자 숨김/복구
-drop policy if exists "reviews_admin_moderate" on public.reviews;
-create policy "reviews_admin_moderate" on public.reviews
-  for update to authenticated
-  using (
-    exists (
-      select 1 from public.users u
-      where u.id = (select auth.uid()) and u.role = 'admin'
-    )
-  )
-  with check (
-    exists (
-      select 1 from public.users u
-      where u.id = (select auth.uid()) and u.role = 'admin'
-    )
-  );
-
-comment on table public.reviews is '멘토 리뷰: 동일 멘토 2회+ 구독 학생만 작성, 수정 불가, 멘토 답글 1회';
+comment on table public.reviews is '멘토 리뷰: 자격 검증(유료 2회+ 구독) 후 학생 작성, 본문 수정 불가, 멘토 답글 1회, 관리자 모더레이션';
