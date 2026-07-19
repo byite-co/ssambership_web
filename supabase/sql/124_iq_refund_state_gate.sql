@@ -1,12 +1,13 @@
 -- --------------------------------------------------------------------------
 -- 124_iq_refund_state_gate.sql   (P0-5 · 개별질문 답변후 셀프환불 차단 — 경쟁조건 제거)
--- [DRAFT — staging(ssambership-staging) 미적용 · 별도 승인 대기. 적용 시 표식 제거 + 매니페스트 기재]
--- 목적: 학생 셀프환불 래퍼 refund_individual_question(p_question_id) 에 상태 게이트를 추가한다.
+-- [DRAFT — DB 미적용]  (staging 적용은 오너 승인 후 · 적용 이력은 docs/audit/sql_apply_manifest.md)
+-- 목적: 학생 셀프환불 래퍼 refund_individual_question(p_question_id) 에 상태 게이트를 추가해,
+--   답변받은(answered) 개별질문의 셀프환불을 차단하고 경쟁조건(claimed↔answer 전이)을 제거한다.
 --   현재 래퍼(091)는 "본인 여부"만 확인하고 core(refund_individual_question_hold, 070)는
 --   refunded/released/payout-ledger/hold-missing 만 차단해 'answered'(및 expired/canceled 등)를
 --   막지 않는다 → 학생이 답변을 받은 뒤에도 셀프환불이 가능(자금 결함).
 --   래퍼에서 대상 행을 FOR UPDATE 로 잠근 뒤 소유자·상태를 판정해 경쟁조건(claimed↔answer 전이)을 제거한다.
--- 선행: 070(core refund_individual_question_hold)·091(wrapper refund_individual_question).
+-- 선행: 070, 091  (070 = core refund_individual_question_hold · 091 = wrapper refund_individual_question)
 -- ⚠️ core 는 변경하지 않는다(향후 감사가능 관리자 환불 여지 유지). 웹 만료 배치
 --    (individualQuestionExpiryBatch.ts)는 core 를 service_role 로 직접 호출하므로 본 변경과 무관.
 -- 허용 환불 상태(정본): escrowed / open / assigned / claimed
@@ -15,7 +16,7 @@
 -- --------------------------------------------------------------------------
 
 create or replace function public.refund_individual_question(p_question_id uuid)
-returns individual_question_escrow_result
+returns public.individual_question_escrow_result
 language plpgsql
 security definer
 set search_path to 'public'
@@ -68,3 +69,9 @@ begin
   return v_res;
 end;
 $$;
+
+comment on function public.refund_individual_question(uuid) is
+  'P0-5 상태 게이트 래퍼: FOR UPDATE 로 대상 개별질문을 잠근 뒤 소유자를 확인하고, '
+  '허용 상태(escrowed/open/assigned/claimed)만 core(refund_individual_question_hold) 로 위임한다. '
+  'answered 등 그 외 상태는 REFUND_NOT_ALLOWED 로 거부하고, 이미 refunded 인 건은 core 위임으로 '
+  'already_refunded(ok=true) 멱등 반환한다. core 정의·권한은 변경하지 않는다.';
