@@ -17,6 +17,7 @@ import { maskContactInUserText } from "@/lib/safety/trustSafetyText";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { loadSchoolClassificationCatalogs } from "@/lib/mentor/schoolClassificationCatalog";
+import { normalizeSubjectCode } from "@/lib/subjects/subjectCatalog";
 
 const STUDENT_LIST_PATH = "/individual-questions";
 const MENTOR_LIST_PATH = "/mentor/individual-questions";
@@ -219,7 +220,8 @@ export async function createDirectIndividualQuestionAction(formData: FormData) {
   const idempotencyKey = textValue(formData, "idempotencyKey");
   const title = textValue(formData, "title");
   const body = textValue(formData, "body");
-  const subject = optionalText(formData, "subject");
+  // P2-23: 과목은 정본 subjects.code 로 정규화한다(미매핑 입력은 null). 자유 문자열을 그대로 저장하지 않는다.
+  const subject = normalizeSubjectCode(optionalText(formData, "subject"));
   const topic = optionalText(formData, "topic");
   const attachment = formData.get("attachment");
   // origin=iq-tab: 개별 질문 탭 내 작성 화면(/individual-questions/direct/[mentorId])에서 제출.
@@ -301,7 +303,8 @@ export async function createOpenIndividualQuestionAction(formData: FormData) {
   const idempotencyKey = textValue(formData, "idempotencyKey");
   const title = textValue(formData, "title");
   const body = textValue(formData, "body");
-  const subject = optionalText(formData, "subject");
+  // P2-23: 과목은 정본 subjects.code 로 정규화한다(미매핑 입력은 null). 자유 문자열을 그대로 저장하지 않는다.
+  const subject = normalizeSubjectCode(optionalText(formData, "subject"));
   const topic = optionalText(formData, "topic");
   const requiredSchoolTier = optionalText(formData, "requiredSchoolTier");
   const requiredMajorCategory = optionalText(formData, "requiredMajorCategory");
