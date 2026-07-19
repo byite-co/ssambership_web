@@ -1,6 +1,8 @@
 -- --------------------------------------------------------------------------
 -- 129_shortform_author_label.sql   (P0-3 · 숏폼 작성자 라벨 컬럼 정본화)
--- [DRAFT — DB 미적용]  (staging 적용은 오너 승인 후 · 적용 이력은 docs/audit/sql_apply_manifest.md)
+-- [적용됨 — ssambership-staging 에 2026-07-19 단일 트랜잭션(lock_timeout 3s, LOCK shortform_posts) 적용.
+--   구조 assertion A1~A5 PASS(컬럼 text·nullable·default 없음 / 신규 제약 0 / 정책 7개 불변 / RLS on / 0행).
+--   rollback-only fixture 는 별도 미승인이라 생략. 원장 미기재 — 적용 이력: docs/audit/sql_apply_manifest.md]
 -- 목적: shortform_posts 에 작성자 표시 라벨 author_label(text, nullable) 컬럼을 추가해,
 --   웹 writer(insertShortformPost/updateShortformPost)가 이미 payload 로 기록하는 필드와
 --   스키마 계약을 일치시킨다. 현재 컬럼 부재로 정상 INSERT 가 실패 → 폴백 INSERT(video_url·status
