@@ -1,32 +1,45 @@
 -- --------------------------------------------------------------------------
 -- 126_reviews_rls_hardening.sql   (P1-7 · 리뷰 RLS 정본화 — 다세대 정책 정리 + 컬럼 강제)
--- 목적: reviews 의 중복/레거시 정책(rev_ins·rev_update_own(with_check 없음)·
---   reviews_select_public(is_blinded 미검사)·"누구나 리뷰 읽기"·"학생만 리뷰 작성"·
---   "멘토 답글 작성")을 전부 제거하고, 자격검증 INSERT·역할별 UPDATE 정책만 남긴다.
---   행 접근은 정책이, 컬럼 범위는 BEFORE UPDATE 트리거가 강제한다.
--- 선행: 123_reviews_converge.sql(스키마 수렴) · 066_review_eligibility_billing_events.sql
---   (check_review_eligibility). is_admin()·check_review_eligibility()는 이미 존재.
+-- [DRAFT — staging(ssambership-staging) 미적용 · 123 검증 통과 후 별도 승인 대기. 적용 시 표식 제거 + 원장 기재]
+-- 목적: reviews 의 중복/레거시 정책을 전부 제거하고, 자격검증 INSERT·역할별 UPDATE·
+--   숨김/블라인드 보호 SELECT 정책만 남긴다. 행 접근은 정책이, 컬럼 범위는 트리거가 강제.
+--   ⚠️ 004의 rev_select USING(true) 가 남으면 모든 SELECT 정책과 OR 결합되어 숨김·블라인드
+--      보호가 무력화되므로 반드시 제거한다. 순수 042형/045형의 student_id·author 정책도 제거.
+-- 선행: 066 (check_review_eligibility), 123 (reviews 스키마 수렴·fail-closed 상태).
+--   is_admin()·check_review_eligibility() 는 이미 존재. 123 로 정책 0개(fail-closed)인 상태에서
+--   본 파일이 정본 정책을 다시 연다(적용 전까지 리뷰 트래픽 재개 금지).
 -- --------------------------------------------------------------------------
 
 alter table public.reviews enable row level security;
 
--- 1) 기존 정책 전부 제거 (레거시 + 정본 구본 — 아래에서 정본만 재생성) ----------------
-drop policy if exists "reviews_select_public"          on public.reviews;  -- 042형(is_blinded 미검사)
-drop policy if exists "누구나 리뷰 읽기"                 on public.reviews;  -- 레거시(is_blinded 미검사)
-drop policy if exists "reviews_select_public_visible"   on public.reviews;
-drop policy if exists "reviews_select_admin"            on public.reviews;
-drop policy if exists "학생만 리뷰 작성"                 on public.reviews;  -- 레거시(자격 미검증)
-drop policy if exists "rev_ins"                         on public.reviews;  -- 004형(자격 미검증)
-drop policy if exists "reviews_insert_student"          on public.reviews;
-drop policy if exists "멘토 답글 작성"                   on public.reviews;  -- 레거시
-drop policy if exists "reviews_update_mentor_reply"     on public.reviews;
-drop policy if exists "reviews_update_mentor"           on public.reviews;
-drop policy if exists "reviews_admin_moderate"          on public.reviews;
-drop policy if exists "reviews_update_admin"            on public.reviews;
-drop policy if exists "rev_update_own"                  on public.reviews;  -- 004형(with_check 없음 — 위험)
+-- 1) 기존 정책 전부 제거 -----------------------------------------------------
+-- (a) 알려진 이름 명시 제거 (감사용)
+drop policy if exists "rev_select"                     on public.reviews;  -- 004 USING(true) — 치명적
+drop policy if exists "rev_ins"                        on public.reviews;  -- 004 (자격 미검증)
+drop policy if exists "rev_update_own"                 on public.reviews;  -- 004 (with_check 없음)
+drop policy if exists "reviews_select_public"          on public.reviews;  -- 042형 (is_blinded 미검사)
+drop policy if exists "reviews_select_public_visible"  on public.reviews;
+drop policy if exists "reviews_select_admin"           on public.reviews;
+drop policy if exists "reviews_insert_author"          on public.reviews;  -- 구 자격 정책명
+drop policy if exists "reviews_insert_student"         on public.reviews;  -- 042형(student_id)/045형(author_id)
+drop policy if exists "reviews_update_mentor_reply"    on public.reviews;
+drop policy if exists "reviews_update_mentor"          on public.reviews;
+drop policy if exists "reviews_admin_moderate"         on public.reviews;
+drop policy if exists "reviews_update_admin"           on public.reviews;
+drop policy if exists "누구나 리뷰 읽기"                on public.reviews;
+drop policy if exists "학생만 리뷰 작성"                on public.reviews;
+drop policy if exists "멘토 답글 작성"                  on public.reviews;
 
--- 2) SELECT 정본 ------------------------------------------------------------
---   공개: 숨김/블라인드 아닌 행만. 관리자: 전체.
+-- (b) 그 외 남은 정책까지 이름 불문 전부 제거 (누락 방지 — OR 결합 무력화 봉쇄)
+do $$
+declare pol record;
+begin
+  for pol in select policyname from pg_policies where schemaname='public' and tablename='reviews' loop
+    execute format('drop policy if exists %I on public.reviews', pol.policyname);
+  end loop;
+end $$;
+
+-- 2) SELECT 정본 — 공개: 숨김/블라인드 아닌 행만. 관리자: 전체. -----------------
 create policy "reviews_select_public_visible" on public.reviews
   for select to anon, authenticated
   using (coalesce(is_hidden, false) = false and coalesce(is_blinded, false) = false);
@@ -43,8 +56,7 @@ create policy "reviews_insert_student" on public.reviews
     and public.check_review_eligibility(mentor_id, (select auth.uid()))
   );
 
--- 4) UPDATE 정본 — 행 접근만 허용(컬럼 범위는 5의 트리거가 강제) --------------------
---   멘토 본인 리뷰: 답글용. 관리자: 모더레이션용. 학생(작성자) UPDATE 정책 없음.
+-- 4) UPDATE 정본 — 행 접근만(컬럼 범위는 5의 트리거) -----------------------------
 create policy "reviews_update_mentor" on public.reviews
   for update to authenticated
   using ((select auth.uid()) = mentor_id)
@@ -105,11 +117,8 @@ begin
     if old.mentor_reply is not null and new.mentor_reply is distinct from old.mentor_reply then
       raise exception 'reviews: mentor reply already set (one-time only)';
     end if;
-    if new.mentor_reply is distinct from old.mentor_reply then
-      new.mentor_replied_at := now();
-    else
-      new.mentor_replied_at := old.mentor_replied_at;
-    end if;
+    if new.mentor_reply is distinct from old.mentor_reply
+      then new.mentor_replied_at := now(); else new.mentor_replied_at := old.mentor_replied_at; end if;
     return new;
   end if;
 
