@@ -69,7 +69,9 @@
 | `130` | P2-14 숏폼 scrap reaction CHECK+RLS |
 | `131` | P1-13 구독 생성/재활성화 RPC |
 
-다음 신규 임의번호는 위 예약을 건너뛴 **`132`**부터.
+`132_notification_outbox_foundation.sql` = P1-11F 알림 outbox foundation(적용됨). **클린설치에서 127(P1-8)·131(P1-13)보다 선행** 적용해야 한다(도메인 RPC 가 `record_domain_notification` 호출).
+
+다음 신규 임의번호는 위 예약을 건너뛴 **`133`**부터.
 
 ## 7. 클린 DB 재현 (검증 부채 — 미실행)
 
