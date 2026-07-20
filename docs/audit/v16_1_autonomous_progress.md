@@ -45,7 +45,8 @@
 | P1-13 구독·결제 원자 상태기계 | 미착수 | 금융 상태기계 신규 적용은 실데이터 대사(현재 0행이나 정본 계보 불명)·독립 2세션·오너 정책 확인 선행 권장. 저장소에 payments/subscriptions 정본 계보가 불완전(DB-앞섬). |
 | P1-10 회원탈퇴 saga + P2-22 | 부분 존재 | `anonymize_user_for_deletion`·`115_account_deletion` 이 DB 에 존재. durable job 상태기계·write/storage gate 계약은 미완. 실삭제 금지 유지. |
 | P1-11 outbox worker 잔여 + P2-17 | foundation 존재 | `notification_outbox`(lease/retry/dead-letter)·`record_domain_notification` 존재. worker claim/lease/dead-letter 소비자·mock 검증 미완. P2-17 소비자 부재로 WAITING. |
-| P3-8 realtime / P3-9 학생명 RPC | 미착수(P1-8 후) | realtime publication 실조회 후 messages/threads 추가 여부 판단 필요. |
+| P3-8 realtime | **완료** | 131 적용. `supabase_realtime` 에 `question_messages`·`question_threads` 추가(기존 attachments만) → 3테이블 멤버십 확인. SELECT RLS 로 당사자만 수신. |
+| P3-9 학생명 RPC | **부분 완료** | 132 적용(PII RPC anon/public EXECUTE 회수). 나머지(활성구독/질문방 당사자 기준으로 노출 인가 재정의)는 현행 `custom_request_orders` 기준과 다른 집합으로의 기능 변경 → DEFERRED_PRODUCT_DECISION. |
 | P2-25 지급 스택 | 미착수 | `105–114` 존재. 정적·동시성 검증 통과 전 적용 금지 규칙. 독립 2세션 부재. |
 | 검증 부채(P0-1~5, P2-24) | 유지 | E2E 인증환경 부재로 상태 유지. |
 

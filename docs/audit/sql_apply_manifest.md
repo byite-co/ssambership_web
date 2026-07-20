@@ -149,6 +149,8 @@
 | 번호 | 적용 | 파일 | 비고 |
 | --- | --- | --- | --- |
 | 130 | yes | `130_p1_8a_question_room_atomic_rpc.sql` | P1-8A. `free_question_usage.thread_id` 수렴(FK ON DELETE SET NULL) + 원자 RPC 5종(`qna_create_free_question_thread`/`qna_append_message`/`qna_confirm_thread`/`qna_flag_wrong_answer`/`qna_register_attachment`). SECURITY DEFINER, execute={authenticated,service_role} (anon revoke). 기존 direct-write 정책·GRANT 는 유지(앱 전환 전 P1-8B 로 이관). rollback-only fixture 14/14 PASS. 동시성(독립 2세션) 미검증 = BLOCKED_ENV. |
+| 131 | yes | `131_p3_8_realtime_messages_threads.sql` | P3-8. `supabase_realtime` publication 에 `question_messages`·`question_threads` 추가(117 은 attachments 만). 멱등. SELECT RLS 로 당사자만 수신. 적용 후 3테이블 멤버십 확인. |
+| 132 | yes | `132_p3_9_student_nickname_rpc_anon_revoke.sql` | P3-9(부분). PII 반환 `get_mentor_student_nicknames(uuid[])` 의 anon/public EXECUTE 회수(심층방어). 나머지 P3-9(인가 집합 재정의)는 제품 결정 대기. |
 
 ## 출시 전 대조 포인트
 
