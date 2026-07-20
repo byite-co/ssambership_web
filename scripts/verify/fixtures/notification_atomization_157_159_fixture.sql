@@ -10,6 +10,9 @@ set local search_path to public;
 
 -- ── fixture 사용자 ───────────────────────────────────────────────────────────
 -- auth.users FK 충족용 최소 행(전부 rollback). 스키마 드리프트 시 컬럼 보정.
+-- 주의: 실 Supabase 에는 on_auth_user_created 트리거(handle_new_auth_user)가 있어 auth.users INSERT 가
+--   public.users 행을 자동 생성한다(메타 없으면 role=student·full_name=null). 트리거가 없는 로컬 스텁과
+--   양쪽에서 동작하도록 public.users/mentor_profiles 는 ON CONFLICT DO UPDATE 로 정본 값을 강제한다.
 insert into auth.users (instance_id, id, aud, role, email, created_at, updated_at)
 values
   ('00000000-0000-0000-0000-000000000000', '00000000-0000-4000-8000-0000000157a1', 'authenticated', 'authenticated', 'fx157-student1@test.local', now(), now()),
@@ -21,10 +24,16 @@ insert into public.users (id, role, full_name, nickname, email) values
   ('00000000-0000-4000-8000-0000000157a1', 'student', '검증학생일', null, 'fx157-student1@test.local'),
   ('00000000-0000-4000-8000-0000000157a2', 'student', '검증학생이', null, 'fx157-student2@test.local'),
   ('00000000-0000-4000-8000-0000000157b1', 'mentor', '검증멘토', null, 'fx157-mentor@test.local'),
-  ('00000000-0000-4000-8000-0000000157c1', 'admin', '검증관리자', null, 'fx157-admin@test.local');
+  ('00000000-0000-4000-8000-0000000157c1', 'admin', '검증관리자', null, 'fx157-admin@test.local')
+on conflict (id) do update set
+  role = excluded.role, full_name = excluded.full_name,
+  nickname = excluded.nickname, email = excluded.email;
 
 insert into public.mentor_profiles (user_id, university_name, department_name, high_school_name)
-values ('00000000-0000-4000-8000-0000000157b1', '검증대학교', '검증학과', '검증고등학교');
+values ('00000000-0000-4000-8000-0000000157b1', '검증대학교', '검증학과', '검증고등학교')
+on conflict (user_id) do update set
+  university_name = excluded.university_name, department_name = excluded.department_name,
+  high_school_name = excluded.high_school_name;
 
 insert into public.subscriptions (id, student_id, mentor_id, plan_tier, status, current_period_start, current_period_end, next_billing_at)
 values

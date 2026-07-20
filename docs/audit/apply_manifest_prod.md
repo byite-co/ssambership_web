@@ -133,6 +133,10 @@
 |---|---|---|---|
 | `151` | `151_p1_10_account_deletion_saga.sql` | **P1-10 회원탈퇴 saga**(플래그 OFF): `account_deletion_jobs` 상태기계 + write-gate 트리거(지갑/결제/질문/커뮤니티 + Storage INSERT conjunct) + 상태전이 RPC. **0 job 이면 write gate 무영향**. 실 삭제 없음(dry-run). | 적용됨 |
 | `152` | `152_p1_11c_notification_delivery_worker.sql` | **P1-11C**: `device_tokens`(RLS·재소유) + `notification_deliveries`(토큰별 UNIQUE) + `notification_settings`(RLS·P2-17) + claim(SKIP LOCKED·lease)/reclaim/backoff·dead-letter/설정강제 fan-out RPC. 실 FCM 없음(worker dry-run). | 적용됨 |
+| `157` | `157_p1_11_subscription_notification_atomization.sql` | **P1-11**: 구독 4종 알림 원자화 트리거(예고 마커·renewal 성공/실패 전이·expired 전이) + 표시 헬퍼 4종. 132/064/068 이후 적용, 158/159 선행. | 적용됨(2026-07-20) |
+| `158` | `158_p1_11_mentor_notification_atomization.sql` | **P1-11**: 멘토 4종 알림 원자화 트리거(terminating/paused fan-out·suspended 환불·가격 변경 fan-out). 157 이후. | 적용됨(2026-07-20) |
+| `159` | `159_p1_11_custom_request_notification_atomization.sql` | **P1-11**: 맞춤의뢰 2종 알림 원자화 트리거(새 지원서·주문 메시지). 157 이후. | 적용됨(2026-07-20) |
+| `160` | `160_p1_11_notification_helper_acl_hardening.sql` | **P1-11 후속**: 157 표시 헬퍼 2종 anon/authenticated EXECUTE revoke(기본 권한 노출 표면 제거). 157 이후. | 적용됨(2026-07-20) |
 
 > 두 파일 모두 신규 객체만 추가(기존 무수정). 151 write gate·152 worker 는 각각 rollback-only fixture 로 staging 검증(전이·취소·gate·claim/lease/설정/invalid-token/dead-letter). production 배포는 각 기능 플래그 ON 시점.
 

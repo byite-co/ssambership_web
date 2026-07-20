@@ -1,4 +1,7 @@
 -- 157_p1_11_subscription_notification_atomization.sql
+-- [적용됨 — ssambership-staging 에 2026-07-20 단일 execute_sql(전문 그대로) 적용. staging fixture 24 assertion
+--   전부 PASS(rollback-only)·baseline 복원 확인. ACL 후속 보정: 160(표시 헬퍼 anon/authenticated revoke).
+--   원장 미기재 — 적용 이력: docs/audit/sql_apply_manifest.md]
 -- P1-11 알림 원자화 — 구독 4 이벤트. domain write 와 같은 트랜잭션에서
 -- record_domain_notification 를 AFTER 트리거로 호출 → 원자·멱등. 웹 best-effort 알림은 코드에서 제거.
 --

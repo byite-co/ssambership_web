@@ -74,8 +74,9 @@
 멘토 종료 환불 본문의 금액 표기 오류(cents 를 캐시로 그대로 출력 — 100배)를 트리거에서 `cents÷100` 으로 교정.
 
 **검증**: 로컬 스크래치 PG16 에서 정본 132+157+158+159 적용 + rollback-only fixture 24 assertion 전부 PASS
-(`scripts/verify/local_notification_trigger_check.sh`). **staging 적용은 PENDING** — 이 세션에 staging secret 이 없어
-`scripts/verify/fixtures/notification_atomization_157_159_fixture.sql` 로 적용 직후 재검증한다(READY_NOT_EXECUTED).
-staging 적용 전까지 preview 웹에서 위 10종 알림은 미생성(트리거 부재 + best-effort 제거) — 적용 순서: SQL 먼저.
+(`scripts/verify/local_notification_trigger_check.sh`). **staging(lbeqxarxothkmzqvpudy) 적용 완료(2026-07-20)** —
+157→158→159 커밋 전문 그대로 적용 + 후속 160(표시 헬퍼 ACL revoke). staging 에서 동일 fixture **24 assertion
+전부 PASS**, 새 트랜잭션 baseline 대조 전 항목 일치(실사용자 알림·금융 무변경). 상세: `docs/audit/sql_apply_manifest.md`.
+production 은 미적용 — 적용 순서는 runbook §1(SQL 먼저, 웹 나중)을 따른다.
 
 **잔여 앱 부채(WAITING_EXTERNAL_APP)**: 실기기 FCM 발송·device token 등록·앱 딥링크(변동 없음).

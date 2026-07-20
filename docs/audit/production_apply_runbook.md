@@ -1,4 +1,4 @@
-# Production 적용 런북 (SQL 122~159) — ⚠️ 실적용 금지, 준비 문서
+# Production 적용 런북 (SQL 122~160) — ⚠️ 실적용 금지, 준비 문서
 
 > 이 문서는 **production 에 적용하지 않는다**. staging(`ssambership-staging`)에만 적용·검증된 정본 SQL 의
 > production 적용 순서·전/후 점검·롤백 구분·진단 쿼리를 정리한 준비 문서다. 실적용은 오너 승인 후.
@@ -10,7 +10,7 @@
 `033`(admin_reviews / question_threads_topic), `034`(mentor_favorites / admin_disputes), `039`(custom_request_compat / storage_audit).
 → 146+ 신규 구간은 중복 없음(정본). clean-DB 적용은 `apply_manifest_prod.md`의 순서를 따른다.
 
-## 1. 적용 순서 (146~159, 신규 정본)
+## 1. 적용 순서 (146~160, 신규 정본)
 전부 **신규 객체만 추가**(기존 applied 정의 무수정). 순서 의존:
 1. `146` avatar/document 교차ref 진단 — READ-ONLY(미적용, 진단만).
 2. `147` 게시판 idempotency·soft-delete (037 이후).
@@ -26,12 +26,14 @@
 12. `157` 구독 4종 알림 원자화 트리거 (132·064·068 이후. 헬퍼 notification_* 를 158/159 가 사용 → 157 선행).
 13. `158` 멘토 4종 알림 원자화 트리거 (157·132·103·069·067 이후).
 14. `159` 맞춤의뢰 2종 알림 원자화 트리거 (157·132·003 이후).
+15. `160` 157 표시 헬퍼 ACL 최소화 — anon/authenticated EXECUTE revoke (157 직후 필수. Supabase 기본
+    권한이 secdef 헬퍼에 EXECUTE 를 부여하므로 production 적용 시에도 157 과 한 세트로 적용한다).
 
-> ⚠️ **157~159 는 staging 미적용**(이 세션에 staging secret 부재). staging 적용 →
-> `scripts/verify/fixtures/notification_atomization_157_159_fixture.sql`(rollback-only) 재검증 →
-> 그 다음에만 웹 배포. **웹이 best-effort 알림을 제거했으므로 SQL 이 웹보다 먼저 적용돼야 한다**
-> (순서 위반 시 구독/멘토/의뢰 알림 10종 미생성 창이 생긴다 — 금융/도메인 write 는 무영향).
-> 로컬 검증: `scripts/verify/local_notification_trigger_check.sh` = 스크래치 PG16 에서 24 assertion PASS.
+> ✅ **157~160 staging 적용 완료(2026-07-20)** — 커밋 전문 그대로 적용, staging fixture 24 assertion 전부
+> PASS + 새 트랜잭션 baseline 복원 확인(`docs/audit/sql_apply_manifest.md`). **웹 best-effort 제거 커밋은
+> SQL 적용 후에만 배포한다는 순서를 production 에서도 유지**(순서 위반 시 구독/멘토/의뢰 알림 10종 미생성 창 —
+> 금융/도메인 write 는 무영향). 로컬 검증: `scripts/verify/local_notification_trigger_check.sh` = 24 assertion PASS.
+> 참고: 실 Supabase 의 `on_auth_user_created` 트리거 때문에 fixture 사용자 생성은 `ON CONFLICT DO UPDATE` 보정판 사용.
 
 ## 2. 단계별 pre-check / post-check
 | SQL | pre-check | post-check |
@@ -43,12 +45,13 @@
 | 152 | notification_outbox(132) 존재 | device_tokens·deliveries·settings·claim RPC 존재 |
 | 153/156 | payout_run_items 중복 0(§4 진단), 105~114 적용 상태 | 전역 UNIQUE, pay_due dry-run 기본, scheduler_enabled=false |
 | 155 | individual_questions 트리거 미존재 | 트리거 3개 존재, 전이 시 알림 원자 |
-| 157 | 132 helper·notification_* 헬퍼 미존재 | billing event/subscriptions 트리거 3개+헬퍼 3개 존재, fixture A 절 PASS |
+| 157 | 132 helper·notification_* 헬퍼 미존재 | billing event/subscriptions 트리거 3개+헬퍼 4개 존재, fixture A 절 PASS |
 | 158 | 157 헬퍼 존재 | mentor_profiles/refunds/mentor_plans 트리거 4개 존재, fixture B 절 PASS |
 | 159 | 157 헬퍼 존재 | applications/order_messages 트리거 2개 존재, fixture C 절 PASS |
+| 160 | 157 헬퍼 존재 | display_name/mentor_label ACL = postgres/service_role 전용(anon/authenticated 부재) |
 
 ## 3. 롤백 구분
-- **롤백 가능(안전)**: 146(진단 no-op), 155/157/158/159(트리거 drop — 단 웹 best-effort 도 제거된 상태라
+- **롤백 가능(안전)**: 146(진단 no-op), 155/157/158/159(트리거 drop)·160(revoke 원복은 재grant — 단 웹 best-effort 도 제거된 상태라
   트리거만 drop 하면 해당 알림이 멎는다 → 롤백 시 웹도 함께 롤백), 156(신규 테이블·함수 drop), 152 신규 테이블 drop(데이터 없을 때).
 - **롤백 주의(구조 의존)**: 147/148 UNIQUE·컬럼(다른 코드가 참조 시작하면 drop 위험), 149/151/154 정책·트리거(원복 시 gate 해제).
 - **롤백 불가/신중**: 150 FK(데이터 참조 후), 153 전역 UNIQUE(지급 스냅샷 존재 시). → forward-fix 우선.

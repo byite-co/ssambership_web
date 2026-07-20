@@ -24,7 +24,7 @@
   state gate·잔액 0 몰수) 전부 통과, 실데이터 무변경. tsc 0.
 - **부채**: 실 GoTrue admin transport·앱 세션 폐기 미들웨어 = WAITING_EXTERNAL_APP(플래그 OFF 컷오버).
 
-## Section 1 — P1-11 알림 17종 원자화 ✅ (17/17 — staging 적용만 PENDING)
+## Section 1 — P1-11 알림 17종 원자화 ✅ (17/17 — staging 반영 완료)
 - **원자 완료 7종(전 세션)**: question_answered(142) + 개별질문 6종(155 트리거). staging fixture 6종 검증.
 - **원자 완료 10종(본 세션, 157/158/159)**: 구독 4(157 — billing event INSERT/전이·subscriptions→expired 트리거) ·
   멘토 4(158 — mentor_profiles 전이 fan-out·refunds INSERT·mentor_plans 가격 fan-out, 동일 tx 다중 tier 는 txid dedup) ·
@@ -33,9 +33,11 @@
   호출부 5파일 정리(이중 발송 0). 멘토 종료 환불 본문의 금액 100배 표기 오류(cents 를 캐시로 출력)를 트리거에서 교정.
 - **검증**: 로컬 스크래치 PG16 에 정본 132+157+158+159 적용 + rollback-only fixture **24 assertion 전부 PASS**
   (`scripts/verify/local_notification_trigger_check.sh` — 원자 롤백·멱등·fan-out 범위·무발화 조건·캐시/이름 표기).
-- **부채**: staging 적용 = `READY_NOT_EXECUTED`(이 세션 staging secret 부재). 적용 순서 **SQL 먼저, 웹 나중**
-  (`docs/audit/production_apply_runbook.md` §1 경고). staging 적용 후
-  `scripts/verify/fixtures/notification_atomization_157_159_fixture.sql` 재실행. 가격 변경 "다른 tx 재알림"은 2트랜잭션 실측 항목.
+- **staging 반영 완료(2026-07-20)**: Supabase MCP(project_id=lbeqxarxothkmzqvpudy 고정)로 157→158→159 커밋 전문
+  그대로 적용 + 후속 160(표시 헬퍼 anon/authenticated EXECUTE revoke — 기본 권한 노출 표면 제거). staging fixture
+  **24 assertion 전부 PASS**, 새 트랜잭션 baseline 대조 전 항목 일치(실사용자 4·멘토 플랜 3 등 무변경, 알림/금융 0행 유지).
+  fixture 는 실 Supabase 의 `on_auth_user_created` 트리거 대응으로 사용자 upsert 를 `ON CONFLICT DO UPDATE` 로 보정.
+  가격 변경 "다른 tx 재알림"은 2트랜잭션 실측 항목으로 유지.
 
 ## Section 4 — P2-25 지급 scheduler 기반 ✅ (기본 OFF)
 - **156**: `payout_settings`(scheduler_enabled 기본 false·싱글턴) + `payout_reconciliation_report`(READ-ONLY 대상/제외/오류)
@@ -78,13 +80,12 @@
   인증 Preview E2E = `READY_NOT_EXECUTED`(e2e/ 준비됨).
 
 ## Section 7 — Production 준비 문서 ✅
-- `docs/audit/production_apply_runbook.md`: 146~159 적용 순서·pre/post·롤백 구분·진단 쿼리(mentor_plans null·refund billing NULL·
+- `docs/audit/production_apply_runbook.md`: 146~160 적용 순서·pre/post·롤백 구분·진단 쿼리(mentor_plans null·refund billing NULL·
   payout dup·storage orphan·outbox dead·deletion stuck)·staging 진단 스냅샷(전부 0)·레거시 번호 충돌 명시.
-  157~159 는 staging 미적용 상태와 "SQL 먼저, 웹 나중" 배포 순서를 §1 에 경고로 명시.
+  157~160 staging 적용 완료 상태와 "SQL 먼저, 웹 나중" production 배포 순서를 §1 에 명시.
 
-## 세션 환경 제약 (2026-07-20 후속 세션)
-- **원격 push 불가 = BLOCKED_ENV**: git relay·GitHub API(contents write) 모두 403(조직 정책 — 이 세션의 GitHub
-  통합에 쓰기 권한 없음). 우회 금지 원칙에 따라 커밋은 로컬 브랜치(`claude/web-app-fixes-bug-rollback-cx52cq`)에
-  보존하고 format-patch 번들을 오너에게 전달 — 오너/원계정 세션에서 `git am` 적용 후 push.
-- **staging secret 부재**: 157~159 staging 적용·rollback fixture 실행 = READY_NOT_EXECUTED
-  (로컬 스크래치 PG16 실구동 24 assertion PASS 로 사전 검증 완료).
+## 세션 환경 제약 (2026-07-20 후속 세션) — 이후 해제됨
+- (해제) 한때 git relay·GitHub API 쓰기 403 + staging secret 부재로 push/적용이 차단됐으나, 오너가 권한을
+  부여한 뒤 같은 컨테이너에서 반영 완료: SQL 커밋(8926395) 선행 push → staging 157~160 적용·fixture 24/24 PASS →
+  웹·lint·이력 커밋 push. Supabase MCP 는 조직 내 3개 프로젝트가 보이므로 모든 호출에
+  project_id=lbeqxarxothkmzqvpudy 를 명시(타 프로젝트·production 미접근).
