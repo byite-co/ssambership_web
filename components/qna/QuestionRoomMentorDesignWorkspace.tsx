@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { useFormStatus } from "react-dom";
 import { ConnectionNotesPanel } from "@/components/qna/ConnectionNotesPanel";
 import { ArrowLeft, ChevronLeft, ChevronRight, Download, Eye, FileText, MessageCircle, Search, Send, User } from "lucide-react";
@@ -208,25 +209,20 @@ export function QuestionRoomMentorDesignWorkspace(props: {
   }, [filteredThreads, sort]);
 
   // ★질문 목록 페이지네이션 (이미 로드된 배열 클라이언트 slice). 모바일 3 / 데스크탑 4.
-  // 초기값=데스크탑값(SSR/hydration 일치) → 마운트 후 matchMedia로 보정.
+  // SSR 스냅샷=데스크탑 → hydration 후 보정(useMediaQuery).
   const THREADS_PER_PAGE_DESKTOP = 4;
-  const [threadsPerPage, setThreadsPerPage] = useState(THREADS_PER_PAGE_DESKTOP);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const apply = () => setThreadsPerPage(mq.matches ? 3 : THREADS_PER_PAGE_DESKTOP);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
+  const threadsPerPage = useMediaQuery("(max-width: 767px)") ? 3 : THREADS_PER_PAGE_DESKTOP;
   const [threadPage, setThreadPage] = useState(1);
-  const threadTotalPages = Math.max(1, Math.ceil(sortedThreads.length / threadsPerPage));
-  const safeThreadPage = Math.min(threadPage, threadTotalPages);
-  useEffect(() => {
-    if (threadPage > threadTotalPages) setThreadPage(threadTotalPages);
-  }, [threadPage, threadTotalPages]);
-  useEffect(() => {
+  // 방/정렬/필터 변경 시 1페이지 리셋 — effect 대신 렌더 중 파생 리셋(안전 변환 패턴).
+  const threadListKey = `${props.roomId}|${sort}|${statusFilter}`;
+  const [prevThreadListKey, setPrevThreadListKey] = useState(threadListKey);
+  if (prevThreadListKey !== threadListKey) {
+    setPrevThreadListKey(threadListKey);
     setThreadPage(1);
-  }, [props.roomId, sort, statusFilter]);
+  }
+  const threadTotalPages = Math.max(1, Math.ceil(sortedThreads.length / threadsPerPage));
+  // 표시·이동은 전부 safeThreadPage(클램프값) 기준 — 상태 동기화 effect 불필요.
+  const safeThreadPage = Math.min(threadPage, threadTotalPages);
   const pagedThreads = sortedThreads.slice(
     (safeThreadPage - 1) * threadsPerPage,
     safeThreadPage * threadsPerPage
@@ -676,7 +672,7 @@ export function QuestionRoomMentorDesignWorkspace(props: {
                       <button
                         type="button"
                         disabled={safeThreadPage <= 1}
-                        onClick={() => setThreadPage((p) => Math.max(1, p - 1))}
+                        onClick={() => setThreadPage(Math.max(1, safeThreadPage - 1))}
                         className="inline-flex h-8 items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 text-[11px] font-bold text-emerald-600 transition hover:bg-emerald-50 disabled:border-slate-200 disabled:text-slate-300 disabled:hover:bg-white"
                         aria-label="이전 페이지"
                       >
@@ -689,7 +685,7 @@ export function QuestionRoomMentorDesignWorkspace(props: {
                       <button
                         type="button"
                         disabled={safeThreadPage >= threadTotalPages}
-                        onClick={() => setThreadPage((p) => Math.min(threadTotalPages, p + 1))}
+                        onClick={() => setThreadPage(Math.min(threadTotalPages, safeThreadPage + 1))}
                         className="inline-flex h-8 items-center gap-1 rounded-lg border border-emerald-200 bg-white px-2.5 text-[11px] font-bold text-emerald-600 transition hover:bg-emerald-50 disabled:border-slate-200 disabled:text-slate-300 disabled:hover:bg-white"
                         aria-label="다음 페이지"
                       >

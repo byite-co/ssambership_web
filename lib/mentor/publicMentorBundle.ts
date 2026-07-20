@@ -61,6 +61,34 @@ export async function fetchReviewsSummary(
     }
     const { column, error: cErr } = await pickExistingColumn(supabase, table, REVIEW_FK);
     const vis = await probePublicReviewVisibilityColumns(supabase, table);
+
+    // P3-2: 'reviews' 정본 테이블은 서버 집계 RPC(get_mentor_review_stats)로 count·avg 를 얻는다.
+    //   → 최대 500건 client cap 없이 hidden/blinded 제외 집계(include_hidden=false). SECURITY DEFINER·
+    //   집계값만 반환. RPC 부재/오류 시 아래 기존 count(exact)+평균 폴백으로 진행(무회귀).
+    if (table === "reviews" && column === "mentor_id") {
+      const { data: statsData, error: rpcErr } = await supabase.rpc("get_mentor_review_stats", {
+        p_mentor_id: mentorId,
+        p_include_hidden: false,
+      });
+      if (!rpcErr) {
+        const stats = (Array.isArray(statsData) ? statsData[0] : statsData) as
+          | { review_count?: number | null; avg_rating?: number | string | null }
+          | null
+          | undefined;
+        const rpcCount = Number(stats?.review_count);
+        const rpcAvgRaw = stats?.avg_rating;
+        const rpcAvg =
+          rpcAvgRaw == null ? null : typeof rpcAvgRaw === "number" ? rpcAvgRaw : Number(rpcAvgRaw);
+        return {
+          count: Number.isFinite(rpcCount) ? rpcCount : 0,
+          avgRating: rpcAvg != null && Number.isFinite(rpcAvg) ? rpcAvg : null,
+          table,
+          probe: "reviews.mentor_id 서버 집계 RPC(get_mentor_review_stats · hidden/blinded 제외 · 500 cap 없음)",
+          error: null,
+        };
+      }
+    }
+
     let count: number | null = null;
     let avgRating: number | null = null;
     let error: string | null = cErr;

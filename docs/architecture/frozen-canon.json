@@ -1,5 +1,5 @@
 {
-  "$comment": "모듈화 기획서 §3(정본 계약 동결)·§4(정합 대기 구역)의 기계 검사용 목록. scripts/check-frozen-canon.mjs 가 경로 실존을 검증한다. frozen = 이동·분할·개명 전면 금지(앱 정합 문서가 경로·라인 참조). quarantine = 기획-코드 정합 작업 또는 feature/payout-postpaid 브랜치가 변경 예정 — 모듈화 PR에서 수정 금지.",
+  "$comment": "모듈화 기획서 §3(정본 계약 동결)·§4(정합 대기 구역)의 기계 검사용 목록. (P3-3, 2026-07-19: 자동 검사 스크립트 scripts/check-frozen-canon.mjs 는 미구현이라 유령 npm 참조를 제거했다 — 현재 이 목록은 수동 대조로 준수를 확인한다.) frozen = 이동·분할·개명 전면 금지(앱 정합 문서가 경로·라인 참조). quarantine = 기획-코드 정합 작업 또는 feature/payout-postpaid 브랜치가 변경 예정 — 모듈화 PR에서 수정 금지.",
   "frozen": [
     "lib/subjects/subjectCatalog.ts",
     "lib/qna/questionSubjects.ts",

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 
 type Props = {
@@ -44,25 +44,30 @@ export function ReviewWriteModal(props: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const refreshEligibility = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/reviews/eligibility?mentorId=${encodeURIComponent(props.mentorId)}`);
-      const json = (await res.json()) as { ok?: boolean; eligible?: boolean; reason?: string };
-      if (json.ok) {
-        setEligible(Boolean(json.eligible));
-        setReason(json.reason ?? "");
-      }
-    } catch {
-      setEligible(false);
-      setReason("자격을 확인하지 못했습니다.");
-    }
-  }, [props.mentorId]);
-
   useEffect(() => {
-    if (props.initialEligible === undefined) {
-      void refreshEligibility();
-    }
-  }, [props.initialEligible, refreshEligibility]);
+    // 초기 자격 조회 — setState 는 전부 await 이후(effect 동기 setState 금지 규칙 준수), stale 응답 무시.
+    if (props.initialEligible !== undefined) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`/api/reviews/eligibility?mentorId=${encodeURIComponent(props.mentorId)}`);
+        const json = (await res.json()) as { ok?: boolean; eligible?: boolean; reason?: string };
+        if (cancelled) return;
+        if (json.ok) {
+          setEligible(Boolean(json.eligible));
+          setReason(json.reason ?? "");
+        }
+      } catch {
+        if (!cancelled) {
+          setEligible(false);
+          setReason("자격을 확인하지 못했습니다.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [props.initialEligible, props.mentorId]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();

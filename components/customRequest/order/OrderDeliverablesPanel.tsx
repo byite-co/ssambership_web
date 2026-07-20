@@ -8,7 +8,7 @@ import {
   orderStatusLabelForUi,
   studentCanDownloadDeliverable,
 } from "@/lib/customRequest/orderLifecycleConstants";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { EmptyState } from "@/components/design-system";
 import { File } from "lucide-react";
 import type { AppRole } from "@/lib/types/user";
@@ -87,15 +87,11 @@ export function OrderDeliverablesPanel(props: Props) {
   const {
     detail,
     orderId,
-    view,
     actorRole,
-    mentorDeliverableBlockReason,
-    orderTerminal = false,
     embedded = false,
   } = props;
   const d = detail.bundle.deliverables;
   const err = d.error;
-  const showMentorForm = false;
   const rows = (d.rows ?? []) as Row[];
   const canDownload = (actorRole === "student" || actorRole === "mentor" || actorRole === "admin") && orderId.trim().length > 0;
   const studentDownloadAllowed = actorRole !== "student" || studentCanDownloadDeliverable(detail.bundle.order.row as Row);

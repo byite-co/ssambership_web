@@ -15,11 +15,6 @@ import {
 } from "@/lib/customRequest/orderMessageAttachments";
 import { isOrderRowTerminalForActions } from "@/lib/customRequest/orderLifecycleConstants";
 import { insertOrderRoomMessage, recordOrderEventBestEffort } from "@/lib/customRequest/orderRoomMutations";
-import { pickOrderStudentId } from "@/lib/customRequest/orderRoomMutations";
-import {
-  fetchUserDisplayName,
-  insertNotificationBestEffort,
-} from "@/lib/notifications/notificationInsert";
 import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/lib/types/user";
@@ -263,37 +258,7 @@ export async function submitCustomOrderRoomMessageAction(formData: FormData): Pr
     has_attachment: Boolean(uploadedAttachment),
   });
 
-  const senderName = await fetchUserDisplayName(supabase, user.id);
-  let recipientId: string | null = null;
-  if (role === "mentor") {
-    recipientId = pickOrderStudentId(row);
-  } else {
-    for (const k of [
-      "mentor_id",
-      "mentor_user_id",
-      "assignee_id",
-      "assigned_mentor_id",
-      "selected_mentor_id",
-      "expert_id",
-    ] as const) {
-      const v = row[k];
-      if (typeof v === "string" && v.trim()) {
-        recipientId = v.trim();
-        break;
-      }
-    }
-  }
-  if (recipientId && recipientId !== user.id) {
-    await insertNotificationBestEffort({
-      recipientUserId: recipientId,
-      type: "new_order_message",
-      title: "주문방에 새 메시지가 왔어요",
-      body: `${senderName}님이 메시지를 보냈습니다.`,
-      link: orderPath(orderId),
-      metadata: { order_id: orderId, sender_id: user.id, sender_role: role },
-    });
-  }
-
+  // 상대방 알림은 159 트리거(custom_order_messages INSERT)가 도메인 write 와 원자적으로 발행한다.
   revalidatePath(orderPath(orderId));
   revalidatePath("/custom-request");
   redirect(`${orderPath(orderId)}?ok=${encodeURIComponent("메시지를 보냈습니다.")}`);

@@ -17,6 +17,9 @@ export type MentorsListSort =
 
 export type MentorsListView = "list" | "grid";
 
+// 컬렉션 범위(퀵링크 계약). all=전체, recent=최근 본(클라이언트 localStorage), favorite=찜(서버 조회).
+export type MentorsListScope = "all" | "recent" | "favorite";
+
 // 과목 정본(subjectCatalog) 대분류 라벨 기반. teaching_subjects(자유 텍스트) 라벨 매칭 호환.
 export type MentorSubjectFilter = string;
 
@@ -40,6 +43,7 @@ export type MentorsListFilters = {
   priceBand: MentorPriceBandFilter | null;
   sort: MentorsListSort;
   view: MentorsListView;
+  scope: MentorsListScope;
   page: number;
 };
 
@@ -58,6 +62,7 @@ export function defaultMentorsListFilters(overrides?: Partial<MentorsListFilters
     priceBand: null,
     sort: "popular",
     view: "list",
+    scope: "all",
     page: 1,
     ...overrides,
   };
@@ -167,6 +172,10 @@ export function parseMentorsListFilters(sp: Record<string, string | string[] | u
   const viewRaw = one("view");
   const view: MentorsListView = viewRaw === "grid" ? "grid" : "list";
 
+  const scopeRaw = one("scope");
+  const scope: MentorsListScope =
+    scopeRaw === "recent" ? "recent" : scopeRaw === "favorite" ? "favorite" : "all";
+
   return {
     q: one("q"),
     subject: pickSubject(one("subject")),
@@ -179,6 +188,7 @@ export function parseMentorsListFilters(sp: Record<string, string | string[] | u
     priceBand,
     sort: pickSort(one("sort")),
     view,
+    scope,
     page: Math.max(1, parseIntParam(one("page")) ?? 1),
   };
 }
@@ -216,6 +226,7 @@ export function filtersToHrefRecord(f: MentorsListFilters): Record<string, strin
   if (f.priceBand) o.priceBand = f.priceBand;
   if (f.sort && f.sort !== "popular") o.sort = f.sort;
   if (f.view === "grid") o.view = "grid";
+  if (f.scope && f.scope !== "all") o.scope = f.scope;
   if (f.page > 1) o.page = String(f.page);
   return o;
 }

@@ -2,6 +2,8 @@
 
 import "@/app/(public)/custom-request/landing.css";
 
+import Link from "next/link";
+
 import { AlertTriangle, BadgeCheck, Briefcase, Pencil, Send, ShieldCheck } from "lucide-react";
 import type { loadOrderBundle } from "@/lib/customRequest/customRequestQueries";
 import type { OrderDetailPageData } from "@/lib/customRequest/orderDetailQueries";
@@ -627,9 +629,9 @@ export function OrderRoomView(props: {
         <OngoingPolicySection />
 
         <footer className="cr-detail-footer">
-          <a href="/custom-request" className="btn btn-ghost">
+          <Link href="/custom-request" className="btn btn-ghost">
             ← 맞춤의뢰 목록으로 돌아가기
-          </a>
+          </Link>
         </footer>
       </article>
     </div>

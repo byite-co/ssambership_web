@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import type { MentorsListView } from "@/lib/mentor/mentorsListSearchParams";
 import type { MentorPublicListCard } from "@/lib/mentor/publicMentorsListQueries";
 import { MentorCard } from "@/components/mentor/MentorCard";
@@ -21,21 +22,17 @@ export function MentorGrid(props: {
   const view = props.view ?? "list";
 
   // 검색/필터(학교·과목·가격대·정렬) 변경 → 결과 배열(순서·구성)이 바뀜 → 1페이지 리셋.
+  // effect 대신 렌더 중 파생 리셋(안전 변환 패턴).
   const cardsSignature = props.cards.map((c) => c.mentorId).join("|");
   const [page, setPage] = useState(1);
-  useEffect(() => {
+  const [prevSignature, setPrevSignature] = useState(cardsSignature);
+  if (prevSignature !== cardsSignature) {
+    setPrevSignature(cardsSignature);
     setPage(1);
-  }, [cardsSignature]);
+  }
 
-  // SSR/hydration 일치를 위해 초기값=데스크탑(6). 마운트 후 모바일(≤767px)이면 4로 보정.
-  const [pageSize, setPageSize] = useState(MENTORS_PER_PAGE_DESKTOP);
-  useEffect(() => {
-    const mql = window.matchMedia("(max-width: 767px)");
-    const apply = () => setPageSize(mql.matches ? MENTORS_PER_PAGE_MOBILE : MENTORS_PER_PAGE_DESKTOP);
-    apply();
-    mql.addEventListener("change", apply);
-    return () => mql.removeEventListener("change", apply);
-  }, []);
+  // SSR 스냅샷=데스크탑(6) → hydration 후 모바일(≤767px)이면 4로 보정(useMediaQuery).
+  const pageSize = useMediaQuery("(max-width: 767px)") ? MENTORS_PER_PAGE_MOBILE : MENTORS_PER_PAGE_DESKTOP;
 
   // pageSize 전환(데스크탑↔모바일) 시 safePage 클램프로 현재 페이지가 범위를 넘지 않게.
   const totalPages = Math.max(1, Math.ceil(props.cards.length / pageSize));

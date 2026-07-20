@@ -82,15 +82,6 @@ function toCard(row: ReviewDbRow, author: UserMini | undefined, subject: string 
   };
 }
 
-function buildDistribution(rows: { rating: number }[]): Record<1 | 2 | 3 | 4 | 5, number> {
-  const d: Record<1 | 2 | 3 | 4 | 5, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
-  for (const r of rows) {
-    const k = Math.max(1, Math.min(5, Math.round(r.rating))) as 1 | 2 | 3 | 4 | 5;
-    d[k] += 1;
-  }
-  return d;
-}
-
 function mapRows(data: Record<string, unknown>[] | null): ReviewDbRow[] {
   return (data ?? []).map((r) => mapReviewDbRow(r));
 }
@@ -134,18 +125,39 @@ export async function listMentorReviews(
     mentorFirstSubject(supabase, mentorId),
   ]);
 
-  let ratingsQ = supabase.from("reviews").select("rating").eq("mentor_id", mentorId).limit(500);
-  if (!opts.includeHidden) {
-    ratingsQ = applyPublicFilters(ratingsQ);
-  }
-  const { data: allRatings } = await ratingsQ;
+  // P3-2: 최대 500건 클라이언트 집계(cap 결함) 제거 → 서버 집계 RPC(get_mentor_review_stats).
+  // 집계값만 반환(원본 미노출)하며 hidden/blinded 를 제외한다(include_hidden 은 관리자 전용, 서버 강제).
+  const { data: statsData } = await supabase.rpc("get_mentor_review_stats", {
+    p_mentor_id: mentorId,
+    p_include_hidden: opts.includeHidden ?? false,
+  });
+  const stats = (Array.isArray(statsData) ? statsData[0] : statsData) as
+    | {
+        review_count?: number | null;
+        avg_rating?: number | string | null;
+        d1?: number | null;
+        d2?: number | null;
+        d3?: number | null;
+        d4?: number | null;
+        d5?: number | null;
+      }
+    | null
+    | undefined;
 
-  const ratingRows = (allRatings ?? []) as { rating: number }[];
-  const total = count ?? rows.length;
+  const total = count ?? (typeof stats?.review_count === "number" ? stats.review_count : rows.length);
   const avgRating =
-    ratingRows.length > 0
-      ? Math.round((ratingRows.reduce((a, r) => a + r.rating, 0) / ratingRows.length) * 10) / 10
-      : null;
+    stats?.avg_rating == null
+      ? null
+      : typeof stats.avg_rating === "number"
+        ? stats.avg_rating
+        : Number(stats.avg_rating) || null;
+  const distribution: Record<1 | 2 | 3 | 4 | 5, number> = {
+    1: Number(stats?.d1) || 0,
+    2: Number(stats?.d2) || 0,
+    3: Number(stats?.d3) || 0,
+    4: Number(stats?.d4) || 0,
+    5: Number(stats?.d5) || 0,
+  };
 
   return {
     items: rows.map((r) => toCard(r, authors.get(r.author_id), subject)),
@@ -153,7 +165,7 @@ export async function listMentorReviews(
     page,
     limit,
     avgRating,
-    distribution: buildDistribution(ratingRows),
+    distribution,
   };
 }
 

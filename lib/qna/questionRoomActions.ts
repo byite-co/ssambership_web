@@ -14,19 +14,17 @@ import { assertConnectionNoteWriteAllowed } from "@/lib/qna/connectionNoteSubscr
 import { assertMentorApprovedForAction } from "@/lib/mentor/mentorVerificationGate";
 import { assertAccountActive } from "@/lib/auth/accountStatus";
 import {
-  createQuestionMessage,
-  createQuestionThread,
   formatActionError,
   readMessageFromForm,
   readNoteFromForm,
   readThreadTitleFromForm,
   saveConnectionNote,
 } from "@/lib/qna/questionRoomMutations";
-import { markQuestionThreadAnsweredForMentor, resolveMentorIdForRoom } from "@/lib/qna/questionRoomThreadService";
 import {
-  fetchUserDisplayName,
-  insertNotificationBestEffort,
-} from "@/lib/notifications/notificationInsert";
+  appendQuestionMessageViaRpc,
+  createQuestionThreadViaRpc,
+  registerQuestionAttachmentViaRpc,
+} from "@/lib/qna/questionRoomRpc";
 
 /**
  * formatActionError 결과에도 Postgrest/HTTP/긴 raw가 남을 수 있으므로, URL 쿼리(사용자 노출)엔 이 함수를 쓴다.
@@ -219,39 +217,22 @@ export async function createQuestionThreadAction(formData: FormData) {
     );
   }
 
-  const subGate = await assertThreadCreationSubscriptionAllowed(supabase, roomId, actor, { isNewThread: true });
-  if (!subGate.ok) {
-    redirect(
-      buildRedirectUrl(roomId, actor, {
-        thread: contextThreadId,
-        kind: "thread",
-        error: subGate.userMessage,
-        draftThread: readThreadTitleFromForm(formData),
-      })
-    );
-  }
-
+  // P1-8A: 원자 RPC 로 생성 — 무료/활성구독 자격을 서버에서 분기하고, 무료면 free_question_usage 에
+  //  thread_id 를 정본 링크로 기록(비원자·시각근접 오짝 제거). 계정상태·차단·멘토승인·자격은 RPC 재검사.
   const title = readThreadTitleFromForm(formData);
-  const result = await createQuestionThread({
-    supabase,
-    role: actor,
-    userId: user.id,
-    roomId,
-    title,
-  });
-
-  if (!result.ok) {
+  const rpc = await createQuestionThreadViaRpc(supabase, { roomId, title });
+  if (!rpc.ok) {
     redirect(
       buildRedirectUrl(roomId, actor, {
         thread: contextThreadId,
         kind: "thread",
-        error: userFacingActionError("thread", result.error),
+        error: rpc.userMessage,
         draftThread: title,
       })
     );
   }
 
-  const nextThreadId = result.threadId ?? contextThreadId;
+  const nextThreadId = rpc.threadId ?? contextThreadId;
   revalidatePath(detailBasePath(roomId, actor));
   redirect(
     buildRedirectUrl(roomId, actor, {
@@ -344,46 +325,19 @@ export async function createQuestionMessageAction(formData: FormData) {
     }
   }
 
-  const result = await createQuestionMessage({
-    supabase,
-    role: actor,
-    userId: user.id,
-    roomId,
-    threadId,
-    content,
-  });
-
-  if (!result.ok) {
+  // P1-8A: append RPC — 메시지 저장 + 멘토 첫 답변만 answered 전이 + record_domain_notification
+  //  exactly-once 알림을 한 트랜잭션으로 처리(웹 best-effort 중복 알림 제거).
+  const targetThread = threadId || fallbackThread || "";
+  const appended = await appendQuestionMessageViaRpc(supabase, { threadId: targetThread, body: content });
+  if (!appended.ok) {
     redirect(
       buildRedirectUrl(roomId, actor, {
         thread: threadId || fallbackThread,
         kind: "message",
-        error: userFacingActionError("message", result.error),
+        error: appended.userMessage,
         draftMessage: content,
       })
     );
-  }
-
-  if (actor === "mentor" && threadId) {
-    const answered = await markQuestionThreadAnsweredForMentor(supabase, user.id, roomId, threadId);
-    if (!answered.ok) {
-      console.error("[createQuestionMessageAction] mark answered", answered.error);
-    } else {
-      const pair = await resolveMentorIdForRoom(supabase, roomId);
-      const studentId = pair.studentId;
-      if (studentId) {
-        const mentorName = await fetchUserDisplayName(supabase, user.id);
-        const link = `/question-room/${encodeURIComponent(roomId)}?thread=${encodeURIComponent(threadId)}`;
-        await insertNotificationBestEffort({
-          recipientUserId: studentId,
-          type: "question_answered",
-          title: "새 답변이 도착했어요",
-          body: `${mentorName}님이 답변을 남겼습니다.`,
-          link,
-          metadata: { room_id: roomId, thread_id: threadId },
-        });
-      }
-    }
   }
 
   revalidatePath(detailBasePath(roomId, actor));
@@ -409,7 +363,7 @@ export const sendQuestionMessageAction = createQuestionMessageAction;
  * room/thread/역할은 서버에서 재검증한다.
  */
 export async function sendQuestionAttachmentAction(formData: FormData) {
-  const { uploadQuestionRoomAttachment, insertQuestionAttachmentRecord, removeQuestionRoomAttachmentObjectBestEffort } =
+  const { uploadQuestionRoomAttachment, removeQuestionRoomAttachmentObjectBestEffort } =
     await import("@/lib/qna/questionRoomAttachmentStorage");
   const { user, actor } = await requireQnaActor();
   const roomId = textFromForm(formData.get("roomId"));
@@ -504,43 +458,25 @@ export async function sendQuestionAttachmentAction(formData: FormData) {
     );
   }
 
-  // 첨부 v2 계약 §2-1·§2-3: 행이 유일한 정본(insert 필수). 웹 첨부 버튼은 캡션이 없으므로
-  // standalone(message_id null)로 저장 — 렌더는 created_at 시간순 독립 행.
-  const recorded = await insertQuestionAttachmentRecord(supabase, {
+  // P1-8A: register RPC — 첨부 메타 등록(경로 thread-id 검증) + 멘토 첫 첨부 answered 전이 +
+  //  record_domain_notification exactly-once 를 원자적으로. 첨부 행이 유일한 정본(§2-1).
+  //  실패 시 방금 올린 미등록 Storage 객체만 보상 삭제(구조화 결과 — 조용히 은폐하지 않음).
+  const registered = await registerQuestionAttachmentViaRpc(supabase, {
     threadId,
-    messageId: null,
-    authorId: user.id,
     storagePath: uploaded.storagePath,
     fileName: uploaded.filename,
     mimeType: uploaded.mime,
+    messageId: null,
   });
-  if (recorded.error) {
+  if (!registered.ok) {
     await removeQuestionRoomAttachmentObjectBestEffort(supabase, uploaded.storagePath);
     redirect(
       buildRedirectUrl(roomId, actor, {
         thread: threadId,
         kind: "message",
-        error: "첨부 저장에 실패했습니다. 잠시 후 다시 시도해 주세요.",
+        error: registered.userMessage,
       })
     );
-  }
-
-  if (actor === "mentor") {
-    const answered = await markQuestionThreadAnsweredForMentor(supabase, user.id, roomId, threadId);
-    if (answered.ok) {
-      const pair = await resolveMentorIdForRoom(supabase, roomId);
-      if (pair.studentId) {
-        const mentorName = await fetchUserDisplayName(supabase, user.id);
-        await insertNotificationBestEffort({
-          recipientUserId: pair.studentId,
-          type: "question_answered",
-          title: "새 답변이 도착했어요",
-          body: `${mentorName}님이 파일을 보냈습니다.`,
-          link: `/question-room/${encodeURIComponent(roomId)}?thread=${encodeURIComponent(threadId)}`,
-          metadata: { room_id: roomId, thread_id: threadId },
-        });
-      }
-    }
   }
 
   revalidatePath(detailBasePath(roomId, actor));

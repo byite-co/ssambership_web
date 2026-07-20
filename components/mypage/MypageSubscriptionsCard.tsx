@@ -140,8 +140,8 @@ export function MypageSubscriptionsCard() {
   const [state, setState] = useState<FetchState>({ phase: "loading" });
   const [toast, setToast] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setState({ phase: "loading" });
+  // 순수 fetch(설정 없음)와 결과 반영을 분리 — effect 본문에서 동기 setState 없이(await 이후에만) 반영.
+  const fetchSnapshot = useCallback(async (): Promise<Exclude<FetchState, { phase: "loading" }>> => {
     try {
       const res = await fetch("/api/mypage/active-subscriptions", { cache: "no-store" });
       const body = (await res.json().catch(() => null)) as {
@@ -151,23 +151,39 @@ export function MypageSubscriptionsCard() {
       } | null;
 
       if (!res.ok || !body?.ok) {
-        const msg = body?.error ?? "구독 현황을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
-        setState({ phase: "error", message: msg });
-        setToast(msg);
-        return;
+        return {
+          phase: "error",
+          message: body?.error ?? "구독 현황을 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.",
+        };
       }
-
-      setState({ phase: "ok", items: body.items ?? [] });
+      return { phase: "ok", items: body.items ?? [] };
     } catch {
-      const msg = "구독 현황을 불러오지 못했습니다. 네트워크 연결을 확인해 주세요.";
-      setState({ phase: "error", message: msg });
-      setToast(msg);
+      return { phase: "error", message: "구독 현황을 불러오지 못했습니다. 네트워크 연결을 확인해 주세요." };
     }
   }, []);
 
+  const applyResult = useCallback((result: Exclude<FetchState, { phase: "loading" }>) => {
+    setState(result);
+    if (result.phase === "error") setToast(result.message);
+  }, []);
+
+  // 재시도 버튼용(로딩 상태 동기 표시 포함). effect 본문에서는 직접 호출하지 않는다.
+  const load = useCallback(async () => {
+    setState({ phase: "loading" });
+    applyResult(await fetchSnapshot());
+  }, [applyResult, fetchSnapshot]);
+
   useEffect(() => {
-    void load();
-  }, [load]);
+    // 초기 로드 — state 초기값이 loading 이라 동기 setState 불필요, 반영은 await 이후.
+    let cancelled = false;
+    (async () => {
+      const result = await fetchSnapshot();
+      if (!cancelled) applyResult(result);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchSnapshot, applyResult]);
 
   return (
     <section className="rounded-2xl border border-slate-300 bg-white p-5 sm:p-6 shadow-[0_1px_4px_rgba(0,0,0,0.05)]">

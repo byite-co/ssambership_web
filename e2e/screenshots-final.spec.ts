@@ -394,7 +394,8 @@ function mentorTargets(d: Ids): Target[] {
   ];
 }
 
-function adminTargets(d: Ids): Target[] {
+// 관리자 캡처는 현재 비활성(보존용) — 재활성 시 _ 접두 제거 후 타깃 목록에 합류.
+function _adminTargets(d: Ids): Target[] {
   return [
     { name: "admin-dashboard", route: "/admin/dashboard" },
     { name: "admin-users", route: "/admin/users" },

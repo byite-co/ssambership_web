@@ -35,10 +35,6 @@ export type TransferSummary = {
   errors: Array<{ questionId: string | null; message: string }>;
 };
 
-function asString(v: unknown): string | null {
-  return typeof v === "string" && v.trim() ? v : null;
-}
-
 function safeName(name: string | null | undefined): string {
   const base = (name ?? "file").replace(/[^\w.\-]+/g, "_").slice(0, 80);
   return base || "file";

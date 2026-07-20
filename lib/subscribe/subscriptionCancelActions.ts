@@ -227,12 +227,15 @@ export async function requestSubscriptionProratedRefundAction(formData: FormData
   }
 
   const paymentId = stringValue(billingEvent?.payment_id) ?? stringValue(loaded.row.payment_id);
+  // 정본 연결: 이 환불이 대응하는 current billing event(id)를 기록한다(150 FK).
+  const billingEventId = stringValue(billingEvent?.id) ?? stringValue(loaded.row.last_billing_event_id);
   const { error: insertError } = await admin.from("refunds").insert({
     user_id: user.id,
     amount_cents: estimate.amountCents,
     status: "pending",
     payment_id: paymentId,
     subscription_id: subscriptionId,
+    billing_event_id: billingEventId,
     request_type: "subscription_prorated",
     reason: reason || "학생 구독 잔여기간 환불 신청",
   });

@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { X } from "lucide-react";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { saveConnectionNoteAction } from "@/lib/qna/questionRoomActions";
 
 export function QuestionRoomNewNoteModal(props: {
@@ -13,14 +13,15 @@ export function QuestionRoomNewNoteModal(props: {
   defaultBody?: string;
   actor?: "student" | "mentor";
 }) {
+  const { open, onClose } = props;
   useEffect(() => {
-    if (!props.open) return;
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") props.onClose();
+      if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [props.open, props.onClose]);
+  }, [open, onClose]);
 
   if (!props.open) return null;
 

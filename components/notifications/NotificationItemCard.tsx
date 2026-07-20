@@ -1,7 +1,7 @@
-import Link from "next/link";
 import type { AppRole } from "@/lib/types/user";
 import { markNotificationReadFormAction } from "@/lib/notifications/notificationReadActions";
 import { resolveNotificationHref } from "@/lib/notifications/notificationDeepLink";
+import { NotificationCardLink } from "@/components/notifications/NotificationCardLink";
 import {
   formatNotificationTime,
   notificationTimeIso,
@@ -49,7 +49,12 @@ export function NotificationItemCard(props: {
         <Icon className="h-[18px] w-[18px]" strokeWidth={1.9} />
       </span>
 
-      <Link href={href} prefetch={false} className="block min-w-0 flex-1">
+      <NotificationCardLink
+        href={href}
+        notificationId={String(row.id ?? "")}
+        unread={!read}
+        className="block min-w-0 flex-1"
+      >
         <div className="flex items-center gap-2">
           <span
             className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${notificationToneBadgeClass(meta.tone)} ${
@@ -68,7 +73,7 @@ export function NotificationItemCard(props: {
         >
           {title}
         </p>
-      </Link>
+      </NotificationCardLink>
 
       {/* 읽음 처리 (안 읽은 항목만) */}
       {hub.readColumn && !read ? (

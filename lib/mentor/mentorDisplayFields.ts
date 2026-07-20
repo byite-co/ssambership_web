@@ -28,6 +28,8 @@ export type MentorProfileDisplay = {
   photoUrl: string;
   verification: string;
   grade: string;
+  /** 상세 소개(500자). intro_line(한줄 소개)과 별개 컬럼. */
+  bio: string;
 };
 
 function looksLikeStudentId(value: string): boolean {
@@ -95,6 +97,7 @@ export function buildMentorProfileDisplay(
     ]),
     verification: getProfileFieldString(profileRow, ["verification_status", "kyc_status"]),
     grade: resolveMentorGradeDisplay(profileRow),
+    bio: getProfileFieldString(profileRow, ["bio"]),
   };
 }
 

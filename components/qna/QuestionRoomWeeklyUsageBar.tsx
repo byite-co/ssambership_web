@@ -11,22 +11,19 @@ export function QuestionRoomWeeklyUsageBar(props: {
   onUsageChange?: (usage: WeeklyUsageSnapshot | null) => void;
   onLoadingChange?: (loading: boolean) => void;
 }) {
+  const { mentorId, onUsageChange, onLoadingChange } = props;
   const [usage, setUsage] = useState<WeeklyUsageSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    if (!props.mentorId) {
-      setLoading(false);
-      props.onUsageChange?.(null);
-      return;
-    }
-    setLoading(true);
-    props.onLoadingChange?.(true);
-    setError(null);
+  // 순수 fetch(설정 없음)와 결과 반영을 분리 — effect 본문에서 동기 setState 없이(await 이후에만) 반영.
+  const fetchUsage = useCallback(async (): Promise<
+    { kind: "none" } | { kind: "ok"; usage: WeeklyUsageSnapshot } | { kind: "error"; message: string }
+  > => {
+    if (!mentorId) return { kind: "none" };
     try {
       const res = await fetch(
-        `/api/question-room/weekly-usage?mentorId=${encodeURIComponent(props.mentorId)}`,
+        `/api/question-room/weekly-usage?mentorId=${encodeURIComponent(mentorId)}`,
         { credentials: "include" }
       );
       const json = (await res.json()) as {
@@ -35,26 +32,56 @@ export function QuestionRoomWeeklyUsageBar(props: {
         usage?: WeeklyUsageSnapshot;
       };
       if (!res.ok || !json.ok || !json.usage) {
-        setError(json.error ?? "사용량을 불러오지 못했습니다.");
-        setUsage(null);
-        props.onUsageChange?.(null);
+        return { kind: "error", message: json.error ?? "사용량을 불러오지 못했습니다." };
+      }
+      return { kind: "ok", usage: json.usage };
+    } catch {
+      return { kind: "error", message: "사용량을 불러오지 못했습니다." };
+    }
+  }, [mentorId]);
+
+  const applyUsageResult = useCallback(
+    (result: { kind: "none" } | { kind: "ok"; usage: WeeklyUsageSnapshot } | { kind: "error"; message: string }) => {
+      if (result.kind === "none") {
+        setLoading(false);
+        onUsageChange?.(null);
         return;
       }
-      setUsage(json.usage);
-      props.onUsageChange?.(json.usage);
-    } catch {
-      setError("사용량을 불러오지 못했습니다.");
-      setUsage(null);
-      props.onUsageChange?.(null);
-    } finally {
+      if (result.kind === "error") {
+        setError(result.message);
+        setUsage(null);
+        onUsageChange?.(null);
+      } else {
+        setUsage(result.usage);
+        onUsageChange?.(result.usage);
+      }
       setLoading(false);
-      props.onLoadingChange?.(false);
+      onLoadingChange?.(false);
+    },
+    [onUsageChange, onLoadingChange]
+  );
+
+  // 재시도 버튼용(로딩 상태 동기 표시 포함). effect 본문에서는 직접 호출하지 않는다.
+  const load = useCallback(async () => {
+    if (mentorId) {
+      setLoading(true);
+      onLoadingChange?.(true);
+      setError(null);
     }
-  }, [props.mentorId, props.onUsageChange, props.onLoadingChange]);
+    applyUsageResult(await fetchUsage());
+  }, [mentorId, onLoadingChange, applyUsageResult, fetchUsage]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    // 초기 로드 — loading 초기값이 true 라 동기 setState 불필요, 반영은 await 이후.
+    let cancelled = false;
+    (async () => {
+      const result = await fetchUsage();
+      if (!cancelled) applyUsageResult(result);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchUsage, applyUsageResult]);
 
   if (!props.mentorId) return null;
 

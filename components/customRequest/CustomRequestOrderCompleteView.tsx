@@ -144,11 +144,15 @@ export function CustomRequestOrderCompleteView(props: CustomRequestOrderComplete
             <dd className="font-extrabold text-slate-900">{payment.paidAtLabel}</dd>
           </div>
         </dl>
+        {/* P2-28: 영수증 조회 기능 미구현 → 무동작 대신 명시적 disabled + 사유. */}
         <button
           type="button"
-          className="mt-4 inline-flex min-h-[40px] items-center justify-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-extrabold text-slate-700 hover:bg-slate-50"
+          disabled
+          aria-disabled="true"
+          title="영수증 조회 기능은 준비 중이에요."
+          className="mt-4 inline-flex min-h-[40px] cursor-not-allowed items-center justify-center rounded-lg border border-slate-200 bg-slate-50 px-4 text-sm font-extrabold text-slate-400"
         >
-          결제 영수증 보기
+          결제 영수증 보기 (준비 중)
         </button>
       </section>
 

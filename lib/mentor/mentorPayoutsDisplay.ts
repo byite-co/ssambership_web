@@ -43,7 +43,7 @@ export function resolvePlatformFeeRate(type: PayoutLineType, raw: unknown): numb
   return expected;
 }
 
-export function formatPlatformFeeRateLabel(type: PayoutLineType, raw?: unknown): string {
+export function formatPlatformFeeRateLabel(type: PayoutLineType, _raw?: unknown): string {
   return platformFeeLabelForType(type);
 }
 

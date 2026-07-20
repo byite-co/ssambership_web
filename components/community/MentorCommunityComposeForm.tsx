@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { CommunityCategoryChips } from "@/components/community/CommunityCategoryChips";
 import { submitMentorCommunityPost } from "@/lib/community/communityComposeActions";
 import { COMMUNITY_POST_CATEGORIES } from "@/lib/community/communityBoardConstants";

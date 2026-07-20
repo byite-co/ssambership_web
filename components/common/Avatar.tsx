@@ -59,6 +59,8 @@ export function Avatar(props: {
     >
       <span className="absolute inset-0 flex items-center justify-center">{initialOf(props.name)}</span>
       {props.photo ? (
+        // 사용자 업로드/외부 아바타 URL(remote pattern 불특정) — next/image 미적용, 첨부 렌더와 동일 관례
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           src={props.photo}
           alt=""

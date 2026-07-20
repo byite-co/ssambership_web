@@ -14,14 +14,15 @@ export function QuestionRoomNewQuestionModal(props: {
   usageLoading?: boolean;
   subjectOptions?: string[];
 }) {
+  const { open, onClose } = props;
   useEffect(() => {
-    if (!props.open) return;
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") props.onClose();
+      if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [props.open, props.onClose]);
+  }, [open, onClose]);
 
   if (!props.open) return null;
 

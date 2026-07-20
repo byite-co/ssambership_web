@@ -7,6 +7,11 @@ import { CASH_CHARGE_PACKAGES } from "@/lib/cash/chargePackages";
 
 type PaymentMethod = "card" | "easy" | "bank";
 
+// 결제 시각 기반 주문번호 — 이벤트 핸들러에서만 호출된다(렌더 비의존).
+function buildChargeOrderId(userId: string): string {
+  return `cash-${userId}-${Date.now()}`;
+}
+
 type Props = {
   userId: string;
   currentBalance: number;
@@ -46,7 +51,7 @@ export function CashChargeWidget({ userId, currentBalance }: Props) {
       await payment.requestPayment({
         method: "CARD",
         amount: { currency: "KRW", value: selected.payKrw },
-        orderId: `cash-${userId}-${Date.now()}`,
+        orderId: buildChargeOrderId(userId),
         orderName: `쌤버십 캐시 ${selected.cashKrw.toLocaleString("ko-KR")}캐시 충전`,
         successUrl: `${window.location.origin}/wallet/charge/success`,
         failUrl: `${window.location.origin}/wallet/charge/fail`,

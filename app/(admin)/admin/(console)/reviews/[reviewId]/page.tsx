@@ -5,7 +5,7 @@ import { requireRole } from "@/lib/auth/routeGuard";
 import { firstReadableAdminTable } from "@/lib/admin/adminQueries";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { moderateAdminReviewAction } from "@/lib/admin/adminReviewActions";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 
 const CANDIDATES = ["reviews", "mentor_reviews", "mentor_review"] as const;
 

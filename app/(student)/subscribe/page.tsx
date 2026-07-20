@@ -4,7 +4,6 @@ import { createClient } from "@/lib/supabase/server";
 import { fetchWalletBalanceByUserId } from "@/lib/cash/cashQueries";
 import { parseWalletBalanceBreakdown } from "@/lib/cash/parseWalletBalanceKrw";
 import { MentorSubscribeSummaryCard } from "@/components/subscribe/MentorSubscribeSummaryCard";
-import { PromotionNoticeBox } from "@/components/subscribe/PromotionNoticeBox";
 import { SubscribeCheckoutClient, type SubscribePlanOption } from "@/components/subscribe/SubscribeCheckoutClient";
 import { loadStudentSubscribePage } from "@/lib/subscribe/subscribePageQueries";
 import {
@@ -115,8 +114,6 @@ export default async function StudentSubscribePage(props: Props) {
               closedTiers={closedTiers}
             />
           </section>
-
-          <PromotionNoticeBox promotions={data.promotions} />
         </main>
       </div>
     </div>

@@ -3,7 +3,7 @@
 import { FREE_TRIAL_PRIORITY_LABEL } from "@/lib/qna/freeTrialPriorityLabel";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { QuestionRoomListCatalog } from "@/components/qna/QuestionRoomListCatalog";
 import {
   QuestionRoomWeeklyUsageBar,

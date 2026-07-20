@@ -7,13 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "screenshots": "node scripts/capture-screenshots.mjs",
-    "screenshots:extra": "node scripts/capture-screenshots.mjs --extra-only",
-    "screenshots:report": "node scripts/generate-review-report.mjs",
-    "inventory:routes": "node scripts/route-inventory.mjs",
-    "inventory:actions": "node scripts/action-inventory.mjs",
-    "dep:baseline": "node scripts/dep-baseline.mjs",
-    "check:frozen-canon": "node scripts/check-frozen-canon.mjs"
+    "test:contract": "node --test --experimental-strip-types \"lib/**/__contract__/*.contract.test.ts\"",
+    "screenshots:report": "node scripts/generate-review-report.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",
