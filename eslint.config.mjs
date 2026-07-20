@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // node:test 계약 테스트(.ts 확장자 import·strip-types 전용) — 앱 린트 대상 아님.
+    "**/__contract__/**",
   ]),
   // 모듈 경계 규칙 (모듈 등기부: docs/architecture/modules.md §5–6)
   // 개발 중 즉시 피드백용 warn — 기계 강제는 dependency-cruiser(Phase 2)가 담당.

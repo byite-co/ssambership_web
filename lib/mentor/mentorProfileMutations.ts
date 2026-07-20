@@ -11,6 +11,7 @@ import {
 import { getSubscribeCatalogPlan } from "@/lib/subscribe/subscribePlanCatalog";
 import type { SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
 import { SUBSCRIPTIONS_TABLE } from "@/lib/subscribe/subscriptionsTable";
+import { buildMentorProfilePayloads, splitCsv } from "@/lib/mentor/mentorProfilePayload";
 
 function isMissingColumnError(err: PostgrestError | null): boolean {
   if (!err) return false;
@@ -195,14 +196,7 @@ export async function updateMentorProfile(
   supabase: SupabaseClient,
   input: MentorProfileFormInput
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const subjects = input.subjects
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-  const tags = input.tags
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
+  const subjects = splitCsv(input.subjects);
 
   // [과목 필수 게이트] 담당 과목이 0개면 구독 공개를 켤 수 없다(활동 차단).
   // 가입 시 과목은 이미 필수이므로, 이 가드는 기존 0과목 멘토가 과목 없이 활동하는 것을 막는다.
@@ -211,18 +205,21 @@ export async function updateMentorProfile(
   }
 
   const now = new Date().toISOString();
-  // [학적 잠금] university_name·department_name 은 멘토가 직접 수정할 수 없다(학력 인증값).
-  // 최초값은 가입(syncAfterSignUpSession)에서 설정되고, 이후 변경은
-  // 학적변경요청(mentor_academic_record_change_requests) 관리자 승인으로만 반영된다.
-  // 따라서 이 upsert 에서는 university_name·department_name 을 의도적으로 제외한다.
-  const core: Record<string, unknown> = {
-    user_id: input.userId,
-    intro_line: input.intro || null,
-    bio: input.bio || null,
-    teaching_subjects: subjects,
-    high_school_name: input.highSchool || null,
-    updated_at: now,
-  };
+  // [avatar·인증서류 분리] payload 는 순수 빌더로 만든다. 빌더는 인증서류 컬럼
+  // (student_id_image_url)을 절대 포함하지 않으며(계약 테스트로 강제), university_name·
+  // department_name(학적 잠금)도 제외한다. avatar 는 imagePatch 로만 별도 갱신한다.
+  const payloads = buildMentorProfilePayloads({
+    userId: input.userId,
+    intro: input.intro,
+    bio: input.bio,
+    grade: input.grade,
+    subjects: input.subjects,
+    highSchool: input.highSchool,
+    tags: input.tags,
+    subscribeOpen: input.subscribeOpen,
+    profileImageUrl: input.profileImageUrl,
+  });
+  const core: Record<string, unknown> = { ...payloads.core, updated_at: now };
 
   // [안전장치] 정상 계정은 가입(syncAfterSignUpSession)에서 mentor_profiles 행이
   // 이미 만들어지므로 위 upsert 는 UPDATE 가 되어 university_name·department_name 을 건드리지 않는다(잠금 유지).
@@ -251,35 +248,20 @@ export async function updateMentorProfile(
     }
   }
 
-  // 프로필 사진: 새 URL이 있을 때만 갱신. core upsert와 분리해 컬럼 부재(SQL 미적용)
-  // 환경에서도 다른 필드 저장이 깨지지 않도록 missing-column 오류는 무시한다.
-  if (input.profileImageUrl) {
+  // 프로필 사진(avatar): 새 URL이 있을 때만 자기 컬럼만 갱신. 인증서류(student_id_image_url)는
+  // 절대 건드리지 않는다(imagePatch 는 profile_image_url 단일 키). core upsert와 분리해
+  // 컬럼 부재(SQL 미적용) 환경에서도 다른 필드 저장이 깨지지 않도록 missing-column 오류는 무시한다.
+  if (payloads.imagePatch) {
     const { error: imgErr } = await supabase
       .from("mentor_profiles")
-      .update({ profile_image_url: input.profileImageUrl, updated_at: now })
+      .update({ ...payloads.imagePatch, updated_at: now })
       .eq("user_id", input.userId);
     if (imgErr && !isMissingColumnError(imgErr)) {
       return { ok: false, error: imgErr.message };
     }
   }
 
-  const extras: Record<string, unknown>[] = [
-    {
-      tags: tags.join(", "),
-      featured_tags: tags,
-      accept_subscriptions: input.subscribeOpen,
-      accepts_subscriptions: input.subscribeOpen,
-      is_open_for_subscriptions: input.subscribeOpen,
-      grade: input.grade || null,
-      grade_level: input.grade || null,
-      academic_year: input.grade || null,
-    },
-    { tags, featured_tags: tags.join(", ") },
-    { grade: input.grade || null },
-    { grade_level: input.grade || null },
-  ];
-
-  for (const patch of extras) {
+  for (const patch of payloads.extras) {
     const { error } = await supabase.from("mentor_profiles").update({ ...patch, updated_at: now }).eq("user_id", input.userId);
     if (!error) {
       break;

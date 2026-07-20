@@ -7,6 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:contract": "node --test --experimental-strip-types \"lib/**/__contract__/*.contract.test.ts\"",
     "screenshots:report": "node scripts/generate-review-report.mjs"
   },
   "dependencies": {
