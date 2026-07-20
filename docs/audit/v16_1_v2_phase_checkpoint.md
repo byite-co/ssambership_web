@@ -88,3 +88,22 @@
 ## SQL 번호 추가
 | 149 | Storage INSERT 자격 게이트 | 적용 |
 | 150 | refund billing_event FK + 게이트 정밀화 | 적용 |
+
+## Phase 3 — P1-10 회원탈퇴 saga + P2-22 ✅ 구조·mock 검증완료 (기능 플래그 OFF)
+- **151 saga DB**: `account_deletion_jobs`(service_role 전용, RLS deny). 상태기계
+  pending→locked→purging→storage_purged→finalized→auth_soft_deleted→completed(+canceled/failed).
+  attempts·last_error·next_attempt_at·cancelable_until·dry_run. RPC: request/cancel/advance/record_error/worker_claim.
+  pending 만 취소(window 내), locked 이후 취소 금지, pending→locked 은 cancelable 경과 후, locked→purging 원자,
+  전이표 강제(storage_purged 전 finalized 금지), advance 멱등.
+- **write gate**: `account_deletion_write_blocked`(locked 이상) + 범용 트리거 → cash_wallets·cash_ledger·payments·
+  question_messages·community_posts·shortform_posts INSERT/UPDATE 차단. Storage INSERT 정책(qra·community·shortform)에
+  deletion conjunct 추가. **0 job 이면 전부 무영향(기능 OFF 안전)**.
+- **worker(dry-run 기본)**: `accountDeletionWorker.runAccountDeletionJob` 어댑터 주입(실/테스트 분리). 
+  purge 계획=DB refs ∪ 버킷 인벤토리 합집합·dedup(`accountDeletionPurgePlan`), 삭제결과 검사(잔여)·빈상태 재검증
+  (Storage 성공 전 finalized 금지), 지갑 forfeit+익명화 원자 경계, auth soft-delete 재시도. dry-run 은 파괴 단계 전 정지.
+- **P2-22**: `resolveEffectiveAccountStatus` 순수 — suspended_until 만료 자동해제, role 실패=transient error(active 폴백 금지),
+  locked/purging=deletion_in_progress, 완료계열=deleted, canLogin 계약.
+- **검증**: staging 151 적용 + rollback-only fixture 12항목 전부 통과(전이·취소·write gate·멱등·record_error, 실데이터 무변경).
+  계약테스트 12건(status 8·purge 4, 총 47/47). tsc 0, eslint 0. account_deletion_jobs staging 0행 유지.
+- **부채**: 앱 경로 배선(삭제 요청 UI·세션 폐기·effective status 소비자·실 Storage/auth 어댑터)=WAITING_EXTERNAL_APP(플래그 ON 컷오버).
+  실 삭제 실행 없음(dry-run·mock).
