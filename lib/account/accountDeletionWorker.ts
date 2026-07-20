@@ -12,11 +12,21 @@ import {
 
 export type DeletionJob = { userId: string; state: string; dryRun: boolean };
 
+/**
+ * GoTrue 세션 폐기 어댑터 — locked 진입 직후 전 세션 revoke. 실제 호출 transport 는 interface 분리.
+ * 기본은 dry-run(mock). production adapter 는 명시적 설정이 있을 때만 주입한다.
+ * 취소해도 기존 세션은 복원하지 않는다(재로그인 요구) — 그 계약은 앱/미들웨어가 강제.
+ */
+export type SessionRevokeAdapter = (userId: string) => Promise<{ ok: boolean; error?: string }>;
+export const dryRunSessionRevoke: SessionRevokeAdapter = async () => ({ ok: true });
+
 export type DeletionDeps = {
   /** 151 account_deletion_advance(from→to) 래퍼. 전이 성공 여부. */
   advance: (userId: string, from: string, to: string) => Promise<boolean>;
   /** 오류 기록 + backoff(151 account_deletion_record_error). */
   recordError: (userId: string, err: string) => Promise<void>;
+  /** GoTrue 전 세션 revoke(dry-run 기본). locked 직후 호출, 성공 전 다음 단계 금지. */
+  revokeSessions: SessionRevokeAdapter;
   /** DB 에 기록된 유저 Storage refs. */
   gatherDbRefs: (userId: string) => Promise<StorageObjectRef[]>;
   /** 버킷 인벤토리(유저 prefix, 페이지네이션 완료본). */
@@ -60,8 +70,14 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
       state = "locked";
     }
 
-    // locked → purging (조건부 원자).
+    // locked 진입 직후: GoTrue 전 세션 revoke(성공 전 다음 단계 금지). 실패 시 재시도로 남긴다.
     if (state === "locked") {
+      const rev = await deps.revokeSessions(userId);
+      if (!rev.ok) {
+        await deps.recordError(userId, `session_revoke_failed: ${rev.error ?? "unknown"}`);
+        return { ok: false, userId, finalState: "locked", dryRun, stopped: "session_revoke" };
+      }
+      // locked → purging (조건부 원자).
       if (await deps.advance(userId, "locked", "purging")) state = "purging";
     }
 
