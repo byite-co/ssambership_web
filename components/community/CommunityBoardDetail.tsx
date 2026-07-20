@@ -7,6 +7,7 @@ import type { CommunityBoardCommentNode, CommunityBoardPostCard } from "@/lib/co
 import { pickPostBody } from "@/lib/community/communityBoardQueries";
 import {
   deleteBoardCommentAction,
+  deleteCommunityBoardPostAction,
   submitBoardCommentAction,
   toggleCommunityPostReactionAction,
 } from "@/lib/community/communityBoardActions";
@@ -94,6 +95,8 @@ export function CommunityBoardDetail(props: {
   /** 작성자가 멘토면 그 멘토의 user_id(찜 대상). 아니면 null → 버튼 숨김. */
   authorMentorId?: string | null;
   authorFavorited?: boolean;
+  /** 조회자가 이 글의 작성자인지 — 수정·삭제 UI 노출(서버가 소유권 재검사). */
+  isAuthor?: boolean;
 }) {
   const body = pickPostBody(props.row);
   const images = props.post.imageUrls;
@@ -128,7 +131,29 @@ export function CommunityBoardDetail(props: {
         ) : null}
       </header>
 
-      <h1 className="text-xl font-black text-slate-900 sm:text-2xl">{props.post.title}</h1>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <h1 className="text-xl font-black text-slate-900 sm:text-2xl">{props.post.title}</h1>
+        {props.isAuthor ? (
+          <div className="flex shrink-0 items-center gap-2">
+            <Link
+              href={`/community/board/${props.postId}/edit`}
+              className="rounded-lg border border-slate-200 px-3 py-1 text-xs font-bold text-slate-600 hover:border-[#2563EB] hover:text-[#2563EB]"
+            >
+              수정
+            </Link>
+            <form action={deleteCommunityBoardPostAction} className="inline">
+              <input type="hidden" name="postId" value={props.postId} />
+              <input type="hidden" name="returnPath" value={props.returnPath} />
+              <button
+                type="submit"
+                className="rounded-lg border border-red-200 px-3 py-1 text-xs font-bold text-red-600 hover:bg-red-50"
+              >
+                삭제
+              </button>
+            </form>
+          </div>
+        ) : null}
+      </div>
       <p className="whitespace-pre-wrap text-sm leading-relaxed text-slate-700 sm:text-base">{body}</p>
 
       {images.length ? (

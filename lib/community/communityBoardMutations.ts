@@ -14,13 +14,19 @@ export type InsertBoardPostInput = {
   status: "draft" | "published";
   authorLabel: string;
   authorRole: string | null;
+  /** 클라 요청 UUID(중복 제출 방지). null 이면 멱등 검사 없음(레거시). */
+  createIdempotencyKey?: string | null;
 };
+
+function isUniqueViolation(err: { code?: string } | null): boolean {
+  return err?.code === "23505";
+}
 
 export async function insertCommunityBoardPost(
   supabase: SupabaseClient,
   userId: string,
   input: InsertBoardPostInput
-): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+): Promise<{ ok: true; id: string; idempotentReplay?: boolean } | { ok: false; error: string }> {
   const title = input.title.trim();
   const body = input.body.trim();
   if (title.length < 1) return { ok: false, error: "title" };
@@ -29,6 +35,7 @@ export async function insertCommunityBoardPost(
 
   const hashtags = input.hashtags.map((t) => t.replace(/^#/, "").trim()).filter(Boolean).slice(0, COMMUNITY_HASHTAG_MAX);
 
+  const idemKey = input.createIdempotencyKey && input.createIdempotencyKey.trim() ? input.createIdempotencyKey.trim() : null;
   const payload: Record<string, unknown> = {
     author_id: userId,
     title,
@@ -40,15 +47,60 @@ export async function insertCommunityBoardPost(
     status: input.status,
     author_label: input.authorLabel,
     author_role: input.authorRole,
+    create_idempotency_key: idemKey,
   };
 
   // 폴백 INSERT 제거: image_urls·status·author_label·author_role 을 누락한 채
   // status default('published') 로 강제공개되던 경로를 없앤다. DB 오류는 그대로 실패.
   const { data, error } = await supabase.from("community_posts").insert(payload).select("id").maybeSingle();
-  if (error) return { ok: false, error: "db" };
+  if (error) {
+    // 중복 제출(동일 author+요청키) → UNIQUE(23505). 기존 글을 찾아 그대로 반환(멱등 재생).
+    if (idemKey && isUniqueViolation(error as { code?: string })) {
+      const { data: existing } = await supabase
+        .from("community_posts")
+        .select("id")
+        .eq("author_id", userId)
+        .eq("create_idempotency_key", idemKey)
+        .maybeSingle();
+      const existingId =
+        existing && typeof (existing as { id: string }).id === "string" ? (existing as { id: string }).id : null;
+      if (existingId) return { ok: true, id: existingId, idempotentReplay: true };
+    }
+    return { ok: false, error: "db" };
+  }
   const id = data && typeof (data as { id: string }).id === "string" ? (data as { id: string }).id : null;
   if (!id) return { ok: false, error: "db" };
   return { ok: true, id };
+}
+
+/**
+ * 게시글 soft-delete(작성자 전용). hard DELETE 금지 — deleted_at 만 세팅해 행을 보존한다(관리자 감사).
+ * 소유권은 `.eq("author_id")` + 0행-실패로 재검사. 이미 삭제된 글은 재삭제 no-op(성공).
+ */
+export async function softDeleteCommunityBoardPost(
+  supabase: SupabaseClient,
+  userId: string,
+  postId: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data, error } = await supabase
+    .from("community_posts")
+    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
+    .eq("id", postId)
+    .eq("author_id", userId)
+    .is("deleted_at", null)
+    .select("id")
+    .maybeSingle();
+  if (error) return { ok: false, error: "db" };
+  if (data && typeof (data as { id: string }).id === "string") return { ok: true };
+  // 0행: 비존재·비소유·이미삭제. 이미 삭제됐는지 확인해 멱등 성공 처리.
+  const { data: check } = await supabase
+    .from("community_posts")
+    .select("id, deleted_at")
+    .eq("id", postId)
+    .eq("author_id", userId)
+    .maybeSingle();
+  if (check && (check as { deleted_at?: unknown }).deleted_at) return { ok: true };
+  return { ok: false, error: "not_found" };
 }
 
 export async function updateCommunityBoardPost(
@@ -82,10 +134,11 @@ export async function updateCommunityBoardPost(
     .update(payload)
     .eq("id", postId)
     .eq("author_id", userId)
+    .is("deleted_at", null)
     .select("id")
     .maybeSingle();
 
-  // 0행 UPDATE(비존재·비소유)를 성공으로 오판하지 않는다: 반환 행이 있을 때만 성공.
+  // 0행 UPDATE(비존재·비소유·삭제됨)를 성공으로 오판하지 않는다: 반환 행이 있을 때만 성공.
   if (error) return { ok: false, error: "db" };
   const id = data && typeof (data as { id: string }).id === "string" ? (data as { id: string }).id : null;
   if (!id) return { ok: false, error: "db" };

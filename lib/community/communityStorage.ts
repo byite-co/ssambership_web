@@ -2,22 +2,18 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { randomUUID } from "crypto";
 
 import { validateMagicBytesForMime } from "@/lib/storage/uploadMagicBytes";
+import {
+  COMMUNITY_IMAGE_ALLOWED_MIME,
+  COMMUNITY_POST_IMAGES_BUCKET,
+  buildCommunityImageObjectPathWithId,
+} from "@/lib/community/communityImageRef";
 
-export const COMMUNITY_POST_IMAGES_BUCKET = "community-post-images";
+export { COMMUNITY_POST_IMAGES_BUCKET };
 
-const ALLOWED = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+const ALLOWED = COMMUNITY_IMAGE_ALLOWED_MIME;
 
 export function buildCommunityImageObjectPath(userId: string, mime: string, originalName: string): string {
-  const ext =
-    mime === "image/png"
-      ? "png"
-      : mime === "image/webp"
-        ? "webp"
-        : mime === "image/gif"
-          ? "gif"
-          : "jpg";
-  const safe = originalName.replace(/[^\w.\-]+/g, "_").slice(0, 40);
-  return `${userId}/${randomUUID()}-${safe || "image"}.${ext}`;
+  return buildCommunityImageObjectPathWithId(userId, mime, originalName, randomUUID());
 }
 
 /**

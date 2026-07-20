@@ -28,6 +28,7 @@ export default async function CommunityNewPage(props: Props) {
   return (
     <CommunityLayoutShell activeNav="board">
       <CommunityBoardComposeForm
+        userId={user.id}
         errorCode={errorCode}
         draftSaved={draftSaved}
         draft={draft}

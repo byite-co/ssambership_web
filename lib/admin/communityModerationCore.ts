@@ -77,6 +77,20 @@ export async function applyContentModeration(args: {
   }
 
   if (args.intent === "deleted") {
+    // 게시판 글은 hard DELETE 금지 — deleted_at soft-delete 로 행을 보존한다(관리자 감사·복구).
+    if (targetType === "community_post") {
+      const { data, error } = await admin
+        .from(table)
+        .update({ deleted_at: new Date().toISOString() })
+        .eq("id", targetId)
+        .is("deleted_at", null)
+        .select("id");
+      if (error) return { ok: false, error: error.message };
+      if (!data?.length) {
+        return { ok: true, applied: false, note: "이미 삭제되었거나 대상 행이 없습니다." };
+      }
+      return { ok: true, applied: true, note: `${table}.deleted_at set (soft-delete)` };
+    }
     const { data, error } = await admin.from(table).delete().eq("id", targetId).select("id");
     if (error) return { ok: false, error: error.message };
     if (!data?.length) {
@@ -102,9 +116,14 @@ export async function applyContentModeration(args: {
 
   const nextStatus =
     args.intent === "hidden" ? hiddenStatusFor(targetType) : publishedStatusFor(targetType);
+  // community_post 복원 시 soft-delete 도 함께 해제(관리자 삭제 취소).
+  const statusPatch: Record<string, unknown> = { status: nextStatus };
+  if (targetType === "community_post" && args.intent === "restored") {
+    statusPatch.deleted_at = null;
+  }
   const { data, error } = await admin
     .from(table)
-    .update({ status: nextStatus })
+    .update(statusPatch)
     .eq("id", targetId)
     .select("id, status");
   if (error) return { ok: false, error: error.message };
