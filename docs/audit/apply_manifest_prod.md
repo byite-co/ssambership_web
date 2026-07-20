@@ -100,6 +100,17 @@
 - **P1-13 검증**: rollback-only fixture(pending→active+debit+succeeded·멱등 무이중차감·processing/stale/insufficient/closed 거부·금액 mentor_plans 정본·plan_id/metadata 백필) 전부 PASS, baseline 0행. **독립 2세션 = `CONCURRENCY_VALIDATION_DEBT`**(단일세션 상태기계만 검증). 실지갑·실결제·실원장 무변경. `insertSubscriptionRow` 등 구 3단계 helper 는 미호출 dead-code(경고)로 잔존 — 별도 정리 대상.
 - 상태: P1-13 = `IMPLEMENTED_STAGING_WITH_CONCURRENCY_DEBT`(완전 완료 아님). P1-8A = `IMPLEMENTED_STAGING_WITH_CONCURRENCY_DEBT`. P3-9 = 완료(anon revoke + 인가 재정의).
 
+### 144 / 145 (v2 Phase1 반려 보정 — staging 적용됨)
+
+| 번호 | 정본 파일 | 내용 | staging |
+|---|---|---|---|
+| `144` | `144_p1_8a_direct_write_eligibility.sql` | 1-1 직접 thread 생성 한도우회 봉쇄(BEFORE 가드 전 자격 강제 + AFTER 트리거 무료 usage thread_id 원자 소비 + 구버전 standalone usage no-op) · 1-2 콘텐츠 없는 answered 거부 + 멘토 첫 콘텐츠 self-gating answered exactly-once(AFTER) · 1-3 업로드 자격에 양방향 차단. 가드=INVOKER, answered 헬퍼=self-gating DEFINER. | 적용됨 |
+| `145` | `145_p1_13_anomaly_persistence.sql` | 1-5 금융 anomaly 영속. service-role 전용 `subscription_checkout_anomalies`(RLS deny). `confirm_subscription_checkout` 가 불일치를 RAISE 대신 anomaly INSERT + `{ok:false,code,anomaly_id}` 반환(금융 변경 0, anomaly 만 커밋). 금융 write 도중 오류는 subtransaction 롤백 후 anomaly 기록. 웹은 data.ok 검사. | 적용됨 |
+
+- 검증: **144** rollback-only(직접 소비·4th 거부·legacy no-op·status-only 거부·멘토 콘텐츠 answered exactly-once·RPC 무영향) PASS. **145** rollback-only(happy·ledger tamper→anomaly+금융불변·succeeded-no-sub anomaly) PASS + **committed 별도 트랜잭션 영속성 검증 후 합성데이터 정리**(anomalies/payments/users 0 복원).
+- **1-6(P1-13 race)**: 143 에서 이미 충족(mentor_profiles FOR UPDATE 로 학생 간 cap 소비 직렬화 + advisory pair lock + uq_subscriptions_pair UNIQUE/ON CONFLICT, 고정 잠금 순서). 독립 2세션 실측만 debt.
+- **1-4(pending refund billing-event 정본 FK)**: refunds 에 billing_event_id 정본 컬럼 없음 → 현행 subscription_id+request_type 기준(142) 유지, billing-event 정본 FK 는 refund 생성 경로(069 등) 조사·수정 필요 = 후속(아래 Phase 상태 참조).
+
 ### 141 / 142 / 143 (P1-8A/P1-13 최종 보안·금융 마감 감사 — staging 적용됨)
 
 | 번호 | 정본 파일 | 내용 | staging |

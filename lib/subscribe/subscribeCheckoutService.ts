@@ -848,7 +848,12 @@ export async function finalizeSubscriptionCheckout(
   if (checkoutRpc.error) {
     return { ok: false, error: mapConfirmSubscriptionError(checkoutRpc.error.message), code: "db" };
   }
-  const subId = (((checkoutRpc.data as Row | null)?.subscription_id as string | undefined) ?? null) as string | null;
+  // P1-13(145): RPC 는 금융 불일치·거부를 RAISE 가 아니라 {ok:false,code} 로 반환한다(anomaly 는 별도 커밋).
+  const rpcData = (checkoutRpc.data ?? {}) as Row;
+  if (rpcData.ok === false) {
+    return { ok: false, error: mapConfirmSubscriptionError(String(rpcData.code ?? "")), code: "db" };
+  }
+  const subId = ((rpcData.subscription_id as string | undefined) ?? null) as string | null;
   if (!subId) {
     return { ok: false, error: "구독 확정 결과를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.", code: "db" };
   }
@@ -912,6 +917,10 @@ function mapConfirmSubscriptionError(message: string): string {
     case "CASH_INSUFFICIENT":
       return "캐시 잔액이 부족해요. 충전 후 다시 시도해 주세요.";
     case "LEDGER_AMOUNT_MISMATCH":
+    case "LEDGER_FIELD_MISMATCH":
+    case "SUCCEEDED_NO_SUBSCRIPTION":
+    case "SUCCEEDED_NO_LEDGER":
+    case "FINANCIAL_WRITE_ERROR":
       return "결제 원장 정합성 확인이 필요해요. 고객센터로 문의해 주세요.";
     default:
       return "구독 확정에 실패했어요. 잠시 후 다시 시도해 주세요.";
