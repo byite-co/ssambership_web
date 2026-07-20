@@ -88,6 +88,18 @@
 - pending-refund lock 경계(설계 §2 결정 C)는 P1-13 billing-event 정본 확정 시 helper 로 교체 = **WAITING_P1_13**.
 - 검증: rollback-only fixture(무료/구독 경로·UNIQUE·attachment 경로검증·멘토 첫답 answered+exactly-once·주간한도·비당사자) 전부 PASS, baseline 0행. 독립 2세션 동시성 = **BLOCKED_ENV**. 실인증 브라우저 E2E = 미실행(검증 부채).
 
+### 131 / 139 / 140 (P1-13 · P1-8A 첨부 계약 · P3-9 완결 — staging 적용됨)
+
+| 번호 | 정본 파일 | 내용 | staging | 의존 |
+|---|---|---|---|---|
+| `131` | `131_p1_13_subscription_checkout_atomic.sql` | **P1-13** 구독·결제 원자 상태기계. `confirm_subscription_checkout(payment,plan,idem)` service_role 전용 — pending 확정(TTL 30분)·processing 거부·성공별칭 정본화·멘토/플랜/결제/구독 pair 잠금·금액 mentor_plans 정본 재계산·구독 생성/재활성화+지갑차감+payment succeeded 원자·원장 금액 불일치 격리(구조화 실패). `payments.plan_id`+camelCase `metadata.planId` 백필, `mentor_profiles.is_open_for_subscriptions` 정본. | 적용됨 | 019/023(cash debit)·067(mentor_plans)·064(billing period) |
+| `139` | `139_p1_8a_attachment_storage_contract.sql` | P1-8A 첨부 Storage 계약: 등록 RPC 에 storage 객체 존재+bucket+owner_id 대조 추가, 업로드 INSERT 정책에 thread 소속+쓰기가능 상태 조건, 보상 DELETE 정책 신설(owner+미등록만). | 적용됨 | 049·136 |
+| `140` | `140_p3_9_student_nickname_subscription_room_scope.sql` | **P3-9 완결** `get_mentor_student_nicknames` 인가를 활성구독 OR 질문방 당사자로 재정의(custom_order-only 제외). | 적용됨 | 138 |
+
+- **P1-13 웹 전환**: `finalizeSubscriptionCheckout` 의 직접 subscription INSERT + debit + markSucceeded 3단계 → `confirm_subscription_checkout` 단일 RPC. 금액은 RPC 가 mentor_plans 정본에서 재계산(구 recommended-price 폴백 대체 — **미가격 mentor_plans 행 멘토는 명시적 오류 = 검증 대상**).
+- **P1-13 검증**: rollback-only fixture(pending→active+debit+succeeded·멱등 무이중차감·processing/stale/insufficient/closed 거부·금액 mentor_plans 정본·plan_id/metadata 백필) 전부 PASS, baseline 0행. **독립 2세션 = `CONCURRENCY_VALIDATION_DEBT`**(단일세션 상태기계만 검증). 실지갑·실결제·실원장 무변경. `insertSubscriptionRow` 등 구 3단계 helper 는 미호출 dead-code(경고)로 잔존 — 별도 정리 대상.
+- 상태: P1-13 = `IMPLEMENTED_STAGING_WITH_CONCURRENCY_DEBT`(완전 완료 아님). P1-8A = `IMPLEMENTED_STAGING_WITH_CONCURRENCY_DEBT`. P3-9 = 완료(anon revoke + 인가 재정의).
+
 ## 7. 클린 DB 재현 (검증 부채 — 미실행)
 
 `supabase` CLI 부재로 아래를 **실행하지 못함**. CLI 환경 확보 시 실행하고, 그 전에는 PASS로 기록하지 않는다.

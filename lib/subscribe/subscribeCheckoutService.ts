@@ -869,37 +869,21 @@ export async function finalizeSubscriptionCheckout(
   }
   const amountCents = debitCheck.amountCents;
 
-  let subId: string | null = null;
-  const subInsert = await insertSubscriptionRow(
-    supabase,
-    { studentId, mentorId, planId, planTier, paymentId, payTable }
-  );
-  if (!subInsert.ok) {
-    return { ok: false, error: `subscriptions 생성 실패: ${subInsert.error}`, code: "db" };
-  }
-  subId = subInsert.subscriptionId;
-
-  const debit = await repairMissingSubscriptionCashLedgerIfNeeded(supabase, {
-    mode: "newSubscription",
-    studentId,
-    paymentId,
-    mentorId,
-    planTier,
-    subscriptionId: subId,
-    planRowHint: planRow,
+  // P1-13: 구독 생성 + 지갑 차감 + payment succeeded 를 단일 원자 RPC(service_role 전용)로 처리한다.
+  //  기존 3단계(직접 INSERT → record_subscription_cash_debit → markPaymentSucceeded)와 수동 보상 경로를 대체.
+  //  금액은 RPC 가 mentor_plans 정본에서 재계산한다(아래 amountCents 는 billing event 기록용 참고값).
+  const adminP113 = createServiceRoleClient();
+  const checkoutRpc = await adminP113.rpc("confirm_subscription_checkout", {
+    p_payment_id: paymentId,
+    p_plan_id: planId,
+    p_idempotency_key: `sub_checkout_${paymentId}`,
   });
-  if (!debit.ok) {
-    await tryDeleteSubscriptionById(supabase, subId);
-    return { ok: false, error: debit.error, code: "db" };
+  if (checkoutRpc.error) {
+    return { ok: false, error: mapConfirmSubscriptionError(checkoutRpc.error.message), code: "db" };
   }
-
-  const payUpdate = await markPaymentSucceeded(supabase, payTable, paymentId, stCol);
-  if (!payUpdate.ok) {
-    if (amountCents > 0) {
-      await tryReversalSubscriptionCashDebit(studentId, paymentId, subId, amountCents);
-    }
-    await tryDeleteSubscriptionById(supabase, subId);
-    return { ok: false, error: `결제 완료 표시 실패(롤백: 구독 삭제 시도): ${payUpdate.error}`, code: "db" };
+  const subId = (((checkoutRpc.data as Row | null)?.subscription_id as string | undefined) ?? null) as string | null;
+  if (!subId) {
+    return { ok: false, error: "구독 확정 결과를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.", code: "db" };
   }
 
   await recordInitialSubscriptionBillingEvent({
@@ -935,6 +919,36 @@ export async function finalizeSubscriptionCheckout(
     roomId: roomR.roomId,
     message: "구독·질문방·결제 완료 처리를 마쳤습니다.",
   };
+}
+
+/** P1-13 confirm_subscription_checkout RPC 코드 → 사용자 문구 매핑. */
+function mapConfirmSubscriptionError(message: string): string {
+  const m = /\b([A-Z][A-Z0-9_]{3,})\b/.exec(String(message ?? ""));
+  const code = m ? m[1] : "";
+  switch (code) {
+    case "PAYMENT_NOT_FOUND":
+      return "결제 정보를 찾을 수 없어요. 잠시 후 다시 시도해 주세요.";
+    case "PAYMENT_PROCESSING":
+      return "결제가 아직 처리 중이에요. 잠시 후 다시 시도해 주세요.";
+    case "PAYMENT_NOT_PENDING":
+    case "PAYMENT_STATE_UNEXPECTED":
+      return "이미 처리되었거나 진행할 수 없는 결제예요. 결제 내역을 확인해 주세요.";
+    case "PAYMENT_STALE":
+      return "결제 확정 시간이 지났어요. 다시 결제해 주세요.";
+    case "MENTOR_NOT_OPEN_FOR_SUBSCRIPTIONS":
+      return "이 멘토는 현재 신규 구독을 받지 않고 있어요.";
+    case "PLAN_NOT_FOUND":
+    case "PLAN_MENTOR_MISMATCH":
+    case "PLAN_INACTIVE":
+    case "PLAN_AMOUNT_INVALID":
+      return "요금제 정보를 확인할 수 없어요. 잠시 후 다시 시도해 주세요.";
+    case "CASH_INSUFFICIENT":
+      return "캐시 잔액이 부족해요. 충전 후 다시 시도해 주세요.";
+    case "LEDGER_AMOUNT_MISMATCH":
+      return "결제 원장 정합성 확인이 필요해요. 고객센터로 문의해 주세요.";
+    default:
+      return "구독 확정에 실패했어요. 잠시 후 다시 시도해 주세요.";
+  }
 }
 
 type InsSub =
