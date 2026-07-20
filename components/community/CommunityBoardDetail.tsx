@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Bookmark, Flag, ThumbsUp } from "lucide-react";
 import { AuthorRoleBadge } from "@/components/community/AuthorRoleBadge";
 import { MentorFavoriteButton } from "@/components/mentor/MentorFavoriteButton";
+import { BoardPostOwnerActions } from "@/components/community/BoardPostOwnerActions";
 import { StateBanner } from "@/components/community/StateBanner";
 import type { CommunityBoardCommentNode, CommunityBoardPostCard } from "@/lib/community/communityBoardQueries";
 import { pickPostBody } from "@/lib/community/communityBoardQueries";
@@ -94,6 +95,8 @@ export function CommunityBoardDetail(props: {
   /** 작성자가 멘토면 그 멘토의 user_id(찜 대상). 아니면 null → 버튼 숨김. */
   authorMentorId?: string | null;
   authorFavorited?: boolean;
+  /** 뷰어가 이 글의 작성자면 true → 수정·삭제 컨트롤 노출. */
+  isAuthor?: boolean;
 }) {
   const body = pickPostBody(props.row);
   const images = props.post.imageUrls;
@@ -116,16 +119,19 @@ export function CommunityBoardDetail(props: {
             <p className="text-xs text-slate-500">{props.post.createdAtLabel}</p>
           </div>
         </div>
-        {props.authorMentorId ? (
-          <MentorFavoriteButton
-            mentorId={props.authorMentorId}
-            initialFavorited={props.authorFavorited ?? false}
-            isLoggedIn={props.canInteract}
-            loginNext={props.returnPath}
-            showText
-            className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1 text-xs font-bold text-slate-600 transition hover:border-[#2563EB] hover:text-[#2563EB] disabled:opacity-60"
-          />
-        ) : null}
+        <div className="flex flex-col items-end gap-2">
+          {props.isAuthor ? <BoardPostOwnerActions postId={props.postId} /> : null}
+          {props.authorMentorId ? (
+            <MentorFavoriteButton
+              mentorId={props.authorMentorId}
+              initialFavorited={props.authorFavorited ?? false}
+              isLoggedIn={props.canInteract}
+              loginNext={props.returnPath}
+              showText
+              className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1 text-xs font-bold text-slate-600 transition hover:border-[#2563EB] hover:text-[#2563EB] disabled:opacity-60"
+            />
+          ) : null}
+        </div>
       </header>
 
       <h1 className="text-xl font-black text-slate-900 sm:text-2xl">{props.post.title}</h1>

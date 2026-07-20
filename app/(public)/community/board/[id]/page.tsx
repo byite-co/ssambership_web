@@ -96,6 +96,7 @@ export default async function CommunityBoardDetailPage(props: Props) {
               reportErrorCode={reportErrorCode}
               authorMentorId={authorMentorId}
               authorFavorited={authorFavorited}
+              isAuthor={Boolean(user?.id && post.authorId && user.id === post.authorId)}
             />
             {/* W-blocks(v1): 신고와 같은 화면에서 차단 접근(신고+차단 병존, 스펙 §4) */}
             {canBlockAuthor && post.authorId ? (

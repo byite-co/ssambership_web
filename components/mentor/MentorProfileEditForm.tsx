@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRef, useState, type ReactNode } from "react";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { submitMentorProfileEdit } from "@/lib/mentor/mentorProfileEditActions";
 import type { MentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
 import { mentorVerificationKo } from "@/lib/mentor/mentorDisplayFields";
@@ -31,9 +31,11 @@ type I = {
   subjects: string; 
   highSchool: string; 
   tags: string; 
-  subOpen: boolean; 
-  photoUrl: string; 
+  subOpen: boolean;
+  photoUrl: string;
   verification: string;
+  /** 인증서류(학생증) 제출 여부. boolean 만 — 원본/서명 URL 은 절대 폼에 전달되지 않는다. */
+  documentSubmitted?: boolean;
   displayName?: string;
   grade?: string;
   individualQuestionPriceCash?: number | null;
@@ -571,12 +573,26 @@ export function MentorProfileEditForm(props: {
           <section className="space-y-4 rounded-2xl border border-l-[4px] border-slate-300 border-l-[#059669] bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.05)] sm:p-6">
             <SectionHeader number="5" title="인증 서류" icon={<ShieldCheck className="h-4 w-4" aria-hidden />} />
             <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-4">
-              <p className="text-sm font-bold text-slate-800">
-                학생증 업로드 상태:{" "}
-                <span className="text-[#059669]">{mentorVerificationKo(initial.verification)}</span>
-              </p>
-              {/* [보안] 학생증(민감 문서)·아바타 이미지를 이 영역에 미리보기로 노출하지 않는다.
-                  제출 상태 배지와 인증 페이지 링크만 제공한다(학생증 원본은 인증 페이지에서만 확인). */}
+              {/* [분리] 아바타 상태와 인증서류 상태를 완전히 분리한다.
+                  - 제출 여부: student_id_image_url 존재(boolean)만으로 판정(아바타와 무관).
+                  - 인증(승인) 상태: verification_status. 서류 원본·아바타 이미지는 이 영역에 미리보기하지 않는다. */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-bold text-slate-800">서류 제출</span>
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-bold ring-1 ${
+                    initial.documentSubmitted
+                      ? "bg-emerald-50 text-emerald-700 ring-emerald-100"
+                      : "bg-slate-100 text-slate-500 ring-slate-200"
+                  }`}
+                >
+                  {initial.documentSubmitted ? "제출됨" : "미제출"}
+                </span>
+                <span className="h-3 w-px bg-slate-200" aria-hidden />
+                <span className="text-sm font-bold text-slate-800">인증 상태</span>
+                <span className="rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-bold text-[#059669] ring-1 ring-emerald-100">
+                  {mentorVerificationKo(initial.verification)}
+                </span>
+              </div>
               <p className="mt-2 text-xs font-medium text-slate-500">
                 학생증 원본은 보안을 위해 이 화면에 표시하지 않아요. 제출·재제출은 인증 페이지에서 진행할 수 있어요.
               </p>

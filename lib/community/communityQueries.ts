@@ -100,7 +100,9 @@ export async function loadMyCommunityBoardPosts(
   if (res.error && !/column|does not exist|order|schema cache/i.test(res.error)) {
     return { rows: [], error: res.error };
   }
-  return { rows: res.rows, error: null };
+  // 소프트삭제된 글은 내 목록에서도 숨긴다(관리자 감사 데이터는 DB 에 보존). 컬럼 미배포 환경은 null-safe.
+  const rows = res.rows.filter((r) => r.deleted_at == null || String(r.deleted_at).trim() === "");
+  return { rows, error: null };
 }
 
 /** 내 활동: 숏폼 — author_id 우선, 스키마에 따라 user_id 폴백 */
@@ -134,7 +136,11 @@ export async function countMyCommunityBoardPosts(supabase: SupabaseClient, userI
   const probe = await firstReadableTable(supabase, ["community_posts"] as const);
   if (!probe.table) return null;
   const t = probe.table;
-  const { count, error } = await supabase.from(t).select("*", { count: "exact", head: true }).eq("author_id", userId);
+  const { count, error } = await supabase
+    .from(t)
+    .select("*", { count: "exact", head: true })
+    .eq("author_id", userId)
+    .is("deleted_at", null);
   if (error) return null;
   return typeof count === "number" ? count : null;
 }

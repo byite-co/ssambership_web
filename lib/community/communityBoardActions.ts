@@ -13,11 +13,12 @@ import {
   insertBoardComment,
   insertCommunityBoardPost,
   softDeleteBoardComment,
+  softDeleteCommunityBoardPost,
   togglePostReaction,
   updateCommunityBoardPost,
 } from "@/lib/community/communityBoardMutations";
-import { communityComposePath } from "@/lib/community/communityComposeTab";
-import { uploadCommunityPostImages } from "@/lib/community/communityStorage";
+import { getCommunityBoardEditablePost } from "@/lib/community/communityBoardQueries";
+import { COMMUNITY_POST_IMAGES_BUCKET } from "@/lib/community/communityStorage";
 import { deleteCommunityImageStoredRefs } from "@/lib/community/communityImageStorage";
 import { createClient } from "@/lib/supabase/server";
 import { assertAccountActive } from "@/lib/auth/accountStatus";
@@ -29,18 +30,6 @@ import {
 } from "@/lib/safety/trustSafetyText";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const DEFAULT_RETURN = "/community/new";
-
-function safeReturnPath(raw: string): string {
-  const path = raw.trim();
-  if (path.startsWith("/community")) return path;
-  return DEFAULT_RETURN;
-}
-
-function errRedirect(returnPath: string, code: string) {
-  const sep = returnPath.includes("?") ? "&" : "?";
-  return `${returnPath}${sep}error=${encodeURIComponent(code)}`;
-}
 
 async function authorLabelFor(userId: string): Promise<{ label: string; role: string | null }> {
   const supabase = await createClient();
@@ -65,111 +54,129 @@ async function compensateNewBoardImages(
   }
 }
 
-export async function submitCommunityBoardPostAction(formData: FormData) {
+export type BoardFinalizeInput = {
+  intent: "draft" | "publish";
+  /** 편집 대상 글(초안·게시) id. 신규 작성이면 비움. */
+  postId?: string | null;
+  title: string;
+  body: string;
+  category: string;
+  /** 편집 시 유지하는 기존 이미지 ref(서버가 실제 소유 글의 image_urls 와 교집합만 인정). */
+  existingImageRefs?: string[];
+  /** 이번 요청에서 직접 업로드한 이미지 ref(`community-post-images/{uid}/...`). */
+  newImageRefs?: string[];
+  /** 생성 멱등키(uuid) — 더블클릭·재시도 중복 INSERT 차단. */
+  idempotencyKey: string;
+};
+
+export type BoardFinalizeResult =
+  | { ok: true; id: string; status: "draft" | "published" }
+  | { ok: false; error: string };
+
+/** ref 가 정확히 `community-post-images/{uid}/...` 형식인지(임의 bucket/path·타인 폴더 차단). */
+function isOwnedCommunityImageRef(ref: string, uid: string): boolean {
+  return ref.startsWith(`${COMMUNITY_POST_IMAGES_BUCKET}/${uid}/`);
+}
+
+/**
+ * 게시판 finalize — 이미지 File 을 받지 않는다. 브라우저가 서명 계약으로 Storage 에 직접 올린 뒤
+ * 텍스트 metadata + 이미지 ref 만 넘긴다. 여기서 DB 행을 원자 생성(멱등키)·수정한다.
+ */
+export async function finalizeCommunityBoardPostAction(
+  input: BoardFinalizeInput,
+): Promise<BoardFinalizeResult> {
   const { user } = await getServerAuthUser();
-  const returnPath = safeReturnPath(String(formData.get("returnPath") ?? DEFAULT_RETURN));
-  if (!user) redirect(`/login?next=${encodeURIComponent(returnPath.split("?")[0] ?? returnPath)}`);
-
-  {
-    const supabaseAcct = await createClient();
-    const acctGate = await assertAccountActive(supabaseAcct, user.id);
-    if (!acctGate.ok) redirect(errRedirect(returnPath, "account_blocked"));
-  }
-
-  const intent = String(formData.get("intent") ?? "publish");
-  const status = intent === "draft" ? "draft" : "published";
-  const draftId = String(formData.get("draftId") ?? "").trim();
-  const title = String(formData.get("title") ?? "").trim();
-  const body = String(formData.get("body") ?? "").trim();
-  const category = normalizeCommunityPostCategory(String(formData.get("category") ?? "free"));
-
-  if (!title) redirect(errRedirect(returnPath, "title"));
-  if (body.length < 10 && status === "published") redirect(errRedirect(returnPath, "body"));
-  if (findRestrictedPhraseInText(title, body)) redirect(errRedirect(returnPath, TRUST_SAFETY_COMMUNITY_ERROR_CODE));
-
-  const safeTitle = maskContactInUserText(title);
-  const safeBody = maskContactInUserText(body);
+  if (!user) return { ok: false, error: "auth" };
 
   const supabase = await createClient();
-  const isUpdate = Boolean(draftId) && UUID_RE.test(draftId);
+  const acctGate = await assertAccountActive(supabase, user.id);
+  if (!acctGate.ok) return { ok: false, error: "account_blocked" };
 
-  // 편집 시: 새 업로드 전에 소유권 조건으로 기존 image_urls 를 조회한다(교체 제거분 차집합 삭제용).
+  const status: "draft" | "published" = input.intent === "draft" ? "draft" : "published";
+  const postId = String(input.postId ?? "").trim();
+  const isUpdate = Boolean(postId) && UUID_RE.test(postId);
+  const title = String(input.title ?? "").trim();
+  const body = String(input.body ?? "").trim();
+  const category = normalizeCommunityPostCategory(String(input.category ?? "free"));
+  const idemKey = String(input.idempotencyKey ?? "").trim();
+
+  // 이번 요청 신규 업로드 ref — 형식·소유 검증된 것만(임의 ref 저장·삭제 차단).
+  const newRefs = (input.newImageRefs ?? [])
+    .filter((r): r is string => typeof r === "string" && r.trim().length > 0)
+    .filter((r) => isOwnedCommunityImageRef(r, user.id));
+
+  const compensate = async () => {
+    if (newRefs.length > 0) await compensateNewBoardImages(supabase, newRefs);
+  };
+
+  if (!idemKey || !UUID_RE.test(idemKey)) {
+    await compensate();
+    return { ok: false, error: "invalid_request" };
+  }
+  if (!title) {
+    await compensate();
+    return { ok: false, error: "title" };
+  }
+  if (body.length < 10 && status === "published") {
+    await compensate();
+    return { ok: false, error: "body" };
+  }
+  if (findRestrictedPhraseInText(title, body)) {
+    await compensate();
+    return { ok: false, error: TRUST_SAFETY_COMMUNITY_ERROR_CODE };
+  }
+
+  // 편집 시: 실제 소유 글(삭제 안 됨)의 image_urls 를 authoritative 로 조회한다.
+  // 클라이언트가 보낸 existingImageRefs 는 이 실제 목록과의 교집합만 인정(임의 ref 주입 차단).
   let oldImageRefs: string[] = [];
+  let keptExisting: string[] = [];
   if (isUpdate) {
-    const { data: existing } = await supabase
-      .from("community_posts")
-      .select("image_urls")
-      .eq("id", draftId)
-      .eq("author_id", user.id)
-      .maybeSingle();
-    const arr =
-      existing && Array.isArray((existing as { image_urls?: unknown }).image_urls)
-        ? (existing as { image_urls: unknown[] }).image_urls
-        : [];
-    oldImageRefs = arr.filter((u): u is string => typeof u === "string" && u.trim().length > 0);
-  }
-
-  // 저장 형식은 이제 `bucket/path` ref(BUG-B). 편집 시 유지되는 기존 이미지는
-  // ref 또는 (레거시) http URL 둘 다 수용 — 빈 문자열만 제외.
-  const imageRefs: string[] = [];
-  const existingImagesRaw = String(formData.get("existingImageUrls") ?? "").trim();
-  if (existingImagesRaw) {
-    try {
-      const parsed = JSON.parse(existingImagesRaw) as unknown;
-      if (Array.isArray(parsed)) {
-        imageRefs.push(...parsed.filter((u): u is string => typeof u === "string" && u.trim().length > 0));
-      }
-    } catch {
-      /* ignore */
+    const editable = await getCommunityBoardEditablePost(supabase, user.id, postId);
+    if (editable.error || !editable.draft) {
+      await compensate();
+      return { ok: false, error: "not_found" };
     }
-  }
-
-  const files = formData.getAll("images").filter((f): f is File => f instanceof File && f.size > 0);
-  if (files.length + imageRefs.length > COMMUNITY_IMAGE_MAX) redirect(errRedirect(returnPath, "images"));
-
-  // 이번 요청에서 새로 업로드한 ref(부분 성공 포함) — DB 실패/업로드 부분 실패 시 보상 삭제 대상.
-  let newUploadedRefs: string[] = [];
-  if (files.length) {
-    const buffers = await Promise.all(
-      files.slice(0, COMMUNITY_IMAGE_MAX - imageRefs.length).map(async (f) => ({
-        buffer: Buffer.from(await f.arrayBuffer()),
-        mime: (f.type || "image/jpeg").toLowerCase(),
-        name: f.name || "image",
-      }))
+    oldImageRefs = editable.draft.imageUrls.filter((u) => typeof u === "string" && u.trim().length > 0);
+    const oldSet = new Set(oldImageRefs);
+    keptExisting = (input.existingImageRefs ?? []).filter(
+      (r): r is string => typeof r === "string" && oldSet.has(r),
     );
-    const up = await uploadCommunityPostImages(supabase, user.id, buffers);
-    newUploadedRefs = up.refs; // 부분 업로드 실패 시에도 성공분 ref 를 반환하므로 보상 가능.
-    if (up.error) {
-      await compensateNewBoardImages(supabase, newUploadedRefs);
-      redirect(errRedirect(returnPath, "upload"));
-    }
-    imageRefs.push(...up.refs);
+  }
+
+  const imageRefs = [...keptExisting, ...newRefs].slice(0, COMMUNITY_IMAGE_MAX);
+  if (keptExisting.length + newRefs.length > COMMUNITY_IMAGE_MAX) {
+    await compensate();
+    return { ok: false, error: "images" };
   }
 
   const { label, role } = await authorLabelFor(user.id);
   const payload = {
-    title: safeTitle,
-    body: safeBody,
+    title: maskContactInUserText(title),
+    body: maskContactInUserText(body),
     category,
     imageUrls: imageRefs,
     hashtags: [] as string[],
-    status: status as "draft" | "published",
+    status,
     authorLabel: label,
     authorRole: role,
+    createIdempotencyKey: idemKey,
   };
 
   const r = isUpdate
-    ? await updateCommunityBoardPost(supabase, user.id, draftId, payload)
+    ? await updateCommunityBoardPost(supabase, user.id, postId, payload)
     : await insertCommunityBoardPost(supabase, user.id, payload);
 
   if (!r.ok) {
-    // DB 실패(INSERT/UPDATE 오류·UPDATE 0행) → 이번 요청 신규 업로드 이미지 고아 방지 보상 삭제.
-    await compensateNewBoardImages(supabase, newUploadedRefs);
-    redirect(errRedirect(returnPath, r.error));
+    await compensate();
+    return { ok: false, error: r.error };
   }
 
-  // DB 성공(UPDATE) → 제거된 구이미지 차집합(old − final) 삭제(post-commit 실패는 구조화 로그).
-  // 썸네일 등 다른 도메인은 미변경. 삭제는 owner-scoped RLS(cpi_auth_delete_own)로 본인 객체만.
+  // 멱등키가 기존 행을 되돌린 동시 중복요청: 이번 요청 신규 업로드 이미지는 어디에도 참조 안 됨 → 고아 정리.
+  if (!isUpdate && "created" in r && r.created === false && newRefs.length > 0) {
+    await compensateNewBoardImages(supabase, newRefs);
+  }
+
+  // DB 성공(UPDATE) → 제거된 구이미지 차집합(old − final) 삭제. 삭제는 owner-scoped RLS 로 본인 객체만.
   if (isUpdate && oldImageRefs.length > 0) {
     const finalSet = new Set(imageRefs);
     const removed = oldImageRefs.filter((ref) => !finalSet.has(ref));
@@ -184,11 +191,31 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
   revalidatePath("/community");
   revalidatePath("/community/board");
   revalidatePath("/community/me");
+  if (r.id) revalidatePath(`/community/board/${r.id}`);
 
-  if (status === "published") redirect(`/community/board/${r.id}`);
+  return { ok: true, id: r.id, status };
+}
 
-  const draftReturn = communityComposePath("board", { draft: "1", draftId: r.id });
-  redirect(draftReturn);
+/**
+ * 게시글 소프트삭제 액션 — hard DELETE 금지. 작성자 본인만, deleted_at 채워 숨김(감사 보존).
+ */
+export async function softDeleteCommunityBoardPostAction(input: {
+  postId: string;
+}): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { user } = await getServerAuthUser();
+  if (!user) return { ok: false, error: "auth" };
+  const postId = String(input.postId ?? "").trim();
+  if (!UUID_RE.test(postId)) return { ok: false, error: "invalid_request" };
+
+  const supabase = await createClient();
+  const r = await softDeleteCommunityBoardPost(supabase, user.id, postId);
+  if (!r.ok) return { ok: false, error: r.error };
+
+  revalidatePath("/community");
+  revalidatePath("/community/board");
+  revalidatePath("/community/me");
+  revalidatePath(`/community/board/${postId}`);
+  return { ok: true };
 }
 
 export async function toggleCommunityPostReactionAction(formData: FormData) {

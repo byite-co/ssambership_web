@@ -3,7 +3,6 @@ import { MentorProfileEditForm } from "@/components/mentor/MentorProfileEditForm
 import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
-import { MENTOR_PROFILE_DATA_MODEL } from "@/lib/mentor/mentorDataModel";
 import { buildMentorProfileDisplay, mentorVerificationKo } from "@/lib/mentor/mentorDisplayFields";
 import { fetchMentorMediaSample, fetchMentorProfileRow } from "@/lib/mentor/mentorProfileQueries";
 import { fetchMentorIndividualQuestionPrice } from "@/lib/individualQuestion/individualQuestionPricing";
@@ -11,7 +10,6 @@ import { cashKrwFromAmountCents } from "@/lib/subscribe/mentorPlanPricing";
 import { fetchPlansForMentor } from "@/lib/mentor/publicMentorBundle";
 import { assignPlansByTier } from "@/lib/subscribe/subscribePageQueries";
 import { mapDataErrorMessage } from "@/lib/utils/mapDataError";
-import { USER_UI_LOAD_FAILED, USER_UI_OPS_ISSUE } from "@/lib/constants/userFacingMessages";
 
 type PageProps = { searchParams?: Promise<{ error?: string; ok?: string }> };
 
@@ -41,6 +39,11 @@ export default async function MentorProfileEditPage(props: PageProps) {
     subOpen: display.subOpen,
     photoUrl: display.photoUrl,
     verification: display.verification,
+    // 인증서류(학생증) 제출 여부만 boolean 으로 전달한다 — 원본 URL/signed URL 은 절대 폼으로 넘기지 않는다.
+    // (아바타 상태와 인증서류 상태를 완전히 분리: 배지는 승인상태와 제출여부를 각각 표시)
+    documentSubmitted:
+      typeof (row as { student_id_image_url?: unknown } | null)?.student_id_image_url === "string" &&
+      ((row as { student_id_image_url: string }).student_id_image_url).trim().length > 0,
     displayName: display.displayName,
     grade: display.grade,
     // 저장값은 cents(=캐시×100). 입력 프리필은 캐시로 ÷100 변환.
@@ -48,7 +51,6 @@ export default async function MentorProfileEditPage(props: PageProps) {
       iqPrice.amountCents != null ? cashKrwFromAmountCents(iqPrice.amountCents) : null,
   };
 
-  const hasRow = Boolean(row);
   if (re) {
     console.error("[mentor/profile/edit] profile row fetch", re);
   }

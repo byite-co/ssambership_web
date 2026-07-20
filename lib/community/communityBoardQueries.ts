@@ -204,7 +204,8 @@ export async function listCommunityBoardPosts(
     supabase
       .from("community_posts")
       .select("*")
-      .eq("status", opts.status ?? "published"),
+      .eq("status", opts.status ?? "published")
+      .is("deleted_at", null),
     sort
   );
 
@@ -285,11 +286,12 @@ export async function listCommunityPopularPostsForHome(
     .from("community_posts")
     .select("*")
     .eq("status", "published")
+    .is("deleted_at", null)
     .order("like_count", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) {
-    // 레거시 스키마(status/like_count 미배포) 폴백: 최신순 limit개.
+    // 레거시 스키마(status/like_count/deleted_at 미배포) 폴백: 최신순 limit개.
     if (/relation|does not exist|column|status|like_count/i.test(error.message)) {
       const fb = await supabase
         .from("community_posts")
@@ -316,6 +318,10 @@ export async function getCommunityBoardPost(
   if (error) return { post: null, row: null, error: error.message };
   if (!data) return { post: null, row: null, error: null };
   const row = data as Row;
+  // 소프트삭제된 글은 일반 상세에서 숨긴다(관리자 감사 데이터는 DB 에 보존).
+  if (row.deleted_at != null && String(row.deleted_at).trim() !== "") {
+    return { post: null, row, error: null };
+  }
   const status = typeof row.status === "string" ? row.status : "published";
   if (status === "hidden") {
     return { post: null, row, error: null };
@@ -326,6 +332,44 @@ export async function getCommunityBoardPost(
   const userMap = await boardAuthorNameMap(supabase, [row]);
   const post = mapRowToBoardCard(row, userMap);
   return { post: { ...post, imageUrls: await resolveCommunityImageUrls(supabase, post.imageUrls) }, row, error: null };
+}
+
+/** 편집용: 소유자 본인의 삭제되지 않은 글(초안·게시 모두)을 그대로 로드. 이미지 ref 는 원본(bucket/path) 유지. */
+export async function getCommunityBoardEditablePost(
+  supabase: SupabaseClient,
+  userId: string,
+  postId: string
+): Promise<{ draft: CommunityBoardDraftRow | null; status: string | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("community_posts")
+    .select("id, title, body, content, category, image_urls, status, author_id, deleted_at")
+    .eq("id", postId)
+    .eq("author_id", userId)
+    .maybeSingle();
+  if (error) return { draft: null, status: null, error: error.message };
+  if (!data) return { draft: null, status: null, error: null };
+  const row = data as Row;
+  if (row.deleted_at != null && String(row.deleted_at).trim() !== "") {
+    return { draft: null, status: null, error: null };
+  }
+  const body =
+    (typeof row.body === "string" && row.body) ||
+    (typeof row.content === "string" && row.content) ||
+    "";
+  const imageUrls = Array.isArray(row.image_urls)
+    ? (row.image_urls as unknown[]).filter((u): u is string => typeof u === "string")
+    : [];
+  return {
+    draft: {
+      id: String(row.id ?? ""),
+      title: typeof row.title === "string" ? row.title : "",
+      body,
+      category: typeof row.category === "string" ? row.category : "free",
+      imageUrls,
+    },
+    status: typeof row.status === "string" ? row.status : "published",
+    error: null,
+  };
 }
 
 export type CommunityBoardDraftRow = {
@@ -347,6 +391,7 @@ export async function getCommunityBoardDraft(
     .eq("id", draftId)
     .eq("author_id", userId)
     .eq("status", "draft")
+    .is("deleted_at", null)
     .maybeSingle();
   if (error) return { draft: null, error: error.message };
   if (!data) return { draft: null, error: null };
@@ -487,7 +532,9 @@ export async function listUserScrapPosts(
   const { data: posts, error: pErr } = await supabase.from("community_posts").select("*").in("id", ids);
   if (pErr) return { posts: [], error: pErr.message };
   const byId = new Map(((posts as Row[]) ?? []).map((r) => [String(r.id), r]));
-  const ordered = ids.map((id) => byId.get(id)).filter((r): r is Row => Boolean(r));
+  const ordered = ids
+    .map((id) => byId.get(id))
+    .filter((r): r is Row => Boolean(r) && (r!.deleted_at == null || String(r!.deleted_at).trim() === ""));
   const userMap = await boardAuthorNameMap(supabase, ordered);
   return { posts: await signBoardCardImages(supabase, ordered.map((r) => mapRowToBoardCard(r, userMap))), error: null };
 }
