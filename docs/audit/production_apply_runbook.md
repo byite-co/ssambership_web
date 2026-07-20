@@ -99,11 +99,13 @@ select user_id, state, attempts, last_error, leased_until, updated_at from publi
   이미지 blob CDN(cloudfront.docker.com) egress 가 조직 정책으로 차단(Forbidden)되어 supabase/postgres 이미지
   확보 불가. 로컬 PG16 스크래치로 **알림 스택(132+157~159)은 실구동 검증 완료**. 전체 001~160 체인은
   CI 격리 Docker(pinned CLI) 또는 fresh Supabase 에서 `apply_manifest_prod.md` 순서 적용 권장.
-- **인증 Preview E2E**: `BLOCKED_ENV`(로컬 관점) — 이 컨테이너의 egress 정책이 앱→staging 호스트
-  (lbeqxarxothkmzqvpudy.supabase.co) 연결을 차단(CONNECT 403)해 로컬 앱 기동·Playwright 실측 불가.
-  Playwright 시나리오(`e2e/`)·fixture 준비됨 — Vercel Preview + 실 로그인에서 오너 확인 권장
-  (숏폼 direct upload·게시판 이미지/멱등/soft-delete·프로필 분리·알림 pagination·favorite/recent·
-  본 세션 lint 리팩터의 페이지네이션 리셋/모바일 pageSize 포함).
+- **인증 Preview E2E**: `EXECUTED_PASS`(2026-07-20 후속 세션, 상세 `docs/audit/preview_e2e_run_20260720b.md`) —
+  Vercel Preview + 실 로그인(신규 E2E 학생·멘토 계정)으로 완주. 학생 PASS · 멘토 PASS ·
+  관리자 = `DEFERRED_UNTIL_APP_COMPLETE`(테스트 계정 GoTrue 시드 결함 `TEST_ACCOUNT_SETUP_BLOCKED`, 제품 결함 아님).
+  P0-3(숏폼)·P0-4(게시판)·P2-24(프로필)·P1-8A/P2-26 핵심 경로·P2-27 핵심 경로 PASS.
+  이 과정에서 발견된 실결함(미디어 첨부 발행 시 disabled 필드 FormData 누락)은 `1f8e382` 로 수정·재검증됨.
+  잔여 scoped validation debt: 다건 알림 cursor 페이지네이션(대량 시드 필요)·모바일 pageSize 정확 카운트·
+  금융/멘토종료 이벤트 알림(rollback-only fixture 영역).
 
 ## 7. staging 진단 스냅샷 (2026-07-20, READ-ONLY)
 | 항목 | staging 결과 |

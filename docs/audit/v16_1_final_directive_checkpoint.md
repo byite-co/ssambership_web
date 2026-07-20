@@ -77,7 +77,7 @@
   `fixtures/notification_atomization_157_159_fixture.sql` — 로컬 PG16 스크래치 클러스터에서 정본 132+157~159 실구동,
   rollback-only 24 assertion PASS. root 환경이면 postgres 사용자로 자동 강등, 종료 시 클러스터 삭제.
 - clean-DB 전체 체인: Supabase CLI 부재 = `BLOCKED_ENV` 유지(알림 스택만 로컬 실구동으로 부분 해소).
-  인증 Preview E2E = `READY_NOT_EXECUTED`(e2e/ 준비됨).
+  인증 Preview E2E = `EXECUTED_PASS`(아래 Section 8 참조 — 구 `READY_NOT_EXECUTED` 해소).
 
 ## Section 7 — Production 준비 문서 ✅
 - `docs/audit/production_apply_runbook.md`: 146~160 적용 순서·pre/post·롤백 구분·진단 쿼리(mentor_plans null·refund billing NULL·
@@ -89,3 +89,31 @@
   부여한 뒤 같은 컨테이너에서 반영 완료: SQL 커밋(8926395) 선행 push → staging 157~160 적용·fixture 24/24 PASS →
   웹·lint·이력 커밋 push. Supabase MCP 는 조직 내 3개 프로젝트가 보이므로 모든 호출에
   project_id=lbeqxarxothkmzqvpudy 를 명시(타 프로젝트·production 미접근).
+
+## Section 8 — 인증 Preview E2E 완주 + 웹 종료 체크포인트 (2026-07-20 최종 세션)
+
+E2E 브랜치(`claude/e2e-student-mentor-admin-test-kmmd4t`)에서 신규 E2E 전용 계정으로 Vercel Preview
+인증 E2E 를 완주하고, 산출물·수정 전부를 본 정본 브랜치에 fast-forward 수렴했다
+(상세 감사: `docs/audit/preview_e2e_run_20260720b.md`, 스펙: `e2e/preview-*.spec.ts` + `playwright.preview.config.ts`).
+
+| 항목 | 상태 |
+|---|---|
+| 학생 Preview E2E | **PASS** |
+| 멘토 Preview E2E | **PASS** |
+| 관리자 Preview E2E | **DEFERRED_UNTIL_APP_COMPLETE** |
+| P0-3 (숏폼 staged upload·413 제거·멱등·보상삭제) | **PASS** |
+| P0-4 (게시판 이미지·중복 방지·수정·soft-delete) | **PASS** |
+| P1-8A 핵심 인증 경로 (무료질문 생성→멘토 첫 답변 answered) | **PASS** |
+| P2-24 (프로필 아바타↔인증서류 분리) | **PASS** |
+| P2-26 핵심 경로 (question_answered 실 domain write→인앱 수신·읽음·딥링크·모두읽음) | **PASS** |
+| P2-27 핵심 경로 (favorite 서버 scope·recent 순서) | **PASS** |
+| 테스트 데이터·Storage·outbox·device token baseline 복원 | **PASS** |
+
+- **발견·수정 결함**: 미디어 첨부 발행 시 `disabled={busy}` 재렌더로 title/rightsAck 가 FormData 에서
+  제외되어 게시판(이미지)·숏폼(영상) 발행이 항상 실패 → 텍스트 필드 `readOnly={busy}` 전환으로 수정
+  (`1f8e382`, 실브라우저 재현→수정→재검증).
+- **scoped validation debt**(웹 종료 비차단): 다건 알림 cursor 페이지네이션(대량 시드 필요,
+  `preview-notifications.spec.ts` 는 `E2E_NOTIF_SEEDED=1` 게이트로 보존) · 모바일 pageSize 정확 카운트
+  (페이저 등장으로 pageSize 적용은 확인) · 금융/멘토 종료 이벤트 알림(rollback-only fixture 영역).
+- **관리자 계정**: staging GoTrue 시드 결함(`confirmation_token` 등 토큰 컬럼 NULL → 로그인 500).
+  제품 결함 아님(`TEST_ACCOUNT_SETUP_BLOCKED`). 이번 작업에서 계정·토큰 컬럼을 수정하지 않았다.
