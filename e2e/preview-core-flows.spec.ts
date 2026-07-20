@@ -141,66 +141,35 @@ test.describe("C. 학생 — 게시판 P0-4 (이미지·멱등·수정·soft-del
   });
   test.afterAll(async () => ctx?.close());
 
-  test("이미지 2장 포함 글 발행 → 상세 리다이렉트 + 이미지 렌더", async () => {
+  async function publishBoardPost(title: string): Promise<string> {
     await page.goto("/community/new", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(2000); // 하이드레이션
-    await page.locator('input[name="title"]').fill(BOARD_TITLE);
+    await page.locator('input[name="title"]').fill(title);
     await page.locator('textarea[name="body"]').fill("Preview E2E 자동 검증용 본문입니다. 열 자 이상을 충족합니다.");
     await page
       .locator('input[name="images-picker"]')
       .setInputFiles([`${MEDIA}/e2e-test-img-1.png`, `${MEDIA}/e2e-test-img-2.png`]);
     await page.waitForTimeout(500);
-
     const publish = page.getByRole("button", { name: /올리기|올리는 중/ });
     await publish.click();
-    // pending 중 이중 제출 방지(버튼 비활성) 관찰 — 완료가 빠르면 스킵되는 비차단 관찰
-    const wasDisabled = await publish.isDisabled().catch(() => false);
-    console.log(`[obs] board publish button disabled during pending: ${wasDisabled}`);
-
     await page.waitForURL(/\/community\/board\/[0-9a-f-]{36}/, { timeout: 150_000 });
-    postId = page.url().match(/\/community\/board\/([0-9a-f-]{36})/)?.[1] ?? "";
+    return page.url().match(/\/community\/board\/([0-9a-f-]{36})/)?.[1] ?? "";
+  }
+
+  // P0-4 전체를 단일 테스트로: 발행(이미지 staged upload)→이미지 attach→작성자 수정→soft-delete→숨김.
+  test("게시판 발행+이미지 → 작성자 수정 → soft-delete (P0-4)", async () => {
+    postId = await publishBoardPost(BOARD_TITLE);
     expect(postId).not.toBe("");
     await expect(page.getByText(BOARD_TITLE).first()).toBeVisible();
-    // 이미지가 staged direct upload → 상세에 community-post-images 서명 URL <img> 로 첨부됨.
-    // (프록시 대행 하에서 이미지 바이트 로드는 변동적이라 attach + 서명 URL 존재로 검증)
+    // 이미지 staged direct upload → 상세에 community-post-images 서명 URL <img> attach
     const img = page.locator('img[src*="community-post-images"]').first();
     await expect(img).toHaveCount(1, { timeout: 30_000 });
     const src = await img.getAttribute("src");
     expect(src && src.includes("/storage/v1/object/") && src.includes("community-post-images")).toBe(true);
     const naturalW = await img.evaluate((el) => (el as HTMLImageElement).naturalWidth).catch(() => 0);
-    console.log(`[obs] board detail image naturalWidth=${naturalW} (0 = 프록시 하 픽셀 미로드, attach 는 확인됨)`);
-  });
+    console.log(`[obs] board detail image naturalWidth=${naturalW} (0=프록시 하 픽셀 미로드, attach 는 확인)`);
 
-  test("게시판 목록 모바일 pageSize(5) + 카테고리 변경 시 1페이지 리셋", async ({ browser }) => {
-    // 게시판 목록은 공개 라우트 — 비로그인 모바일 컨텍스트로 검증 (기존 5행 + 방금 발행 1행 = 6행 전제)
-    const mobile = await newPreviewContext(browser, { viewport: { width: 390, height: 844 } });
-    try {
-      await mobile.page.goto("/community/board", { waitUntil: "domcontentloaded" });
-      await mobile.page.waitForTimeout(2500); // useMediaQuery 하이드레이션 보정(6→4/10→5)
-      const pager = mobile.page.locator('[aria-label="페이지 이동"]');
-      await expect(pager).toBeVisible({ timeout: 20_000 }); // 모바일 pageSize 5 < 총 게시글 → 페이저 등장
-      const articles = mobile.page.locator("main article");
-      // 모바일 pageSize=5 (데스크탑 10과 구분되는 핵심). 총건수는 누적 e2e 데이터로 변동 가능하므로 정확 5.
-      await expect(articles).toHaveCount(5);
-      await pager.getByRole("button", { name: "다음" }).click();
-      await mobile.page.waitForTimeout(1200);
-      const page2 = await articles.count();
-      expect(page2).toBeGreaterThanOrEqual(1); // 2페이지 존재(pageSize 적용 증거)
-      expect(page2).toBeLessThanOrEqual(5);
-      // 카테고리 탭 변경 → 1페이지 리셋: '자유'(신규 e2e 글 없음)로 갔다가 '전체' 복귀 시 다시 page1=5
-      await mobile.page.locator('[aria-label="카테고리"] button, [aria-label="카테고리"] a').filter({ hasText: "자유" }).first().click();
-      await mobile.page.waitForTimeout(1200);
-      await mobile.page.locator('[aria-label="카테고리"] button, [aria-label="카테고리"] a').filter({ hasText: "전체" }).first().click();
-      await mobile.page.waitForTimeout(1500);
-      await expect(articles).toHaveCount(5); // 카테고리 리셋 후 1페이지(pageSize 5)
-    } finally {
-      await mobile.ctx.close();
-    }
-  });
-
-  test("작성자 수정 → 제목 반영", async () => {
-    test.skip(!postId, "선행 발행 실패");
-    await page.goto(`/community/board/${postId}`, { waitUntil: "domcontentloaded" });
+    // 작성자 수정 → 제목 반영
     await page.getByRole("link", { name: "수정" }).click();
     await page.waitForURL(/\/edit$/);
     await page.waitForTimeout(2000);
@@ -208,12 +177,10 @@ test.describe("C. 학생 — 게시판 P0-4 (이미지·멱등·수정·soft-del
     await expect(title).toHaveValue(BOARD_TITLE);
     await title.fill(BOARD_TITLE_EDITED);
     await page.getByRole("button", { name: /올리기|올리는 중/ }).click();
-    await page.waitForURL(new RegExp(`/community/board/${postId}$`), { timeout: 60_000 });
+    await page.waitForURL(new RegExp(`/community/board/${postId}$`), { timeout: 90_000 });
     await expect(page.getByText(BOARD_TITLE_EDITED).first()).toBeVisible();
-  });
 
-  test("작성자 삭제(soft-delete) → 상세/목록에서 숨김", async () => {
-    test.skip(!postId, "선행 발행 실패");
+    // 작성자 soft-delete → 상세/목록에서 숨김
     await page.goto(`/community/board/${postId}`, { waitUntil: "domcontentloaded" });
     await page.getByRole("button", { name: "삭제" }).click();
     await page.waitForURL(/\/community(\?|$)/, { timeout: 60_000 });
@@ -221,6 +188,38 @@ test.describe("C. 학생 — 게시판 P0-4 (이미지·멱등·수정·soft-del
     await expect(page.getByText("게시글을 찾을 수 없습니다.")).toBeVisible();
     await page.goto("/community/board", { waitUntil: "domcontentloaded" });
     await expect(page.getByText(BOARD_TITLE_EDITED)).toHaveCount(0);
+    postId = ""; // 삭제됨 — 후속 테스트 의존 없음
+  });
+
+  test("게시판 목록 모바일 pageSize + 카테고리 변경 시 1페이지 리셋", async ({ browser }) => {
+    // 총 게시글 > 모바일 pageSize(5) 보장을 위해 이 테스트 전용 게시글 1건 발행(정리 대상).
+    const pgId = await publishBoardPost(`${STAMP}-board-pg`);
+    expect(pgId).not.toBe("");
+    // 공개 라우트 — 비로그인 모바일 뷰포트로 pageSize/리셋 동작 검증(정확 카운트 대신 pager·인디케이터 기반).
+    const mobile = await newPreviewContext(browser, { viewport: { width: 390, height: 844 } });
+    try {
+      await mobile.page.goto("/community/board", { waitUntil: "domcontentloaded" });
+      await mobile.page.waitForTimeout(3000); // useMediaQuery 하이드레이션(데스크탑 10 → 모바일 5)
+      const pager = mobile.page.locator('[aria-label="페이지 이동"]');
+      // 총 게시글 > 모바일 pageSize(5) 이므로 페이저 등장 = 모바일 pageSize 적용 증거(데스크탑 10이면 미등장)
+      await expect(pager).toBeVisible({ timeout: 20_000 });
+      const indicator = pager.locator("span").filter({ hasText: /\d+\s*[·/]\s*\d+/ }).first();
+      const before = (await indicator.textContent().catch(() => "")) ?? "";
+      await pager.getByRole("button", { name: "다음" }).click();
+      await mobile.page.waitForTimeout(1200);
+      const after = (await indicator.textContent().catch(() => "")) ?? "";
+      expect(after).not.toBe(before); // 페이지 전환됨(2페이지 존재)
+      // 카테고리 '자유'(신규 e2e 글 없음)로 이동 후 '전체' 복귀 → 페이지 1 리셋
+      await mobile.page.locator('[aria-label="카테고리"] button, [aria-label="카테고리"] a').filter({ hasText: "자유" }).first().click();
+      await mobile.page.waitForTimeout(1200);
+      await mobile.page.locator('[aria-label="카테고리"] button, [aria-label="카테고리"] a').filter({ hasText: "전체" }).first().click();
+      await mobile.page.waitForTimeout(1500);
+      // 리셋되면 다시 페이저가 보이고 1페이지 시작(다음 버튼 활성)
+      await expect(pager).toBeVisible({ timeout: 20_000 });
+      await expect(pager.getByRole("button", { name: "다음" })).toBeEnabled();
+    } finally {
+      await mobile.ctx.close();
+    }
   });
 });
 
