@@ -100,6 +100,18 @@
 - **P1-13 검증**: rollback-only fixture(pending→active+debit+succeeded·멱등 무이중차감·processing/stale/insufficient/closed 거부·금액 mentor_plans 정본·plan_id/metadata 백필) 전부 PASS, baseline 0행. **독립 2세션 = `CONCURRENCY_VALIDATION_DEBT`**(단일세션 상태기계만 검증). 실지갑·실결제·실원장 무변경. `insertSubscriptionRow` 등 구 3단계 helper 는 미호출 dead-code(경고)로 잔존 — 별도 정리 대상.
 - 상태: P1-13 = `IMPLEMENTED_STAGING_WITH_CONCURRENCY_DEBT`(완전 완료 아님). P1-8A = `IMPLEMENTED_STAGING_WITH_CONCURRENCY_DEBT`. P3-9 = 완료(anon revoke + 인가 재정의).
 
+### 141 / 142 / 143 (P1-8A/P1-13 최종 보안·금융 마감 감사 — staging 적용됨)
+
+| 번호 | 정본 파일 | 내용 | staging |
+|---|---|---|---|
+| `141` | `141_p1_8a_direct_write_guards.sql` | 앱 호환 direct-write 우회 방어. 판별: qna_* RPC(owner=postgres)는 `current_user='postgres'`, 직접 write 는 `'authenticated'` → **SECURITY INVOKER** 가드 트리거로 구분. `question_threads`(role-correct status/first_answered/wrong 전이) · `question_messages`/`question_attachments`(종료 스레드·경로/owner 위조) 직접 write 거부. 업로드 INSERT 정책에 계정 활성+멘토 승인 추가. | 적용됨 |
+| `142` | `142_p1_8a_pending_refund_lock.sql` | pending-refund lock 즉시 연동. create(구독 경로)·student append·student attachment 는 활성 구독 `FOR UPDATE` 후 별도 statement 로 두 canonical 유형(subscription_prorated/subscription_mentor_suspended) live pending refund 검사 → 있으면 거부. 무료·멘토 미적용. | 적용됨 |
+| `143` | `143_p1_13_state_machine_hardening.sql` | `confirm_subscription_checkout` 완전성: pair advisory xact lock(빈 pair 봉쇄)+UNIQUE/ON CONFLICT · 학생활성·멘토승인·cap(신규/재활성)·payment kind·mentor 존재 게이트 · 성공/원장 **전필드** 멱등(user_id·ref_type·ref_id·delta·reason·idem_key) · succeeded인데 구독/원장 불일치 시 구조화 실패 격리(부분커밋 없음). | 적용됨 |
+
+- 검증(rollback-only, 전부 PASS, baseline 복원): **141** RPC 무영향·student fake answered 거부·종료 스레드 메시지 거부·직접 owner/경로 위조 거부. **142** create/student-append pending-refund 거부·무refund 정상·멘토 무영향. **143** happy·전필드 멱등·ledger tamper 격리·succeeded-no-sub 격리·정지학생/미승인멘토/cap초과/비구독kind 거부.
+- **최종 판정**: **P1-8A = `IMPLEMENTED_WITH_CONCURRENCY_DEBT`** (Storage OR-우회 0, 직접 write 우회 서버 트리거로 봉쇄, pending-refund 연동 완료; 독립 2세션 first-answered/한도 경쟁 실측만 부채). **P1-13 = `IMPLEMENTED_WITH_CONCURRENCY_DEBT`** (구조적 잠금: pair advisory lock + uq_subscriptions_pair UNIQUE/ON CONFLICT 검증; 독립 2세션 실측만 부채). Part 5 dead-code 제거로 eslint warning 0.
+- 잔여 노트: P1-13 가격은 mentor_plans 정본만 사용(미가격 플랜 멘토 명시적 오류=배포 전 검증). pending-refund 는 refunds.subscription_id+request_type 기준(P1-13 billing-event 정본 확정 시 last_billing_event_id helper 로 교체 가능). direct 정책·open→pending 최종 제거 = P1-8B(WAITING_EXTERNAL_APP).
+
 ## 7. 클린 DB 재현 (검증 부채 — 미실행)
 
 `supabase` CLI 부재로 아래를 **실행하지 못함**. CLI 환경 확보 시 실행하고, 그 전에는 PASS로 기록하지 않는다.

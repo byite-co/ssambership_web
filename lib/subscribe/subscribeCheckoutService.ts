@@ -16,7 +16,6 @@ import {
   SUBSCRIPTIONS_SELECT,
   SUBSCRIPTIONS_TABLE,
   addMonthsClampedUtc,
-  buildSubscriptionsInsertPayload,
 } from "@/lib/subscribe/subscriptionsTable";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { loadMentorCapUsage, wouldExceedCap } from "@/lib/subscribe/mentorCapService";
@@ -429,40 +428,8 @@ async function recordSubscriptionCashDebitRpc(
   }
 }
 
-/**
- * `record_subscription_cash_debit` 이후 `markPaymentSucceeded`만 실패한 경우(드묾) 보정: 원장+지갑을 019 `record_subscription_cash_rollback`에서 원자적으로 되돌림
- */
-async function tryReversalSubscriptionCashDebit(
-  userId: string,
-  paymentId: string,
-  subscriptionId: string,
-  amountCents: number
-): Promise<void> {
-  if (amountCents <= 0) {
-    console.error("[tryReversalSubscriptionCashDebit] skip rollback: non-positive amountCents", {
-      userId,
-      paymentId,
-      subscriptionId,
-      amountCents,
-    });
-    return;
-  }
-  try {
-    const admin = createServiceRoleClient();
-    const { error } = await admin.rpc("record_subscription_cash_rollback", {
-      p_user_id: userId,
-      p_subscription_id: subscriptionId,
-      p_payment_id: paymentId,
-      p_amount_cents: amountCents,
-    });
-    if (error) {
-      console.error("[tryReversalSubscriptionCashDebit] record_subscription_cash_rollback", error);
-    }
-  } catch (e) {
-    console.error("[tryReversalSubscriptionCashDebit]", e);
-  }
-}
-
+// (removed dead helpers: insertSubscriptionRow / markPaymentSucceeded / tryDeleteSubscriptionById /
+//  tryReversalSubscriptionCashDebit — P1-13 3단계 비원자 경로가 confirm_subscription_checkout RPC 로 대체됨.)
 type IntentResult =
   | {
       ok: true;
@@ -951,131 +918,10 @@ function mapConfirmSubscriptionError(message: string): string {
   }
 }
 
-type InsSub =
-  | { ok: true; subscriptionId: string }
-  | { ok: false; error: string };
 
-async function insertSubscriptionRow(
-  supabase: SupabaseClient,
-  ctx: {
-    studentId: string;
-    mentorId: string;
-    planId: string;
-    planTier: SubscribePlanTier;
-    paymentId: string;
-    payTable: string;
-  }
-): Promise<InsSub> {
-  void supabase;
-  const admin = createServiceRoleClient();
-
-  const canonical = await admin
-    .from(SUBSCRIPTIONS_TABLE)
-    .insert(
-      buildSubscriptionsInsertPayload({
-        studentId: ctx.studentId,
-        mentorId: ctx.mentorId,
-        planId: ctx.planId,
-        planTier: ctx.planTier,
-        paymentId: ctx.paymentId,
-      })
-    )
-    .select("id")
-    .maybeSingle();
-  if (!canonical.error && canonical.data && (canonical.data as Row).id != null) {
-    return { ok: true, subscriptionId: String((canonical.data as Row).id) };
-  }
-  if (canonical.error && isSchemaNotReadyError(canonical.error)) {
-    const legacyCanonical = await admin
-      .from(SUBSCRIPTIONS_TABLE)
-      .insert(
-        buildSubscriptionsInsertPayload({
-          studentId: ctx.studentId,
-          mentorId: ctx.mentorId,
-          planId: ctx.planId,
-          planTier: ctx.planTier,
-          paymentId: ctx.paymentId,
-          includeBillingPeriod: false,
-        })
-      )
-      .select("id")
-      .maybeSingle();
-    if (!legacyCanonical.error && legacyCanonical.data && (legacyCanonical.data as Row).id != null) {
-      return { ok: true, subscriptionId: String((legacyCanonical.data as Row).id) };
-    }
-  }
-  if (canonical.error) {
-    console.error("[insertSubscriptionRow] subscriptions insert", canonical.error);
-  }
-
-  for (const table of SUB_TABLES) {
-    if (table === SUBSCRIPTIONS_TABLE) continue;
-    const { error: pe } = await admin.from(table).select("id").limit(1);
-    if (pe) continue;
-    const { column: sc } = await pickExistingColumn(admin, table, STU_FK);
-    const { column: mc } = await pickExistingColumn(admin, table, MEN_FK);
-    if (!sc || !mc) continue;
-    const st = (await pickExistingColumn(admin, table, ["status", "state", "subscription_status"])).column;
-    const pc = (await pickExistingColumn(admin, table, ["plan_id", "mentor_plan_id", "product_id", "price_id"])).column;
-    const payRef = (await pickExistingColumn(admin, table, ["payment_id", "last_payment_id", "initial_payment_id"])).column;
-    const p: Record<string, unknown> = { [sc]: ctx.studentId, [mc]: ctx.mentorId };
-    if (st) p[st] = "active";
-    if (pc && ctx.planId) p[pc] = ctx.planId;
-    if (payRef) p[payRef] = ctx.paymentId;
-    const { column: tierC } = await pickExistingColumn(admin, table, ["plan_tier", "tier", "label"]);
-    if (tierC) p[tierC] = ctx.planTier;
-    const { data, error } = await admin.from(table).insert(p).select("id").maybeSingle();
-    if (!error && data && (data as Row).id != null) {
-      return { ok: true, subscriptionId: String((data as Row).id) };
-    }
-  }
-  return {
-    ok: false,
-    error: canonical.error?.message ?? "subscriptions insert 후보 전부 실패",
-  };
-}
-
-async function markPaymentSucceeded(
-  supabase: SupabaseClient,
-  table: string,
-  id: string,
-  stCol: string | null
-): Promise<{ ok: true } | { ok: false; error: string }> {
-  void supabase;
-  if (!stCol) return { ok: true };
-  const admin = createServiceRoleClient();
-  for (const val of ["succeeded", "paid", "success", "complete", "captured"] as const) {
-    const { data, error } = await admin
-      .from(table)
-      .update({ [stCol]: val })
-      .eq("id", id)
-      .select("id")
-      .maybeSingle();
-    if (!error && data) {
-      return { ok: true };
-    }
-  }
-  return { ok: false, error: "status 업데이트 실패" };
-}
-
-async function tryDeleteSubscriptionById(supabase: SupabaseClient, subId: string | null) {
-  void supabase;
-  if (!subId) return;
-  const admin = createServiceRoleClient();
-  for (const table of SUB_TABLES) {
-    const { error } = await admin.from(table).delete().eq("id", subId);
-    if (!error) return;
-    console.error(
-      "[tryDeleteSubscriptionById] failed on",
-      table,
-      "subId:",
-      subId,
-      error.message
-    );
-  }
-  console.error("[tryDeleteSubscriptionById] ZOMBIE_SUBSCRIPTION_RISK subId:", subId);
-}
-
+// (removed dead helper insertSubscriptionRow — P1-13 3단계 경로가 confirm_subscription_checkout RPC 로 대체됨)
+// (removed dead helper markPaymentSucceeded — P1-13 3단계 경로가 confirm_subscription_checkout RPC 로 대체됨)
+// (removed dead helper tryDeleteSubscriptionById — P1-13 3단계 경로가 confirm_subscription_checkout RPC 로 대체됨)
 type RoomR = { ok: true; roomId: string } | { ok: false; error: string };
 
 /**
