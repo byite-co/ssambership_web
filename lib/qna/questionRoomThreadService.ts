@@ -2,13 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
 import { assertRoomParty } from "@/lib/qna/questionRoomApiAuth";
 import { nextRoomQuestionNumber } from "@/lib/qna/questionRoomMutations";
-import { updateQuestionThreadStatus } from "@/lib/qna/questionThreadMutations";
-import { readQuestionThreadWorkflowStatus, WEEKLY_QUESTION_LIMIT_MESSAGE } from "@/lib/qna/questionThreadStatus";
+import { WEEKLY_QUESTION_LIMIT_MESSAGE } from "@/lib/qna/questionThreadStatus";
 import { fetchWeeklyQuestionUsage } from "@/lib/qna/weeklyQuestionUsage";
 import { assertFreeQuestionAllowed } from "@/lib/qna/freeQuestionUsage";
 import { findActiveSubscriptionForPair } from "@/lib/subscribe/subscribeCheckoutService";
 import { threadRowBelongsToMentorStudentRoom } from "@/lib/qna/questionThreadRoomRef";
-import { assertMentorApprovedForAction } from "@/lib/mentor/mentorVerificationGate";
 import {
   confirmQuestionThreadViaRpc,
   createQuestionThreadViaRpc,
@@ -164,42 +162,9 @@ export async function confirmQuestionThreadForStudent(
   return { ok: true };
 }
 
-export async function markQuestionThreadAnsweredForMentor(
-  supabase: SupabaseClient,
-  mentorId: string,
-  roomId: string,
-  threadId: string
-): Promise<{ ok: true } | { ok: false; status: 400 | 403 | 404 | 500; error: string }> {
-  const party = await assertRoomParty(supabase, roomId, mentorId, "mentor");
-  if (!party.ok) {
-    return { ok: false, status: party.status === 403 ? 403 : 404, error: party.error };
-  }
-  const mentorGate = await assertMentorApprovedForAction(supabase, mentorId);
-  if (!mentorGate.ok) {
-    return { ok: false, status: 403, error: mentorGate.error };
-  }
-  const inRoom = await assertThreadInRoom(supabase, roomId, threadId);
-  if (!inRoom.ok) {
-    return { ok: false, status: inRoom.status, error: inRoom.error };
-  }
-
-  const workflow = readQuestionThreadWorkflowStatus(inRoom.row);
-  if (workflow === "confirmed") {
-    return { ok: true };
-  }
-  if (workflow === "answered") {
-    return { ok: true };
-  }
-
-  const extra = inRoom.row.first_answered_at
-    ? undefined
-    : { first_answered_at: new Date().toISOString() };
-  const updated = await updateQuestionThreadStatus(supabase, threadId, "answered", extra);
-  if (!updated.ok) {
-    return { ok: false, status: 500, error: updated.error };
-  }
-  return { ok: true };
-}
+// P1-8A: 멘토 "답변 완료" status-only 직접 write 경로 폐지. answered 전이는 오직
+//  qna_append_message(첫 메시지)/qna_register_attachment(첫 첨부) RPC 내부에서만 발생한다.
+//  (구 markQuestionThreadAnsweredForMentor + /api/.../answer 라우트 제거.)
 
 export async function updateQuestionThreadWrongAnswerForStudent(
   supabase: SupabaseClient,
