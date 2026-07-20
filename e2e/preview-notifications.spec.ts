@@ -13,6 +13,11 @@ test.describe("알림 허브 — cursor/category/unread", () => {
   let ctx: BrowserContext;
   let page: Page;
 
+  // 12건 대량 시드는 실 domain write 로 재현이 비현실적이라 기본 skip.
+  // 실 알림 생성·소비(question_answered)는 preview-qna-notify.spec.ts 가 커버.
+  // 다건 cursor 페이지네이션을 검증하려면 E2E_NOTIF_SEEDED=1 + 사전 시드 후 실행.
+  test.skip(process.env.E2E_NOTIF_SEEDED !== "1", "다건 알림 시드 미수행 — qna-notify 스펙이 실 알림 흐름 커버");
+
   test.beforeAll(async ({ browser }) => {
     ({ ctx, page } = await newPreviewContext(browser));
     await login(page, ACCOUNTS.student);
