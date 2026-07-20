@@ -59,3 +59,14 @@
 - **보상**: finalize 실패 시 신규 미등록 영상 보상 삭제, 교체 성공 후 구영상 차집합 정리(기존 로직 유지).
 - **검증**: tsc 0, 변경파일 eslint 0, 계약테스트 16/16(숏폼 ref 5건 포함), staging 148 no-op 적용.
 - **부채**: 실브라우저 업로드 왕복(500MB·더블클릭·finalize 실패 보상)=E2E_DEBT.
+
+## Phase 2-4 — 알림·멘토 목록 계약 테스트 ✅ 구현완료
+- **순수 추출**: `notificationCursor.ts`(encode/decode·isNotificationReadRow, hub 가 re-export),
+  `orderCardsByIds.ts`(favorite/recent 정렬 — scopedMentorsList 중복 제거).
+- **계약 테스트(19건, 총 35/35)**:
+  - 알림 커서 왕복(+00:00·uuid 무손상, URL-safe), 잘못된 커서 null, 읽음판정(bool·timestamp·1970 sentinel·null col).
+  - 카테고리 파싱(all 폴백)·타입목록·href(unread/카테고리 반영, 필터 변경 시 cursor 초기화).
+  - 최근 본 멘토: 순서(최신 먼저)·dedup·손상 localStorage→[]·빈 상태·무효 id 무시(localStorage mock).
+  - scope 정렬: recent(ids 순서)·favorite(입력정렬 유지)·디렉터리 제외·빈 ids·원본 불변.
+- **검증**: tsc 0, 변경파일 eslint 0, 계약테스트 35/35.
+- **부채**: read-before-navigation·비로그인·서버 favorite 필터 왕복 실브라우저=E2E_DEBT.

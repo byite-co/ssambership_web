@@ -4,6 +4,17 @@ import {
   notificationCategoryTypeList,
   type NotificationCategory,
 } from "@/lib/notifications/notificationCategories";
+import {
+  BOOL_READ_COLS,
+  decodeNotificationCursor,
+  encodeNotificationCursor,
+  isNotificationReadRow,
+  type NotificationCursor,
+} from "@/lib/notifications/notificationCursor";
+
+// 커서·읽음판정 순수 로직은 notificationCursor.ts 로 이동해 계약 테스트로 회귀 방지. 여기서 re-export.
+export { BOOL_READ_COLS, decodeNotificationCursor, encodeNotificationCursor, isNotificationReadRow };
+export type { NotificationCursor };
 
 type Row = Record<string, unknown>;
 
@@ -36,7 +47,7 @@ const TYPE_FK = [
 ] as const;
 // 키셋 정렬 1순위 후보(존재하는 첫 컬럼). 동률은 항상 id(uuid, 유니크)로 안정화한다.
 const ORDER_CANDIDATES = ["created_at", "inserted_at", "sent_at", "updated_at"] as const;
-const BOOL_READ_COLS = new Set(["is_read", "read", "acknowledged"]);
+// BOOL_READ_COLS 는 notificationCursor.ts 에서 import(위 re-export).
 
 /** P2-26: 서버 키셋 페이지 크기 기본값(모바일/데스크탑 공통) */
 export const DEFAULT_NOTIFICATIONS_PAGE_SIZE = 10;
@@ -50,7 +61,7 @@ export const NOTIFICATIONS_HUB_DATA_MODEL = [
   "공지·이벤트 연동",
 ] as const;
 
-export type NotificationCursor = { orderValue: string; id: string };
+// NotificationCursor 는 notificationCursor.ts 에서 import(위 re-export).
 export type NotificationPageDir = "next" | "prev";
 
 export type NotificationHubLoad = {
@@ -74,47 +85,6 @@ export type NotificationHubLoad = {
   /** 본인 전체 미읽음 수(현재 페이지가 아니라 서버 count). read 컬럼 없으면 null */
   unreadCount: number | null;
 };
-
-export function isNotificationReadRow(row: Row, readCol: string | null): boolean {
-  if (!readCol) return false;
-  const v = row[readCol];
-  if (BOOL_READ_COLS.has(readCol)) {
-    return v === true || v === 1 || v === "true" || v === 1.0;
-  }
-  return v != null && String(v) !== "" && !String(v).startsWith("1970-01-01");
-}
-
-// ── 커서 인코딩(URL-safe base64url) — created_at 의 '+00:00' 등이 URL 왕복에서 손상되지 않도록 ──
-// 구분자: 타임스탬프/uuid 에 나타나지 않는 제어문자(0x01).
-const CURSOR_SEP = String.fromCharCode(1);
-
-function b64urlEncode(raw: string): string {
-  const b64 = typeof btoa === "function" ? btoa(raw) : Buffer.from(raw, "binary").toString("base64");
-  return b64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-function b64urlDecode(s: string): string {
-  const b64 = s.replace(/-/g, "+").replace(/_/g, "/");
-  return typeof atob === "function" ? atob(b64) : Buffer.from(b64, "base64").toString("binary");
-}
-
-export function encodeNotificationCursor(orderValue: string, id: string): string {
-  return b64urlEncode(`${orderValue}${CURSOR_SEP}${id}`);
-}
-
-export function decodeNotificationCursor(cursor: string | null | undefined): NotificationCursor | null {
-  if (!cursor) return null;
-  try {
-    const raw = b64urlDecode(cursor);
-    const idx = raw.indexOf(CURSOR_SEP);
-    if (idx < 0) return null;
-    const orderValue = raw.slice(0, idx);
-    const id = raw.slice(idx + CURSOR_SEP.length);
-    if (!id) return null;
-    return { orderValue, id };
-  } catch {
-    return null;
-  }
-}
 
 function baseLoad(pageSize: number): NotificationHubLoad {
   return {

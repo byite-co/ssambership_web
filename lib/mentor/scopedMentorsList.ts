@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { MENTORS_PAGE_SIZE, type MentorsListFilters } from "@/lib/mentor/mentorsListSearchParams";
 import { loadPublicMentorsList, type PublicMentorsListResult } from "@/lib/mentor/publicMentorsListQueries";
+import { filterAndOrderByIds } from "@/lib/mentor/orderCardsByIds";
 
 // P2-27: scope=favorite/recent 실제 배선. publicMentorsListQueries(격리)는 수정하지 않고
 // 전체 필터 결과 카드셋을 받아 scope ID 로 제한·정렬·페이지네이션한다.
@@ -55,12 +56,9 @@ export async function loadScopedMentorsList(
     return { ...emptyMentorsResult(filters.page, pageSize), usersError: full.usersError };
   }
 
-  const idSet = new Set(scope.ids);
-  let scoped = full.cards.filter((c) => idSet.has(c.mentorId));
-  if (scope.orderByIds) {
-    const order = new Map(scope.ids.map((id, i) => [id, i] as const));
-    scoped = [...scoped].sort((a, b) => (order.get(a.mentorId) ?? 1e9) - (order.get(b.mentorId) ?? 1e9));
-  }
+  const scoped = filterAndOrderByIds(full.cards, scope.ids, (c) => c.mentorId, {
+    orderByIds: scope.orderByIds,
+  });
 
   const totalCount = scoped.length;
   const start = (filters.page - 1) * pageSize;
