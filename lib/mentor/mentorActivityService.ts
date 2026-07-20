@@ -199,6 +199,8 @@ export async function finalizeMentorTermination(
     });
 
     const paymentId = str(billing?.payment_id) ?? str(sub.payment_id);
+    // 정본 연결: 이 환불이 대응하는 current billing event(id)를 기록한다(150 FK).
+    const billingEventId = str(billing?.id) ?? str(sub.last_billing_event_id);
     if (estimate.amountCents > 0) {
       const { error: insErr } = await admin.from("refunds").insert({
         user_id: studentId,
@@ -206,6 +208,7 @@ export async function finalizeMentorTermination(
         status: "pending",
         payment_id: paymentId,
         subscription_id: subscriptionId,
+        billing_event_id: billingEventId,
         request_type: "subscription_mentor_suspended",
         reason: "멘토 활동 종료에 따른 잔여기간 환불(잔여 100%)",
       });

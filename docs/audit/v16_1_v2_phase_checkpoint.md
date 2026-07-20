@@ -70,3 +70,21 @@
   - scope 정렬: recent(ids 순서)·favorite(입력정렬 유지)·디렉터리 제외·빈 ids·원본 불변.
 - **검증**: tsc 0, 변경파일 eslint 0, 계약테스트 35/35.
 - **부채**: read-before-navigation·비로그인·서버 favorite 필터 왕복 실브라우저=E2E_DEBT.
+
+## Phase 1 후속(비차단) ✅ 구현완료
+### 질문 첨부 Storage INSERT 자격 (149)
+- `qra_path_upload_eligible(name)` + Storage INSERT 정책 conjunct 추가. 등록 RPC 호출 없이 quota 소모하는
+  업로드를 차단: 학생은 (활성구독 && pending 환불 없음) 또는 (구독없음 && 경로 thread=본인 무료질문 스레드)만 허용.
+  멘토 업로더 미영향. RLS with_check 는 비잠금 best-effort(최종 원자 잠금·환불검사는 등록 RPC).
+- staging 적용 완료. 141/142 미수정.
+
+### refund billing event 정본 FK (150)
+- `refunds.billing_event_id uuid` FK → subscription_billing_events(id) ON DELETE SET NULL + 부분 인덱스.
+- 웹 신규 refund 경로 2곳(구독 취소·멘토 종료)이 current billing event id 기록.
+- `qna_subscription_has_live_refund` 를 current billing event 기준으로 정밀화(billing_event_id NULL 레거시는
+  안전하게 계속 카운트 — 추정 백필 금지). production 배포 전 NULL 진단 쿼리 파일 주석에 포함.
+- staging refunds=0행(신규 컬럼 안전). 064/069/142 미수정.
+
+## SQL 번호 추가
+| 149 | Storage INSERT 자격 게이트 | 적용 |
+| 150 | refund billing_event FK + 게이트 정밀화 | 적용 |
