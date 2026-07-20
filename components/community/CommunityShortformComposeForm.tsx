@@ -189,7 +189,7 @@ export function CommunityShortformComposeForm(props: Props) {
               name="title"
               required
               maxLength={100}
-              disabled={busy}
+              readOnly={busy}
               defaultValue={props.draft?.title ?? ""}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             />
@@ -199,7 +199,6 @@ export function CommunityShortformComposeForm(props: Props) {
             카테고리
             <select
               name="category"
-              disabled={busy}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
               defaultValue={props.draft?.category ?? "study"}
             >
@@ -237,7 +236,7 @@ export function CommunityShortformComposeForm(props: Props) {
               name="body"
               maxLength={500}
               rows={4}
-              disabled={busy}
+              readOnly={busy}
               defaultValue={props.draft?.body ?? ""}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             />
@@ -247,14 +246,14 @@ export function CommunityShortformComposeForm(props: Props) {
             출처 (선택)
             <input
               name="source"
-              disabled={busy}
+              readOnly={busy}
               defaultValue={props.draft?.source ?? ""}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             />
           </label>
 
           <label className="flex items-start gap-2 text-sm text-slate-800">
-            <input type="checkbox" name="rightsAck" value="on" disabled={busy} className="mt-1 accent-[#2563EB]" />
+            <input type="checkbox" name="rightsAck" value="on" className="mt-1 accent-[#2563EB]" />
             <span>영상 및 콘텐츠의 권리를 보유하며 정책에 맞게 올립니다. (올리기 시 필수)</span>
           </label>
         </form>

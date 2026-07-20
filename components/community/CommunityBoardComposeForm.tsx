@@ -165,7 +165,7 @@ export function CommunityBoardComposeForm(props: Props) {
           <input
             name="title"
             required
-            disabled={busy}
+            readOnly={busy}
             defaultValue={props.draft?.title ?? ""}
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
           />
@@ -182,7 +182,7 @@ export function CommunityBoardComposeForm(props: Props) {
           <textarea
             name="body"
             rows={8}
-            disabled={busy}
+            readOnly={busy}
             defaultValue={props.draft?.body ?? ""}
             className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
           />
