@@ -36,3 +36,30 @@
   + `run_scheduled_payout`(enabled 아니면 무조건 dry-run·실지급 금지, enabled 라야 실지급, 153 멱등으로 배치 중복 봉쇄).
 - cron 미설정(staging 기본 disabled). 실지급은 명시 enable + dry_run=false 만.
 - **검증**: staging 156 적용 + `run_scheduled_payout(today)` = scheduler_enabled=false·dry_run=true·payout_run_items 0(무변경).
+
+## Section 3 — P1-11 worker·P2-17 통합 검증 ✅ (152 fixture 로 검증됨)
+- 152 rollback fixture 가 이미 검증: 복수 worker claim 중복 0(claim_w1=1/w2=0)·lease 만료 회수·invalid token revoke·
+  dead-letter(max)·설정 OFF 수신자 delivery 0(suppressed)·토큰별 delivery UNIQUE·계정 전환 재소유(register_device_token).
+- worker 오케스트레이터(outboxWorker.runOutboxBatch, dryRunTransport)·순수 backoff(outboxBackoff) 계약테스트 56/62 포함.
+- P2-17: 설정 저장 실패 시 성공 UI 금지(NotificationSettingsPanel ok 분기). 실기기 FCM·앱 딥링크·권한 = WAITING_EXTERNAL_APP.
+- 부채: 오케스트레이터 mock-transport 단위 테스트는 `@/` alias node:test 제약으로 미실행(tsc·152 fixture·backoff 테스트로 대체 검증).
+
+## Section 5 — 저장소 전체 lint 부채
+- **현황**: `npx eslint .` = 38 error·66 warning. **전부 기존 파일**(신규 규칙 `react-hooks/set-state-in-effect` 등,
+  브랜치 HEAD 이전부터 존재). **이번 세션 변경 파일은 전부 lint-clean**(경고 포함 0).
+- **안전 수정**: e2e prefer-const(2건) 적용. 위험한 --fix(빈 줄·disable 제거) 되돌림.
+- **미완(정직 보고)**: 나머지는 ~18개 인터랙티브 UI 컴포넌트의 set-state-in-effect(페이지네이션 리셋·matchMedia 초기화·
+  prop 동기화)·no-explicit-any(query 콜백)·no-html-link 다. **브라우저 검증 없이 "기능 변화 없이" 대량 리팩터는 회귀 위험**이라
+  세션 내 전량 0 화는 보류. 안전 변환 패턴(React 렌더 중 파생 리셋: `const key=…; const [prev,setPrev]=useState(key);
+  if(prev!==key){setPrev(key);setPage(1)}`)을 각 파일에 적용하는 브라우저 검증 동반 후속으로 분리. = LINT_DEBT(pre-existing).
+- `next build`는 eslint 게이트가 아니라 Vercel Ready 유지(빌드 영향 없음).
+
+## Section 6 — 검증 환경 준비 ✅ (스크립트·구조)
+- `scripts/verify/sql_number_integrity.mjs`(오프라인): 146+ 신규 번호 중복 0 확인, 레거시 중복(002/032/033/034/039) 보고.
+- `scripts/verify/two_session_concurrency.sh`: psql 2세션 harness 골격. DATABASE_URL 없으면 `READY_NOT_EXECUTED`.
+  6 시나리오(p0-5·p1-8·p1-13·p1-10·p1-11·p2-25) pg_backend_pid 상이 검증 포함.
+- clean-DB: Supabase CLI·로컬 PG 부재 = `BLOCKED_ENV`(오프라인 번호검사만). 인증 Preview E2E = `READY_NOT_EXECUTED`(e2e/ 준비됨).
+
+## Section 7 — Production 준비 문서 ✅
+- `docs/audit/production_apply_runbook.md`: 146~156 적용 순서·pre/post·롤백 구분·진단 쿼리(mentor_plans null·refund billing NULL·
+  payout dup·storage orphan·outbox dead·deletion stuck)·staging 진단 스냅샷(전부 0)·레거시 번호 충돌 명시.

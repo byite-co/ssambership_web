@@ -164,11 +164,11 @@ test("(1) shortform_post: hidden/restored/deleted 동작", async () => {
   const sfId = await newShortform(studentId, randomUUID());
 
   await applyContentModerationViaDb({ targetType: "shortform_post", targetId: sfId, intent: "hidden" });
-  let { data: r1 } = await admin.from("shortform_posts").select("status").eq("id", sfId).single();
+  const { data: r1 } = await admin.from("shortform_posts").select("status").eq("id", sfId).single();
   expect((r1 as { status: string }).status).toBe("hidden");
 
   await applyContentModerationViaDb({ targetType: "shortform_post", targetId: sfId, intent: "restored" });
-  let { data: r2 } = await admin.from("shortform_posts").select("status").eq("id", sfId).single();
+  const { data: r2 } = await admin.from("shortform_posts").select("status").eq("id", sfId).single();
   expect((r2 as { status: string }).status).toBe("published");
 
   await applyContentModerationViaDb({ targetType: "shortform_post", targetId: sfId, intent: "deleted" });
