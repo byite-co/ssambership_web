@@ -23,3 +23,16 @@
 - **검증**: staging 154 적용 + rollback fixture 6항목(gate 정상차단·forfeit GUC 우회·lease 중복0·reclaim·
   state gate·잔액 0 몰수) 전부 통과, 실데이터 무변경. tsc 0.
 - **부채**: 실 GoTrue admin transport·앱 세션 폐기 미들웨어 = WAITING_EXTERNAL_APP(플래그 OFF 컷오버).
+
+## Section 1 — P1-11 알림 17종 원자화 (진행: 7/17 완료)
+- **원자 완료 7종**: question_answered(142) + 개별질문 6종(155 트리거). domain write 와 동일 트랜잭션 원자·멱등.
+  웹 best-effort 알림·미사용 심볼 제거. staging fixture 6종 검증.
+- **남은 10종**: 구독 4·맞춤의뢰 2·멘토 4. `docs/audit/notification_event_coverage.md` 에 트리거 기반 후속 계획 명시
+  (subscription_billing_events / order 메시지·mentor_applications INSERT / refunds INSERT / mentor_plans UPDATE fan-out).
+  재무 RPC 본문 재작성 없이 트리거만 추가하는 안전 경로. 이번 세션은 IQ 6종만 원자화(재무 알림 mis-wiring 방지).
+
+## Section 4 — P2-25 지급 scheduler 기반 ✅ (기본 OFF)
+- **156**: `payout_settings`(scheduler_enabled 기본 false·싱글턴) + `payout_reconciliation_report`(READ-ONLY 대상/제외/오류)
+  + `run_scheduled_payout`(enabled 아니면 무조건 dry-run·실지급 금지, enabled 라야 실지급, 153 멱등으로 배치 중복 봉쇄).
+- cron 미설정(staging 기본 disabled). 실지급은 명시 enable + dry_run=false 만.
+- **검증**: staging 156 적용 + `run_scheduled_payout(today)` = scheduler_enabled=false·dry_run=true·payout_run_items 0(무변경).
