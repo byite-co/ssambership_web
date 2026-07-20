@@ -125,3 +125,19 @@
 - **검증**: staging 152 적용 + rollback fixture 10항목 통과(claim/lease/fan-out/설정 suppress/그룹별/invalid-token revoke/
   dead-letter/reclaim, 실데이터 무변경). 계약테스트 9건(backoff 3·설정모델 6, 총 56/56). tsc 0, eslint 0.
 - **부채**: best-effort→atomic 16 이벤트 전환·실기기 FCM 발송·device token 등록 호출=WAITING_EXTERNAL_APP/후속.
+
+## Phase 5 — P2-25 내부지갑 지급 스택 ✅ 정적·구조 검증완료
+- **선행 감사(staging 실측)**: payout_runs·payout_run_items·due_payouts·per-run UNIQUE=적용됨(out-of-band).
+  108 RPC·114 원천징수 컬럼·전역 UNIQUE=미적용. payout_run_items 0행(전역 UNIQUE 안전). 중복 payout 0.
+- **153 수렴(신규 파일 — 적용 정의 무수정)**:
+  - 114 원천징수 컬럼(`withholding_cents`·`net_paid_cents`) 추가.
+  - **전역 UNIQUE `(source_type, source_id)`** — 다른 배치 재실행에도 동일 source 이중지급 차단.
+  - `pay_due_payouts_for_run(run_date, idem, p_dry_run=true)` 정본 재작성:
+    - **ON CONFLICT (source_type,source_id) + RETURNING id INTO v_item_id**, **신규 성공행만 v_paid/v_total 반영**
+      (108 의 "conflict 에도 카운트 증가" 버그 수정).
+    - **dry-run 기본** — 돈 이동·행 삽입·상태변경 0, 예상 지급건·합계만 산출(실지급은 p_dry_run=false 명시).
+    - 원천징수 3.3%=floor(mentor*0.033), net=mentor-wh, append-only 원장(적립+공제 각 1행), scheduler 기본 OFF.
+- **웹 순수 계산**: `lib/payout/payoutComputation.ts` — 수익률 85/95·원천징수 3.3%·지급일 23일(UI·SQL 정합 단일 소스).
+- **검증**: staging 153 적용 + rollback-only fixture 7항목(전역 UNIQUE 신규/타배치 중복·원천징수 일반/0원/홀수·
+  dry-run 무변경, 실데이터 무변경). 계약테스트 6건(총 62/62). tsc 0, eslint 0. staging 지급/원장/job 테이블 전부 0행 복원.
+- **부채**: 독립 2세션 동시 실행 실측(UNIQUE/lock 경합)=CONCURRENCY_DEBT(구조는 완료). scheduler cron 배선·실지급 컷오버=WAITING.
