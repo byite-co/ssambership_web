@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import Link from "next/link";
 import "@/app/(public)/custom-request/landing.css";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createOpenIndividualQuestionAction } from "@/lib/individualQuestion/individualQuestionActions";
 import { OPEN_INDIVIDUAL_QUESTION_PRICE_PLACEHOLDER_CASH } from "@/lib/individualQuestion/individualQuestionTypes";

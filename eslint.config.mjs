@@ -15,6 +15,24 @@ const eslintConfig = defineConfig([
     // node:test 계약 테스트(.ts 확장자 import·strip-types 전용) — 앱 린트 대상 아님.
     "**/__contract__/**",
   ]),
+  // 의도적 미사용 심볼 컨벤션 — `_` 접두는 "의도적으로 안 씀" 표기(rest 제외 destructure·자리표시 인자 등).
+  // 규칙 완화가 아니라 typescript-eslint 표준 컨벤션 채택(실수 미사용은 여전히 경고).
+  {
+    name: "unused-vars-underscore-convention",
+    files: ["**/*.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "warn",
+        {
+          argsIgnorePattern: "^_",
+          varsIgnorePattern: "^_",
+          caughtErrorsIgnorePattern: "^_",
+          destructuredArrayIgnorePattern: "^_",
+          ignoreRestSiblings: true,
+        },
+      ],
+    },
+  },
   // 모듈 경계 규칙 (모듈 등기부: docs/architecture/modules.md §5–6)
   // 개발 중 즉시 피드백용 warn — 기계 강제는 dependency-cruiser(Phase 2)가 담당.
   {

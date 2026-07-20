@@ -102,10 +102,10 @@ test("(B) active 구독: 가드 PASS — 학생/멘토 모두 노트 편집 허�
   const roomId = await ensureRoom(studentId, mentorId);
   await ensureActiveSubscription(studentId, mentorId);
 
-  const sGate = await assertConnectionNoteWriteAllowed(admin as any, roomId, "student");
+  const sGate = await assertConnectionNoteWriteAllowed(admin, roomId, "student");
   expect(sGate.ok, `active 구독 - 학생 가드 통과 (msg=${(sGate as { userMessage?: string }).userMessage ?? ""})`).toBe(true);
 
-  const mGate = await assertConnectionNoteWriteAllowed(admin as any, roomId, "mentor");
+  const mGate = await assertConnectionNoteWriteAllowed(admin, roomId, "mentor");
   expect(mGate.ok).toBe(true);
 });
 
@@ -119,13 +119,13 @@ test("(B) expired 구독: 가드 차단 — 학생/멘토 모두 노트 편집 �
   const subId = await ensureActiveSubscription(studentId, mentorId);
   await admin.from("subscriptions").update({ status: "expired", expired_at: new Date().toISOString() }).eq("id", subId);
 
-  const sGate = await assertConnectionNoteWriteAllowed(admin as any, roomId, "student");
+  const sGate = await assertConnectionNoteWriteAllowed(admin, roomId, "student");
   expect(sGate.ok, "expired 구독 - 학생 가드 차단").toBe(false);
   if (!sGate.ok) {
     expect(sGate.userMessage).toMatch(/구독이 만료|편집할 수 없|재구독/);
   }
 
-  const mGate = await assertConnectionNoteWriteAllowed(admin as any, roomId, "mentor");
+  const mGate = await assertConnectionNoteWriteAllowed(admin, roomId, "mentor");
   expect(mGate.ok).toBe(false);
 
   // ★읽기는 RLS 정책상 가능해야 함 — connection_notes select는 방 멤버만 검증.
@@ -151,7 +151,7 @@ test("(B) canceled/refunded 구독: 동일하게 차단", async () => {
     const subId = await ensureActiveSubscription(studentId, mentorId);
     await admin.from("subscriptions").update({ status: terminalStatus }).eq("id", subId);
 
-    const gate = await assertConnectionNoteWriteAllowed(admin as any, roomId, "student");
+    const gate = await assertConnectionNoteWriteAllowed(admin, roomId, "student");
     if (terminalStatus === "past_due") {
       // past_due는 findActiveSubscriptionForPair에서 active만 인정하므로 차단됨
       expect(gate.ok, `${terminalStatus}: 가드 차단`).toBe(false);
@@ -190,7 +190,7 @@ test("(B) 읽기 RLS — 만료 후 학생/멘토 본인이 노트·스레드 �
   expect((notes ?? [])[0]?.body).toMatch(/note-guard-test/);
 
   // 스레드도 같이 (room scope으로 SELECT)
-  const { data: threads, error: tErr } = await sb
+  const { data: _threads, error: tErr } = await sb
     .from("question_threads")
     .select("id")
     .eq("mentor_student_room_id", roomId);

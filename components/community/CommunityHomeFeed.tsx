@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { PenLine } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { COMMUNITY_POST_CATEGORIES } from "@/lib/community/communityBoardConstants";
@@ -48,27 +49,32 @@ export function CommunityHomeFeed(props: Props) {
 
   const paginate = props.paginate ?? false;
   const [page, setPage] = useState(1);
-  // 탭(정렬)·카테고리 변경 시 1페이지로 리셋.
-  useEffect(() => {
+  // 탭(정렬)·카테고리 변경 시 1페이지로 리셋 — effect 대신 렌더 중 파생 리셋(안전 변환 패턴).
+  const listKey = `${category}|${sortTab}`;
+  const [prevListKey, setPrevListKey] = useState(listKey);
+  if (prevListKey !== listKey) {
+    setPrevListKey(listKey);
     setPage(1);
-  }, [category, sortTab]);
-  // 모바일은 페이지당 5개, 데스크탑은 기존 10개. 초기값=데스크탑값(SSR/hydration 일치) → 마운트 후 보정.
-  const [pageSize, setPageSize] = useState(BOARD_PAGE_SIZE);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const apply = () => setPageSize(mq.matches ? 5 : BOARD_PAGE_SIZE);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
+  }
+  // 모바일은 페이지당 5개, 데스크탑은 기존 10개. SSR 스냅샷=데스크탑 → hydration 후 보정(useMediaQuery).
+  const isMobileList = useMediaQuery("(max-width: 767px)");
+  const pageSize = isMobileList ? 5 : BOARD_PAGE_SIZE;
 
-  useEffect(() => {
+  // 서버가 새 initialPosts 를 내려주면(라우팅·revalidate) 현재 필터가 초기 필터와 일치할 때 목록 동기화.
+  // effect 의 동기 setState 대신 렌더 중 파생 리셋.
+  const [prevInitialPosts, setPrevInitialPosts] = useState(props.initialPosts);
+  if (prevInitialPosts !== props.initialPosts) {
+    setPrevInitialPosts(props.initialPosts);
     if (category === props.initialCategory && sortTab === (props.initialSort ?? "all")) {
       setPosts(props.initialPosts);
       setCursor(props.initialCursor);
       setDone(!props.initialCursor);
-      return;
     }
+  }
+
+  useEffect(() => {
+    // 초기 필터와 일치하면 목록은 서버 props(위 파생 리셋)가 정본 — fetch 불필요.
+    if (category === props.initialCategory && sortTab === (props.initialSort ?? "all")) return;
     let cancelled = false;
     (async () => {
       setLoading(true);
@@ -89,7 +95,7 @@ export function CommunityHomeFeed(props: Props) {
     return () => {
       cancelled = true;
     };
-  }, [props.initialPosts, props.initialCursor, props.initialCategory, props.initialSort, category, sortTab, basePath]);
+  }, [props.initialCategory, props.initialSort, category, sortTab]);
 
   const loadMore = useCallback(async () => {
     if (loading || done || !cursor) return;

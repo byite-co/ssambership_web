@@ -12,7 +12,7 @@ export const revalidate = 0;
 
 export default async function PublicLayout({ children }: { children: ReactNode }) {
   const pathname = (await headers()).get("x-pathname") ?? "";
-  const { user, profile } = await getServerUserWithProfile();
+  const { profile } = await getServerUserWithProfile();
   const sessionRole: AppRole | null =
     profile?.role === "mentor" || profile?.role === "student" || profile?.role === "admin" ? profile.role : null;
 

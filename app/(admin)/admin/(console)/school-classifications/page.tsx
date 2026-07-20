@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import {
   updateMajorCategoryCatalogAction,
   updateSchoolTierCatalogAction,

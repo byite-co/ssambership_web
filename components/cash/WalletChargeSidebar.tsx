@@ -1,4 +1,3 @@
-import Link from "next/link";
 import type { WalletBalanceBreakdown } from "@/lib/cash/parseWalletBalanceKrw";
 import { USER_UI_LOAD_FAILED } from "@/lib/constants/userFacingMessages";
 

@@ -6,7 +6,7 @@ import {
   requestSubscriptionCancelAtPeriodEndAction,
   undoSubscriptionCancelAtPeriodEndAction,
 } from "@/lib/subscribe/subscriptionCancelActions";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import type { StudentSubscriptionManagementItem } from "@/lib/subscribe/studentSubscriptionManagement";
 
 const PAGE_SIZE = 4;

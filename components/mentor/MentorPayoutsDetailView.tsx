@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import type { MentorPayoutDetailLine, PayoutLineType } from "@/lib/mentor/mentorPayoutsTypes";
 import { detailLineToSettlementRow, formatYearMonthLabel } from "@/lib/mentor/mentorPayoutsDisplay";
 import { MentorPayoutsSettlementTable } from "@/components/mentor/payouts/MentorPayoutsSettlementTable";
@@ -61,14 +62,17 @@ export function MentorPayoutsDetailView() {
   // SSR/hydration 일치를 위해 초기값=데스크탑(10), 마운트 후 모바일이면 5로 보정.
   const PAGE_SIZE_DESKTOP = 10;
   const PAGE_SIZE_MOBILE = 5;
-  const [pageSize, setPageSize] = useState(PAGE_SIZE_DESKTOP);
-  useEffect(() => {
-    const mql = window.matchMedia("(max-width: 767px)");
-    const apply = () => setPageSize(mql.matches ? PAGE_SIZE_MOBILE : PAGE_SIZE_DESKTOP);
-    apply();
-    mql.addEventListener("change", apply);
-    return () => mql.removeEventListener("change", apply);
-  }, []);
+  const pageSize = useMediaQuery("(max-width: 767px)") ? PAGE_SIZE_MOBILE : PAGE_SIZE_DESKTOP;
+
+  // 필터(month/type) 변경 시 로딩 상태로 전환 — effect 의 동기 setState 대신 렌더 중 파생 리셋.
+  // (초기 마운트는 useState 초기값 loading=true/error=null 이 이미 커버)
+  const loadKey = `${month}|${type}`;
+  const [prevLoadKey, setPrevLoadKey] = useState(loadKey);
+  if (prevLoadKey !== loadKey) {
+    setPrevLoadKey(loadKey);
+    setLoading(true);
+    setError(null);
+  }
 
   const tableRows = useMemo(() => lines.map(detailLineToSettlementRow), [lines]);
   // 이미 로드된 내역을 pageSize개씩 slice(추가 fetch 없음). pageSize 전환 시 safePage 클램프.
@@ -79,32 +83,35 @@ export function MentorPayoutsDetailView() {
     [tableRows, safePage, pageSize]
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    const params = new URLSearchParams();
-    if (month) params.set("month", month);
-    if (type !== "all") params.set("type", type);
-    try {
-      const res = await fetch(`/api/mentor/payouts/detail?${params.toString()}`);
-      const json = (await res.json()) as DetailResponse;
-      if (!json.ok || !json.lines) {
-        setError(json.error ?? "내역을 불러오지 못했습니다.");
-        setLines([]);
-        return;
-      }
-      setLines(json.lines);
-      setTotals(json.totals ?? EMPTY_TOTALS);
-    } catch {
-      setError("내역을 불러오지 못했습니다.");
-    } finally {
-      setLoading(false);
-    }
-  }, [month, type]);
-
+  // month/type 별 상세 fetch — loading/error 초기화는 마운트 초기값·loadKey 파생 리셋이 담당,
+  // setState 는 전부 await 이후 콜백 시점(effect 동기 setState 금지 규칙 준수). 언마운트/필터 변경 시 stale 응답 무시.
   useEffect(() => {
-    void load();
-  }, [load]);
+    let cancelled = false;
+    (async () => {
+      const params = new URLSearchParams();
+      if (month) params.set("month", month);
+      if (type !== "all") params.set("type", type);
+      try {
+        const res = await fetch(`/api/mentor/payouts/detail?${params.toString()}`);
+        const json = (await res.json()) as DetailResponse;
+        if (cancelled) return;
+        if (!json.ok || !json.lines) {
+          setError(json.error ?? "내역을 불러오지 못했습니다.");
+          setLines([]);
+          return;
+        }
+        setLines(json.lines);
+        setTotals(json.totals ?? EMPTY_TOTALS);
+      } catch {
+        if (!cancelled) setError("내역을 불러오지 못했습니다.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [month, type]);
 
   async function exportExcel() {
     const XLSX = await import("xlsx");

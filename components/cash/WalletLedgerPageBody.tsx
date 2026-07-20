@@ -86,7 +86,7 @@ export function WalletLedgerPageBody(props: { data: WalletLedgerPageData }) {
       ? formatWalletRowDisplay(data.balance.row)
       : "0캐시";
 
-  const ledgerRows = (data.ledger.rows ?? []) as Record<string, unknown>[];
+  const ledgerRows = useMemo(() => (data.ledger.rows ?? []) as Record<string, unknown>[], [data.ledger.rows]);
 
   const filtered = useMemo(() => {
     let rows = ledgerRows;

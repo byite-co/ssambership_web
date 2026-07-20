@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { PageScaffold } from "@/components/shell/PageScaffold";
 import { StudentSupportTabs } from "@/components/support/StudentSupportTabs";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { createClient } from "@/lib/supabase/server";
 import { requestSubscriptionProratedRefundAction } from "@/lib/subscribe/subscriptionCancelActions";

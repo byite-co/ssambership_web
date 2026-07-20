@@ -5,7 +5,7 @@ import { requireRole } from "@/lib/auth/routeGuard";
 import { firstReadableAdminTable } from "@/lib/admin/adminQueries";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { approveAdminRefundAction, rejectAdminRefundAction } from "@/lib/admin/refundActions";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 
 type Props = { params: Promise<{ id: string }> };
 

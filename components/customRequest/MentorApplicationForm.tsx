@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useState } from "react";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { submitMentorCustomRequestApplication } from "@/lib/customRequest/customRequestApplicationActions";
 import type { MentorPostSummaryDisplay } from "@/components/customRequest/MentorPostReadonlySummary";
 import {

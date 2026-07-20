@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Clock, Inbox } from "lucide-react";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { listCardClassName, type ListCardTone } from "@/components/design-system/ListCard";
 import { getSubjectLabel } from "@/lib/subjects/subjectCatalog";
 import {
@@ -139,20 +140,15 @@ export function StudentSentIndividualQuestionsSection(props: {
     }
   }, [props.rows, tab]);
 
-  // 탭(필터) 변경 시 1페이지 리셋.
-  useEffect(() => {
+  // 탭(필터) 변경 시 1페이지 리셋 — effect 대신 렌더 중 파생 리셋(안전 변환 패턴).
+  const [prevTab, setPrevTab] = useState(tab);
+  if (prevTab !== tab) {
+    setPrevTab(tab);
     setPage(1);
-  }, [tab]);
+  }
 
-  // 모바일은 페이지당 4개, 데스크탑은 기존 5개. 초기값=데스크탑값(SSR/hydration 일치) → 마운트 후 보정.
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const apply = () => setPageSize(mq.matches ? PAGE_SIZE_MOBILE : PAGE_SIZE);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
+  // 모바일은 페이지당 4개, 데스크탑은 기존 5개. SSR 스냅샷=데스크탑 → hydration 후 보정(useMediaQuery).
+  const pageSize = useMediaQuery("(max-width: 767px)") ? PAGE_SIZE_MOBILE : PAGE_SIZE;
 
   const tabs: { id: StatusTab; label: string; count: number }[] = [
     { id: "all", label: "전체", count: props.rows.length },

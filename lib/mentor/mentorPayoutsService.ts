@@ -412,8 +412,6 @@ export async function loadMentorPayoutMonthlyCards(
     const pendingInMonth = sumNetByStatus(all, ym, isPendingPayoutLine);
 
     const scheduledPayout = pendingInMonth > 0 ? pendingInMonth : Math.max(0, revenue - paidInMonth);
-    const status: MentorPayoutMonthlyCard["status"] =
-      paidInMonth > 0 && scheduledPayout === 0 ? "paid" : revenue > 0 || scheduledPayout > 0 ? "scheduled" : "scheduled";
 
     cards.push({
       yearMonth: ym,

@@ -19,8 +19,6 @@ const subtleLinkBar =
 const mutedLink =
   `${subtleLinkBar} opacity-55 cursor-not-allowed hover:bg-transparent`;
 
-const greenCardPrimary = `${cardPrimary} border-green-200 bg-green-50 text-green-800 hover:bg-green-100`;
-const blueCardPrimary = `${cardPrimary} border-blue-200 bg-blue-50 text-blue-900 hover:bg-blue-100`;
 // 납품 수락 — 학생의 가장 중요한 결정. 연한 카드 대신 채움형 primary(파랑) hero로 강조(시각만, 동작·가드 미터치).
 const studentAcceptHero =
   "flex w-full items-center justify-between gap-3 rounded-2xl bg-[#2563EB] px-5 py-4 text-left text-white shadow-[0_6px_16px_rgba(37,99,235,0.28)] ring-1 ring-blue-700/10 transition-colors hover:bg-[#1D4ED8] disabled:cursor-not-allowed disabled:opacity-50";
@@ -60,12 +58,10 @@ export function OrderActionBar(props: Props) {
     orderId,
     orderTerminal = false,
     studentAcceptDisabledReason,
-    mentorStartDisabledReason,
     studentRevisionRequestDisabledReason,
     studentCancelDisabledReason,
     openDisputeApplicationDisabledReason,
     hasActiveDispute = false,
-    mentorRevisionJumpDisabledReason = null,
     embedded = false,
   } = props;
 
@@ -85,7 +81,6 @@ export function OrderActionBar(props: Props) {
 
   const canStudentAccept =
     actorRole === "student" && view === "student" && !studentAcceptDisabledReason && orderId.trim().length > 0;
-  const canMentorStart = false;
   const canStudentRevisionJumps =
     actorRole === "student" && view === "student" && !studentRevisionRequestDisabledReason && orderId.trim().length > 0;
   const canStudentCancel =
@@ -96,7 +91,6 @@ export function OrderActionBar(props: Props) {
     !openDisputeApplicationDisabledReason &&
     orderId.trim().length > 0;
 
-  const mentorPrimaryStarts = Boolean(canMentorStart);
   const studentPrimaryAccepts = Boolean(canStudentAccept);
 
   return (

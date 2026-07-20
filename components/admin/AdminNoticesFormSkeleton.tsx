@@ -1,6 +1,6 @@
 "use client";
 
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { submitAdminNoticeDraft } from "@/lib/admin/adminNoticesActions";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 

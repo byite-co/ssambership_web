@@ -53,12 +53,21 @@ const IQ_ACTIVE_STATUSES = ["open", "assigned", "claimed", "answered"] as const;
 const SUBSCRIPTION_ACTIVE_STATUSES = ["active", "past_due"] as const;
 const DISPUTE_ACTIVE_STATUSES = ["open", "under_review"] as const;
 
+/** count 집계 쿼리에서 실제로 쓰는 최소 표면 — supabase 빌더의 깊은 제네릭 대신 구조 타입으로 고정. */
+type CountQueryBuilder = {
+  eq(column: string, value: unknown): CountQueryBuilder;
+  in(column: string, values: readonly unknown[]): CountQueryBuilder;
+  or(filters: string): CountQueryBuilder;
+} & PromiseLike<{ count: number | null; error: { message: string } | null }>;
+
 async function countRows(
   admin: SupabaseClient,
   table: string,
-  build: (q: ReturnType<SupabaseClient["from"]>["select"] extends never ? never : any) => any
+  build: (q: CountQueryBuilder) => CountQueryBuilder
 ): Promise<number> {
-  const base = admin.from(table).select("id", { count: "exact", head: true });
+  const base = admin
+    .from(table)
+    .select("id", { count: "exact", head: true }) as unknown as CountQueryBuilder;
   const { count, error } = await build(base);
   if (error) return -1; // 조회 실패는 보수적으로 "차단" 취급 (호출부에서 ok=false)
   return count ?? 0;
@@ -73,7 +82,7 @@ export async function checkAccountDeletionPreconditions(
 
   // ── 구독 ──────────────────────────────────────────────────────────────
   if (role === "student") {
-    const n = await countRows(admin, "subscriptions", (q: any) =>
+    const n = await countRows(admin, "subscriptions", (q) =>
       q.eq("student_id", userId).in("status", SUBSCRIPTION_ACTIVE_STATUSES)
     );
     items.push({
@@ -85,7 +94,7 @@ export async function checkAccountDeletionPreconditions(
     });
   } else {
     // 멘토: 구독자 보유 시 기존 활동 해지 플로우 선행 필수 (스펙 §2-2)
-    const n = await countRows(admin, "subscriptions", (q: any) =>
+    const n = await countRows(admin, "subscriptions", (q) =>
       q.eq("mentor_id", userId).in("status", SUBSCRIPTION_ACTIVE_STATUSES)
     );
     items.push({
@@ -102,10 +111,10 @@ export async function checkAccountDeletionPreconditions(
 
   // ── 개별질문(IQ) 진행 건 ──────────────────────────────────────────────
   {
-    const q =
+    const q: (b: CountQueryBuilder) => CountQueryBuilder =
       role === "student"
-        ? (b: any) => b.eq("student_id", userId).in("status", IQ_ACTIVE_STATUSES)
-        : (b: any) =>
+        ? (b) => b.eq("student_id", userId).in("status", IQ_ACTIVE_STATUSES)
+        : (b) =>
             b.or(`claimed_mentor_id.eq.${userId},designated_mentor_id.eq.${userId}`).in(
               "status",
               IQ_ACTIVE_STATUSES
@@ -149,7 +158,7 @@ export async function checkAccountDeletionPreconditions(
 
   // ── 분쟁 ─────────────────────────────────────────────────────────────
   {
-    const n = await countRows(admin, "disputes", (q: any) =>
+    const n = await countRows(admin, "disputes", (q) =>
       q.or(`student_id.eq.${userId},mentor_id.eq.${userId}`).in("status", DISPUTE_ACTIVE_STATUSES)
     );
     items.push({
