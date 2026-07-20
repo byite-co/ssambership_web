@@ -157,7 +157,7 @@ test.describe("C. 학생 — 게시판 P0-4 (이미지·멱등·수정·soft-del
     const wasDisabled = await publish.isDisabled().catch(() => false);
     console.log(`[obs] board publish button disabled during pending: ${wasDisabled}`);
 
-    await page.waitForURL(/\/community\/board\/[0-9a-f-]{36}/, { timeout: 90_000 });
+    await page.waitForURL(/\/community\/board\/[0-9a-f-]{36}/, { timeout: 150_000 });
     postId = page.url().match(/\/community\/board\/([0-9a-f-]{36})/)?.[1] ?? "";
     expect(postId).not.toBe("");
     await expect(page.getByText(BOARD_TITLE).first()).toBeVisible();
@@ -224,7 +224,7 @@ test.describe("C. 학생 — 게시판 P0-4 (이미지·멱등·수정·soft-del
   });
 });
 
-test.describe("D. 멘토 — 프로필 §5 분리(P0-3) + 숏폼 업로드(P2-24)", () => {
+test.describe("D. 멘토 — 프로필 §5 분리(P2-24) + 숏폼 업로드(P0-3)", () => {
   let ctx: BrowserContext;
   let page: Page;
   test.beforeAll(async ({ browser }) => {

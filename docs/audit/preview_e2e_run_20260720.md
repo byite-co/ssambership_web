@@ -67,9 +67,9 @@
 
 인증 브라우저 관찰이 막힌 만큼, 세 결함 수정의 정본 계약을 DB·코드로 대조했다.
 
-- **P0-3 (프로필 아바타↔인증서류 분리)**: DB — 멘토 프로필 `student_id_image_url = null`, `verification_status = approved`, `profile_image_url` 존재. 코드 — 편집 폼 §5가 서류 제출(=`student_id_image_url` 존재 boolean, "미제출")과 인증 상태(=`verification_status`, "인증 완료")를 **독립 배지로 분리 렌더**. 공개 프로필 읽기는 화이트리스트 컬럼(`profile_image_url`만)이라 서류 URL 미전달. → 현 데이터에서 "미제출 + 인증 완료" 조합이 산출됨(분리의 핵심 증거).
+- **P2-24 (프로필 아바타↔인증서류 분리)** *(정정: 이전 표기 P0-3 는 오기)*: DB — 멘토 프로필 `student_id_image_url = null`, `verification_status = approved`, `profile_image_url` 존재. 코드 — 편집 폼 §5가 서류 제출(=`student_id_image_url` 존재 boolean, "미제출")과 인증 상태(=`verification_status`, "인증 완료")를 **독립 배지로 분리 렌더**. 공개 프로필 읽기는 화이트리스트 컬럼(`profile_image_url`만)이라 서류 URL 미전달. → 현 데이터에서 "미제출 + 인증 완료" 조합이 산출됨(분리의 핵심 증거).
 - **P0-4 (게시판 멱등·soft-delete)**: DB — `community_posts`에 `create_idempotency_key` 컬럼 + `(author_id, create_idempotency_key)` UNIQUE 인덱스, `deleted_at` 컬럼 존재. 코드 — 목록/상세 쿼리 `deleted_at IS NULL` 필터, 작성자 전용 수정/삭제 UI, 이미지 staged direct upload(본문 413 회피).
-- **P2-24 (숏폼 staged upload·멱등)**: DB — `shortform_posts`에 `create_idempotency_key` + UNIQUE 인덱스. 버킷 `shortform-videos` public=false, 500MB, MIME(mp4/mov/webm) 강제. `next.config.ts` `bodySizeLimit:"25mb"`이지만 영상은 서명 URL로 Storage에 직접 업로드하고 finalize엔 ref만 전달 → 25MB 제한과 무관. 코드 — `URL.createObjectURL` 미리보기, 단일 영상 replace, submit pending 비활성화.
+- **P0-3 (숏폼 staged upload·413 제거·멱등·보상삭제)** *(정정: 이전 표기 P2-24 는 오기)*: DB — `shortform_posts`에 `create_idempotency_key` + UNIQUE 인덱스. 버킷 `shortform-videos` public=false, 500MB, MIME(mp4/mov/webm) 강제. `next.config.ts` `bodySizeLimit:"25mb"`이지만 영상은 서명 URL로 Storage에 직접 업로드하고 finalize엔 ref만 전달 → 25MB 제한과 무관. 코드 — `URL.createObjectURL` 미리보기, 단일 영상 replace, submit pending 비활성화.
 
 ## 4. 환경 특이사항 (재현 참고)
 
@@ -94,5 +94,5 @@
 
 - `playwright.preview.config.ts` — Vercel Preview 대상 인증 회귀 설정(원격 baseURL·순차 실행·사전설치 브라우저).
 - `e2e/helpers/previewProxy.ts` — 프록시 뒤 원격 배포 구동용 네트워크 대행 + 공유링크 부트스트랩 헬퍼.
-- `e2e/preview-core-flows.spec.ts` — A(공개)·B(학생)·C(게시판 P0-4)·D(멘토 P0-3/P2-24)·E(관리자) 스펙.
+- `e2e/preview-core-flows.spec.ts` — A(공개)·B(학생)·C(게시판 P0-4)·D(멘토 프로필 P2-24/숏폼 P0-3)·E(관리자) 스펙.
 - `e2e/preview-notifications.spec.ts` — 알림 허브 cursor/카테고리/unread 스펙(시드 선행).
