@@ -1,7 +1,6 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchUserDisplayName, insertNotificationBestEffort } from "@/lib/notifications/notificationInsert";
 import { fetchPlansForMentor } from "@/lib/mentor/publicMentorBundle";
 import { mentorPlanDebitAmountCents } from "@/lib/subscribe/mentorPlanPricing";
 import { assignPlansByTier, isSubscribePlanTier, type SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
@@ -93,75 +92,6 @@ function addDaysUtc(value: Date, days: number): Date {
   return new Date(value.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
-function formatCashFromCents(amountCents: number): string {
-  const cash = Math.max(0, Math.round(amountCents / 100));
-  return `${cash.toLocaleString("ko-KR")}캐시`;
-}
-
-function formatNoticeDate(value: string | null): string {
-  if (!value) return "예정일";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "예정일";
-  return new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(date);
-}
-
-function noticeMentorLabel(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return "멘토";
-  return trimmed.endsWith("멘토") ? trimmed : `${trimmed} 멘토`;
-}
-
-async function mentorNameForNotice(supabase: SupabaseClient, row: Row): Promise<string> {
-  const mentorId = getUserId(row, "mentor_id");
-  if (!mentorId) return "멘토";
-  try {
-    return noticeMentorLabel(await fetchUserDisplayName(supabase, mentorId));
-  } catch (error) {
-    console.error("[subscriptionRenewal] mentor name lookup failed", { mentorId, error });
-    return "멘토";
-  }
-}
-
-async function notifyStudentBestEffort(
-  supabase: SupabaseClient,
-  row: Row,
-  input: {
-    type: string;
-    title: string;
-    body: string;
-    link: string;
-    metadata?: Record<string, unknown>;
-  }
-): Promise<void> {
-  const studentId = getUserId(row, "student_id");
-  const subscriptionId = getSubscriptionId(row);
-  if (!studentId || !subscriptionId) return;
-  try {
-    await insertNotificationBestEffort({
-      recipientUserId: studentId,
-      type: input.type,
-      title: input.title,
-      body: input.body,
-      link: input.link,
-      metadata: {
-        subscriptionId,
-        ...(input.metadata ?? {}),
-      },
-    });
-  } catch (error) {
-    console.error("[subscriptionRenewal] notification failed", {
-      subscriptionId,
-      type: input.type,
-      error,
-    });
-  }
-}
-
 function isDuplicateKeyError(error: unknown): boolean {
   const maybe = error as { code?: string; message?: string } | null;
   const message = maybe?.message ?? "";
@@ -241,20 +171,12 @@ async function markCanceledAtPeriodEnd(
   };
   if (eventId) patch.last_billing_event_id = eventId;
 
+  // 만료 알림은 157 트리거(subscriptions status→expired 전이)가 도메인 write 와 원자적으로 발행한다.
   const { error } = await supabase.from(SUBSCRIPTIONS_TABLE).update(patch).eq("id", subscriptionId);
   if (error) {
     console.error("[subscriptionRenewal] cancel transition failed", { subscriptionId, error: error.message });
     return false;
   }
-
-  const mentorName = await mentorNameForNotice(supabase, row);
-  await notifyStudentBestEffort(supabase, row, {
-    type: "subscription_expired",
-    title: "구독이 만료되었어요",
-    body: `${mentorName} 구독이 만료되었어요. 다시 구독하려면 멘토 페이지에서 재구독할 수 있어요.`,
-    link: "/subscriptions",
-    metadata: { reason: "cancel_at_period_end" },
-  });
   return true;
 }
 
@@ -280,20 +202,12 @@ async function markExpired(
   };
   if (eventId) patch.last_billing_event_id = eventId;
 
+  // 만료 알림은 157 트리거(subscriptions status→expired 전이)가 도메인 write 와 원자적으로 발행한다.
   const { error } = await supabase.from(SUBSCRIPTIONS_TABLE).update(patch).eq("id", subscriptionId);
   if (error) {
     console.error("[subscriptionRenewal] expire transition failed", { subscriptionId, error: error.message });
     return false;
   }
-
-  const mentorName = await mentorNameForNotice(supabase, row);
-  await notifyStudentBestEffort(supabase, row, {
-    type: "subscription_expired",
-    title: "구독이 만료되었어요",
-    body: `${mentorName} 구독이 만료되었어요. 다시 구독하려면 멘토 페이지에서 재구독할 수 있어요.`,
-    link: "/subscriptions",
-    metadata: { reason: "insufficient_cash" },
-  });
   return true;
 }
 
@@ -320,46 +234,6 @@ async function resolveRenewalAmountCents(
     return { ok: false, error: "invalid_amount" };
   }
   return { ok: true, amountCents };
-}
-
-async function notifyRenewalSuccess(
-  supabase: SupabaseClient,
-  row: Row,
-  result: RpcRenewalResult,
-  amountCents: number
-): Promise<void> {
-  const mentorName = await mentorNameForNotice(supabase, row);
-  await notifyStudentBestEffort(supabase, row, {
-    type: "subscription_renewal_succeeded",
-    title: "구독이 갱신되었어요",
-    body: `${mentorName} 구독이 갱신되었어요. ${formatCashFromCents(amountCents)} 결제가 완료됐고, 다음 결제일은 ${formatNoticeDate(result.next_period_end)}입니다.`,
-    link: "/subscriptions",
-    metadata: {
-      billingEventId: result.billing_event_id,
-      ledgerId: result.ledger_id,
-      nextPeriodEnd: result.next_period_end,
-    },
-  });
-}
-
-async function notifyRenewalFailure(
-  supabase: SupabaseClient,
-  row: Row,
-  result: RpcRenewalResult,
-  atIso: string
-): Promise<void> {
-  const mentorName = await mentorNameForNotice(supabase, row);
-  const graceDate = formatNoticeDate(addDaysUtc(new Date(atIso), 2).toISOString());
-  await notifyStudentBestEffort(supabase, row, {
-    type: "subscription_renewal_failed_insufficient_cash",
-    title: "구독 갱신에 실패했어요",
-    body: `${mentorName} 구독 갱신에 실패했어요(캐시 부족). ${graceDate}까지 충전하면 구독이 유지됩니다.`,
-    link: "/wallet/charge",
-    metadata: {
-      billingEventId: result.billing_event_id,
-      attemptCount: result.attempt_count,
-    },
-  });
 }
 
 async function insertPreRenewalNoticeMarker(
@@ -423,6 +297,7 @@ async function sendPreRenewalNotice(
     return { code: "skipped", message: "missing_billing_date" };
   }
 
+  // 예고 알림은 157 트리거(마커 INSERT)가 도메인 write 와 원자적으로 발행한다.
   const marker = await insertPreRenewalNoticeMarker(supabase, {
     row,
     amountCents: price.amountCents,
@@ -431,20 +306,6 @@ async function sendPreRenewalNotice(
   });
   if (marker === "duplicate") return { code: "already" };
   if (marker === "failed") return { code: "skipped", message: "notice_marker_failed" };
-
-  const mentorName = await mentorNameForNotice(supabase, row);
-  await notifyStudentBestEffort(supabase, row, {
-    type: "subscription_renewal_upcoming",
-    title: "구독이 곧 갱신돼요",
-    body: `${mentorName} 구독이 곧 갱신돼요. ${formatNoticeDate(nextBillingAt)}에 ${formatCashFromCents(price.amountCents)}가 결제됩니다. 잔액을 확인해 주세요.`,
-    link: "/wallet/charge",
-    metadata: {
-      nextBillingAt,
-      amountCents: price.amountCents,
-      noticeDays: renewalNoticeDaysFromEnv(),
-    },
-  });
-
   return { code: "sent" };
 }
 
@@ -478,17 +339,14 @@ async function processRenewal(
   const result = (((data as RpcRenewalResult[] | null) ?? [])[0] ?? null) as RpcRenewalResult | null;
   if (!result) return { code: "error", message: "empty_rpc_result" };
 
+  // 성공·실패(캐시 부족) 알림은 157 트리거(billing event 전이)가 RPC 트랜잭션과 원자적으로 발행한다.
   if (result.ok && result.code === "succeeded") {
-    await notifyRenewalSuccess(supabase, row, result, price.amountCents);
     return { code: "renewed" };
   }
   if (result.ok && result.code === "already_succeeded") {
     return { code: "already" };
   }
   if (!result.ok && result.code === "insufficient_cash") {
-    if ((result.attempt_count ?? 0) <= 1) {
-      await notifyRenewalFailure(supabase, row, result, atIso);
-    }
     return { code: "insufficient" };
   }
   return { code: "skipped", message: `${result.code}: ${result.message ?? ""}`.trim() };

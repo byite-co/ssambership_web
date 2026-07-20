@@ -9,11 +9,6 @@ import {
   insertCustomRequestApplicationAttachment,
   insertMentorApplication,
 } from "@/lib/customRequest/customRequestMutations";
-import { firstReadableCustomTable, pickDisplayField } from "@/lib/customRequest/customRequestQueries";
-import {
-  fetchUserDisplayName,
-  insertNotificationBestEffort,
-} from "@/lib/notifications/notificationInsert";
 import { assertMentorApprovedForAction } from "@/lib/mentor/mentorVerificationGate";
 import {
   APPLICATION_ATTACHMENT_MAX_FILE_BYTES,
@@ -162,31 +157,7 @@ export async function submitMentorCustomRequestApplication(formData: FormData) {
     }
   }
 
-  const pT = await firstReadableCustomTable(supabase, ["custom_request_posts", "request_posts"]);
-  if (pT.table) {
-    const { data: postRow } = await supabase.from(pT.table).select("*").eq("id", postId).maybeSingle();
-    if (postRow) {
-      const authorId = pickDisplayField(postRow as Record<string, unknown>, [
-        "author_id",
-        "student_id",
-        "user_id",
-        "requester_id",
-        "client_id",
-      ]);
-      if (authorId && authorId !== "—") {
-        const mentorName = await fetchUserDisplayName(supabase, user.id);
-        await insertNotificationBestEffort({
-          recipientUserId: authorId,
-          type: "new_application",
-          title: "새 지원서가 도착했어요",
-          body: `${mentorName}님이 의뢰에 지원했습니다.`,
-          link: `/custom-request/${encodeURIComponent(postId)}/applications/waiting`,
-          metadata: { post_id: postId, mentor_id: user.id },
-        });
-      }
-    }
-  }
-
+  // 의뢰 작성자 알림은 159 트리거(custom_request_applications INSERT)가 도메인 write 와 원자적으로 발행한다.
   revalidatePath("/custom-request");
   revalidatePath(`/custom-request/${postId}`);
   revalidatePath(`/custom-request/${postId}/applications`, "page");

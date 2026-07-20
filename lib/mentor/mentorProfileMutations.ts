@@ -1,6 +1,4 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { insertNotificationBestEffort } from "@/lib/notifications/notificationInsert";
-import { createServiceRoleClient } from "@/lib/supabase/admin";
 import {
   amountCentsFromCashKrw,
   isOutsideMentorPriceGuide,
@@ -10,7 +8,6 @@ import {
 } from "@/lib/subscribe/mentorPlanPricing";
 import { getSubscribeCatalogPlan } from "@/lib/subscribe/subscribePlanCatalog";
 import type { SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
-import { SUBSCRIPTIONS_TABLE } from "@/lib/subscribe/subscriptionsTable";
 import { buildMentorProfilePayloads, splitCsv } from "@/lib/mentor/mentorProfilePayload";
 
 function isMissingColumnError(err: PostgrestError | null): boolean {
@@ -37,8 +34,6 @@ export type MentorProfileFormInput = {
   profileImageUrl?: string | null;
 };
 
-const ACTIVE_SUBSCRIPTION_STATUSES = ["active", "cancel_scheduled", "past_due"];
-
 function priceChanged(
   row: Record<string, unknown> | null,
   tier: SubscribePlanTier,
@@ -46,56 +41,6 @@ function priceChanged(
 ): boolean {
   if (!row) return true;
   return mentorPlanDebitAmountCents(row, tier) !== nextAmountCents;
-}
-
-async function notifyActiveSubscribersOfPriceChange(
-  supabase: SupabaseClient,
-  mentorId: string,
-  changedTiers: SubscribePlanTier[]
-): Promise<void> {
-  if (changedTiers.length === 0) return;
-
-  let readClient = supabase;
-  try {
-    readClient = createServiceRoleClient();
-  } catch {
-    readClient = supabase;
-  }
-
-  const { data, error } = await readClient
-    .from(SUBSCRIPTIONS_TABLE)
-    .select("student_id, status")
-    .eq("mentor_id", mentorId)
-    .in("status", ACTIVE_SUBSCRIPTION_STATUSES);
-
-  if (error) {
-    console.warn("[notifyActiveSubscribersOfPriceChange] subscription lookup failed", {
-      mentorId,
-      error: error.message,
-    });
-    return;
-  }
-
-  const studentIds = Array.from(
-    new Set(
-      ((data as Record<string, unknown>[] | null) ?? [])
-        .map((row) => (typeof row.student_id === "string" ? row.student_id : null))
-        .filter((id): id is string => Boolean(id))
-    )
-  );
-
-  await Promise.all(
-    studentIds.map((studentId) =>
-      insertNotificationBestEffort({
-        recipientUserId: studentId,
-        type: "mentor_subscription_price_changed",
-        title: "멘토 구독 요금이 변경됐어요",
-        body: "구독 중인 멘토의 요금제가 변경됐어요. 현재 구독에는 바로 적용되지 않고 신규 구독 또는 다음 갱신부터 반영됩니다.",
-        link: `/mentors/${mentorId}`,
-        metadata: { mentorId, changedTiers },
-      })
-    )
-  );
 }
 
 async function updateMentorSubscriptionPrices(
@@ -107,7 +52,6 @@ async function updateMentorSubscriptionPrices(
   if (!pricesKrw) return { ok: true };
 
   const payloads: Record<string, unknown>[] = [];
-  const changedTiers: SubscribePlanTier[] = [];
   const { data: existingRows, error: selectError } = await supabase
     .from("mentor_plans")
     .select("id, mentor_id, plan_tier, amount_cents")
@@ -144,7 +88,6 @@ async function updateMentorSubscriptionPrices(
     const existing = byTier.get(tier) ?? null;
     if (!priceChanged(existing, tier, amountCents)) continue;
 
-    changedTiers.push(tier);
     payloads.push({
       mentor_id: mentorId,
       plan_tier: tier,
@@ -164,7 +107,7 @@ async function updateMentorSubscriptionPrices(
     return { ok: false, error: upsertError.message };
   }
 
-  await notifyActiveSubscribersOfPriceChange(supabase, mentorId, changedTiers);
+  // 활성 구독 학생 알림은 158 트리거(mentor_plans amount_cents 변경 fan-out)가 upsert 트랜잭션과 원자적으로 발행한다.
   return { ok: true };
 }
 

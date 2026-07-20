@@ -22,7 +22,7 @@ export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationCategory, string> 
   system: "공지·안내",
 };
 
-// 웹 코드가 실제 발행하는 notifications.type 토큰(insertNotificationBestEffort 호출부 기준).
+// 실제 발행되는 notifications.type 토큰(DB 원자 producer — 142/144·155·157·158·159 트리거/RPC 기준).
 export const NOTIFICATION_CATEGORY_TYPES: Record<Exclude<NotificationCategory, "all">, readonly string[]> = {
   qna: [
     "question_answered",
