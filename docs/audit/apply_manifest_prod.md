@@ -127,6 +127,15 @@
 > (`community_posts_author_idem_key`·`idx_cp_active_created`·`shortform_posts_author_idem_key`)이라 **staging 은
 > 재실행해도 no-op**(구조·이름 동일). PR #44 의 `144_...` 실험 파일은 정본에 가져오지 않는다(수퍼시드). PR #44 는 close.
 
+### 151 / 152 (v2 Phase3·Phase4 — staging 적용됨, 기능 플래그 OFF)
+
+| 번호 | 정본 파일 | 내용 | staging |
+|---|---|---|---|
+| `151` | `151_p1_10_account_deletion_saga.sql` | **P1-10 회원탈퇴 saga**(플래그 OFF): `account_deletion_jobs` 상태기계 + write-gate 트리거(지갑/결제/질문/커뮤니티 + Storage INSERT conjunct) + 상태전이 RPC. **0 job 이면 write gate 무영향**. 실 삭제 없음(dry-run). | 적용됨 |
+| `152` | `152_p1_11c_notification_delivery_worker.sql` | **P1-11C**: `device_tokens`(RLS·재소유) + `notification_deliveries`(토큰별 UNIQUE) + `notification_settings`(RLS·P2-17) + claim(SKIP LOCKED·lease)/reclaim/backoff·dead-letter/설정강제 fan-out RPC. 실 FCM 없음(worker dry-run). | 적용됨 |
+
+> 두 파일 모두 신규 객체만 추가(기존 무수정). 151 write gate·152 worker 는 각각 rollback-only fixture 로 staging 검증(전이·취소·gate·claim/lease/설정/invalid-token/dead-letter). production 배포는 각 기능 플래그 ON 시점.
+
 ### 141 / 142 / 143 (P1-8A/P1-13 최종 보안·금융 마감 감사 — staging 적용됨)
 
 | 번호 | 정본 파일 | 내용 | staging |
