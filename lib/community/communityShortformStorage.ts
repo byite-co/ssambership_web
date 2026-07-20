@@ -7,8 +7,13 @@ import {
 } from "@/lib/community/communityShortformConstants";
 import { createSignedStorageUrl } from "@/lib/storage/signedStorageUrl";
 import { validateMagicBytesForMime } from "@/lib/storage/uploadMagicBytes";
+import {
+  SHORTFORM_VIDEO_MIME,
+  shortformVideoExtForMime,
+  shortformVideoRefBelongsToUser,
+} from "@/lib/community/shortformVideoRef";
 
-const SHORTFORM_VIDEO_MIME = new Set(["video/mp4", "video/quicktime", "video/webm"]);
+export { shortformVideoRefBelongsToUser };
 
 function formatStorageRef(bucket: string, path: string): string {
   return `${bucket}/${path.replace(/^\/+/, "")}`;
@@ -116,7 +121,7 @@ export async function uploadShortformVideo(
   if (magicError) {
     return { url: null, error: "type" };
   }
-  const ext = normalizedMime.includes("quicktime") ? "mov" : normalizedMime.includes("webm") ? "webm" : "mp4";
+  const ext = shortformVideoExtForMime(normalizedMime);
   const path = `${userId}/${randomUUID()}.${ext}`;
   const { error } = await supabase.storage.from(SHORTFORM_VIDEO_BUCKET).upload(path, buffer, {
     contentType: normalizedMime,
@@ -124,6 +129,27 @@ export async function uploadShortformVideo(
   });
   if (error) return { url: null, error: error.message };
   return { url: formatShortformVideoStoredRef(path), error: null };
+}
+
+/**
+ * 숏폼 영상 직접 업로드용 서명 티켓 발급(413 회피). 서버가 `{userId}/{uuid}.{ext}` 경로를 만들고
+ * 서명 URL·token 을 반환하면, 브라우저가 uploadToSignedUrl 로 Storage 에 직접 올린다(액션 body 미경유).
+ * 호출자(액션)가 멘토·계정활성·본인 userId 를 강제한 뒤 호출한다. 서명은 service-role 권장(경로는 서버 통제).
+ */
+export async function createShortformVideoUploadTicket(
+  supabase: SupabaseClient,
+  userId: string,
+  mime: string
+): Promise<
+  | { ok: true; path: string; token: string; ref: string }
+  | { ok: false; error: "type" | "sign" }
+> {
+  const normalizedMime = mime.trim().toLowerCase();
+  if (!SHORTFORM_VIDEO_MIME.has(normalizedMime)) return { ok: false, error: "type" };
+  const path = `${userId}/${randomUUID()}.${shortformVideoExtForMime(normalizedMime)}`;
+  const { data, error } = await supabase.storage.from(SHORTFORM_VIDEO_BUCKET).createSignedUploadUrl(path);
+  if (error || !data?.token) return { ok: false, error: "sign" };
+  return { ok: true, path, token: data.token, ref: formatShortformVideoStoredRef(path) };
 }
 
 export async function uploadShortformThumbnail(

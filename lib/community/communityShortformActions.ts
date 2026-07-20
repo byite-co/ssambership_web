@@ -13,11 +13,13 @@ import {
 } from "@/lib/community/communityShortformMutations";
 import type { ShortformCategorySlug } from "@/lib/community/communityShortformConstants";
 import {
+  createShortformVideoUploadTicket,
   deleteShortformVideoStoredRef,
   isShortformStoredVideoRef,
-  uploadShortformVideo,
+  shortformVideoRefBelongsToUser,
 } from "@/lib/community/communityShortformStorage";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { assertAccountActive } from "@/lib/auth/accountStatus";
 import {
   TRUST_SAFETY_COMMUNITY_ERROR_CODE,
@@ -98,21 +100,26 @@ export async function submitShortformUploadAction(formData: FormData) {
     oldVideoRef = ev;
   }
 
-  const videoFile = formData.get("video");
+  // [staged upload] 영상은 액션 body 로 받지 않는다(413 회피). 클라가 서명 티켓으로 Storage 에 직접
+  // 업로드하고 ref(텍스트)만 보낸다. videoUrl=기존 유지분(임시저장), newVideoRef=이번 신규 업로드.
   let videoUrl = String(formData.get("videoUrl") ?? "").trim();
-  let uploadedRef: string | null = null; // 이번 요청에서 새로 업로드한 ref(실패 시 보상 대상)
-  if (videoFile instanceof File && videoFile.size > 0) {
-    const buf = Buffer.from(await videoFile.arrayBuffer());
-    const up = await uploadShortformVideo(supabase, user.id, buf, videoFile.type || "video/mp4");
-    if (up.error) err(returnPath, up.error === "size" ? "video_size" : "video_upload");
-    videoUrl = up.url ?? "";
-    uploadedRef = up.url ?? null;
+  let uploadedRef: string | null = null; // 이번 요청 신규 업로드 ref(본인 소유일 때만 — 실패 시 보상 대상)
+  const newVideoRef = String(formData.get("videoRef") ?? "").trim();
+  if (newVideoRef) {
+    // 위조 ref(타인 경로) 차단 — 타인 객체는 보상 삭제하지 않는다(RLS delete 도 owner-scoped).
+    if (!shortformVideoRefBelongsToUser(newVideoRef, user.id)) err(returnPath, "video_upload");
+    videoUrl = newVideoRef;
+    uploadedRef = newVideoRef;
   }
   if (!videoUrl && status === "published") {
     // 아직 DB write 전. 방금 업로드한 새 객체가 있으면 고아 방지 위해 보상 삭제 후 오류.
     await compensateNewShortformVideo(supabase, uploadedRef);
     err(returnPath, "video");
   }
+
+  // 요청 UUID → 멱등 키(더블클릭·재시도에도 1행). 없거나 형식 오류면 null(레거시 무검사).
+  const requestId = String(formData.get("requestId") ?? "").trim();
+  const createIdempotencyKey = requestId && UUID_RE.test(requestId) ? requestId : null;
 
   const label = authorStoredLabelFromProfile(profile);
   const payload = {
@@ -125,6 +132,7 @@ export async function submitShortformUploadAction(formData: FormData) {
     source,
     status: status as "draft" | "published",
     authorLabel: label,
+    createIdempotencyKey,
   };
 
   const r = isUpdate
@@ -135,6 +143,11 @@ export async function submitShortformUploadAction(formData: FormData) {
     // DB 실패(INSERT/UPDATE 오류·UPDATE 0행) → 이번 요청 신규 video 고아 방지 보상 삭제.
     await compensateNewShortformVideo(supabase, uploadedRef);
     err(returnPath, r.error);
+  }
+
+  // 중복 제출 멱등 재생: 기존 글이 반환됐다면 이번 중복 업로드 영상은 고아 → 보상 삭제 후 기존 글로 이동.
+  if (!isUpdate && "idempotentReplay" in r && r.idempotentReplay) {
+    await compensateNewShortformVideo(supabase, uploadedRef);
   }
 
   // DB 성공 → 교체된 구영상 차집합 삭제(old != final 이고 old 가 우리 stored video ref 일 때만).
@@ -153,6 +166,33 @@ export async function submitShortformUploadAction(formData: FormData) {
 
   if (status === "published") redirect(`/community/shortform/${r.id}`);
   redirect(communityComposePath("shortform", { draft: "1", draftId: r.id }));
+}
+
+/**
+ * 숏폼 영상 직접 업로드용 서명 티켓 발급(413 회피). 멘토·계정활성만 발급하며 경로는 서버가 본인 userId 로 통제한다.
+ * 클라는 반환된 path·token 으로 브라우저에서 Storage 에 직접 업로드하고, finalize 에는 ref 만 넘긴다.
+ */
+export async function createShortformVideoUploadTicketAction(input: {
+  contentType: string;
+}): Promise<{ ok: true; path: string; token: string; ref: string } | { ok: false; error: string }> {
+  const { user } = await getServerAuthUser();
+  if (!user) return { ok: false, error: "auth" };
+  const supabase = await createClient();
+  const acct = await assertAccountActive(supabase, user.id);
+  if (!acct.ok) return { ok: false, error: "account_blocked" };
+  const { data: profile } = await getUserProfileById(supabase, user.id);
+  if (profile?.role !== "mentor") return { ok: false, error: "mentor_only" };
+
+  // 서명은 service-role 권장(경로는 서버가 본인 userId 로 통제). 없으면 사용자 클라로 폴백.
+  let signer = supabase;
+  try {
+    signer = createServiceRoleClient();
+  } catch {
+    signer = supabase;
+  }
+  const ticket = await createShortformVideoUploadTicket(signer, user.id, input.contentType);
+  if (!ticket.ok) return { ok: false, error: ticket.error };
+  return { ok: true, path: ticket.path, token: ticket.token, ref: ticket.ref };
 }
 
 export async function toggleShortformLikeAction(formData: FormData) {

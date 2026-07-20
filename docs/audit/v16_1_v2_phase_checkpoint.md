@@ -47,3 +47,15 @@
   (`getCommunityBoardPostForEdit` — 본인·미삭제 글만). update 경로가 소유권+deleted_at 서버 재검사.
 - **검증**: tsc 0, 변경파일 eslint 0, 계약테스트 11/11(ref 소유권 5건 포함), staging 147 no-op 적용.
 - **부채**: 실브라우저 왕복(더블클릭·부분실패·413 회피 실측)=E2E_DEBT. 중복 테스트 글 자동삭제 안 함(ID만 보고 대상).
+
+## Phase 2-3 — 숏폼 413·미리보기·중복 ✅ 구현완료
+- **413 회피(staged upload)**: 서버 `createShortformVideoUploadTicketAction`(멘토·계정활성만) → 서명 티켓(path·token,
+  service-role 서명·경로는 서버가 본인 userId 로 통제). 브라우저가 `uploadToSignedUrl` 로 Storage 직접 업로드.
+  finalize 액션은 `videoRef`(텍스트)만 수신 — body limit 미상향, 새 dependency 없음(기존 Supabase JS).
+- **소유권**: finalize 가 `shortformVideoRefBelongsToUser` 로 신규 ref 위조(타인 경로) 거부. 순수 `shortformVideoRef.ts` 공용.
+- **미리보기·replace**: 단일 영상 File state(append 아님·replace), `<video>` object URL 미리보기, 교체/언마운트 시 revoke.
+- **중복**: 148 `create_idempotency_key` + `(author_id,key)` UNIQUE(staging no-op 수렴). insert 23505→기존행 반환(멱등,
+  중복 업로드분 보상 삭제). 클라 요청 UUID + 제출 중 버튼 disable → 더블클릭·재시도 1행. draft status 보존.
+- **보상**: finalize 실패 시 신규 미등록 영상 보상 삭제, 교체 성공 후 구영상 차집합 정리(기존 로직 유지).
+- **검증**: tsc 0, 변경파일 eslint 0, 계약테스트 16/16(숏폼 ref 5건 포함), staging 148 no-op 적용.
+- **부채**: 실브라우저 업로드 왕복(500MB·더블클릭·finalize 실패 보상)=E2E_DEBT.
