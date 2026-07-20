@@ -1,6 +1,15 @@
-# P1-8A 질문방 원자 RPC·웹 전환 — 설계 DRAFT (staging 적용·웹 전환 보류)
+# P1-8A 질문방 원자 RPC·웹 전환 — 설계 (구현 완료: 136 + 웹 전환)
 
-> 상태: **설계 완료 · staging 미적용 · 웹 미전환**. 착수 조건(아래 §6)이 확보되기 전 적용하지 않는다.
+> **갱신 2026-07-20 — 구현 완료(단일세션 검증).** 정본 SQL `supabase/sql/136_p1_8a_question_room_atomic_rpc.sql`
+> staging 적용, 웹 전환(폼 액션 create/message/attachment + API 서비스 create/confirm/wrong) 완료.
+> `qna_create_question_thread` 가 무료/활성구독 자격을 서버에서 분기하고, 무료면 `free_question_usage.thread_id`
+> 정본 링크(+UNIQUE)를 기록한다. 멘토 첫 메시지/첨부만 answered 전이 + `record_domain_notification` exactly-once.
+> `question_attachments.storage_path` UNIQUE + 경로 thread-id 검증 + 실패 시 미등록 객체 보상 삭제.
+> **남은 것**: 독립 2세션 동시성 실측(BLOCKED_ENV) · 실인증 브라우저 E2E(미실행) · pending-refund lock
+> helper 최종 교체(WAITING_P1_13) · direct 정책 제거·open→pending 최종 이관(P1-8B, WAITING_EXTERNAL_APP).
+> 아래 원본 DRAFT 는 설계 근거로 보존한다.
+
+> 상태(원안): **설계 완료 · staging 미적용 · 웹 미전환**. 착수 조건(아래 §6)이 확보되기 전 적용하지 않는다.
 > 보류 사유: (1) 할당량 소비의 **동시성 정확성은 독립 2세션 실측 필수**(§10, 단일 세션 PASS 금지) — 현 환경 불가.
 > (2) 웹 전환은 라이브 질문방 write 경로 교체라 **런타임 E2E** 필요 — 현 환경(인증 세션) 불가.
 > (3) pending-refund lock 경계는 **P1-13 billing-event 정본** 위에 완성(결정 C 계약으로 경계까지만 구현 가능).

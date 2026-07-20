@@ -73,6 +73,21 @@
 
 `133`(P2-15)·`134`(P2-24 bio)·`135`(P3-2 리뷰 통계 RPC) 적용됨. 다음 신규 임의번호는 예약(131 P1-13)을 건너뛴 **`136`**부터.
 
+### 136–138 (P1-8A / P3-8 / P3-9 수렴 — staging 적용됨)
+
+원래 PR #43(main 기반)에서 130·131·132 로 staging 선적용됐으나 이 브랜치의 130(scrap)·132(outbox)와 충돌하고 131 은 P1-13 예약이라, 정본 브랜치에서 **136·137·138** 로 수렴한다. staging 실객체 = 아래 정본 파일과 일치(멱등 재적용 안전).
+
+| 번호 | 정본 파일 | 내용 | staging | 의존 |
+|---|---|---|---|---|
+| `136` | `136_p1_8a_question_room_atomic_rpc.sql` | P1-8A 질문방 원자 RPC 5종(`qna_create_question_thread`(무료/구독 서버분기)+무료 wrapper+append+confirm+wrong+register) · `free_question_usage.thread_id`(FK SET NULL + **UNIQUE**) · `question_attachments.storage_path` **UNIQUE** · execute={authenticated,service_role} | 적용됨 | **`132`(record_domain_notification) 선행 필수** |
+| `137` | `137_p3_8_realtime_messages_threads.sql` | P3-8 realtime publication 에 `question_messages`·`question_threads` 추가(멱등) | 적용됨 | 136 후 |
+| `138` | `138_p3_9_student_nickname_rpc_anon_revoke.sql` | P3-9(부분) `get_mentor_student_nicknames` anon/public EXECUTE 회수 | 적용됨 | — |
+
+- 클린설치 순서: `132`(P1-11F outbox) → `136`(P1-8A) → `137`(P3-8) → `138`(P3-9). **staging-only 의존 없음**(record_domain_notification·notification_outbox 는 132 로 저장소에 존재).
+- P1-8A 전환 정책: 기존 direct-write 정책·GRANT·049 storage·`open` 상태 **유지**. direct 정책 제거·open→pending 최종 이관 = **P1-8B(WAITING_EXTERNAL_APP)**.
+- pending-refund lock 경계(설계 §2 결정 C)는 P1-13 billing-event 정본 확정 시 helper 로 교체 = **WAITING_P1_13**.
+- 검증: rollback-only fixture(무료/구독 경로·UNIQUE·attachment 경로검증·멘토 첫답 answered+exactly-once·주간한도·비당사자) 전부 PASS, baseline 0행. 독립 2세션 동시성 = **BLOCKED_ENV**. 실인증 브라우저 E2E = 미실행(검증 부채).
+
 ## 7. 클린 DB 재현 (검증 부채 — 미실행)
 
 `supabase` CLI 부재로 아래를 **실행하지 못함**. CLI 환경 확보 시 실행하고, 그 전에는 PASS로 기록하지 않는다.

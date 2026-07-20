@@ -1,14 +1,46 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
 import { assertRoomParty } from "@/lib/qna/questionRoomApiAuth";
-import { createQuestionThread, nextRoomQuestionNumber } from "@/lib/qna/questionRoomMutations";
+import { nextRoomQuestionNumber } from "@/lib/qna/questionRoomMutations";
 import { updateQuestionThreadStatus } from "@/lib/qna/questionThreadMutations";
 import { readQuestionThreadWorkflowStatus, WEEKLY_QUESTION_LIMIT_MESSAGE } from "@/lib/qna/questionThreadStatus";
 import { fetchWeeklyQuestionUsage } from "@/lib/qna/weeklyQuestionUsage";
-import { assertFreeQuestionAllowed, recordFreeQuestionUsage } from "@/lib/qna/freeQuestionUsage";
+import { assertFreeQuestionAllowed } from "@/lib/qna/freeQuestionUsage";
 import { findActiveSubscriptionForPair } from "@/lib/subscribe/subscribeCheckoutService";
 import { threadRowBelongsToMentorStudentRoom } from "@/lib/qna/questionThreadRoomRef";
 import { assertMentorApprovedForAction } from "@/lib/mentor/mentorVerificationGate";
+import {
+  confirmQuestionThreadViaRpc,
+  createQuestionThreadViaRpc,
+  flagWrongAnswerViaRpc,
+} from "@/lib/qna/questionRoomRpc";
+
+/** P1-8A RPC 가 raise 한 코드 → API HTTP status 매핑. */
+function qnaRpcCodeToStatus(code: string): 400 | 403 | 404 | 429 | 500 {
+  switch (code) {
+    case "ROOM_NOT_FOUND":
+    case "THREAD_NOT_FOUND":
+      return 404;
+    case "WEEKLY_LIMIT_EXHAUSTED":
+      return 429;
+    case "NOT_ANSWERED":
+      return 400;
+    case "AUTH_REQUIRED":
+    case "NOT_ROOM_PARTY":
+    case "STUDENT_ONLY":
+    case "MENTOR_CANNOT_CREATE_THREAD":
+    case "ACCOUNT_BANNED":
+    case "ACCOUNT_SUSPENDED":
+    case "BLOCKED":
+    case "MENTOR_NOT_APPROVED":
+    case "FREE_QUOTA_EXPIRED":
+    case "FREE_QUOTA_TOTAL_EXHAUSTED":
+    case "FREE_QUOTA_MENTOR_EXHAUSTED":
+      return 403;
+    default:
+      return 500;
+  }
+}
 
 export async function resolveMentorIdForRoom(
   supabase: SupabaseClient,
@@ -79,11 +111,6 @@ export async function createStudentQuestionThread(
   | { ok: true; threadId: string | null }
   | { ok: false; status: 400 | 403 | 404 | 429 | 500; error: string }
 > {
-  const gate = await assertStudentCanCreateThread(supabase, studentId, roomId);
-  if (!gate.ok) {
-    return { ok: false, status: gate.status, error: gate.error };
-  }
-
   // 제목은 선택사항 — 비우면 질문방 단위 누적 순번으로 "질문 N" 자동 생성.
   // ★N은 이 room의 thread 수 + 1 (학생 전체 합산 아님).
   let finalTitle = title.trim();
@@ -91,28 +118,17 @@ export async function createStudentQuestionThread(
     finalTitle = `질문 ${await nextRoomQuestionNumber(supabase, roomId)}`;
   }
 
-  const result = await createQuestionThread({
-    supabase,
-    role: "student",
-    userId: studentId,
+  // P1-8A: 원자 RPC 로 생성 — 무료/구독 자격 서버 분기 + 무료면 usage thread_id 링크.
+  const rpc = await createQuestionThreadViaRpc(supabase, {
     roomId,
     title: finalTitle,
     subject: subject?.trim() || null,
     topic: topic?.trim() || null,
   });
-
-  if (!result.ok) {
-    return { ok: false, status: 500, error: result.error };
+  if (!rpc.ok) {
+    return { ok: false, status: qnaRpcCodeToStatus(rpc.code), error: rpc.userMessage };
   }
-
-  if (gate.useFreeQuota) {
-    const recorded = await recordFreeQuestionUsage(supabase, studentId, gate.mentorId);
-    if (!recorded.ok) {
-      return { ok: false, status: 500, error: recorded.userMessage };
-    }
-  }
-
-  return { ok: true, threadId: result.threadId };
+  return { ok: true, threadId: rpc.threadId };
 }
 
 export async function assertThreadInRoom(
@@ -137,28 +153,13 @@ export async function confirmQuestionThreadForStudent(
   roomId: string,
   threadId: string
 ): Promise<{ ok: true } | { ok: false; status: 400 | 403 | 404 | 500; error: string }> {
-  const party = await assertRoomParty(supabase, roomId, studentId, "student");
-  if (!party.ok) {
-    return { ok: false, status: party.status === 403 ? 403 : 404, error: party.error };
-  }
-  const inRoom = await assertThreadInRoom(supabase, roomId, threadId);
-  if (!inRoom.ok) {
-    return { ok: false, status: inRoom.status, error: inRoom.error };
-  }
-
-  const workflow = readQuestionThreadWorkflowStatus(inRoom.row);
-  if (workflow === "confirmed") {
-    return { ok: true };
-  }
-  if (workflow !== "answered") {
-    return { ok: false, status: 400, error: "멘토 답변이 도착한 뒤에만 확인할 수 있습니다." };
-  }
-
-  const updated = await updateQuestionThreadStatus(supabase, threadId, "confirmed", {
-    confirmed_at: new Date().toISOString(),
-  });
-  if (!updated.ok) {
-    return { ok: false, status: 500, error: updated.error };
+  // P1-8A: 확인 RPC(answered→confirmed, 학생 전용). roomId 는 API 계약 유지용(RPC 는 thread→room 도출).
+  void roomId;
+  void studentId;
+  const rpc = await confirmQuestionThreadViaRpc(supabase, threadId);
+  if (!rpc.ok) {
+    const st = qnaRpcCodeToStatus(rpc.code);
+    return { ok: false, status: st === 429 ? 400 : st, error: rpc.userMessage };
   }
   return { ok: true };
 }
@@ -207,33 +208,13 @@ export async function updateQuestionThreadWrongAnswerForStudent(
   threadId: string,
   isWrongAnswer: boolean
 ): Promise<{ ok: true } | { ok: false; status: 403 | 404 | 500; error: string }> {
-  const party = await assertRoomParty(supabase, roomId, studentId, "student");
-  if (!party.ok) {
-    return { ok: false, status: party.status === 403 ? 403 : 404, error: party.error };
+  // P1-8A: 오답 표시 RPC(학생 전용). roomId 는 API 계약 유지용(RPC 는 thread→room 도출).
+  void roomId;
+  void studentId;
+  const rpc = await flagWrongAnswerViaRpc(supabase, threadId, isWrongAnswer);
+  if (!rpc.ok) {
+    const st = qnaRpcCodeToStatus(rpc.code);
+    return { ok: false, status: st === 404 ? 404 : st === 403 ? 403 : 500, error: rpc.userMessage };
   }
-  const inRoom = await assertThreadInRoom(supabase, roomId, threadId);
-  if (!inRoom.ok) {
-    return { ok: false, status: inRoom.status, error: inRoom.error };
-  }
-
-  const now = new Date().toISOString();
-  const payloads: Record<string, unknown>[] = [
-    {
-      is_wrong_answer: isWrongAnswer,
-      mastery_status: isWrongAnswer ? "wrong" : "unknown",
-      updated_at: now,
-    },
-    { is_wrong_answer: isWrongAnswer, updated_at: now },
-    { is_wrong_answer: isWrongAnswer },
-  ];
-  let lastError = "오답 표시를 저장하지 못했습니다.";
-  for (const payload of payloads) {
-    const { error } = await supabase.from("question_threads").update(payload).eq("id", threadId);
-    if (!error) return { ok: true };
-    lastError = error.message;
-    if (!/column|schema cache|Could not find/i.test(error.message)) {
-      return { ok: false, status: 500, error: error.message };
-    }
-  }
-  return { ok: false, status: 500, error: lastError };
+  return { ok: true };
 }
