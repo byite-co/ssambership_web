@@ -138,6 +138,18 @@
 | 083 |  | `083_custom_order_message_attachments.sql` | 083_custom_order_message_attachments.sql |
 | 084 |  | `084_admin_case_notes.sql` | 084_admin_case_notes.sql |
 | 085 |  | `085_connection_notes_author_rls.sql` | 085_connection_notes_author_rls.sql |
+## v16(1) 잔여 작업 적용 기록 (ssambership-staging `lbeqxarxothkmzqvpudy`)
+
+> 이 저장소 브랜치(`claude/v16-web-db-autonomous-*`)는 `main` 기준이며 SQL 파일은 121까지만 포함한다.
+> 122–129 번호대는 미머지 PR(#31=120, #33=121, #34=122–125, 기타 숏폼/리뷰 계열)에서 예약 중이므로,
+> 신규 파일은 충돌을 피하기 위해 **130 이상**을 사용한다. (staging DB 는 이 브랜치보다 앞서 있어
+> `notification_outbox`·`record_domain_notification` 등 저장소에 원본이 없는 객체가 이미 존재한다 —
+> 이들은 재생성하지 않고 그대로 재사용한다.)
+
+| 번호 | 적용 | 파일 | 비고 |
+| --- | --- | --- | --- |
+| 130 | yes | `130_p1_8a_question_room_atomic_rpc.sql` | P1-8A. `free_question_usage.thread_id` 수렴(FK ON DELETE SET NULL) + 원자 RPC 5종(`qna_create_free_question_thread`/`qna_append_message`/`qna_confirm_thread`/`qna_flag_wrong_answer`/`qna_register_attachment`). SECURITY DEFINER, execute={authenticated,service_role} (anon revoke). 기존 direct-write 정책·GRANT 는 유지(앱 전환 전 P1-8B 로 이관). rollback-only fixture 14/14 PASS. 동시성(독립 2세션) 미검증 = BLOCKED_ENV. |
+
 ## 출시 전 대조 포인트
 
 - `023`, `024`, `072`, `073`, `073b`: 민감 RPC가 실DB에서 `anon`/`authenticated`에 열려 있지 않은지 확인한다.

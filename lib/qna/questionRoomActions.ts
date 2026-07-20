@@ -23,6 +23,8 @@ import {
   saveConnectionNote,
 } from "@/lib/qna/questionRoomMutations";
 import { markQuestionThreadAnsweredForMentor, resolveMentorIdForRoom } from "@/lib/qna/questionRoomThreadService";
+import { findActiveSubscriptionForPair } from "@/lib/subscribe/subscribeCheckoutService";
+import { createFreeQuestionThreadViaRpc } from "@/lib/qna/questionRoomRpc";
 import {
   fetchUserDisplayName,
   insertNotificationBestEffort,
@@ -219,6 +221,40 @@ export async function createQuestionThreadAction(formData: FormData) {
     );
   }
 
+  const title = readThreadTitleFromForm(formData);
+
+  // P1-8A: 활성 구독이 없는 학생의 새 스레드는 원자 RPC로 처리한다.
+  //  (기존: 게이트가 free_question_usage 를 먼저 INSERT → 별도 thread INSERT → 사후 시각 근접
+  //   짝짓기. 비원자 + 오짝 위험. RPC 는 무료권 소비·스레드 생성·thread_id 링크를 한 트랜잭션으로 처리하고
+  //   계정상태·차단·멘토승인·무료자격을 서버에서 재검사한다.)
+  const roomPair = await resolveMentorIdForRoom(supabase, roomId);
+  if (roomPair.mentorId) {
+    const activeSub = await findActiveSubscriptionForPair(supabase, user.id, roomPair.mentorId);
+    if (!activeSub) {
+      const rpc = await createFreeQuestionThreadViaRpc(supabase, { roomId, title });
+      if (!rpc.ok) {
+        redirect(
+          buildRedirectUrl(roomId, actor, {
+            thread: contextThreadId,
+            kind: "thread",
+            error: rpc.userMessage,
+            draftThread: title,
+          })
+        );
+      }
+      const freeThreadId = rpc.threadId ?? contextThreadId;
+      revalidatePath(detailBasePath(roomId, actor));
+      redirect(
+        buildRedirectUrl(roomId, actor, {
+          thread: freeThreadId ?? null,
+          kind: "thread",
+          ok: "thread가 생성되어 자동 선택되었습니다.",
+        })
+      );
+    }
+  }
+
+  // 활성 구독 경로(또는 멘토 미해결 폴백) — 기존 주간 한도 게이트 + 생성 유지.
   const subGate = await assertThreadCreationSubscriptionAllowed(supabase, roomId, actor, { isNewThread: true });
   if (!subGate.ok) {
     redirect(
@@ -226,12 +262,11 @@ export async function createQuestionThreadAction(formData: FormData) {
         thread: contextThreadId,
         kind: "thread",
         error: subGate.userMessage,
-        draftThread: readThreadTitleFromForm(formData),
+        draftThread: title,
       })
     );
   }
 
-  const title = readThreadTitleFromForm(formData);
   const result = await createQuestionThread({
     supabase,
     role: actor,

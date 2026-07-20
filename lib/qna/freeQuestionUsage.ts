@@ -252,24 +252,41 @@ function pairFreeUsageRowsToThreadIds(
 /**
  * 무료 스레드 짝짓기용 usage 조회 — service_role 전용.
  * `free_question_usage` RLS는 student_id=auth.uid() select만 허용하므로 멘토 세션 폴백은 항상 빈 결과(답변 차단)가 된다.
+ *
+ * P1-8A(130): `thread_id` 정본 링크가 채워진 행은 정확 매칭에 사용하고, 링크가 없는 레거시 행만
+ * 시각 근접 휴리스틱으로 폴백한다. `thread_id` 미적용(구DB) 시 select 실패 → created_at 만으로 재조회.
  */
 async function readFreeQuestionUsageRowsForPairing(
   studentId: string,
   mentorId: string
-): Promise<{ created_at: unknown }[]> {
+): Promise<{ created_at: unknown; thread_id: unknown }[]> {
   try {
     const admin = createServiceRoleClient();
-    const { data, error } = await admin
+    const withThread = await admin
+      .from(TABLE)
+      .select("created_at, thread_id")
+      .eq("student_id", studentId)
+      .eq("mentor_id", mentorId)
+      .order("created_at", { ascending: true });
+    if (!withThread.error) {
+      return (withThread.data as { created_at: unknown; thread_id: unknown }[]) ?? [];
+    }
+    if (!/column|does not exist|schema cache/i.test(withThread.error.message)) {
+      console.error("[readFreeQuestionUsageRowsForPairing]", withThread.error.message, { studentId, mentorId });
+      return [];
+    }
+    // thread_id 컬럼 미적용 환경 폴백.
+    const legacy = await admin
       .from(TABLE)
       .select("created_at")
       .eq("student_id", studentId)
       .eq("mentor_id", mentorId)
       .order("created_at", { ascending: true });
-    if (error) {
-      console.error("[readFreeQuestionUsageRowsForPairing]", error.message, { studentId, mentorId });
+    if (legacy.error) {
+      console.error("[readFreeQuestionUsageRowsForPairing] legacy", legacy.error.message, { studentId, mentorId });
       return [];
     }
-    return (data as { created_at: unknown }[]) ?? [];
+    return ((legacy.data as { created_at: unknown }[]) ?? []).map((r) => ({ ...r, thread_id: null }));
   } catch (e) {
     console.error("[readFreeQuestionUsageRowsForPairing] service role unavailable", { studentId, mentorId, e });
     return [];
@@ -293,11 +310,36 @@ export async function loadFreeQuestionThreadIdsInRoom(
     return new Set();
   }
 
-  return pairFreeUsageRowsToThreadIds(
-    usages,
-    threads as { id: unknown; created_at: unknown }[],
-    FREE_QUESTION_THREAD_PAIR_MAX_MS
-  );
+  const roomThreadIds = new Set<string>();
+  for (const t of threads as { id: unknown }[]) {
+    const tid = typeof t.id === "string" ? t.id : t.id != null ? String(t.id) : "";
+    if (tid) roomThreadIds.add(tid);
+  }
+
+  // 1) thread_id 정본 링크가 있는 행은 정확 매칭(이 room 소속만).
+  const result = new Set<string>();
+  const legacyUsages: { created_at: unknown }[] = [];
+  for (const u of usages) {
+    const linked = typeof u.thread_id === "string" ? u.thread_id : u.thread_id != null ? String(u.thread_id) : "";
+    if (linked) {
+      if (roomThreadIds.has(linked)) result.add(linked);
+      // 링크가 있으나 다른 room 소속이면 이 room 에서는 제외.
+    } else {
+      legacyUsages.push({ created_at: u.created_at });
+    }
+  }
+
+  // 2) 링크 없는 레거시 행만 이미 매칭되지 않은 thread 에 시각 근접 폴백.
+  if (legacyUsages.length > 0) {
+    const remainingThreads = (threads as { id: unknown; created_at: unknown }[]).filter((t) => {
+      const tid = typeof t.id === "string" ? t.id : t.id != null ? String(t.id) : "";
+      return tid && !result.has(tid);
+    });
+    const paired = pairFreeUsageRowsToThreadIds(legacyUsages, remainingThreads, FREE_QUESTION_THREAD_PAIR_MAX_MS);
+    paired.forEach((id) => result.add(id));
+  }
+
+  return result;
 }
 
 /** 메시지/답변 게이트: 해당 thread 가 무료질문권 1회 사용과 짝지어진 스레드인지 */
