@@ -48,3 +48,34 @@
   트리거로 수신자별 1건. termination_refund 는 `refunds` INSERT(request_type='subscription_mentor_suspended') 트리거가 자연스러움.
 - mentor_subscription_price_changed: `mentor_plans` UPDATE 트리거에서 활성 구독자 fan-out.
 이들은 재무 RPC 본문을 재작성하지 않고 트리거만 추가하므로 안전하다. best-effort 호출은 트리거 추가와 동시에 제거해야 이중 발송이 없다.
+
+---
+
+## 갱신 (P1-11 원자화 완결 — 157/158/159) : canonical 17/17 원자
+
+**전 17종 원자 producer 전환 완료.** 방식은 155 와 동일 — domain 테이블 AFTER 트리거가 domain write 와
+같은 트랜잭션에서 `record_domain_notification`(132) 호출. 원자·멱등((recipient,event_key) UNIQUE).
+
+| 이벤트 | 트리거(SQL) | domain write | recipient | event_key |
+|---|---|---|---|---|
+| subscription_renewal_upcoming | 157 `trg_sbe_notify_insert` | billing event 예고 마커 INSERT(renewal/skipped/pre_renewal_notice_sent) | 학생 | `{event}:{sub}:{period_end date}` |
+| subscription_renewal_succeeded | 157 `trg_sbe_notify_*` | billing event renewal/succeeded 전이(068 RPC) | 학생 | `{event}:{sub}:{period_end date}` |
+| subscription_renewal_failed_insufficient_cash | 157 `trg_sbe_notify_*` | billing event renewal_failed/failed 전이(068 RPC). 재시도에도 주기당 1건 | 학생 | `{event}:{sub}:{period_end date}` |
+| subscription_expired | 157 `trg_sub_notify_expired` | subscriptions status→expired 전이(만료·해지예약 공통) | 학생 | `{event}:{sub}:{expired date}` |
+| mentor_termination_notice | 158 `trg_mp_notify_activity` | mentor_profiles activity_status→terminating | 활성 구독 학생 fan-out | `{event}:{sub}:{effective date}` |
+| mentor_pause_notice | 158 `trg_mp_notify_activity` | mentor_profiles activity_status→paused | 활성 구독 학생 fan-out | `{event}:{sub}:{pause_until date}` |
+| mentor_termination_refund | 158 `trg_refund_notify_mentor_termination` | refunds INSERT(request_type=subscription_mentor_suspended) | 학생 | `{event}:{refund_id}` |
+| mentor_subscription_price_changed | 158 `trg_mplan_notify_price_*` | mentor_plans amount_cents INSERT/변경 | 활성 구독 학생 fan-out | `{event}:{mentor}:{sub}:{txid}` (동일 tx 다중 tier = 1건) |
+| new_application | 159 `trg_cra_notify_new_application` | custom_request_applications INSERT | 의뢰 글 작성자(자기 지원 무발화) | `{event}:{application_id}` |
+| new_order_message | 159 `trg_com_notify_new_order_message` | custom_order_messages INSERT | 주문 상대방(제3자 작성 무발화) | `{event}:{message_id}` |
+
+웹 best-effort 헬퍼 전면 제거: `insertNotificationBestEffort`·`fetchUserDisplayName`·`notificationInsert.ts` 삭제,
+호출부 5파일(subscriptionRenewalBatch/mentorActivityService/mentorProfileMutations/customRequestApplicationActions/orderMessageActions) 정리.
+멘토 종료 환불 본문의 금액 표기 오류(cents 를 캐시로 그대로 출력 — 100배)를 트리거에서 `cents÷100` 으로 교정.
+
+**검증**: 로컬 스크래치 PG16 에서 정본 132+157+158+159 적용 + rollback-only fixture 24 assertion 전부 PASS
+(`scripts/verify/local_notification_trigger_check.sh`). **staging 적용은 PENDING** — 이 세션에 staging secret 이 없어
+`scripts/verify/fixtures/notification_atomization_157_159_fixture.sql` 로 적용 직후 재검증한다(READY_NOT_EXECUTED).
+staging 적용 전까지 preview 웹에서 위 10종 알림은 미생성(트리거 부재 + best-effort 제거) — 적용 순서: SQL 먼저.
+
+**잔여 앱 부채(WAITING_EXTERNAL_APP)**: 실기기 FCM 발송·device token 등록·앱 딥링크(변동 없음).

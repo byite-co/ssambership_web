@@ -16,8 +16,12 @@ screenshots/
 generate_report.mjs
 *.docx
 
-# 스크린샷 스크립트
-scripts/
+# 스크린샷 스크립트 (scripts/ 디렉토리째 제외하면 하위 재포함이 불가해 * 로 나열)
+scripts/*
+# 검증 harness 는 정본(추적) — scripts/ 전체 ignore 가 이전 세션 검증 스크립트 커밋 누락 원인이었다
+!scripts/verify/
+# 보고서 생성 스크립트는 기존부터 추적됨
+!scripts/generate-review-report.mjs
 
 # E2E / Playwright 산출물 (소스 아님)
 /test-results/
