@@ -178,17 +178,21 @@ test.describe("C. 학생 — 게시판 P0-4 (이미지·멱등·수정·soft-del
       await mobile.page.goto("/community/board", { waitUntil: "domcontentloaded" });
       await mobile.page.waitForTimeout(2500); // useMediaQuery 하이드레이션 보정(6→4/10→5)
       const pager = mobile.page.locator('[aria-label="페이지 이동"]');
-      await expect(pager).toBeVisible({ timeout: 20_000 }); // 모바일 pageSize 5 < 6행 → 페이저 등장
+      await expect(pager).toBeVisible({ timeout: 20_000 }); // 모바일 pageSize 5 < 총 게시글 → 페이저 등장
       const articles = mobile.page.locator("main article");
-      await expect(articles).toHaveCount(5); // 모바일 pageSize=5
+      // 모바일 pageSize=5 (데스크탑 10과 구분되는 핵심). 총건수는 누적 e2e 데이터로 변동 가능하므로 정확 5.
+      await expect(articles).toHaveCount(5);
       await pager.getByRole("button", { name: "다음" }).click();
-      await expect(articles).toHaveCount(1); // 6행 중 2페이지 = 1행
-      // 카테고리 탭 변경 → 1페이지 리셋 (전체 탭으로 복귀해도 page=1)
+      await mobile.page.waitForTimeout(1200);
+      const page2 = await articles.count();
+      expect(page2).toBeGreaterThanOrEqual(1); // 2페이지 존재(pageSize 적용 증거)
+      expect(page2).toBeLessThanOrEqual(5);
+      // 카테고리 탭 변경 → 1페이지 리셋: '자유'(신규 e2e 글 없음)로 갔다가 '전체' 복귀 시 다시 page1=5
       await mobile.page.locator('[aria-label="카테고리"] button, [aria-label="카테고리"] a').filter({ hasText: "자유" }).first().click();
-      await mobile.page.waitForTimeout(1000);
+      await mobile.page.waitForTimeout(1200);
       await mobile.page.locator('[aria-label="카테고리"] button, [aria-label="카테고리"] a').filter({ hasText: "전체" }).first().click();
       await mobile.page.waitForTimeout(1500);
-      await expect(articles).toHaveCount(5); // 리셋되어 1페이지(5행)
+      await expect(articles).toHaveCount(5); // 카테고리 리셋 후 1페이지(pageSize 5)
     } finally {
       await mobile.ctx.close();
     }
@@ -267,9 +271,10 @@ test.describe("D. 멘토 — 프로필 §5 분리(P0-3) + 숏폼 업로드(P2-24
     await page.goto("/community/shortform/new", { waitUntil: "domcontentloaded" });
     await page.waitForTimeout(2000);
     await page.locator('input[name="video-picker"]').setInputFiles(`${MEDIA}/e2e-test-video.webm`);
-    // P2-24: URL.createObjectURL 로컬 미리보기
-    await expect(page.locator('video[src^="blob:"]')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText("e2e-test-video.webm").first()).toBeVisible();
+    // P0-3: 파일 선택 시 URL.createObjectURL 로컬 미리보기 <video src=blob:> 가 DOM 에 attach.
+    // (헤드리스에서 webm 프레임 미디코드 시 0-size 라 toBeVisible 대신 attach + 파일명으로 확인)
+    await expect(page.locator('video[src^="blob:"]')).toHaveCount(1, { timeout: 15_000 });
+    await expect(page.getByText("e2e-test-video.webm").first()).toBeVisible({ timeout: 10_000 });
 
     await page.locator('input[name="title"]').fill(SHORTFORM_TITLE);
     await page.locator('input[name="rightsAck"]').check();
