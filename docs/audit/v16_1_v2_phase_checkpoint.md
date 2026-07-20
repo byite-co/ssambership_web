@@ -107,3 +107,21 @@
   계약테스트 12건(status 8·purge 4, 총 47/47). tsc 0, eslint 0. account_deletion_jobs staging 0행 유지.
 - **부채**: 앱 경로 배선(삭제 요청 UI·세션 폐기·effective status 소비자·실 Storage/auth 어댑터)=WAITING_EXTERNAL_APP(플래그 ON 컷오버).
   실 삭제 실행 없음(dry-run·mock).
+
+## Phase 4 — P1-11C outbox worker + P2-17 ✅ 구조·mock 검증완료 (dry-run, 실 FCM 없음)
+- **152 DB**: `device_tokens`(유저 RLS·본인만, `register_device_token` 재소유=계정 전환),
+  `notification_deliveries`(service_role, UNIQUE(outbox_id,device_token_id)=토큰별 1건),
+  `notification_settings`(유저 RLS). worker RPC: claim(SKIP LOCKED·lease)·reclaim_expired(만료 회수)·
+  mark_sent·mark_failed(backoff·max→dead-letter)·create_deliveries(활성토큰×설정 fan-out)·
+  delivery mark_sent/failed(invalid token→revoke). 설정 강제 `notification_delivery_allowed`(push+group).
+- **worker(dry-run)**: `outboxWorker.runOutboxBatch` 어댑터 주입 — reclaim→claim→fan-out→per-token transport→
+  delivery/outbox 상태·backoff·dead-letter. `dryRunTransport` 기본(실 FCM 없음). 순수 `outboxBackoff`(지수 backoff·
+  무효토큰 분류).
+- **P2-17 설정 UI**: `/settings/notifications` + `NotificationSettingsPanel`(실 토글·즉시 저장). 
+  `notification_settings` upsert(RLS 본인). **DB 저장 실패 시 성공 UI 금지**(ok=false → 오류·이전상태 유지).
+  worker 가 설정을 강제(create_deliveries 억제). 채널(push)·event group(qna/order/subscription/refund/system) 기본 on.
+- **event coverage**: `docs/audit/notification_event_coverage.md` — 17 canonical event 표(producer·동일tx·recipient·dedup).
+  현재 원자 producer=question_answered 1건, 나머지 16=웹 best-effort(원자화 이벤트별 후속), 실 FCM/토큰등록=WAITING_EXTERNAL_APP.
+- **검증**: staging 152 적용 + rollback fixture 10항목 통과(claim/lease/fan-out/설정 suppress/그룹별/invalid-token revoke/
+  dead-letter/reclaim, 실데이터 무변경). 계약테스트 9건(backoff 3·설정모델 6, 총 56/56). tsc 0, eslint 0.
+- **부채**: best-effort→atomic 16 이벤트 전환·실기기 FCM 발송·device token 등록 호출=WAITING_EXTERNAL_APP/후속.

@@ -1,37 +1,110 @@
 "use client";
 
-const rows: { key: string; label: string; note: string }[] = [
-  { key: "qna", label: "질문방 알림", note: "답변·스레드 관련" },
-  { key: "custom", label: "맞춤의뢰 알림", note: "지원·납품·수정 요청" },
-  { key: "community", label: "커뮤니티 알림", note: "댓글·검수·신고 처리" },
-  { key: "billing", label: "정산·결제 알림", note: "구독·캐시·환불" },
-];
+import { useState } from "react";
+import { updateNotificationSettingsAction } from "@/lib/notifications/notificationSettingsActions";
+import {
+  NOTIFICATION_GROUPS,
+  NOTIFICATION_GROUP_LABELS,
+  type NotificationSettings,
+} from "@/lib/notifications/notificationSettingsModel";
 
-export function NotificationSettingsPanel() {
+type Toggle = { label: string; checked: boolean; onChange: (v: boolean) => void; disabled?: boolean };
+
+function ToggleRow(props: { title: string; note: string; toggle: Toggle }) {
+  return (
+    <li className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+      <div>
+        <p className="text-sm font-extrabold text-slate-900">{props.title}</p>
+        <p className="text-xs text-slate-500">{props.note}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={props.toggle.checked}
+        disabled={props.toggle.disabled}
+        onClick={() => props.toggle.onChange(!props.toggle.checked)}
+        className={`relative h-7 w-12 shrink-0 rounded-full transition ${
+          props.toggle.checked ? "bg-[#2563EB]" : "bg-slate-200"
+        } ${props.toggle.disabled ? "opacity-50" : ""}`}
+      >
+        <span className="sr-only">{props.title}</span>
+        <span
+          className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow transition-all ${
+            props.toggle.checked ? "left-6" : "left-1"
+          }`}
+        />
+      </button>
+    </li>
+  );
+}
+
+export function NotificationSettingsPanel(props: { initial: NotificationSettings }) {
+  const [settings, setSettings] = useState<NotificationSettings>(props.initial);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function save(next: NotificationSettings) {
+    setSaving(true);
+    setError(null);
+    setSaved(false);
+    const fd = new FormData();
+    if (next.pushEnabled) fd.set("push", "on");
+    for (const key of NOTIFICATION_GROUPS) {
+      if (next.groups[key]) fd.set(`group_${key}`, "on");
+    }
+    const res = await updateNotificationSettingsAction(fd);
+    if (res.ok) {
+      // DB 저장 성공에만 상태 확정·성공 표시.
+      setSettings(next);
+      setSaved(true);
+    } else {
+      // 저장 실패 → 성공 UI 금지, 이전 상태 유지, 오류 표시.
+      setError(res.error);
+    }
+    setSaving(false);
+  }
+
+  function togglePush(v: boolean) {
+    void save({ ...settings, pushEnabled: v });
+  }
+  function toggleGroup(key: (typeof NOTIFICATION_GROUPS)[number], v: boolean) {
+    void save({ ...settings, groups: { ...settings.groups, [key]: v } });
+  }
+
   return (
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <h2 className="text-base font-black text-slate-900">알림 설정</h2>
       <p className="mt-1 text-xs font-medium leading-relaxed text-slate-600">
-        채널별 on/off를 저장하는 API가 아직 연결되어 있지 않습니다. 토글은 비활성화되어 있으며, 실제 반영은 백엔드 준비 후
-        활성화합니다.
+        푸시 알림 채널과 종류별 수신 여부를 설정할 수 있어요. 변경 즉시 저장됩니다.
       </p>
+
+      {error ? (
+        <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-900">{error}</p>
+      ) : saved ? (
+        <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-900">
+          저장되었습니다.
+        </p>
+      ) : null}
+
       <ul className="mt-4 divide-y divide-slate-100 rounded-xl border border-slate-100">
-        {rows.map((r) => (
-          <li key={r.key} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-            <div>
-              <p className="text-sm font-extrabold text-slate-900">{r.label}</p>
-              <p className="text-xs text-slate-500">{r.note}</p>
-            </div>
-            <button
-              type="button"
-              disabled
-              title="알림 설정 저장 API가 연결되면 활성화됩니다."
-              className="relative h-7 w-12 shrink-0 rounded-full bg-slate-200 text-left text-[10px] font-bold text-slate-500 cursor-not-allowed"
-            >
-              <span className="sr-only">비활성화됨</span>
-              <span className="absolute left-1 top-1 h-5 w-5 rounded-full bg-white shadow" />
-            </button>
-          </li>
+        <ToggleRow
+          title="푸시 알림 전체"
+          note="끄면 모든 종류의 푸시가 발송되지 않아요"
+          toggle={{ label: "push", checked: settings.pushEnabled, onChange: togglePush, disabled: saving }}
+        />
+        {NOTIFICATION_GROUPS.map((key) => (
+          <ToggleRow
+            key={key}
+            title={NOTIFICATION_GROUP_LABELS[key].label}
+            note={NOTIFICATION_GROUP_LABELS[key].note}
+            toggle={{
+              label: key,
+              checked: settings.pushEnabled && settings.groups[key],
+              onChange: (v) => toggleGroup(key, v),
+              disabled: saving || !settings.pushEnabled,
+            }}
+          />
         ))}
       </ul>
     </section>
