@@ -28,3 +28,23 @@
 - **원자 producer**: 현재 `question_answered`(질문방) 1건만 도메인 트랜잭션과 원자적. 152 worker(claim/lease/fan-out/설정강제/dead-letter)와 outbox 파이프라인은 이 이벤트로 end-to-end 검증됨.
 - **best-effort → atomic 전환(후속)**: 나머지 16 이벤트는 웹 서비스/배치에서 `insertNotificationBestEffort` 로 도메인 write 밖에서 발행된다. 진정한 동일-트랜잭션 원자화는 각 도메인 write 를 DB RPC(SECURITY DEFINER, `record_domain_notification` 호출 포함)로 옮겨야 하므로 **이벤트별 후속 작업**이다(각 1건씩 P1-11C-follow). dedup key 부여도 그 시점에 함께.
 - **앱 전용 producer**: 실기기 FCM 발송·device token 등록(register_device_token 호출)·인앱 push 표시는 Flutter 앱 몫 = `WAITING_EXTERNAL_APP`. DB(device_tokens/deliveries/settings)·worker(dry-run)·웹 설정 UI 는 본 Phase 에서 완비.
+
+---
+
+## 갱신 (P1-11 원자화 진행 — 155)
+
+**원자 producer 로 전환 완료 (7/17)**: `question_answered`(142) + 개별질문 6종 —
+`individual_question_assigned/claimed/answered/released/expired_refunded/message`.
+방식: **domain 테이블 AFTER 트리거**(`155_p1_11_iq_notification_atomization.sql`)가 domain write(RPC·웹 직접 write 무관)와
+같은 트랜잭션에서 `record_domain_notification` 호출 → 원자·멱등((recipient,event_key) UNIQUE). 웹 best-effort 헬퍼·호출 제거
+(`individualQuestionActions.ts`·`individualQuestionExpiryBatch.ts`). staging fixture 6종 전부 검증(domain write 롤백 시 알림 0).
+
+**남은 10종 — 동일 트리거 패턴 후속 계획**:
+- 구독 4종(renewal_succeeded/failed_insufficient_cash/upcoming/expired): `process_subscription_renewal`(RPC)·
+  `subscription_billing_events`/`subscriptions` write 대상. billing event INSERT / subscriptions status 전이 트리거로 원자화.
+  dedup key = `{event}:{subscription_id}:{period_end}`(주기별 1건).
+- 맞춤의뢰 2종(new_order_message/new_application): `order_room_messages`/`mentor_applications` AFTER INSERT 트리거.
+- 멘토 3종(termination_notice/refund/pause_notice): 다중 수신자 fan-out — `subscriptions` 상태 전이 또는 `refunds` INSERT
+  트리거로 수신자별 1건. termination_refund 는 `refunds` INSERT(request_type='subscription_mentor_suspended') 트리거가 자연스러움.
+- mentor_subscription_price_changed: `mentor_plans` UPDATE 트리거에서 활성 구독자 fan-out.
+이들은 재무 RPC 본문을 재작성하지 않고 트리거만 추가하므로 안전하다. best-effort 호출은 트리거 추가와 동시에 제거해야 이중 발송이 없다.
