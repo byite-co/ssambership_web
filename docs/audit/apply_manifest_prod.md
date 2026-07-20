@@ -111,6 +111,22 @@
 - **1-6(P1-13 race)**: 143 에서 이미 충족(mentor_profiles FOR UPDATE 로 학생 간 cap 소비 직렬화 + advisory pair lock + uq_subscriptions_pair UNIQUE/ON CONFLICT, 고정 잠금 순서). 독립 2세션 실측만 debt.
 - **1-4(pending refund billing-event 정본 FK)**: refunds 에 billing_event_id 정본 컬럼 없음 → 현행 subscription_id+request_type 기준(142) 유지, billing-event 정본 FK 는 refund 생성 경로(069 등) 조사·수정 필요 = 후속(아래 Phase 상태 참조).
 
+### 146 / 147 / 148 / 149 / 150 (v2 Phase2 + Phase1 후속 — staging)
+
+| 번호 | 정본 파일 | 내용 | staging |
+|---|---|---|---|
+| `146` | `146_p2_1_avatar_document_crossref_diagnostic.sql` | **P2-24(=구 P0-3 라벨정정: 프로필 avatar·인증서류 분리) 진단(READ-ONLY, 미적용)**. avatar↔student_id 동일 객체 교차 ref 탐지만. 자동수정·삭제 금지. staging 실행 = 0행. | 미적용(진단) |
+| `147` | `147_p2_2_community_board_idempotency_softdelete.sql` | **P0-4 게시판**: `community_posts.create_idempotency_key` + `(author_id,key)` UNIQUE(index) + `deleted_at` + 활성 부분 인덱스. 전부 IF NOT EXISTS. | 적용됨(no-op) |
+| `148` | `148_p2_3_shortform_idempotency.sql` | **P0-3 숏폼**: `shortform_posts.create_idempotency_key` + `(author_id,key)` UNIQUE(index). IF NOT EXISTS. | 적용됨(no-op) |
+| `149` | `149_p1_8a_storage_insert_eligibility.sql` | 질문 첨부 Storage INSERT 자격 게이트(qra_path_upload_eligible). | 적용됨 |
+| `150` | `150_p1_13_refund_billing_event_fk.sql` | `refunds.billing_event_id` FK + live-refund 판정 정밀화. | 적용됨 |
+
+> **PR #44 실험 번호 → 정본 수렴 기록**: 임시 stacked PR #44 가 게시판/숏폼 멱등키·soft-delete 구조를 실험 번호
+> `144_community_shortform_idempotency_softdelete.sql` 로 **staging 에 선(先)적용**했다. 정본(PR #42)은 그 구조를
+> **정본 번호 `147`(게시판)·`148`(숏폼)** 로 재작성해 수렴한다. 두 정본 파일은 전부 `IF NOT EXISTS`·동일 객체명
+> (`community_posts_author_idem_key`·`idx_cp_active_created`·`shortform_posts_author_idem_key`)이라 **staging 은
+> 재실행해도 no-op**(구조·이름 동일). PR #44 의 `144_...` 실험 파일은 정본에 가져오지 않는다(수퍼시드). PR #44 는 close.
+
 ### 141 / 142 / 143 (P1-8A/P1-13 최종 보안·금융 마감 감사 — staging 적용됨)
 
 | 번호 | 정본 파일 | 내용 | staging |
