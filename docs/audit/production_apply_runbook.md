@@ -91,15 +91,19 @@ select user_id, state, attempts, last_error, leased_until, updated_at from publi
 - account_deletion stuck job((f)) — lease 만료 회수(`account_deletion_reclaim_expired`)·재시도 backoff.
 - payout: `run_scheduled_payout` 은 scheduler_enabled=false 인 한 dry-run(실지급 0). enable 은 오너 명시 승인 시만.
 
-## 6. 실행하지 못한 검증(환경 부채)
-- **독립 2세션 동시성**: `scripts/verify/two_session_concurrency.sh` — DATABASE_URL secret 필요 = `READY_NOT_EXECUTED`.
-  구조(전역 UNIQUE·advisory·lease·SKIP LOCKED)는 단일세션 rollback fixture 로 검증됨.
-- **clean-DB 재현(전체 체인)**: Supabase CLI 미설치 = `BLOCKED_ENV`(auth/storage 스키마·role 에뮬레이션 필요).
-  단, 로컬 PG16 확보로 **알림 스택(132+157+158+159)은 스크래치 DB 실구동 검증 완료**
-  (`scripts/verify/local_notification_trigger_check.sh`, 스텁 스키마 = `scripts/verify/fixtures/local_stub_schema.sql`).
-  전체 001~159 체인은 CI 격리 Docker(pinned CLI) 또는 fresh Supabase 에서 `apply_manifest_prod.md` 순서 적용 권장.
-- **인증 Preview E2E**: 실 멘토 로그인 환경 부재 = `READY_NOT_EXECUTED`. Playwright 시나리오(`e2e/`)·fixture 준비됨,
-  Vercel Preview + 실 로그인에서 오너 확인 권장(숏폼 direct upload·게시판 이미지/멱등/soft-delete·프로필 분리·알림 pagination·favorite/recent).
+## 6. 실행하지 못한 검증(환경 부채 — 2026-07-20 배포 세션 기준 최신)
+- **독립 2세션 동시성**: `scripts/verify/two_session_concurrency.sh` — 직결 DATABASE_URL secret 필요 = `READY_NOT_EXECUTED`.
+  Supabase MCP 는 호출 단위 세션이라 지속 트랜잭션 경쟁(잠금 유지) 실측 불가. 구조(전역 UNIQUE·advisory·lease·
+  SKIP LOCKED)는 단일세션 rollback fixture 로 검증됨.
+- **clean-DB 재현(전체 체인)**: `BLOCKED_ENV` — 배포 세션에서 Docker 데몬 기동까지는 성공했으나
+  이미지 blob CDN(cloudfront.docker.com) egress 가 조직 정책으로 차단(Forbidden)되어 supabase/postgres 이미지
+  확보 불가. 로컬 PG16 스크래치로 **알림 스택(132+157~159)은 실구동 검증 완료**. 전체 001~160 체인은
+  CI 격리 Docker(pinned CLI) 또는 fresh Supabase 에서 `apply_manifest_prod.md` 순서 적용 권장.
+- **인증 Preview E2E**: `BLOCKED_ENV`(로컬 관점) — 이 컨테이너의 egress 정책이 앱→staging 호스트
+  (lbeqxarxothkmzqvpudy.supabase.co) 연결을 차단(CONNECT 403)해 로컬 앱 기동·Playwright 실측 불가.
+  Playwright 시나리오(`e2e/`)·fixture 준비됨 — Vercel Preview + 실 로그인에서 오너 확인 권장
+  (숏폼 direct upload·게시판 이미지/멱등/soft-delete·프로필 분리·알림 pagination·favorite/recent·
+  본 세션 lint 리팩터의 페이지네이션 리셋/모바일 pageSize 포함).
 
 ## 7. staging 진단 스냅샷 (2026-07-20, READ-ONLY)
 | 항목 | staging 결과 |
