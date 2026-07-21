@@ -9,6 +9,16 @@
 --   2) email_confirmed_at IS NOT NULL (이메일 인증 완료 계정만 통과)
 --   3) public.users.role = 'admin'  (requireRole("admin"))
 --
+-- ★ e2e/GoTrue 주의 (Supabase 에서 직접 INSERT 로 만든 계정의 공통 증상):
+--   auth.users 의 토큰 컬럼(confirmation_token · recovery_token ·
+--   email_change_token_new · email_change 등)은 DB 기본값이 없어, SQL 로 직접
+--   INSERT 하면 NULL 로 남는다. GoTrue(Go)는 이 컬럼들을 string 으로 스캔하므로
+--   NULL 이면 signInWithPassword 가 'converting NULL to string is unsupported'
+--   로 실패한다 → 로그인·세션 갱신 불가 → **e2e 검증에 사용 불가**.
+--   (Dashboard "Add user"/GoTrue API 로 만든 계정은 이 값들이 '' 라 정상.)
+--   → §A 는 생성 시 이 컬럼들을 '' 로 명시하고, §C 는 이미 만들어진 계정을
+--     NULL → '' 로 보정한다(멱등).
+--
 -- ⚠️ 보안 원칙: **비밀번호 평문을 이 파일(=git)에 절대 기록하지 않는다.**
 --   - auth 사용자 생성(비밀번호 지정)은 리포지토리 밖에서 처리한다:
 --       (a) Supabase Dashboard → Authentication → Add user
@@ -49,14 +59,20 @@ begin
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password,
     email_confirmed_at, raw_app_meta_data, raw_user_meta_data,
-    created_at, updated_at, is_sso_user, is_anonymous
+    created_at, updated_at, is_sso_user, is_anonymous,
+    -- ★ 아래 토큰 컬럼은 DB 기본값이 없어 미지정 시 NULL → GoTrue 로그인 실패.
+    --   실제 GoTrue 생성 계정과 동일하게 '' 로 명시한다(헤더 ★ 참고).
+    confirmation_token, recovery_token, email_change_token_new, email_change,
+    email_change_token_current, phone_change, phone_change_token, reauthentication_token
   ) values (
     '00000000-0000-0000-0000-000000000000', v_id, 'authenticated', 'authenticated',
     v_email, extensions.crypt(v_password, extensions.gen_salt('bf')),
     now(),
     '{"provider":"email","providers":["email"]}'::jsonb,
     jsonb_build_object('app_role', 'admin', 'email_verified', true, 'full_name', '쌤버십 운영자'),
-    now(), now(), false, false
+    now(), now(), false, false,
+    '', '', '', '',
+    '', '', '', ''
   );
 
   -- 이메일/비밀번호 provider identity (GoTrue 로그인에 필요)
@@ -110,6 +126,34 @@ begin
 end $$;
 
 
+-- -----------------------------------------------------------------------------
+-- §C. auth 토큰 컬럼 NULL → '' 정규화 (직접 생성 계정 e2e 로그인 복구). 멱등.
+-- -----------------------------------------------------------------------------
+-- §A 이전에 SQL 로 직접 INSERT 한 계정(예: e2e 관리자)은 토큰 컬럼이 NULL 이라
+-- GoTrue signInWithPassword 가 실패한다(헤더 ★). 아래는 NULL 을 '' 로 보정한다.
+--   · 값이 이미 ''/정상인 계정은 WHERE 절에서 걸러져 영향 없음(비용 0 수렴).
+--   · auth.users 에는 AFTER INSERT 트리거만 있어 UPDATE 부작용 없음.
+--   · 비밀번호·이메일·인증상태·identity 는 건드리지 않는다(토큰 컬럼만).
+update auth.users
+set confirmation_token         = coalesce(confirmation_token, ''),
+    recovery_token             = coalesce(recovery_token, ''),
+    email_change_token_new     = coalesce(email_change_token_new, ''),
+    email_change               = coalesce(email_change, ''),
+    email_change_token_current = coalesce(email_change_token_current, ''),
+    phone_change               = coalesce(phone_change, ''),
+    phone_change_token         = coalesce(phone_change_token, ''),
+    reauthentication_token     = coalesce(reauthentication_token, ''),
+    updated_at                 = now()
+where confirmation_token is null
+   or recovery_token is null
+   or email_change_token_new is null
+   or email_change is null
+   or email_change_token_current is null
+   or phone_change is null
+   or phone_change_token is null
+   or reauthentication_token is null;
+
+
 -- =============================================================================
 -- §V. 적용 직후 검증 (Supabase SQL Editor 에서 수동 실행)
 -- =============================================================================
@@ -131,4 +175,12 @@ end $$;
 -- §V-c. 전체 관리자 목록:
 --   select id, email, role, status, created_at
 --     from public.users where role = 'admin' order by created_at;
+--
+-- §V-d. 토큰 정규화 확인 — NULL 토큰 계정 0건 기대(전 계정 e2e 로그인 가능):
+--   select count(*) as remaining_null_token_accounts
+--     from auth.users
+--    where confirmation_token is null or recovery_token is null
+--       or email_change_token_new is null or email_change is null
+--       or email_change_token_current is null or phone_change is null
+--       or phone_change_token is null or reauthentication_token is null;
 -- =============================================================================
