@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createShortformVideoUploadTicketAction,
   submitShortformUploadAction,
+  submitShortformUploadFromAppAction,
 } from "@/lib/community/communityShortformActions";
 import { SHORTFORM_CATEGORIES, SHORTFORM_VIDEO_MAX_BYTES } from "@/lib/community/communityShortformConstants";
 import { SHORTFORM_VIDEO_BUCKET, SHORTFORM_VIDEO_MIME } from "@/lib/community/shortformVideoRef";
@@ -28,6 +29,11 @@ type Props = {
   errorCode: string | null;
   draftSaved: boolean;
   draft: ShortformDraftRow | null;
+  /**
+   * "app" = 모바일 앱 WebView 표면: 앱 전용 finalize 액션(완료 브릿지 redirect)을 쓰고
+   * 뒤로 링크를 숨긴다(취소는 앱 네이티브 UI). 기본값은 웹.
+   */
+  surface?: "web" | "app";
 };
 
 function messageForError(code: string | null): string | null {
@@ -54,10 +60,12 @@ function cryptoRandomUuid(): string {
 export function CommunityShortformComposeForm(props: Props) {
   const supabase = useMemo(() => createClient(), []);
   const hasStoredVideo = Boolean(props.draft?.videoUrl);
+  const isAppSurface = props.surface === "app";
 
   const formRef = useRef<HTMLFormElement>(null);
   const videoRefInputRef = useRef<HTMLInputElement>(null);
   const requestIdInputRef = useRef<HTMLInputElement>(null);
+  const intentInputRef = useRef<HTMLInputElement>(null);
   const uploadedGateRef = useRef(false);
 
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -97,7 +105,8 @@ export function CommunityShortformComposeForm(props: Props) {
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
-    const intent = submitter?.name === "intent" ? submitter.value : "publish";
+    const submitterIntent = submitter?.name === "intent" ? submitter.value : "";
+    const intent = submitterIntent === "draft" || submitterIntent === "publish" ? submitterIntent : "publish";
 
     if (uploadedGateRef.current) {
       uploadedGateRef.current = false;
@@ -125,6 +134,12 @@ export function CommunityShortformComposeForm(props: Props) {
     setBusy(true);
     setError(null);
     try {
+      // 최초 submit 시점의 intent 를 hidden input 에 고정한다 — 업로드 await 이후
+      // 재제출이 (busy 재렌더로 disabled 가 된) submitter 전달에 의존하지 않게 하기
+      // 위함이다. disabled 컨트롤은 FormData 에 실리지 않아 draft→publish 변질
+      // 위험이 있었다.
+      if (intentInputRef.current) intentInputRef.current.value = intent;
+
       let rid = requestId;
       if (!rid) {
         rid = cryptoRandomUuid();
@@ -153,7 +168,8 @@ export function CommunityShortformComposeForm(props: Props) {
       }
       if (requestIdInputRef.current) requestIdInputRef.current.value = rid;
       uploadedGateRef.current = true;
-      formRef.current?.requestSubmit(submitter ?? undefined);
+      // submitter 를 넘기지 않는다 — intent 는 위에서 hidden input 에 캡처됐다.
+      formRef.current?.requestSubmit();
     } catch {
       setError("저장에 실패했어요. 다시 시도해 주세요.");
       setBusy(false);
@@ -162,13 +178,17 @@ export function CommunityShortformComposeForm(props: Props) {
 
   return (
     <div className="space-y-4">
-      <CommunityComposeTopBar backHref="/community/shortform" formId={FORM_ID} disabled={busy} />
+      <CommunityComposeTopBar
+        backHref={isAppSurface ? null : "/community/shortform"}
+        formId={FORM_ID}
+        disabled={busy}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <form
           id={FORM_ID}
           ref={formRef}
-          action={submitShortformUploadAction}
+          action={isAppSurface ? submitShortformUploadFromAppAction : submitShortformUploadAction}
           onSubmit={onSubmit}
           className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6"
         >
@@ -176,6 +196,9 @@ export function CommunityShortformComposeForm(props: Props) {
           {hasStoredVideo ? <input type="hidden" name="videoUrl" value={props.draft?.videoUrl ?? ""} /> : null}
           <input type="hidden" name="videoRef" ref={videoRefInputRef} defaultValue="" />
           <input type="hidden" name="requestId" ref={requestIdInputRef} defaultValue="" />
+          {/* 최초 submit 의 intent 캡처용 — 서버는 getAll("intent") 중 첫 유효값을 읽어
+              JS 비활성(submitter 값)·JS 활성(이 hidden 값) 어느 경로든 의도를 보존한다. */}
+          <input type="hidden" name="intent" ref={intentInputRef} defaultValue="" />
 
           {error ? (
             <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900">
@@ -216,8 +239,10 @@ export function CommunityShortformComposeForm(props: Props) {
               <p className="mt-1 text-xs text-slate-500">임시저장된 영상이 있습니다. 새 파일을 선택하면 교체됩니다.</p>
             ) : null}
             <div className="mt-2">
+              {/* name 미지정: 파일이 폼 FormData 에 구조적으로 실리지 않는다(413 원천 차단).
+                  실제 업로드는 서명 티켓 → Storage 직접 업로드 → hidden videoRef 제출.
+                  선택 파일명 표기는 Dropzone 내부 label 이 정본(한 줄). */}
               <CommunityFileDropzone
-                name="video-picker"
                 accept="video/mp4,video/quicktime,video/webm"
                 disabled={busy}
                 buttonLabel="영상 파일 선택"
@@ -225,9 +250,6 @@ export function CommunityShortformComposeForm(props: Props) {
                 onFilesChange={onPickVideo}
               />
             </div>
-            {videoFile ? (
-              <p className="mt-1 text-xs font-semibold text-slate-700">{videoFile.name}</p>
-            ) : null}
           </div>
 
           <label className="block text-sm font-extrabold text-slate-800">

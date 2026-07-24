@@ -3,7 +3,8 @@ import Link from "next/link";
 const PRIMARY = "#2563EB";
 
 type Props = {
-  backHref: string;
+  /** 뒤로 링크. null 이면 링크를 숨긴다(앱 WebView 표면 — 취소는 앱 네이티브 UI 담당). */
+  backHref: string | null;
   formId: string;
   /** 제출 진행 중 버튼 비활성(중복 제출 방지). */
   disabled?: boolean;
@@ -13,9 +14,13 @@ export function CommunityComposeTopBar(props: Props) {
   const disabled = Boolean(props.disabled);
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3">
-      <Link href={props.backHref} className="text-sm font-extrabold text-slate-600 hover:text-[#2563EB]">
-        ← 뒤로
-      </Link>
+      {props.backHref ? (
+        <Link href={props.backHref} className="text-sm font-extrabold text-slate-600 hover:text-[#2563EB]">
+          ← 뒤로
+        </Link>
+      ) : (
+        <span aria-hidden />
+      )}
       <div className="flex flex-wrap gap-2">
         <button
           type="submit"

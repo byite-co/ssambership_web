@@ -22,6 +22,12 @@ import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { assertAccountActive } from "@/lib/auth/accountStatus";
 import {
+  APP_SHORTFORM_COMPOSE_PATH,
+  appBridgeCompletePath,
+  appBridgeErrorPath,
+} from "@/lib/appSession/appSurfacePaths";
+import { extractShortformSubmitFields } from "@/lib/community/shortformSubmitFields";
+import {
   TRUST_SAFETY_COMMUNITY_ERROR_CODE,
   findRestrictedPhraseInText,
   maskContactInUserText,
@@ -56,26 +62,40 @@ async function compensateNewShortformVideo(
   }
 }
 
-export async function submitShortformUploadAction(formData: FormData) {
-  const returnPath = communityComposePath("shortform");
+/**
+ * 숏폼 finalize 공통 코어 — surface 에 따라 인증 실패·성공 redirect 대상만 달라진다.
+ * - web: 기존 동작 그대로(로그인 유도·피드 오류쿼리·상세/작성 화면 복귀).
+ * - app: 앱 WebView 표면 — 실패는 고정 오류 페이지, 성공은 완료 브릿지(enum 경로)로.
+ * FormData 는 허용 키 10종의 문자열 값만 사용한다(File/Blob 비신뢰 — shortformSubmitFields).
+ */
+async function submitShortformUploadCore(surface: "web" | "app", formData: FormData) {
+  const isApp = surface === "app";
+  const returnPath = isApp ? APP_SHORTFORM_COMPOSE_PATH : communityComposePath("shortform");
   const { user } = await getServerAuthUser();
-  if (!user) redirect(`/login?next=${encodeURIComponent(returnPath)}`);
+  if (!user) {
+    if (isApp) redirect(appBridgeErrorPath("session_expired"));
+    redirect(`/login?next=${encodeURIComponent(returnPath)}`);
+  }
 
   const supabase = await createClient();
   const acctGate = await assertAccountActive(supabase, user.id);
-  if (!acctGate.ok) redirect("/community/shortform?error=account_blocked");
+  if (!acctGate.ok) {
+    redirect(isApp ? appBridgeErrorPath("account_blocked") : "/community/shortform?error=account_blocked");
+  }
   const { data: profile } = await getUserProfileById(supabase, user.id);
-  if (profile?.role !== "mentor") redirect("/community/shortform?error=mentor_only");
+  if (profile?.role !== "mentor") {
+    redirect(isApp ? appBridgeErrorPath("mentor_only") : "/community/shortform?error=mentor_only");
+  }
 
-  const intent = String(formData.get("intent") ?? "publish");
-  const status = intent === "draft" ? "draft" : "published";
-  const draftId = String(formData.get("draftId") ?? "").trim();
+  const fields = extractShortformSubmitFields(formData);
+  const status = fields.intent === "draft" ? "draft" : "published";
+  const draftId = fields.draftId;
   const isUpdate = Boolean(draftId) && UUID_RE.test(draftId);
-  const title = String(formData.get("title") ?? "").trim();
-  const category = String(formData.get("category") ?? "study") as ShortformCategorySlug;
-  const body = String(formData.get("body") ?? "").trim();
-  const source = String(formData.get("source") ?? "").trim();
-  const rights = formData.get("rightsAck") === "on";
+  const title = fields.title;
+  const category = fields.category as ShortformCategorySlug;
+  const body = fields.body;
+  const source = fields.source;
+  const rights = fields.rightsAck;
 
   // 인증·입력 검증은 업로드 전에 끝낸다(고아 업로드 방지).
   if (!rights && status === "published") err(returnPath, "rights");
@@ -102,9 +122,9 @@ export async function submitShortformUploadAction(formData: FormData) {
 
   // [staged upload] 영상은 액션 body 로 받지 않는다(413 회피). 클라가 서명 티켓으로 Storage 에 직접
   // 업로드하고 ref(텍스트)만 보낸다. videoUrl=기존 유지분(임시저장), newVideoRef=이번 신규 업로드.
-  let videoUrl = String(formData.get("videoUrl") ?? "").trim();
+  let videoUrl = fields.videoUrl;
   let uploadedRef: string | null = null; // 이번 요청 신규 업로드 ref(본인 소유일 때만 — 실패 시 보상 대상)
-  const newVideoRef = String(formData.get("videoRef") ?? "").trim();
+  const newVideoRef = fields.videoRef;
   if (newVideoRef) {
     // 위조 ref(타인 경로) 차단 — 타인 객체는 보상 삭제하지 않는다(RLS delete 도 owner-scoped).
     if (!shortformVideoRefBelongsToUser(newVideoRef, user.id)) err(returnPath, "video_upload");
@@ -118,7 +138,7 @@ export async function submitShortformUploadAction(formData: FormData) {
   }
 
   // 요청 UUID → 멱등 키(더블클릭·재시도에도 1행). 없거나 형식 오류면 null(레거시 무검사).
-  const requestId = String(formData.get("requestId") ?? "").trim();
+  const requestId = fields.requestId;
   const createIdempotencyKey = requestId && UUID_RE.test(requestId) ? requestId : null;
 
   const label = authorStoredLabelFromProfile(profile);
@@ -164,8 +184,23 @@ export async function submitShortformUploadAction(formData: FormData) {
   revalidatePath("/community");
   revalidatePath("/community/me");
 
+  // 앱 표면: 성공은 완료 브릿지(서버 enum 경로)로 — 앱이 이 URL 을 intercept 해 WebView 를 닫는다.
+  if (isApp) {
+    redirect(appBridgeCompletePath("shortform", status === "published" ? "published" : "draft"));
+  }
+
   if (status === "published") redirect(`/community/shortform/${r.id}`);
   redirect(communityComposePath("shortform", { draft: "1", draftId: r.id }));
+}
+
+/** 웹 표면 finalize(기존 계약 유지). */
+export async function submitShortformUploadAction(formData: FormData) {
+  await submitShortformUploadCore("web", formData);
+}
+
+/** 앱 WebView 표면 finalize — 실패는 고정 오류 페이지, 성공은 완료 브릿지로 이동한다. */
+export async function submitShortformUploadFromAppAction(formData: FormData) {
+  await submitShortformUploadCore("app", formData);
 }
 
 /**
