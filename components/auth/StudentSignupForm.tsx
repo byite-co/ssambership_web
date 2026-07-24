@@ -3,7 +3,7 @@ import type { ChangeEvent, ReactNode } from "react";
 export type StudentSignupFormValues = {
   fullName: string;
   nickname: string;
-  /** 시안의「학교」· DB·메타 `grade_level` */
+  /** 학년(예: 고1·고2·고3·재수) — DB·메타 `grade_level`. 학교명 필드가 아니다(멘토 가입의 `high_school_name` 과 별개 계약). */
   gradeLevel: string;
   studentStatus: string;
   birthDate: string;
@@ -107,16 +107,16 @@ export function StudentSignupForm({ value, onChange, disabled, fieldErrors }: St
             )}
           </div>
           <div>
-            <label htmlFor="st-school" className={label}>
-              소속학교 <span className="font-normal text-slate-500">(선택)</span>
+            <label htmlFor="st-grade" className={label}>
+              학년 <span className="font-normal text-slate-500">(선택)</span>
             </label>
             <input
-              id="st-school"
+              id="st-grade"
               className={input}
               value={value.gradeLevel}
               onChange={(e) => h("gradeLevel", e)}
               disabled={disabled}
-              placeholder="재학·출신 고등학교"
+              placeholder="예: 고1, 고2, 고3, 재수"
             />
             <p className={hint}>학생 프로필과 탐색 카드에 반영됩니다.</p>
           </div>
