@@ -84,3 +84,26 @@ test("앱 표면 액션 배선: finalize·티켓의 app wrapper 가 앱 클라�
   // 웹 경로 회귀 방지: 일반 createClient 도 여전히 존재(웹 표면은 전역 helper 유지).
   assert.ok(actions.includes('from "@/lib/supabase/server"'), "웹 표면 전역 helper 가 제거됨");
 });
+
+test("앱 표면 계정 게이트 배선: strict(fail-closed)가 bootstrap·페이지·티켓·finalize 에, 웹은 기존 가드 유지", () => {
+  // (판정 로직 자체는 appSurfaceAccountGate.contract.test.ts 가 table-driven 으로 검증 —
+  //  여기는 '어느 표면이 어느 게이트를 쓰는가' 배선만 회귀 감시한다.)
+  const route = read("app/api/app-session/bootstrap/route.ts");
+  assert.ok(route.includes("assertAppSurfaceAccountActiveStrict"), "bootstrap 이 strict 게이트 미사용");
+  assert.ok(!route.includes("assertAccountActive("), "bootstrap 이 fail-open 가드로 회귀");
+  assert.ok(route.includes("strictMentorRoleDecision"), "bootstrap role 게이트 미배선");
+
+  const page = read("app/app/community/shortform/new/page.tsx");
+  assert.ok(page.includes("assertAppSurfaceAccountActiveStrict"), "앱 작성 표면이 strict 게이트 미사용");
+  assert.ok(!page.includes('from "@/lib/auth/accountStatus"'), "앱 작성 표면이 fail-open 가드를 import");
+
+  const actions = read("lib/community/communityShortformActions.ts");
+  assert.ok(actions.includes("assertAppSurfaceAccountActiveStrict"), "앱 wrapper 액션이 strict 게이트 미사용");
+  // 일반 웹 wrapper 는 기존 fail-open 가드를 계속 쓴다(웹 동작 불변).
+  assert.ok(actions.includes("assertAccountActive(supabase"), "웹 표면 기존 가드가 제거됨");
+
+  // 기존 fail-open helper 자체는 불변(전역 의미 변경 금지) — fail-open 시그니처 잔존 확인.
+  const legacy = read("lib/auth/accountStatus.ts");
+  assert.ok(legacy.includes("return { ok: true };"), "전역 assertAccountActive 의미가 변경됨");
+  assert.ok(!legacy.includes("Strict"), "전역 helper 에 strict 모드가 섞임");
+});

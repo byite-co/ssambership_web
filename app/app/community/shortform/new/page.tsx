@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { CommunityShortformComposeForm } from "@/components/community/CommunityShortformComposeForm";
-import { assertAccountActive } from "@/lib/auth/accountStatus";
+import { assertAppSurfaceAccountActiveStrict } from "@/lib/appSession/appSurfaceAccountGate";
 import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
 import { appBridgeErrorPath } from "@/lib/appSession/appSurfacePaths";
 import { getShortformDraft } from "@/lib/community/communityShortformQueries";
@@ -26,7 +26,8 @@ export default async function AppShortformComposePage(props: Props) {
   const user = authData?.user ?? null;
   if (authError || !user) redirect(appBridgeErrorPath("session_expired"));
 
-  const acctGate = await assertAccountActive(supabase, user.id);
+  // 앱 표면 계정 게이트(strict·fail-closed) — 확인 불가·정지·삭제 write-block 전부 차단.
+  const acctGate = await assertAppSurfaceAccountActiveStrict(supabase, user.id);
   if (!acctGate.ok) redirect(appBridgeErrorPath("account_blocked"));
   // 서버 최종 검증: 활성 mentor role 만(웹 표면과 동일 계약 — 별도 승인조건 추가 없음).
   const { data: profile } = await getUserProfileById(supabase, user.id);

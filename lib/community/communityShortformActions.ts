@@ -27,6 +27,7 @@ import {
   appBridgeCompletePath,
   appBridgeErrorPath,
 } from "@/lib/appSession/appSurfacePaths";
+import { assertAppSurfaceAccountActiveStrict } from "@/lib/appSession/appSurfaceAccountGate";
 import { extractShortformSubmitFields } from "@/lib/community/shortformSubmitFields";
 import {
   TRUST_SAFETY_COMMUNITY_ERROR_CODE,
@@ -81,7 +82,11 @@ async function submitShortformUploadCore(surface: "web" | "app", formData: FormD
     if (isApp) redirect(appBridgeErrorPath("session_expired"));
     redirect(`/login?next=${encodeURIComponent(returnPath)}`);
   }
-  const acctGate = await assertAccountActive(supabase, user.id);
+  // 계정 게이트: 앱 표면은 strict(fail-closed — bootstrap 이후 정지·삭제도 매 요청 차단),
+  // 웹 표면은 기존 fail-open 가드 유지(일반 웹 동작 불변).
+  const acctGate = isApp
+    ? await assertAppSurfaceAccountActiveStrict(supabase, user.id)
+    : await assertAccountActive(supabase, user.id);
   if (!acctGate.ok) {
     redirect(isApp ? appBridgeErrorPath("account_blocked") : "/community/shortform?error=account_blocked");
   }
@@ -209,15 +214,20 @@ export async function submitShortformUploadFromAppAction(formData: FormData) {
 /**
  * 서명 티켓 발급 공통 코어 — 호출자가 표면에 맞는 supabase 클라이언트를 넘긴다
  * (앱 표면: appSurfaceServer — 티켓 발급 중 쿠키 재발급이 나도 HttpOnly 유지).
+ * 계정 게이트도 표면별: 앱=strict(fail-closed), 웹=기존 fail-open 유지.
  */
 async function createShortformVideoUploadTicketCore(
+  surface: "web" | "app",
   supabase: Awaited<ReturnType<typeof createClient>>,
   contentType: string,
 ): Promise<{ ok: true; path: string; token: string; ref: string } | { ok: false; error: string }> {
   const { data: authData } = await supabase.auth.getUser();
   const user = authData?.user ?? null;
   if (!user) return { ok: false, error: "auth" };
-  const acct = await assertAccountActive(supabase, user.id);
+  const acct =
+    surface === "app"
+      ? await assertAppSurfaceAccountActiveStrict(supabase, user.id)
+      : await assertAccountActive(supabase, user.id);
   if (!acct.ok) return { ok: false, error: "account_blocked" };
   const { data: profile } = await getUserProfileById(supabase, user.id);
   if (profile?.role !== "mentor") return { ok: false, error: "mentor_only" };
@@ -241,14 +251,14 @@ async function createShortformVideoUploadTicketCore(
 export async function createShortformVideoUploadTicketAction(input: {
   contentType: string;
 }): Promise<{ ok: true; path: string; token: string; ref: string } | { ok: false; error: string }> {
-  return createShortformVideoUploadTicketCore(await createClient(), input.contentType);
+  return createShortformVideoUploadTicketCore("web", await createClient(), input.contentType);
 }
 
-/** 앱 WebView 표면용 서명 티켓 발급 — 앱 전용 클라이언트(쿠키 속성 강제)로 동일 코어를 태운다. */
+/** 앱 WebView 표면용 서명 티켓 발급 — 앱 전용 클라이언트(쿠키 속성 강제)+strict 계정 게이트. */
 export async function createShortformVideoUploadTicketFromAppAction(input: {
   contentType: string;
 }): Promise<{ ok: true; path: string; token: string; ref: string } | { ok: false; error: string }> {
-  return createShortformVideoUploadTicketCore(await createAppSurfaceClient(), input.contentType);
+  return createShortformVideoUploadTicketCore("app", await createAppSurfaceClient(), input.contentType);
 }
 
 export async function toggleShortformLikeAction(formData: FormData) {

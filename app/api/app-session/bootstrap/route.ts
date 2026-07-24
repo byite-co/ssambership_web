@@ -7,10 +7,13 @@ import {
   bootstrapProjectRefMatches,
   parseBootstrapBody,
 } from "@/lib/appSession/appSessionBootstrapCore";
+import {
+  assertAppSurfaceAccountActiveStrict,
+  strictMentorRoleDecision,
+} from "@/lib/appSession/appSurfaceAccountGate";
 import { hardenAppSurfaceCookieWrites } from "@/lib/appSession/appSurfaceCookies";
 import type { AppBridgeErrorCode } from "@/lib/appSession/appSurfacePaths";
 import { appBridgeErrorPath } from "@/lib/appSession/appSurfacePaths";
-import { assertAccountActive } from "@/lib/auth/accountStatus";
 import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
 
 // POST /api/app-session/bootstrap — 앱 WebView 세션 부트스트랩(단일 target: shortform_create).
@@ -105,12 +108,15 @@ export async function POST(request: Request) {
     const { data, error: userError } = await supabase.auth.getUser();
     if (userError || !data?.user) return errorRedirect(request.url, "bootstrap_failed");
 
-    // 계정 활성·mentor role 최종 검증 — 실패 시 쿠키 버퍼는 부착 없이 폐기된다.
-    const acctGate = await assertAccountActive(supabase, data.user.id);
+    // 계정 게이트(strict·fail-closed: 행 없음/조회 오류/미지 status/유효 정지/banned/
+    // 삭제 write-block/RPC 실패 전부 거부) → mentor role 게이트. 어느 실패든 쿠키
+    // 버퍼는 부착 없이 폐기되고, 고정 오류 code 외 내부 상태는 반사하지 않는다.
+    const acctGate = await assertAppSurfaceAccountActiveStrict(supabase, data.user.id);
     if (!acctGate.ok) return errorRedirect(request.url, "account_blocked");
     const { data: profile, error: profileError } = await getUserProfileById(supabase, data.user.id);
-    if (profileError || !profile) return errorRedirect(request.url, "bootstrap_failed"); // role 조회 실패
-    if (profile.role !== "mentor") return errorRedirect(request.url, "mentor_only");
+    const roleDecision = strictMentorRoleDecision(profile, Boolean(profileError));
+    if (roleDecision === "profile_unavailable") return errorRedirect(request.url, "bootstrap_failed");
+    if (roleDecision === "not_mentor") return errorRedirect(request.url, "mentor_only");
 
     const targetPath = APP_SESSION_BOOTSTRAP_TARGETS[parsed.target];
     const res = withNoStore(NextResponse.redirect(new URL(targetPath, request.url), 303));
