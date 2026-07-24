@@ -7,8 +7,11 @@ import {
   bootstrapProjectRefMatches,
   parseBootstrapBody,
 } from "@/lib/appSession/appSessionBootstrapCore";
+import { hardenAppSurfaceCookieWrites } from "@/lib/appSession/appSurfaceCookies";
 import type { AppBridgeErrorCode } from "@/lib/appSession/appSurfacePaths";
 import { appBridgeErrorPath } from "@/lib/appSession/appSurfacePaths";
+import { assertAccountActive } from "@/lib/auth/accountStatus";
+import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
 
 // POST /api/app-session/bootstrap — 앱 WebView 세션 부트스트랩(단일 target: shortform_create).
 //
@@ -16,13 +19,14 @@ import { appBridgeErrorPath } from "@/lib/appSession/appSurfacePaths";
 // - POST 전용(GET/PUT/PATCH/DELETE 405). Content-Type allowlist(form-urlencoded/json).
 // - 토큰은 body 로만 받고 URL·로그·응답 어디에도 싣지 않는다. Cache-Control: no-store.
 // - 앱 토큰의 발급 프로젝트 ref 와 웹 Supabase ref 가 일치해야 한다(교차 프로젝트 이식 차단).
-// - auth.setSession 후 auth.getUser 로 실사용자 재검증(서명·만료는 auth 서버가 판정).
+// - [쿠키 버퍼 불변식] setSession 이 쓰는 쿠키는 격리 버퍼(pendingCookies)에만 기록되고,
+//   getUser(실사용자)·계정 활성·mentor role·target 검증이 **전부** 통과한 성공 응답에만
+//   부착된다. 어떤 실패 응답에도 Set-Cookie 는 0개다(버퍼 폐기).
 // - redirect 대상은 전부 서버 상수(open redirect 0). 실패는 고정 브릿지 오류 페이지로.
-// - 쿠키는 이 라우트 한정으로 HttpOnly/Secure/SameSite=Lax 를 강제한다(3-3):
-//   전역 lib/supabase/server.ts 기본값(@supabase/ssr 0.10.2: httpOnly=false)은 건드리지
-//   않는다 — 전역 HttpOnly 화(化)는 브라우저 로그인(document.cookie 기록)을 깨뜨린다.
-//   한계: 이후 다른 서버 경로에서 토큰 refresh 로 쿠키가 재발급되면 전역 기본 속성으로
-//   내려간다(기능 저하 없음 — 속성 강화가 부트스트랩 발급분에 한정될 뿐). 문서화됨.
+// - 쿠키 속성은 appSurfaceCookies 정본(HttpOnly/Secure/SameSite=Lax/Path=/)으로 강제하며,
+//   이후 앱 표면의 refresh 재발급·회전·삭제도 전용 클라이언트(appSurfaceServer)가 같은
+//   속성으로 쓴다 — 최초만 HttpOnly 였다가 재발급에서 내려가는 구조 없음. 전역
+//   lib/supabase/server.ts 기본값(httpOnly=false)은 불변경(전역 변경은 브라우저 로그인 파괴).
 
 export const dynamic = "force-dynamic";
 
@@ -101,15 +105,17 @@ export async function POST(request: Request) {
     const { data, error: userError } = await supabase.auth.getUser();
     if (userError || !data?.user) return errorRedirect(request.url, "bootstrap_failed");
 
+    // 계정 활성·mentor role 최종 검증 — 실패 시 쿠키 버퍼는 부착 없이 폐기된다.
+    const acctGate = await assertAccountActive(supabase, data.user.id);
+    if (!acctGate.ok) return errorRedirect(request.url, "account_blocked");
+    const { data: profile, error: profileError } = await getUserProfileById(supabase, data.user.id);
+    if (profileError || !profile) return errorRedirect(request.url, "bootstrap_failed"); // role 조회 실패
+    if (profile.role !== "mentor") return errorRedirect(request.url, "mentor_only");
+
     const targetPath = APP_SESSION_BOOTSTRAP_TARGETS[parsed.target];
     const res = withNoStore(NextResponse.redirect(new URL(targetPath, request.url), 303));
-    for (const { name, value, options } of pendingCookies) {
-      res.cookies.set(name, value, {
-        ...options,
-        httpOnly: true,
-        secure: true,
-        sameSite: "lax",
-      });
+    for (const { name, value, options } of hardenAppSurfaceCookieWrites(pendingCookies)) {
+      res.cookies.set(name, value, options as CookieOptions);
     }
     return res;
   } catch {

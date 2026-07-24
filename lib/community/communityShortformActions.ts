@@ -19,6 +19,7 @@ import {
   shortformVideoRefBelongsToUser,
 } from "@/lib/community/communityShortformStorage";
 import { createClient } from "@/lib/supabase/server";
+import { createAppSurfaceClient } from "@/lib/supabase/appSurfaceServer";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { assertAccountActive } from "@/lib/auth/accountStatus";
 import {
@@ -71,13 +72,15 @@ async function compensateNewShortformVideo(
 async function submitShortformUploadCore(surface: "web" | "app", formData: FormData) {
   const isApp = surface === "app";
   const returnPath = isApp ? APP_SHORTFORM_COMPOSE_PATH : communityComposePath("shortform");
-  const { user } = await getServerAuthUser();
+  // 앱 표면은 전용 클라이언트를 쓴다 — 이 액션 안에서 토큰 refresh 로 쿠키가 재발급돼도
+  // HttpOnly/Secure/SameSite=Lax 속성이 유지된다(웹 표면은 기존 전역 클라이언트 그대로).
+  const supabase = isApp ? await createAppSurfaceClient() : await createClient();
+  const { data: authData } = await supabase.auth.getUser();
+  const user = authData?.user ?? null;
   if (!user) {
     if (isApp) redirect(appBridgeErrorPath("session_expired"));
     redirect(`/login?next=${encodeURIComponent(returnPath)}`);
   }
-
-  const supabase = await createClient();
   const acctGate = await assertAccountActive(supabase, user.id);
   if (!acctGate.ok) {
     redirect(isApp ? appBridgeErrorPath("account_blocked") : "/community/shortform?error=account_blocked");
@@ -204,15 +207,16 @@ export async function submitShortformUploadFromAppAction(formData: FormData) {
 }
 
 /**
- * 숏폼 영상 직접 업로드용 서명 티켓 발급(413 회피). 멘토·계정활성만 발급하며 경로는 서버가 본인 userId 로 통제한다.
- * 클라는 반환된 path·token 으로 브라우저에서 Storage 에 직접 업로드하고, finalize 에는 ref 만 넘긴다.
+ * 서명 티켓 발급 공통 코어 — 호출자가 표면에 맞는 supabase 클라이언트를 넘긴다
+ * (앱 표면: appSurfaceServer — 티켓 발급 중 쿠키 재발급이 나도 HttpOnly 유지).
  */
-export async function createShortformVideoUploadTicketAction(input: {
-  contentType: string;
-}): Promise<{ ok: true; path: string; token: string; ref: string } | { ok: false; error: string }> {
-  const { user } = await getServerAuthUser();
+async function createShortformVideoUploadTicketCore(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  contentType: string,
+): Promise<{ ok: true; path: string; token: string; ref: string } | { ok: false; error: string }> {
+  const { data: authData } = await supabase.auth.getUser();
+  const user = authData?.user ?? null;
   if (!user) return { ok: false, error: "auth" };
-  const supabase = await createClient();
   const acct = await assertAccountActive(supabase, user.id);
   if (!acct.ok) return { ok: false, error: "account_blocked" };
   const { data: profile } = await getUserProfileById(supabase, user.id);
@@ -225,9 +229,26 @@ export async function createShortformVideoUploadTicketAction(input: {
   } catch {
     signer = supabase;
   }
-  const ticket = await createShortformVideoUploadTicket(signer, user.id, input.contentType);
+  const ticket = await createShortformVideoUploadTicket(signer, user.id, contentType);
   if (!ticket.ok) return { ok: false, error: ticket.error };
   return { ok: true, path: ticket.path, token: ticket.token, ref: ticket.ref };
+}
+
+/**
+ * 숏폼 영상 직접 업로드용 서명 티켓 발급(413 회피). 멘토·계정활성만 발급하며 경로는 서버가 본인 userId 로 통제한다.
+ * 클라는 반환된 path·token 으로 브라우저에서 Storage 에 직접 업로드하고, finalize 에는 ref 만 넘긴다.
+ */
+export async function createShortformVideoUploadTicketAction(input: {
+  contentType: string;
+}): Promise<{ ok: true; path: string; token: string; ref: string } | { ok: false; error: string }> {
+  return createShortformVideoUploadTicketCore(await createClient(), input.contentType);
+}
+
+/** 앱 WebView 표면용 서명 티켓 발급 — 앱 전용 클라이언트(쿠키 속성 강제)로 동일 코어를 태운다. */
+export async function createShortformVideoUploadTicketFromAppAction(input: {
+  contentType: string;
+}): Promise<{ ok: true; path: string; token: string; ref: string } | { ok: false; error: string }> {
+  return createShortformVideoUploadTicketCore(await createAppSurfaceClient(), input.contentType);
 }
 
 export async function toggleShortformLikeAction(formData: FormData) {

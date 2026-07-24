@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createShortformVideoUploadTicketAction,
+  createShortformVideoUploadTicketFromAppAction,
   submitShortformUploadAction,
   submitShortformUploadFromAppAction,
 } from "@/lib/community/communityShortformActions";
@@ -146,7 +147,11 @@ export function CommunityShortformComposeForm(props: Props) {
         setRequestId(rid);
       }
       if (videoFile) {
-        const ticket = await createShortformVideoUploadTicketAction({
+        // 앱 표면은 전용 티켓 액션(쿠키 재발급 시에도 HttpOnly 유지)을 태운다.
+        const requestTicket = isAppSurface
+          ? createShortformVideoUploadTicketFromAppAction
+          : createShortformVideoUploadTicketAction;
+        const ticket = await requestTicket({
           contentType: (videoFile.type || "video/mp4").toLowerCase(),
         });
         if (!ticket.ok) {
