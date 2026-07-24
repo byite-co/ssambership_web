@@ -85,3 +85,11 @@ flutter run --dart-define=WEB_BASE_URL=https://ssambership-web-git-claude-web-ap
 ## 판정 기록 위치
 - 코드/계약 검증: PR #42 `lib/appSession/__contract__/*` · `lib/community/__contract__/shortformSubmitFields*` (85/85)
 - 앱 단위/위젯: PR #33 `test/web_bridge/shortform_compose_bridge_test.dart` 외 (662/662)
+
+## QA4 수렴 라운드 추기 (2026-07-24)
+- SQL 166 staging 적용: 기존 SQL 067 UNIQUE index 실존·정의 검증 PASS, SQL 166 에 의한
+  staging index 신규 생성 0. fixture S1~S5 전부 PASS(최초 승인 시드 3종·커스텀 보존·
+  158 fan-out 구독자당 1건·재승인 멱등·baseline 복원, backfill 0).
+- Toss 성공경로: success page/confirm 라우트가 confirmCashTopupForCurrentUser 공용 코어를
+  직접 호출(self-fetch·SITE_URL·Cookie 재전달 제거). Toss 성공 E2E 는 test key·QA 계정·
+  Preview 접근이 확보될 때까지 TOSS_SUCCESS_E2E_READY_NOT_EXECUTED.
