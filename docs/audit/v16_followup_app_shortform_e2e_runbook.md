@@ -44,11 +44,25 @@ curl -s -o /dev/null -D - -X POST "$BASE/api/app-session/bootstrap" \
   --data-urlencode "access_token=$AT" --data-urlencode "refresh_token=$RT" \
   --data-urlencode "target=shortform_create" | grep -iE "^HTTP|^location|^set-cookie|cache-control"
 # 3) 쿠키로 작성 표면 200 (무크롬·폼 렌더): -c/-b 쿠키자 유지
-# 4) 학생 계정 토큰으로 2) 반복 → 303 후 작성 표면 접근 시 /app/bridge/error?code=mentor_only
-# 5) session refresh 후 속성: 1시간 뒤(또는 만료 강제) 동일 쿠키로 서버 액션 호출 시 재발급 쿠키의
-#    HttpOnly 유지 여부 확인 — 전역 기본(@supabase/ssr 0.10.2 httpOnly=false)으로 내려가면
-#    라우트 주석에 문서화된 '부트스트랩 발급분 한정 강화' 한계가 실측 확인되는 것(기능 저하 없음).
+# 4) 학생 계정 토큰 bootstrap → 303 없이 /app/bridge/error?code=mentor_only (Set-Cookie 0 —
+#    bootstrap 이 role/계정 활성까지 검증 후에만 쿠키를 부착한다)
+# 5) session refresh 후 속성(구조 수렴 확인): 앱 표면의 모든 서버 경로(bootstrap·작성 표면·
+#    서명 티켓·finalize)는 앱 전용 클라이언트(lib/supabase/appSurfaceServer)를 쓰므로
+#    refresh 재발급·회전·삭제 쿠키도 HttpOnly/Secure/SameSite=Lax/Path=/ 로 쓰인다
+#    (appSurfaceCookies 정본 + 계약테스트). 실측은 만료 강제 후 finalize 재호출의
+#    Set-Cookie 속성 확인으로 수행.
 ```
+
+### A-2. 공유 refresh 계보(앱↔WebView, 방식 A) — SHARED_REFRESH_LINEAGE_READY_NOT_EXECUTED
+
+앱과 WebView 가 같은 refresh token 계보를 쓰므로 회전(rotation)·10초 reuse interval 상호작용을
+장시간 시나리오로 검증한다(이번 컨테이너에서는 egress 차단으로 미실행):
+
+1. 앱 로그인 → 2. WebView bootstrap → 3. WebView 또는 서버 경로에서 refresh 발생(만료 대기/강제)
+→ 4. reuse interval(10초) 경과 → 5. 앱 API 호출·앱측 refresh → 6. WebView finalize 재호출
+→ 7. 상호 401·invalid refresh token·강제 로그아웃 없음 확인 → 8. 앱 로그아웃 → WebView 쿠키 폐기 확인
+→ 9. 재로그인 후 이전 쿠키 재사용 0 확인.
+Supabase Auth 의 reuse detection·interval 설정은 변경하지 않는다.
 
 ### B. 앱 실기기/에뮬레이터 E2E (섹션 8 시나리오)
 
