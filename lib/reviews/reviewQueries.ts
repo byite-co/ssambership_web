@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { checkReviewEligibility } from "@/lib/reviews/checkReviewEligibility";
 import { formatGradeSubject, maskStudentName } from "@/lib/reviews/reviewDisplay";
 import { isPubliclyVisibleReview, mapReviewDbRow, type ReviewDbRow } from "@/lib/reviews/reviewRowMapper";
+import { applyReviewUpdate } from "@/lib/reviews/reviewUpdateResult";
 import { maskContactInUserText } from "@/lib/safety/trustSafetyText";
 
 export type ReviewCardItem = {
@@ -223,6 +224,9 @@ export async function createReview(
  * - 바꿀 수 있는 것은 rating·body 뿐이다. updated_at 은 서버(트리거)가 now() 로 강제한다.
  * - 자격 재검사를 하지 않는다(171 정본). 다만 **본인 후기인지**는 서버에서 재확인한다.
  * - 모더레이션된(숨김·블라인드) 후기는 수정을 막는다 — 열지 여부는 오너 결정(W4).
+ *   173 이 같은 차단을 RLS·트리거 2계층으로 서버에 내렸다. 아래 사전 검사는
+ *   **그대로 남긴다** — 서버 가드가 생겼다고 클라이언트 가드를 빼지 않는다(이중 방어).
+ * - 최종 UPDATE 는 영향 행 1건을 회수해야 성공이다(applyReviewUpdate).
  */
 export async function updateReview(
   supabase: SupabaseClient,
@@ -264,16 +268,10 @@ export async function updateReview(
   // 신규 작성과 동일하게 명백한 외부 연락처만 가린 값으로 저장한다.
   const safeBody = maskContactInUserText(text);
 
-  const { error } = await supabase
-    .from("reviews")
-    .update({ rating, body: safeBody })
-    .eq("id", reviewId)
-    .eq("author_id", authorId);
-
-  if (error) {
-    return { ok: false, error: "후기 수정에 실패했습니다." };
-  }
-  return { ok: true, id: reviewId };
+  // 영향 행을 회수해 **정확히 1행 · id 일치**일 때만 성공으로 본다.
+  // 173 이 정책 USING 을 강화한 뒤로는 모더레이션된 리뷰가 error 없이 0행으로 끝나므로,
+  // error 만 검사하면 조용한 무효 수정이 "성공"으로 표시된다.
+  return applyReviewUpdate(supabase, authorId, reviewId, { rating, body: safeBody });
 }
 
 export async function replyToReview(
