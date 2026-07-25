@@ -53,25 +53,42 @@ async function loadRelationshipRows(
   subscriptions: SubscriptionRelationRow[];
   individualQuestions: IndividualQuestionRelationRow[];
 }> {
-  const [subs, iqs] = await Promise.all([
+  // coalesce(claimed, designated) = mentor
+  //   ⟺ (claimed = mentor) OR (claimed IS NULL AND designated = mentor)
+  // 이 분기를 PostgREST `.or(...)` 한 줄로 쓰지 않고 **두 개의 단순 질의로 나눈다.**
+  // `.or()` 의 중첩 `and(...)` 문법이 틀리면 PostgREST 가 400 을 내고, 이 코드의 오류 처리는
+  // 오류를 빈 배열로 흡수하므로 **자격이 조용히 false 가 된다**(IQ 이력만 있는 학생이
+  // 영문 없이 거부됨). eq/is 조합만 쓰면 그 실패 모드 자체가 사라진다.
+  const [subs, iqClaimed, iqDesignated] = await Promise.all([
     supabase
       .from("subscriptions")
       .select("mentor_id, status")
       .eq("student_id", studentId)
       .eq("mentor_id", mentorId)
       .in("status", [...ELIGIBLE_SUBSCRIPTION_STATUSES]),
-    // coalesce(claimed, designated) = mentor  ⟺  claimed = mentor  OR  (claimed IS NULL AND designated = mentor)
     supabase
       .from("individual_questions")
       .select("claimed_mentor_id, designated_mentor_id, status")
       .eq("student_id", studentId)
       .in("status", [...ELIGIBLE_INDIVIDUAL_QUESTION_STATUSES])
-      .or(`claimed_mentor_id.eq.${mentorId},and(claimed_mentor_id.is.null,designated_mentor_id.eq.${mentorId})`),
+      .eq("claimed_mentor_id", mentorId),
+    supabase
+      .from("individual_questions")
+      .select("claimed_mentor_id, designated_mentor_id, status")
+      .eq("student_id", studentId)
+      .in("status", [...ELIGIBLE_INDIVIDUAL_QUESTION_STATUSES])
+      .is("claimed_mentor_id", null)
+      .eq("designated_mentor_id", mentorId),
   ]);
 
+  const individualQuestions = [
+    ...(iqClaimed.error ? [] : ((iqClaimed.data ?? []) as IndividualQuestionRelationRow[])),
+    ...(iqDesignated.error ? [] : ((iqDesignated.data ?? []) as IndividualQuestionRelationRow[])),
+  ];
+
   return {
-    subscriptions: (subs.error ? [] : ((subs.data ?? []) as SubscriptionRelationRow[])),
-    individualQuestions: (iqs.error ? [] : ((iqs.data ?? []) as IndividualQuestionRelationRow[])),
+    subscriptions: subs.error ? [] : ((subs.data ?? []) as SubscriptionRelationRow[]),
+    individualQuestions,
   };
 }
 
