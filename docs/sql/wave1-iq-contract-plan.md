@@ -544,3 +544,136 @@ v19·v20 의 클라이언트측 AMBIGUOUS 방어는 서버 실태와 무관하�
 - **기존 SQL 001~166 및 웹 앱 코드** — 무수정. 본 세션이 만든 파일은 167·168·169와 이 문서뿐이다.
 - **139 스타일의 storage 객체 존재·owner 대조를 168 에 추가** — 현 버킷의 owner_id 전량 NULL
   실태에서 정상 경로까지 막으므로 의도적으로 넣지 않았다(169 에서 별도로 다룸).
+
+---
+
+## 7. 적용 manifest (웨이브 2 · W3 세션 — 2026-07-25, staging `lbeqxarxothkmzqvpudy`)
+
+> 실행자: W3(서버·웹) 단독 세션. 대상은 **staging 전용** — production 프로젝트는 조회조차 하지 않았다.
+> 모든 fixture 는 `begin … rollback` 으로만 실행했고, 커밋된 fixture 행은 **0** 이다.
+> 모든 조회는 집계·카탈로그 메타데이터·내부 id 만 반환했다(개인정보 값 출력 0).
+
+### 7-1. 적용 결과 요약
+
+| # | 파일 | 적용 | 적용 시각 (UTC) | 사후 검증 |
+|---|------|------|------------------|-----------|
+| 167 | `167_iq_attachment_unique_question_storage_path.sql` | ✅ | `2026-07-25 18:52:28` | `uq_iqa_question_storage_path` **constraint**(`contype='u'`) 실재 · 백킹 인덱스 포함 인덱스 4건 |
+| 168 | `168_iq_attachment_register_rpc_idempotent.sql` | ✅ | `2026-07-25 18:54:28` | 반환형 `uuid`→**`jsonb`** · 시그니처 `(uuid,text,text,text,uuid)` 불변 · ACL 재부여 확인 |
+| 169 | `169_iq_attachment_storage_delete_policy.sql` | ✅ | `2026-07-25 18:56:14` | `iqa_storage_delete_unregistered_owner` 정책 실재 · `iqa_storage_*` 정책 4건 |
+| 170 | `170_review_eligibility_relationship_based.sql` | ✅ | `2026-07-25 19:00:59` | 자격 쌍 **0 → 1** · 구 3경로 집계 로직 제거 확인 |
+| 171 | `171_reviews_author_update_and_updated_at.sql` | ✅ | `2026-07-25 19:03:43` | `reviews.updated_at` 실재 · 정책 7건 · 작성자 공격 6종 전부 거부 |
+| 172 | (파일 없음) | **`DEFERRED_W4`** | — | 승인 백필·부분 유니크 인덱스 **둘 다 W4 이연**. `mentor_school_verifications` 0행·인덱스 3건 무변경 |
+
+부수 작업(마이그레이션 파일 아님): `community_posts.author_role` 오염 2행 정정 —
+`2026-07-25 19:06:49 UTC` · RETURNING **2행** · 정정 후 오염 **0행** · 그 외 컬럼 md5 지문 불변.
+
+### 7-2. 롤백 순서 — 부분과 전체를 구분한다
+
+두 순서를 **모두** 명문화한다. 구분하지 않으면 167 을 먼저 떨어뜨려 168 이 42P10 으로 죽는다.
+
+- **전체 롤백(파트 1+2)**: `171 → 170 → 169 → 168 → 167`
+- **파트 1만 롤백**: `169 → 168 → 167`
+- 172 는 이번 회차 미적용이므로 **롤백 대상이 아니다.**
+
+개별 롤백문은 각 SQL 파일 하단 `── ROLLBACK 절차 ──` 절에 있다. 요지:
+
+```sql
+-- 171
+drop policy if exists "reviews_update_author" on public.reviews;
+drop policy if exists "reviews_select_author" on public.reviews;
+-- reviews_enforce_update() 는 126_reviews_rls_hardening.sql 정의를 재적용
+alter table public.reviews drop column if exists updated_at;
+-- 170
+-- 066_review_eligibility_billing_events.sql 재적용(같은 시그니처 create or replace)
+-- 169
+drop policy if exists iqa_storage_delete_unregistered_owner on storage.objects;
+-- 168
+-- 함수를 구 정의(RETURNS uuid · plain INSERT)로 재생성 + ACL 재부여
+-- 167
+alter table public.individual_question_attachments
+  drop constraint if exists uq_iqa_question_storage_path;
+```
+
+### 7-3. 단계별 검증 기록
+
+**167** — preflight 중복 조합 0건 확인 → rollback-only 재현(생성 후 `contype='u'` 확인, rollback 후 부재 재확인)
+→ 적용 → fixture §3-1 3건: 동일 `(Q,P)` 재INSERT 는 **`SQLSTATE=23505 conname=uq_iqa_question_storage_path`**
+(오류에 conname 이 실린다 — 8차 교훈 충족), 다른 경로·다른 질문은 정상 INSERT → baseline 복원(행 1 = 적용 전과 동일).
+
+**168** — ABORT_168 가드 통과(arbiter 확인) → rollback-only 재현(`jsonb` + ACL 확인 후 rollback, `uuid` 복귀 확인)
+→ 적용 → fixture §3-2:
+
+| 회차 | 결과 |
+|---|---|
+| 1회차 | `status=created` · `idempotent_hit=false` |
+| 2회차(동일 인자) | `status=existing` · `idempotent_hit=true` · **attachment_id 동일** |
+| 3회차(다른 메타) | `status=existing` · 동일 id · `message_id_mismatch=true` · 기존 행 `file_name`·`mime_type`·`message_id` **무갱신** |
+| 4회차(앞뒤 공백) | btrim 정규화로 `status=existing` · 신규 행 0 |
+| 행 증가량 | **1** (1회차만) |
+
+가드 회귀 5종 전수 통과: `28000 AUTH_REQUIRED` · `22023 INVALID_INPUT: storage_path is required` ·
+`42501 NOT_QUESTION_PARTY` · `22023 STORAGE_PATH_MISMATCH` · `22023 MESSAGE_NOT_IN_QUESTION`.
+
+ACL 실측(적용 후) — 파일 `:173` 기준선과 동일:
+
+| 주체 | EXECUTE |
+|---|---|
+| `authenticated` | **true** |
+| `service_role` | **true** |
+| `anon` | **false** |
+| `PUBLIC` | **false** |
+
+`proacl = {postgres=X/postgres,authenticated=X/postgres,service_role=X/postgres}`.
+
+**169** — ABORT_169 가드 통과(기존 DELETE/ALL 정책 0건) → rollback-only 재현 → 적용 → fixture §3-3:
+
+| 케이스 | 기대 | 실측 |
+|---|---|---|
+| A 본인 소유 + 미등록 + 당사자 | 삭제 1 | **1** |
+| B 등록 완료 객체 | 거부 | **0** |
+| C 타인 소유 | 거부 | **0** |
+| D 본인 소유지만 질문 당사자 아님 | 거부 | **0** |
+| E `owner_id` NULL 기존 5객체 | 거부 | **0** |
+| F 공백 경로 업로드 후 등록 | 객체명↔행경로 대조 | 등록은 btrim 결과로 저장되어 **불일치 확인**(§5-5 불변식이 실위험임을 실증) |
+
+- **케이스 D 주의**: 최초 시도는 삭제 1이 나왔는데, 이는 정책 결함이 아니라 **픽스처 오류**였다.
+  staging 의 개별질문 2건이 **같은 학생 소유**라 행위자가 실제로 당사자였다. 존재하지 않는
+  질문 uuid 를 경로 접두사로 쓴 정정 픽스처에서 `party=false` · 삭제 **0** 을 확인했다.
+- **비목표(알려진 한계, 실패 아님)**: 버킷 5객체의 `owner_id` 가 전부 NULL 이라 기존 고아 4건은
+  이 정책으로 삭제되지 않는다. 파일 헤더에 이미 기록된 사항이며 처리는 오너 결정(§5-3).
+- **환경 제약(신규 발견)**: `storage.objects` 에 `protect_objects_delete`(BEFORE DELETE, statement)
+  트리거가 있어 **직접 SQL DELETE 가 전면 차단**된다(`storage.protect_delete()` → 42501).
+  Storage API 가 세우는 `storage.allow_delete_query='true'` GUC 를 트랜잭션 안에서 동일하게
+  설정해 실제 삭제 경로를 재현했다. RLS 정책만으로는 삭제가 성립하지 않는다는 뜻이므로
+  앱은 반드시 Storage API 를 경유해야 한다.
+
+**170** — 적용 전/후 **동일 쿼리**로 자격 쌍 비교: **0 → 1**. 상태 전수 진리표(19행)를 실측했고
+`lib/reviews/__contract__/reviewEligibilityPolicy.contract.test.ts` 가 같은 표를 TS 측에서 재현한다.
+
+| 구독 | pending F · active **T** · past_due F · cancel_scheduled **T** · canceled F · expired **T** · refunded F |
+|---|---|
+| **개별질문** | escrowed F · assigned F · open F · claimed F · answered **T** · released **T** · expired F · refunded F · canceled F |
+| **멘토 식별** | designated 전용 **T** · claimed 가 타 멘토면 designated 가 대상이어도 **F**(coalesce 우선순위) |
+
+**171** — 적용 후 작성자 세션 공격 6종 **전부 예외 거부**:
+`is_blinded` 해제 · `moderation_state` 변경 · `mentor_reply` 변조 · `is_hidden` 해제 ·
+`moderated_by` 위조 · `body`+`is_blinded` **혼합 우회** → 전부
+`reviews: author must not change moderation or mentor reply fields`.
+권한 회귀 없음: 멘토·관리자의 학생 본문 수정은 `reviews: protected columns are immutable` 로 거부,
+멘토 답글·관리자 숨김은 기존대로 동작(각 1행). 작성자 정상 수정 시 조정 필드 전량 보존 확인.
+타 사용자의 숨김 리뷰 조회 **0행**, 작성자 본인 조회 **1행**, 타 사용자의 리뷰 수정 **0행**.
+`updated_at` 은 클라이언트가 보낸 값(2000-01-01)을 무시하고 서버가 강제.
+
+### 7-4. baseline 복원 대조표 (모든 fixture 종료 후)
+
+| 대상 | 적용 전 | 종료 후 |
+|---|---|---|
+| `individual_question_attachments` | 1 | **1** |
+| `individual_question_messages` | 1 | **1** |
+| `storage.objects`(해당 버킷) | 5 | **5** |
+| `reviews` | 0 | **0** |
+| `mentor_school_verifications` | 0 | **0** |
+| `community_posts` | 6 | **6** (오염 정정은 UPDATE — 행 수 불변) |
+| `mentor_school_verifications` 인덱스 | 3 | **3** (신규 0) |
+
+**예외 테이블 없음** — 172 가 미적용이므로 행 수가 달라진 테이블은 하나도 없다.
