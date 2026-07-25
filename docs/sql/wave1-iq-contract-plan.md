@@ -7,7 +7,16 @@
 > - 대상 프로젝트: `lbeqxarxothkmzqvpudy` (ssambership-staging) — read-only
 > - 실조회 일자: 2026-07-25
 > - 기점 커밋: `6062dcc3799be3a2b467661c98db1fb309741693` (PR #42 브랜치 HEAD)
-> - 작업 브랜치: `wave1/server-sql-draft`
+> - **정본 브랜치: `wave1/server-sql-draft`** — 웨이브 1 프롬프트·트랙 5 대조·W3 인계가 모두
+>   이 이름을 참조한다. 동일 커밋이 하네스 지정 브랜치 `claude/wave1-server-sql-draft-thwz4h`
+>   에도 올라가 있으나(양쪽 내용 동일), 그쪽은 W3 완료 후 오너가 정리할 잔여물이다.
+>
+> **개정 2026-07-25 (22차 판정 반영 델타 4건):**
+> ① §4-5 `iqa_select_party` 서술 정정 — 실재하는 **테이블 RLS** 정책명이며 "실명이 아니다"는
+> 과잉 정정이었다. ② 가드 개수 표기를 실측 **5종**으로 통일(초판 4종·5종 혼재).
+> ③ §5-4 파급 강도 완화 — 168 선행은 기능 정지가 아니라 **모호-수렴 경로로의 강등**이므로
+> "동시 배포 필수" → "**168 후 A3 근접 후속**". ④ §5-5 경로 정규화 불변식 각주 신설 +
+> §3-3 케이스 F 추가. 델타 4건 모두 문서·주석 한정이며 **SQL 실행 로직은 무변경**이다.
 
 ---
 
@@ -120,6 +129,10 @@ rollback;
   -- 케이스 C: 타인 업로드 객체                  → DELETE 거부 기대 (owner_id 불일치)
   -- 케이스 D: 본인 업로드지만 질문 당사자 아님   → DELETE 거부 기대 (party 조건)
   -- 케이스 E: owner_id NULL 인 기존 5객체       → DELETE 거부 기대 (fail-closed, 의도된 동작)
+  -- 케이스 F: 앞뒤 공백 포함 경로로 업로드 후 등록
+  --   → storage 객체명(원문)과 등록 행 storage_path(btrim 결과)가 **일치하는지** 확인.
+  --     불일치면 앱 findRegistered 가 0건을 보고 보상 삭제로 흐를 수 있다(§5-5).
+  --     확인식: storage.objects.name = individual_question_attachments.storage_path
 ```
 
 **케이스 E 는 현 staging 의 고아 4건이 이 정책으로 정리되지 **않음**을 확인하는 시나리오다.**
@@ -244,10 +257,22 @@ ORDER BY 1;
 | exec_authenticated | **true** |
 | exec_service_role | **true** |
 
-정의 본문 요지(전문 대조 완료): 가드 4종 —
+정의 본문 요지(전문 대조 완료): **가드 5종** —
 `AUTH_REQUIRED`(28000) → `INVALID_INPUT: storage_path is required`(22023) →
 `NOT_QUESTION_PARTY`(42501) → `STORAGE_PATH_MISMATCH`(22023) → `MESSAGE_NOT_IN_QUESTION`(22023)
 — 이후 **ON CONFLICT 절 없는 plain INSERT** 후 `returning id into v_id; return v_id;`.
+
+가드 개수 실측(초판의 "4종" 표기를 5종으로 통일):
+
+```sql
+SELECT (length(pg_get_functiondef(p.oid))
+        - length(replace(pg_get_functiondef(p.oid), 'raise exception', '')))
+       / length('raise exception') AS raise_sites
+FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+WHERE n.nspname='public' AND p.proname='add_individual_question_attachment';
+```
+
+→ `raise_sites = 5`. 168 은 이 5종의 조건·메시지 토큰·SQLSTATE 를 전부 보존한다.
 
 > **재확인 결과: 기존 실측 기준(plain INSERT · 멱등 인자 없음)과 일치.**
 > 부수 확인 — 저장 시 `btrim` 이 적용되지 않는다(빈 문자열 검사에만 사용). 168 에서 보완.
@@ -320,9 +345,26 @@ ORDER BY policyname;
 | `iqa_storage_insert_party` | INSERT | authenticated | with_check 동일 식 |
 | `iqa_storage_update_party_annotations` | UPDATE | authenticated | 위 식 + `split_part(name,'/',2)='annotations'` |
 
-> **명명 정정:** 프롬프트가 참조한 `iqa_select_party` 는 실명이 아니다.
-> 실제 SELECT 정책명은 **`iqa_storage_read_party`** 이며 정의는 위와 같다.
-> 169 초안은 이 실명 규약(`iqa_storage_*`)을 따라 `iqa_storage_delete_unregistered_owner` 로 명명했다.
+> **명명 구분 (2026-07-25 판정 후 재실측·정정):**
+> `iqa_select_party` 는 **실재하는 정책명이다.** 다만 storage 정책이 아니라 **테이블 RLS 정책**이다.
+> 초판 보고에서 "실명이 아니다"라고 쓴 것은 과잉 정정이었다 — 아래가 실측이다.
+>
+> ```sql
+> SELECT schemaname, tablename, policyname, cmd, roles::text, qual, with_check
+> FROM pg_policies
+> WHERE schemaname='public' AND tablename='individual_question_attachments';
+> ```
+>
+> | schemaname | tablename | policyname | cmd | roles | qual |
+> |---|---|---|---|---|---|
+> | public | individual_question_attachments | **`iqa_select_party`** | SELECT | {authenticated} | `user_is_individual_question_party(question_id)` |
+>
+> (이 테이블의 **유일한** 정책이다. 앱의 findRegistered = 당사자 SELECT 가 의존하는 것이 바로 이것이며,
+>  앱 코드 주석도 이 이름을 참조한다.)
+>
+> storage 쪽 SELECT 정책명은 이와 **별개로** `iqa_storage_read_party` 다.
+> 169 초안은 storage 쪽 실명 규약(`iqa_storage_*`)을 따라 `iqa_storage_delete_unregistered_owner`
+> 로 명명했고, 테이블 RLS 정책 `iqa_select_party` 는 **일절 건드리지 않는다**.
 
 **(c) storage.objects 전체 DELETE 정책 6건 — 이 버킷 커버 0건**
 
@@ -450,13 +492,48 @@ v19·v20 의 클라이언트측 AMBIGUOUS 방어는 서버 실태와 무관하�
   - **옵션 C** — 169 에서 owner_id 조건을 빼고 party 조건만 남긴다.
     **비권장** — 질문 당사자 누구나 남의 업로드 중간산출물을 지울 수 있게 되어 안전성이 후퇴한다.
 
-### 5-4. 168 의 파괴적 반환 타입 변경 — **배포 조율 필요**
+### 5-4. 168 의 반환 타입 변경 — **배포 조율 필요(단, 기능 정지는 아님)**
 
-반환이 `uuid` → `jsonb` 로 바뀐다. 구 호출자는 반환값을 uuid 로 직접 읽으므로 **168 적용과
-앱 배선(App-A3)이 함께 나가야 한다**. 서버만 먼저 적용하면 기존 앱의 첨부 등록 경로가 깨진다.
+반환이 `uuid` → `jsonb` 로 바뀐다. 구 호출자는 반환값을 uuid 로 직접 읽는다.
 
+> **파급 강도 정정 (2026-07-25 판정 · 앱 저장소 `e95b259` 호출부 코드 대조):**
+> 초판은 "서버만 먼저 적용하면 기존 앱의 첨부 등록 경로가 **깨진다**"고 썼으나, 이는 과장이었다.
+> 실제 구앱 동작은 다음과 같다.
+>
+> 1. register 콜백이 RPC 반환을 `id is! String` 으로 검사 → jsonb(Map) 수신 시 `AppError` 를 던진다.
+> 2. `AppError` 는 `PostgrestException` 이 아니므로 `isDefiniteRegisterFailure = false`.
+> 3. upload core 가 **모호(AMBIGUOUS) 분기 → findRegistered(당사자 SELECT)** 로 수렴한다.
+> 4. 서버 INSERT 는 **이미 성공**했으므로 행이 발견되고 → `registered` 반환 = **등록 성공**으로 끝난다.
+>    (core 원문 주석: "서버 INSERT 는 성공했었다 — DB 행이 정본")
+>
+> 즉 168 선행 시 구앱은 기능 정지가 아니라 **매 등록이 모호-수렴 경로로 강등**된다
+> (등록당 SELECT 1회 추가, 수렴 SELECT 가 일시 실패하면 AMBIGUOUS UX 노출).
+> 중복 생성 0 · 데이터 무손실 — v18/v19 수렴 설계가 정확히 이 시나리오를 흡수한다.
+
+**따라서 배포 요건은 "동시 배포 필수" 가 아니라 "168 적용 후 App-A3 를 근접 후속으로"** 다.
+강등 구간(모호-수렴으로 도는 기간)을 짧게 유지하는 것이 목표이며, 두 배포를 하나의 창구에
+묶어야 할 정도의 경직된 제약은 아니다. W3 의 배포 조율 부담은 그만큼 가볍다.
+
+- 여전히 유효한 점: 둘을 **하나의 계획으로 묶어 관리**해야 한다(순서·관측 지표 공유).
 - 대안(비채택) — 새 이름의 함수를 병행 추가하고 구 함수를 남기는 방식.
   호출 경로가 둘로 갈라져 "서로 다른 계약 동시 구현" 금지 규율에 저촉되므로 채택하지 않았다.
+- 강등 구간 관측 지표(권장): findRegistered 수렴 경로 진입률. 168 적용 직후 급증 → A3 배포 후 0 수렴.
+
+### 5-5. 경로 정규화 불변식 — **A3 배선 정본에 명시 필요**
+
+168 이 저장 직전 `btrim` 을 도입하므로, 앞뒤 공백이 있는 경로가 유입되면 **storage 객체명(원문)과
+등록 행 storage_path(trim)가 갈라진다**. 그 상태에서 앱 findRegistered 가
+`.eq('storage_path', 원문)` 으로 조회하면 0건을 보고 **보상 삭제로 흐를 여지**가 있다.
+
+- **현 실위험 0**: 앱 생성 경로는 `{questionId}/{ts}-{salt}.{ext}` 형식이고, preflight 실측
+  미trim 행 0건(§4-2). 아래는 회귀 방지용 명문화다.
+- **A3 배선 정본에 1줄 명시**: 경로 무공백 불변식(파일명·확장자 sanitize 포함)을 지키거나,
+  업로드·조회 경로에 서버와 **동일한 정규화(btrim)** 를 적용할 것.
+- **더 강한 권장**: RPC 반환의 `storage_path` 는 서버가 확정한 정규화 결과다.
+  앱이 이후 조회·삭제 판정에 자신이 만든 원문 대신 **이 반환값을 정본으로 사용**하면 불일치가
+  원천 차단된다.
+- W3 fixture 보강: §3-2 4회차(공백 경로 멱등 히트)가 RPC 레벨을 커버하므로,
+  여기에 **"객체명 ↔ 행 경로 일치" 확인 한 줄**을 더하면 완결된다(§3-3 케이스 F).
 
 ---
 
