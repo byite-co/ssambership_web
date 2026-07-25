@@ -563,6 +563,11 @@ v19·v20 의 클라이언트측 AMBIGUOUS 방어는 서버 실태와 무관하�
 | 170 | `170_review_eligibility_relationship_based.sql` | ✅ | `2026-07-25 19:00:59` | 자격 쌍 **0 → 1** · 구 3경로 집계 로직 제거 확인 |
 | 171 | `171_reviews_author_update_and_updated_at.sql` | ✅ | `2026-07-25 19:03:43` | `reviews.updated_at` 실재 · 정책 7건 · 작성자 공격 6종 전부 거부 |
 | 172 | (파일 없음) | **`DEFERRED_W4`** | — | 승인 백필·부분 유니크 인덱스 **둘 다 W4 이연**. `mentor_school_verifications` 0행·인덱스 3건 무변경 |
+| 173 | `173_reviews_moderated_author_edit_guard.sql` | ✅ | `2026-07-25 20:4x` (W3b 라운드) | 정책 **7건 유지**(신설·삭제 0 · `reviews_update_author.qual` 만 변경) · 트리거 작성자 분기 가드 **1개** · 2계층 공격 테스트 14항 전건 합격 |
+
+> 173 은 W3b 보정 라운드에서 추가됐다. 172 는 **건너뛴 번호**이며 위 행의 `DEFERRED_W4` 는 그대로 유지된다.
+> 적용 시각은 적용 직후 사후 검증 시각(`2026-07-25 20:47:11 UTC`) 기준의 같은 분 단위 구간이다 —
+> DDL 적용 시각을 별도로 캡처하지 않았으므로 초 단위는 기록하지 않는다.
 
 부수 작업(마이그레이션 파일 아님): `community_posts.author_role` 오염 2행 정정 —
 `2026-07-25 19:06:49 UTC` · RETURNING **2행** · 정정 후 오염 **0행** · 그 외 컬럼 md5 지문 불변.
@@ -571,13 +576,22 @@ v19·v20 의 클라이언트측 AMBIGUOUS 방어는 서버 실태와 무관하�
 
 두 순서를 **모두** 명문화한다. 구분하지 않으면 167 을 먼저 떨어뜨려 168 이 42P10 으로 죽는다.
 
-- **전체 롤백(파트 1+2)**: `171 → 170 → 169 → 168 → 167`
+- **전체 롤백(파트 1+2+W3b)**: `173 → 171 → 170 → 169 → 168 → 167`
 - **파트 1만 롤백**: `169 → 168 → 167`
 - 172 는 이번 회차 미적용이므로 **롤백 대상이 아니다.**
+- 173 은 171 위에만 얹혀 있다. 173 을 남긴 채 171 을 떨어뜨리면 `reviews_update_author`
+  정책과 트리거 가드가 서로 다른 세대를 가리키게 되므로 **반드시 173 을 먼저** 되돌린다.
 
 개별 롤백문은 각 SQL 파일 하단 `── ROLLBACK 절차 ──` 절에 있다. 요지:
 
 ```sql
+-- 173
+drop policy if exists "reviews_update_author" on public.reviews;
+create policy "reviews_update_author" on public.reviews
+  for update to authenticated
+  using ((select auth.uid()) = author_id)
+  with check ((select auth.uid()) = author_id);
+-- reviews_enforce_update() 는 171 정의를 재적용(작성자 분기 가드 1개 제거)
 -- 171
 drop policy if exists "reviews_update_author" on public.reviews;
 drop policy if exists "reviews_select_author" on public.reviews;
@@ -664,6 +678,35 @@ ACL 실측(적용 후) — 파일 `:173` 기준선과 동일:
 타 사용자의 숨김 리뷰 조회 **0행**, 작성자 본인 조회 **1행**, 타 사용자의 리뷰 수정 **0행**.
 `updated_at` 은 클라이언트가 보낸 값(2000-01-01)을 무시하고 서버가 강제.
 
+**173** (W3b 보정 라운드) — 171 이 닫지 못한 구멍 하나를 닫는다: 작성자 분기가 `OLD.is_hidden`·
+`OLD.is_blinded` 를 보지 않아 **모더레이션된 본인 리뷰를 작성자가 직접 요청으로 수정**할 수 있었다.
+UI 의 `canEdit:false` 는 클라이언트 가드일 뿐이라 PostgREST 직접 호출로 우회된다.
+
+2계층으로 막았고, **두 계층을 각각 따로 실증**했다. 정상 `authenticated` 요청 하나로는 두 계층을
+동시에 증명할 수 없다 — 정책 USING 이 먼저 행을 가리므로 UPDATE 가 0행으로 끝나고 트리거는
+아예 실행되지 않는다.
+
+- **RLS 계층**(`db_role=authenticated`): 타인의 숨김·블라인드 조회 **0행** · 작성자의 숨김 `body`
+  수정 **0행**(본문 불변) · 작성자의 블라인드 `rating` 수정 **0행**(값 불변) · 작성자의 공개 리뷰
+  정상 수정 **1행**(`updated_at`=`now()` 서버 강제) · 타인 리뷰 수정 **0행**.
+  권한 회귀 0 — 관리자 숨김/해제 각 **1행**, 멘토 답글 **1행**(`mentor_replied_at` 서버 강제).
+  관리자 해제가 조정된 행에서도 성립하는 것이 핵심이다(가드를 작성자 분기 밖에 뒀다면 여기서 깨진다).
+- **트리거 계층**(`db_role=postgres` 로 RLS 우회 · JWT `role=authenticated` · `sub`=작성자,
+  `is_admin()=false` 실측): 숨김 행 `body` 수정과 블라인드 행 `rating` 수정 모두
+  `reviews: moderated review is not editable by author` **전문 일치**로 거부, 원본 불변.
+  JWT `role` 을 `service_role` 로 넣으면 트리거 첫 분기가 조기 반환하므로 아무것도 증명하지 못한다 —
+  반드시 `authenticated` 로 주입한다.
+
+실행 형태: `execute_sql` **단일 호출 · 단일 payload**(`BEGIN;` → `DO $$ … $$;` → 증거 `SELECT` →
+`ROLLBACK;`). 예상 예외는 `DO` 블록 안 중첩 `begin … exception` 서브트랜잭션으로 포착해
+첫 예외가 트랜잭션 전체를 abort 시키지 않게 했다. 픽스처 잔여 **0** 은 수동 `DELETE` 가 아니라
+바깥 `ROLLBACK` 으로만 달성했고, 종료 후 별도 SELECT-only 호출로 `reviews` **0행** 복귀를 확인했다.
+
+웹 짝: 정책 USING 이 먼저 걸리면 UPDATE 는 예외가 아니라 **0행**으로 끝나므로,
+영향 행을 세지 않던 `updateReview()` 는 조용한 무효 수정을 "성공"으로 표시했다.
+같은 라운드에서 `applyReviewUpdate()` 1행 계약(`.select("id")` 회수 · 정확히 1행 + id 일치만 성공)으로
+함께 닫았다. 한쪽만 적용하면 결함이 남는다.
+
 ### 7-4. baseline 복원 대조표 (모든 fixture 종료 후)
 
 | 대상 | 적용 전 | 종료 후 |
@@ -677,3 +720,9 @@ ACL 실측(적용 후) — 파일 `:173` 기준선과 동일:
 | `mentor_school_verifications` 인덱스 | 3 | **3** (신규 0) |
 
 **예외 테이블 없음** — 172 가 미적용이므로 행 수가 달라진 테이블은 하나도 없다.
+
+**W3b 라운드 재확인 (173 적용·공격 테스트 종료 후)** — 위 표와 동일하게 복원됐다:
+`reviews` **0행**(모더레이션 0행) · 픽스처 사용자 잔여 **0**(`public.users`·`auth.users` 모두) ·
+`reviews` 정책 **7건** · `mentor_school_verifications` 인덱스 **3건**으로 이름까지 동일
+(`mentor_school_verifications_pkey` · `idx_..._mentor_id` · `idx_..._status` — 신규 유니크 인덱스 0건,
+172 미적용 유지).
