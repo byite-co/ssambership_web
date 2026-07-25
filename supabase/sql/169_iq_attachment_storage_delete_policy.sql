@@ -8,9 +8,15 @@
 -- 배경(2026-07-25 staging `lbeqxarxothkmzqvpudy` read-only 실조회):
 --   - 버킷 실태: individual-question-attachments · public=false · file_size_limit=20971520(20MB) ·
 --     allowed_mime_types 9종(png/jpeg/webp/gif, pdf, zip, docx, pptx, json).
---   - 이 버킷의 storage.objects 정책 3건 — 명명이 `iqa_storage_*` 이다
---     (프롬프트가 참조한 `iqa_select_party` 는 실명이 아니며, 실제 SELECT 정책명은
---      `iqa_storage_read_party` 다. 아래 신설 정책은 이 실명 규약을 따른다):
+--   - 이 버킷의 storage.objects 정책 3건 — 명명이 `iqa_storage_*` 이다.
+--     ※ 명명 구분(2026-07-25 재실측): `iqa_select_party` 는 **실재하는 정책명**이지만
+--        storage 가 아니라 **테이블 RLS** 정책이다
+--        (public.individual_question_attachments · SELECT · authenticated ·
+--         using: user_is_individual_question_party(question_id) — 이 테이블의 유일한 정책).
+--        앱의 findRegistered(당사자 SELECT) 가 의존하는 것이 바로 이 테이블 정책이다.
+--        storage 쪽 SELECT 정책명은 별개로 `iqa_storage_read_party` 이며,
+--        아래 신설 DELETE 정책은 storage 쪽 실명 규약(`iqa_storage_*`)을 따른다.
+--        이 스크립트는 테이블 RLS 정책 `iqa_select_party` 를 일절 건드리지 않는다.
 --       · iqa_storage_read_party   (SELECT, authenticated)
 --           using: bucket_id='individual-question-attachments'
 --                  AND user_is_party_for_individual_question_storage_path(name)

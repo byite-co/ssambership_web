@@ -14,7 +14,8 @@
 --   - 현행 시그니처: add_individual_question_attachment(uuid, text, text, text, uuid)
 --       = (p_question_id, p_storage_path, p_file_name, p_mime_type, p_message_id DEFAULT null)
 --   - 현행 반환: uuid (신규 행 id). plpgsql · SECURITY DEFINER · search_path='public' · volatile.
---   - 현행 본문: 가드 4종 후 **plain INSERT** — ON CONFLICT 절 없음, 멱등 인자 없음.
+--   - 현행 본문: 가드 **5종**(raise exception 5곳 — 실측 재확인) 후 **plain INSERT** —
+--     ON CONFLICT 절 없음, 멱등 인자 없음.
 --     → 같은 (question_id, storage_path) 로 재호출하면 행이 계속 늘어난다(재시도 = 중복 생성).
 --   - 실효 EXECUTE(has_function_privilege): anon=false · authenticated=true · service_role=true.
 --     proacl = {postgres=X/postgres, authenticated=X/postgres, service_role=X/postgres}.
@@ -28,7 +29,7 @@
 --   3) 저장 직전 storage_path 를 btrim 한다(167 주석의 정규화 한계 보완 — 미trim 유입 차단).
 --
 -- 의도적 비변경(스코프 밖 — 이 스크립트가 건드리지 않는 것):
---   - 기존 가드 4종의 조건·예외 메시지·SQLSTATE 를 **한 글자도 바꾸지 않는다**.
+--   - 기존 가드 5종의 조건·예외 메시지·SQLSTATE 를 **한 글자도 바꾸지 않는다**.
 --     v19·v20 클라이언트가 이 토큰들로 분기하고 있으므로 문자열 안정성이 계약의 일부다.
 --   - 139(question-room-attachments) 처럼 storage 객체 존재·owner_id 대조를 추가하지 **않는다**.
 --     staging 실측상 individual-question-attachments 버킷 5개 객체는 owner·owner_id 가 전부
@@ -213,6 +214,17 @@ commit;
 --   42P10 은 앱에서 복구 불가 — 즉시 알림 대상(167 누락 배포).
 --
 -- 3상태 구분 방법(요약): 예외 발생 = 실패 / status='created' = 신규 / status='existing' = 멱등 히트.
+--
+-- ── 경로 불변식 (A3 배선 필수 조건) ──
+-- 이 RPC 는 저장 직전 storage_path 를 btrim 한다. 따라서 앞뒤 공백이 있는 경로로 업로드하면
+-- **storage 객체명(원문)과 등록 행 storage_path(trim)가 갈라진다**. 그 상태에서 앱의
+-- findRegistered 가 `.eq('storage_path', 원문)` 으로 조회하면 0건을 보고 보상 삭제로 흐를 수 있다.
+--   → 앱은 **경로 무공백 불변식**(파일명·확장자 sanitize 포함)을 지키거나,
+--     업로드·조회에 쓰는 경로에 서버와 **동일한 정규화(btrim)** 를 적용해야 한다.
+--   → 반환된 `storage_path` 는 서버가 확정한 정규화 결과다. 앱은 이후 조회·삭제 판정에
+--     자신이 만든 원문이 아니라 **이 반환값을 정본으로 사용**하면 불일치가 원천 차단된다.
+-- 현 실위험 0: 앱 생성 경로는 `{questionId}/{ts}-{salt}.{ext}` 형식이고, preflight 실측
+-- 미trim 행 0건이다. 위 불변식은 회귀 방지용 명문화다.
 -- ═══════════════════════════════════════════════════════════════════════════
 --
 -- ── §V 검증 SELECT (적용 후 별도 실행) ──
