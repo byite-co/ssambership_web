@@ -12,7 +12,7 @@ const USER = "11111111-1111-4111-8111-111111111111";
 const OTHER = "22222222-2222-4222-8222-222222222222";
 const ORDER = `cash-${USER}-1753300000000`;
 
-type Counters = { toss: number; record: number };
+type Counters = { toss: number; record: number; lookup?: number };
 
 function makePorts(over: Partial<ConfirmCashTopupPorts>, counters: Counters): ConfirmCashTopupPorts {
   return {
@@ -22,6 +22,10 @@ function makePorts(over: Partial<ConfirmCashTopupPorts>, counters: Counters): Co
     tossConfirm: async ({ orderId, amount }) => {
       counters.toss++;
       return { ok: true, data: { status: "DONE", orderId, totalAmount: amount, method: "카드" } };
+    },
+    tossLookupOrder: async (orderId) => {
+      counters.lookup = (counters.lookup ?? 0) + 1;
+      return { ok: true, data: { status: "DONE", orderId, totalAmount: 30_000, method: "카드" } };
     },
     recordTopup: async () => {
       counters.record++;
