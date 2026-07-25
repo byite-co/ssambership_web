@@ -1,7 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { revalidateCommunityPaths } from "@/lib/community/communityRevalidate";
 import { getServerAuthUser } from "@/lib/auth/getCurrentUser";
 import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
 import { authorStoredLabelFromProfile } from "@/lib/community/communityAuthorLabels";
@@ -188,9 +188,12 @@ async function submitShortformUploadCore(surface: "web" | "app", formData: FormD
     }
   }
 
-  revalidatePath("/community/shortform");
-  revalidatePath("/community");
-  revalidatePath("/community/me");
+  // 매트릭스: 숏폼 작성/수정 × (공개 목록·상세·내 활동·관리자).
+  revalidateCommunityPaths({
+    mutation: isUpdate ? "post_update" : "post_create",
+    kind: "shortform",
+    postId: r.id,
+  });
 
   // 앱 표면: 성공은 완료 브릿지(서버 enum 경로)로 — 앱이 이 URL 을 intercept 해 WebView 를 닫는다.
   if (isApp) {
@@ -276,10 +279,12 @@ export async function toggleShortformLikeAction(formData: FormData) {
   const supabase = await createClient();
   const result = await toggleShortformLike(supabase, user.id, postId);
 
-  revalidatePath(returnPath);
-  revalidatePath(`/community/shortform/${postId}`);
-  revalidatePath("/community/shortform");
-  revalidatePath("/community");
+  revalidateCommunityPaths({
+    mutation: "reaction_toggle",
+    kind: "shortform",
+    postId,
+    extraPaths: [returnPath],
+  });
 
   if (!result.ok) {
     redirect(appendQuery(returnPath, "likeError", "not_ready"));

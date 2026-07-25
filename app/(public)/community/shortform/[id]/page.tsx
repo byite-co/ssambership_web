@@ -3,6 +3,7 @@ import { CommunityShortformDetailView } from "@/components/community/CommunitySh
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { createClient } from "@/lib/supabase/server";
 import { isCommunityPostUuid, loadCommunityComments } from "@/lib/community/communityQueries";
+import { authorModerationNotice } from "@/lib/community/communityModerationVisibility";
 import {
   getShortformDetail,
   getShortformReactionFlags,
@@ -27,14 +28,22 @@ export default async function CommunityShortformDetailPage(props: Props) {
   const idOk = isCommunityPostUuid(id);
 
   let item = null;
+  let row: Record<string, unknown> | null = null;
   let loadError: string | null = null;
   if (idOk) {
-    const res = await getShortformDetail(supabase, id);
+    const res = await getShortformDetail(supabase, id, user?.id ?? null);
     if (res.error) loadError = "숏폼\uC744 \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.";
     else if (res.item) {
       item = res.item;
-      await incrementShortformView(supabase, id);
+      row = res.row;
     }
+  }
+
+  // 관리자 숨김 숏폼은 작성자 본인에게만 행이 유지되고, 이 배너로 사유를 함께 보여준다.
+  const moderationNotice = authorModerationNotice(row, user?.id ?? null);
+  // 숨김 상태에서는 조회수를 올리지 않는다(공개되지 않은 콘텐츠의 지표 왜곡 방지).
+  if (item && !moderationNotice) {
+    await incrementShortformView(supabase, id);
   }
 
   const { rows: rawComments } = item ? await loadCommunityComments(supabase, "shortform", id) : { rows: [] };
@@ -65,6 +74,12 @@ export default async function CommunityShortformDetailPage(props: Props) {
             >
               숏폼 목록으로
             </Link>
+          </div>
+        ) : null}
+        {item && moderationNotice ? (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+            <p className="text-xs font-extrabold text-amber-900">{moderationNotice.badgeLabel}</p>
+            <p className="mt-1 text-xs font-semibold text-amber-800">{moderationNotice.reason}</p>
           </div>
         ) : null}
         {item ? (

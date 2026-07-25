@@ -1,5 +1,10 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { communityComposePath } from "@/lib/community/communityComposeTab";
+import {
+  authorModerationNotice,
+  communityRowAuthorId,
+  type AuthorModerationNotice,
+} from "@/lib/community/communityModerationVisibility";
 
 type Row = Record<string, unknown>;
 
@@ -268,6 +273,11 @@ export type CommunityMePostListItem = {
   title: string;
   dateLabel: string | null;
   linkHref: string | null;
+  /**
+   * 관리자 숨김·삭제 처분 배지(작성자 본인 표면 전용). 정상 노출 글은 null 이라
+   * 복구(restored) 직후 배지가 자동으로 사라진다.
+   */
+  moderation: AuthorModerationNotice | null;
 };
 
 export type CommunityMeDraftItem = {
@@ -283,17 +293,29 @@ function isDraftRow(row: Row): boolean {
   return status === "draft";
 }
 
-export function toCommunityMePostListItem(kind: "board" | "shortform", row: Row): CommunityMePostListItem | null {
+export function toCommunityMePostListItem(
+  kind: "board" | "shortform",
+  row: Row,
+  viewerId?: string | null
+): CommunityMePostListItem | null {
   if (isDraftRow(row)) return null;
   const id = typeof row.id === "string" ? row.id.trim() : "";
   if (!id) return null;
   const base = kind === "board" ? "/community/board" : "/community/shortform";
+  // 「내 활동」은 본인 행만 조회하지만(author_id 스코프), 배지 판정은 뷰어=작성자일 때만
+  // 성립하도록 명시적으로 확인한다(타인 표면 재사용 시에도 안전).
+  const moderation = authorModerationNotice(row, viewerId ?? communityRowAuthorId(row));
   return {
     kind,
     id,
     title: pickTitle(row),
     dateLabel: formatCommunityPostDate(row),
-    linkHref: isCommunityPostUuid(id) ? `${base}/${encodeURIComponent(id)}` : null,
+    // 숨김 글은 작성자 본인 상세가 열리므로 링크를 유지한다. 삭제 글은 상세가 not-found 라 링크 제거.
+    linkHref:
+      moderation?.state === "deleted" || !isCommunityPostUuid(id)
+        ? null
+        : `${base}/${encodeURIComponent(id)}`,
+    moderation,
   };
 }
 
@@ -324,11 +346,16 @@ export function buildCommunityMeDraftsList(boardRows: Row[], shortformRows: Row[
   return out;
 }
 
-export function buildCommunityMePostsList(boardRows: Row[], shortformRows: Row[], max: number): CommunityMePostListItem[] {
+export function buildCommunityMePostsList(
+  boardRows: Row[],
+  shortformRows: Row[],
+  max: number,
+  viewerId?: string | null
+): CommunityMePostListItem[] {
   const merged = mergeMeRecentCommunityItems(boardRows, shortformRows, max);
   const out: CommunityMePostListItem[] = [];
   for (const { kind, row } of merged) {
-    const item = toCommunityMePostListItem(kind, row);
+    const item = toCommunityMePostListItem(kind, row, viewerId);
     if (item) out.push(item);
   }
   return out;

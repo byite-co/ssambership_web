@@ -77,11 +77,12 @@ export default async function CommunityMePage(props: PageProps) {
     if (shortRes.error) console.error("[community/me] loadMyShortformPosts", shortRes.error);
     const loadFailed = Boolean(boardRes.error || shortRes.error);
     activity = {
-      myPosts: buildCommunityMePostsList(boardRes.rows, shortRes.rows, 200),
+      // viewerId 를 넘겨야 관리자 숨김·삭제 배지가 작성자 본인 표면에서만 계산된다.
+      myPosts: buildCommunityMePostsList(boardRes.rows, shortRes.rows, 200, uid),
       myDrafts: buildCommunityMeDraftsList(boardRes.rows, shortRes.rows, 50),
       boardCount: boardCount,
       shortformCount: shortCount,
-      recent: buildCommunityMePostsList(boardRes.rows, shortRes.rows, 3),
+      recent: buildCommunityMePostsList(boardRes.rows, shortRes.rows, 3, uid),
       loadFailed,
     };
   }

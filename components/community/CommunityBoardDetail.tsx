@@ -38,6 +38,7 @@ function CommentItem(props: {
             {node.isOwn ? (
               <form action={deleteBoardCommentAction} className="inline">
                 <input type="hidden" name="commentId" value={node.id} />
+                <input type="hidden" name="postId" value={props.postId} />
                 <input type="hidden" name="returnPath" value={returnPath} />
                 <button type="submit" className="text-red-600 hover:underline">
                   {"\uC0AD\uC81C"}

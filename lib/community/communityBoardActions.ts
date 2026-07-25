@@ -1,6 +1,5 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getServerAuthUser } from "@/lib/auth/getCurrentUser";
 import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
@@ -18,6 +17,7 @@ import {
   updateCommunityBoardPost,
 } from "@/lib/community/communityBoardMutations";
 import { communityComposePath } from "@/lib/community/communityComposeTab";
+import { revalidateCommunityPaths } from "@/lib/community/communityRevalidate";
 import { deleteCommunityImageStoredRefs } from "@/lib/community/communityImageStorage";
 import { communityImageRefBelongsToUser } from "@/lib/community/communityImageRef";
 import { createClient } from "@/lib/supabase/server";
@@ -36,6 +36,15 @@ function safeReturnPath(raw: string): string {
   const path = raw.trim();
   if (path.startsWith("/community")) return path;
   return DEFAULT_RETURN;
+}
+
+/** 게시글 id 확보: 폼 필드 우선, 없으면 `/community/board/{uuid}` returnPath 에서 복구. */
+function boardPostIdFrom(rawPostId: string, returnPath: string): string | null {
+  const direct = rawPostId.trim();
+  if (UUID_RE.test(direct)) return direct;
+  const m = /^\/community\/board\/([^/?#]+)/.exec(returnPath.trim());
+  const fromPath = m?.[1] ? decodeURIComponent(m[1]) : "";
+  return UUID_RE.test(fromPath) ? fromPath : null;
 }
 
 function errRedirect(returnPath: string, code: string) {
@@ -197,9 +206,12 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
     }
   }
 
-  revalidatePath("/community");
-  revalidatePath("/community/board");
-  revalidatePath("/community/me");
+  // 매트릭스: 글 작성/수정 × (공개 목록·상세·내 활동·관리자). 수정 시 상세도 함께 갱신한다.
+  revalidateCommunityPaths({
+    mutation: isUpdate ? "post_update" : "post_create",
+    kind: "board",
+    postId: r.id,
+  });
 
   if (status === "published") redirect(`/community/board/${r.id}`);
 
@@ -227,10 +239,7 @@ export async function deleteCommunityBoardPostAction(formData: FormData) {
     redirect(errRedirect(safeReturn, "delete"));
   }
 
-  revalidatePath("/community");
-  revalidatePath("/community/board");
-  revalidatePath("/community/me");
-  revalidatePath(`/community/board/${postId}`);
+  revalidateCommunityPaths({ mutation: "post_delete", kind: "board", postId });
   redirect("/community");
 }
 
@@ -250,9 +259,12 @@ export async function toggleCommunityPostReactionAction(formData: FormData) {
   const supabase = await createClient();
   await togglePostReaction(supabase, user.id, postId, type);
 
-  revalidatePath(returnPath);
-  revalidatePath(`/community/board/${postId}`);
-  revalidatePath("/community");
+  revalidateCommunityPaths({
+    mutation: "reaction_toggle",
+    kind: "board",
+    postId,
+    extraPaths: [returnPath],
+  });
   redirect(returnPath);
 }
 
@@ -295,20 +307,32 @@ export async function submitBoardCommentAction(formData: FormData) {
     redirect(`${returnPath}?${q.toString()}`);
   }
 
-  revalidatePath(`/community/board/${postId}`);
-  revalidatePath("/community");
+  revalidateCommunityPaths({
+    mutation: "comment_create",
+    kind: "board",
+    postId,
+    extraPaths: [returnPath],
+  });
   redirect(returnPath);
 }
 
 export async function deleteBoardCommentAction(formData: FormData) {
   const commentId = String(formData.get("commentId") ?? "").trim();
   const returnPath = String(formData.get("returnPath") ?? "").trim();
+  // 댓글 삭제도 글 상세·목록·내 활동을 함께 갱신하려면 소속 글 id 가 필요하다.
+  // 폼이 넘겨주지 않는 레거시 호출을 위해 returnPath 에서도 복구한다.
+  const postId = boardPostIdFrom(String(formData.get("postId") ?? ""), returnPath);
   const { user } = await getServerAuthUser();
   if (!user) redirect(`/login?next=${encodeURIComponent(returnPath)}`);
   if (!UUID_RE.test(commentId)) redirect(returnPath);
 
   const supabase = await createClient();
   await softDeleteBoardComment(supabase, user.id, commentId);
-  revalidatePath(returnPath);
+  revalidateCommunityPaths({
+    mutation: "comment_delete",
+    kind: "board",
+    postId,
+    extraPaths: [returnPath],
+  });
   redirect(returnPath);
 }

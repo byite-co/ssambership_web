@@ -1,7 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { revalidateCommunityPaths } from "@/lib/community/communityRevalidate";
 import { getServerAuthUser } from "@/lib/auth/getCurrentUser";
 import { createClient } from "@/lib/supabase/server";
 import { insertCommunityComment } from "@/lib/community/communityMutations";
@@ -68,16 +68,12 @@ export async function submitCommunityCommentAction(formData: FormData) {
     redirect(buildCommentRedirect(returnPath, "save"));
   }
 
-  if (postType === "board") {
-    revalidatePath("/community/board");
-    revalidatePath(`/community/board/${postId}`);
-  } else {
-    revalidatePath("/community/shorts");
-    revalidatePath("/community/shortform");
-    revalidatePath(`/community/shorts/${postId}`);
-    revalidatePath(`/community/shortform/${postId}`);
-  }
-  revalidatePath("/community");
+  revalidateCommunityPaths({
+    mutation: "comment_create",
+    kind: postType === "board" ? "board" : "shortform",
+    postId,
+    extraPaths: [returnPath],
+  });
 
   redirect(returnPath);
 }
