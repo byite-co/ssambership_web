@@ -156,15 +156,14 @@ export default async function CustomRequestOrderCompletePage(props: PageProps) {
   const mentorId = pickMentorIdFromOrderRow(order);
 
   let reviewEligible = false;
-  let reviewTooltip = "동일 멘토 2회 이상 이용 후 작성 가능";
+  let reviewTooltip = "구독 또는 개별 질문 이용 이력이 있으면 작성 가능";
   if (mentorId) {
+    // 자격 판정은 checkReviewEligibility(=SQL 170 과 동일 기준) 하나만 쓴다.
+    // 구 기준의 `subscriptionCount < 2` 재판정은 폐기됐다 — 화면이 서버와 어긋나던 원인.
     const eligibility = await checkReviewEligibility(supabase, user.id, mentorId);
-    reviewEligible = eligibility.eligible;
-    if (!eligibility.eligible) {
-      reviewTooltip =
-        eligibility.subscriptionCount < 2
-          ? "동일 멘토 2회 이상 이용 후 작성 가능"
-          : eligibility.reason;
+    reviewEligible = eligibility.eligible && (eligibility.mode !== "edit" || eligibility.canEdit);
+    if (!reviewEligible) {
+      reviewTooltip = eligibility.reason ?? "지금은 후기를 작성할 수 없습니다.";
     }
   }
 

@@ -156,7 +156,7 @@ export function MentorReviewList(props: { mentorId: string }) {
                     <span className="text-amber-500 text-sm">{starIcons(item.rating)}</span>
                   </div>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    {item.gradeSubject} · 구독 {item.subscriptionCount}회 · {formatDate(item.createdAt)}
+                    {item.gradeSubject} · {formatDate(item.createdAt)}
                   </p>
                   <p className="mt-2 text-sm leading-relaxed text-slate-800">{item.content}</p>
                   {item.mentorReply ? (

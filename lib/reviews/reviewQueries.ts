@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import { checkReviewEligibility } from "@/lib/reviews/checkReviewEligibility";
 import { formatGradeSubject, maskStudentName } from "@/lib/reviews/reviewDisplay";
 import { isPubliclyVisibleReview, mapReviewDbRow, type ReviewDbRow } from "@/lib/reviews/reviewRowMapper";
@@ -10,7 +9,6 @@ export type ReviewCardItem = {
   rating: number;
   content: string;
   createdAt: string;
-  subscriptionCount: number;
   studentInitial: string;
   studentMaskedName: string;
   gradeSubject: string;
@@ -73,7 +71,6 @@ function toCard(row: ReviewDbRow, author: UserMini | undefined, subject: string 
     rating: row.rating,
     content: row.body,
     createdAt: row.created_at,
-    subscriptionCount: row.subscription_count,
     studentInitial: initial,
     studentMaskedName: name,
     gradeSubject: formatGradeSubject(author?.grade_level, subject),
@@ -176,7 +173,12 @@ export async function createReview(
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const eligibility = await checkReviewEligibility(supabase, authorId, input.mentorId);
   if (!eligibility.eligible) {
-    return { ok: false, error: eligibility.reason };
+    return { ok: false, error: eligibility.reason ?? "후기를 작성할 수 없습니다." };
+  }
+  // 이미 후기가 있으면 신규 생성이 아니라 수정 경로다. 여기서 막지 않으면
+  // uq_reviews_mentor_author 에 걸려 23505 가 난다(중복 POST 0건 보장).
+  if (eligibility.mode === "edit") {
+    return { ok: false, error: "이미 작성한 후기가 있습니다. 후기 수정으로 진행해 주세요." };
   }
 
   const rating = Math.round(input.rating);
@@ -201,10 +203,8 @@ export async function createReview(
     body: safeBody,
   };
 
-  const subCountCol = await pickExistingColumn(supabase, "reviews", ["subscription_count"]);
-  if (subCountCol.column) {
-    insertRow[subCountCol.column] = eligibility.subscriptionCount;
-  }
+  // subscription_count 기록 중단(오너 확정 6). 자격 기준이 결제 횟수에서 관계 상태로
+  // 바뀌면서 이 값은 의미를 잃었다. 컬럼 자체는 기존 행 호환을 위해 남겨 둔다(DROP 은 W4).
 
   const { data, error } = await supabase.from("reviews").insert(insertRow).select("id").single();
 
@@ -216,6 +216,64 @@ export async function createReview(
   }
 
   return { ok: true, id: String((data as { id: string }).id) };
+}
+
+/**
+ * 작성자 본인 후기 수정 (171 로 개통된 경로).
+ * - 바꿀 수 있는 것은 rating·body 뿐이다. updated_at 은 서버(트리거)가 now() 로 강제한다.
+ * - 자격 재검사를 하지 않는다(171 정본). 다만 **본인 후기인지**는 서버에서 재확인한다.
+ * - 모더레이션된(숨김·블라인드) 후기는 수정을 막는다 — 열지 여부는 오너 결정(W4).
+ */
+export async function updateReview(
+  supabase: SupabaseClient,
+  authorId: string,
+  reviewId: string,
+  input: { rating: number; body: string }
+): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  const { data: row, error: fetchErr } = await supabase
+    .from("reviews")
+    .select("id, author_id, is_hidden, is_blinded")
+    .eq("id", reviewId)
+    .maybeSingle();
+
+  if (fetchErr || !row) {
+    return { ok: false, error: "후기를 찾을 수 없습니다." };
+  }
+
+  const r = row as { id: string; author_id: string; is_hidden: boolean; is_blinded: boolean };
+  if (r.author_id !== authorId) {
+    return { ok: false, error: "본인이 작성한 후기만 수정할 수 있습니다." };
+  }
+  if (r.is_hidden || r.is_blinded) {
+    return { ok: false, error: "검토 중인 후기라 지금은 수정할 수 없습니다." };
+  }
+
+  const rating = Math.round(input.rating);
+  if (rating < 1 || rating > 5) {
+    return { ok: false, error: "별점은 1~5점 사이로 선택해 주세요." };
+  }
+
+  const text = input.body.trim();
+  if (text.length < 20) {
+    return { ok: false, error: "리뷰는 최소 20자 이상 작성해 주세요." };
+  }
+  if (text.length > 500) {
+    return { ok: false, error: "리뷰는 최대 500자까지 작성할 수 있습니다." };
+  }
+
+  // 신규 작성과 동일하게 명백한 외부 연락처만 가린 값으로 저장한다.
+  const safeBody = maskContactInUserText(text);
+
+  const { error } = await supabase
+    .from("reviews")
+    .update({ rating, body: safeBody })
+    .eq("id", reviewId)
+    .eq("author_id", authorId);
+
+  if (error) {
+    return { ok: false, error: "후기 수정에 실패했습니다." };
+  }
+  return { ok: true, id: reviewId };
 }
 
 export async function replyToReview(

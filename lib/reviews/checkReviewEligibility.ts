@@ -1,211 +1,107 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  ELIGIBLE_INDIVIDUAL_QUESTION_STATUSES,
+  ELIGIBLE_SUBSCRIPTION_STATUSES,
+  REVIEW_ELIGIBILITY_REASON,
+  decideReviewEligibility,
+  hasRelationshipEligibility,
+  type ExistingReviewRef,
+  type IndividualQuestionRelationRow,
+  type ReviewEligibilityResult,
+  type SubscriptionRelationRow,
+} from "@/lib/reviews/reviewEligibilityPolicy";
 
-const MIN_PAID_SUBSCRIPTION_COUNT = 2;
+export type { ReviewEligibilityMode, ReviewEligibilityResult } from "@/lib/reviews/reviewEligibilityPolicy";
+export { REVIEW_ELIGIBILITY_REASON } from "@/lib/reviews/reviewEligibilityPolicy";
 
-const PAYMENT_SUCCEEDED = new Set([
-  "paid",
-  "succeeded",
-  "escrowed",
-  "completed",
-  "complete",
-  "success",
-  "captured",
-  "paid_out",
-]);
+/**
+ * 리뷰 자격 조회 — 판정 로직은 `reviewEligibilityPolicy`(순수 함수)에 있고,
+ * 이 파일은 조회(I/O)만 담당한다. 판정 정본은 SQL 170 의 check_review_eligibility 다.
+ */
 
-export type ReviewEligibilityResult =
-  | { eligible: true; subscriptionCount: number }
-  | { eligible: false; reason: string; subscriptionCount: number };
-
-type Row = Record<string, unknown>;
-
-type PaymentLikeRow = {
-  status?: string | null;
-  amount?: number | null;
-  kind?: string | null;
-  metadata?: Record<string, unknown> | null;
-  data?: Record<string, unknown> | null;
-};
-
-function paymentSucceeded(status: string | null | undefined): boolean {
-  if (!status) return false;
-  return PAYMENT_SUCCEEDED.has(String(status).trim().toLowerCase());
-}
-
-function isPaidTier(value: unknown): boolean {
-  const tier = String(value ?? "").trim().toLowerCase();
-  return tier !== "free" && tier !== "trial" && !tier.includes("trial");
-}
-
-function isMissingBillingEventsTable(error: unknown): boolean {
-  const e = error as { code?: string; message?: string } | null | undefined;
-  const code = String(e?.code ?? "");
-  const message = String(e?.message ?? "").toLowerCase();
-  return (
-    code === "42P01" ||
-    code === "42703" ||
-    code === "PGRST204" ||
-    code === "PGRST205" ||
-    message.includes("subscription_billing_events") ||
-    message.includes("schema cache") ||
-    message.includes("does not exist")
-  );
-}
-
-async function countSucceededBillingEvents(
+/** 본인이 이미 쓴 후기 1건. 숨김·블라인드 행도 반드시 잡혀야 한다(171 reviews_select_author). */
+async function findOwnReview(
   supabase: SupabaseClient,
-  studentId: string,
+  authorId: string,
   mentorId: string
-): Promise<number | null> {
+): Promise<{ ok: true; review: ExistingReviewRef | null } | { ok: false }> {
   const { data, error } = await supabase
-    .from("subscription_billing_events")
-    .select("id, amount_cents, plan_tier")
-    .eq("student_id", studentId)
+    .from("reviews")
+    .select("id, is_hidden, is_blinded")
+    .eq("author_id", authorId)
     .eq("mentor_id", mentorId)
-    .eq("status", "succeeded")
-    .in("event_type", ["initial", "renewal"]);
+    .maybeSingle();
 
-  if (error) {
-    if (!isMissingBillingEventsTable(error)) {
-      console.error("[countSucceededBillingEvents]", error.message);
-    }
-    return null;
-  }
+  if (error) return { ok: false };
+  if (!data) return { ok: true, review: null };
 
-  return ((data ?? []) as Row[]).filter((row) => {
-    const amount = row.amount_cents;
-    return typeof amount === "number" && amount > 0 && isPaidTier(row.plan_tier);
-  }).length;
+  const row = data as { id?: unknown; is_hidden?: unknown; is_blinded?: unknown };
+  const id = String(row.id ?? "").trim();
+  if (!id) return { ok: true, review: null };
+
+  return {
+    ok: true,
+    review: { id, isHidden: Boolean(row.is_hidden), isBlinded: Boolean(row.is_blinded) },
+  };
 }
 
-async function subscriptionIdsForPair(
+async function loadRelationshipRows(
   supabase: SupabaseClient,
   studentId: string,
   mentorId: string
-): Promise<string[]> {
-  const { data, error } = await supabase
-    .from("subscriptions")
-    .select("id, plan_tier")
-    .eq("student_id", studentId)
-    .eq("mentor_id", mentorId);
-
-  if (error) return [];
-  return ((data ?? []) as Row[])
-    .filter((row) => isPaidTier(row.plan_tier))
-    .map((row) => String(row.id ?? "").trim())
-    .filter(Boolean);
-}
-
-async function countPaidEventsViaLedger(
-  supabase: SupabaseClient,
-  studentId: string,
-  mentorId: string
-): Promise<number> {
-  const subscriptionIds = await subscriptionIdsForPair(supabase, studentId, mentorId);
-  if (subscriptionIds.length === 0) return 0;
-
-  const { data, error } = await supabase
-    .from("cash_ledger")
-    .select("id")
-    .eq("user_id", studentId)
-    .eq("ref_type", "subscriptions")
-    .in("ref_id", subscriptionIds)
-    .lt("delta_cents", 0);
-
-  if (error) return 0;
-  return (data ?? []).length;
-}
-
-async function countPaidEventsViaPayments(
-  supabase: SupabaseClient,
-  studentId: string,
-  mentorId: string
-): Promise<number> {
-  const { data, error } = await supabase
-    .from("payments")
-    .select("id, status, amount, kind, metadata, data")
-    .eq("mentor_id", mentorId)
-    .or(`user_id.eq.${studentId},student_id.eq.${studentId},payer_id.eq.${studentId}`);
-
-  if (error) return 0;
-
-  return ((data ?? []) as PaymentLikeRow[]).filter((row) => {
-    if (!paymentSucceeded(row.status)) return false;
-    if (typeof row.amount === "number" && row.amount <= 0) return false;
-    const kind = String(row.kind ?? "").trim().toLowerCase();
-    const metadataSource = typeof row.metadata?.source === "string" ? row.metadata.source : null;
-    const dataSource = typeof row.data?.source === "string" ? row.data.source : null;
-    return kind === "subscription" || metadataSource === "subscribe_checkout" || dataSource === "subscribe_checkout";
-  }).length;
-}
-
-async function fallbackPaidEventCount(
-  supabase: SupabaseClient,
-  studentId: string,
-  mentorId: string
-): Promise<number> {
-  const [ledgerCount, paymentCount] = await Promise.all([
-    countPaidEventsViaLedger(supabase, studentId, mentorId),
-    countPaidEventsViaPayments(supabase, studentId, mentorId),
+): Promise<{
+  subscriptions: SubscriptionRelationRow[];
+  individualQuestions: IndividualQuestionRelationRow[];
+}> {
+  const [subs, iqs] = await Promise.all([
+    supabase
+      .from("subscriptions")
+      .select("mentor_id, status")
+      .eq("student_id", studentId)
+      .eq("mentor_id", mentorId)
+      .in("status", [...ELIGIBLE_SUBSCRIPTION_STATUSES]),
+    // coalesce(claimed, designated) = mentor  ⟺  claimed = mentor  OR  (claimed IS NULL AND designated = mentor)
+    supabase
+      .from("individual_questions")
+      .select("claimed_mentor_id, designated_mentor_id, status")
+      .eq("student_id", studentId)
+      .in("status", [...ELIGIBLE_INDIVIDUAL_QUESTION_STATUSES])
+      .or(`claimed_mentor_id.eq.${mentorId},and(claimed_mentor_id.is.null,designated_mentor_id.eq.${mentorId})`),
   ]);
-  return Math.max(ledgerCount, paymentCount);
+
+  return {
+    subscriptions: (subs.error ? [] : ((subs.data ?? []) as SubscriptionRelationRow[])),
+    individualQuestions: (iqs.error ? [] : ((iqs.data ?? []) as IndividualQuestionRelationRow[])),
+  };
 }
 
 /**
- * Review eligibility: the student must have at least two successful paid
- * subscription billing events for the same mentor. Free/trial use does not count.
+ * 자격 판정. 검사 순서는 정책 모듈의 계약을 따른다:
+ *   ① 본인 기존 후기 조회 → ② 있으면 관계 자격 재검사 없이 'edit' → ③ 없을 때만 신규 자격 검사.
  */
 export async function checkReviewEligibility(
   supabase: SupabaseClient,
   authorId: string,
   mentorId: string
 ): Promise<ReviewEligibilityResult> {
-  const billingEventCount = await countSucceededBillingEvents(supabase, authorId, mentorId);
-  const fallbackCount =
-    billingEventCount == null || billingEventCount < MIN_PAID_SUBSCRIPTION_COUNT
-      ? await fallbackPaidEventCount(supabase, authorId, mentorId)
-      : 0;
-  const paidCount = Math.max(billingEventCount ?? 0, fallbackCount);
-
-  if (paidCount < MIN_PAID_SUBSCRIPTION_COUNT) {
+  const own = await findOwnReview(supabase, authorId, mentorId);
+  if (!own.ok) {
     return {
       eligible: false,
-      reason: "같은 멘토에게 2회 이상 결제한 학생만 후기를 남길 수 있어요. 무료체험만 이용한 경우 작성할 수 없습니다.",
-      subscriptionCount: paidCount,
+      mode: "create",
+      existingReviewId: null,
+      canEdit: false,
+      reason: REVIEW_ELIGIBILITY_REASON.LOOKUP_FAILED,
     };
   }
 
-  return await finishReviewEligibilityCheck(supabase, authorId, mentorId, paidCount);
-}
-
-async function finishReviewEligibilityCheck(
-  supabase: SupabaseClient,
-  authorId: string,
-  mentorId: string,
-  paidCount: number
-): Promise<ReviewEligibilityResult> {
-  const { data: existing, error: reviewErr } = await supabase
-    .from("reviews")
-    .select("id")
-    .eq("author_id", authorId)
-    .eq("mentor_id", mentorId)
-    .maybeSingle();
-
-  if (reviewErr) {
-    return {
-      eligible: false,
-      reason: "리뷰 작성 여부를 확인하지 못했습니다.",
-      subscriptionCount: paidCount,
-    };
+  // 기존 후기가 있으면 관계 자격을 다시 묻지 않는다(수정 시 자격 재검사 안 함 — 171 정본).
+  if (own.review) {
+    return decideReviewEligibility({ existingReview: own.review, relationshipEligible: true });
   }
 
-  if (existing?.id) {
-    return {
-      eligible: false,
-      reason: "이미 이 멘토에 대한 리뷰를 작성했습니다. 작성 후에는 수정할 수 없습니다.",
-      subscriptionCount: paidCount,
-    };
-  }
+  const rows = await loadRelationshipRows(supabase, authorId, mentorId);
+  const relationshipEligible = hasRelationshipEligibility({ mentorId, ...rows });
 
-  return { eligible: true, subscriptionCount: paidCount };
+  return decideReviewEligibility({ existingReview: null, relationshipEligible });
 }
