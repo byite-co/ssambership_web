@@ -47,6 +47,14 @@
 > 오염 2행(`community_posts.author_role`)은 **자동 수정 금지**(오너 결정 대기).
 > 대조표는 이 2행을 baseline 으로 간주하고 **증가분만** 본다.
 
+> **[정정 2026-07-25] 「오염 2행」은 `community_posts` 한 곳뿐이다.**
+> 초판 보고에서 `individual_question_attachments` 도 「기존 감사 2행」 기준과 대조하려다
+> 불일치를 제기했으나(F-1), 이는 **지시서의 수치 전이 오기**로 종결됐다.
+> 첨부 테이블에는 애초에 「2행」 기준이 없었다 — 본 트랙과 트랙 3 preflight 가 같은
+> 시간대에 독립 측정해 **둘 다 총 1행 · 중복 0 · 고아 0** 으로 일치했다.
+> 후속 세션은 첨부 테이블에서 「2행 → 0행 해소」나 「1행 감소」를 찾지 말 것.
+> 첨부 판정 기준은 **§3-C 의 증가분·중복 0** 이지 절대 행 수가 아니다.
+
 ---
 
 ## 2. 시나리오 정의 (A~G)
@@ -490,3 +498,19 @@ SELECT (SELECT count(*) FROM public.community_posts    WHERE author_id = :'qa_de
 | 알림 멱등 (`dup_recipient_event`) | | |
 | community_posts 오염 증가 0 (`role_mismatch_rows`) | | |
 | 탈퇴 상태 전이 완주 | | |
+
+---
+
+## 6. 결과 해석 시 알아둘 스키마 특성 (준비 세션 실측 · 수정 0)
+
+QA 결과를 오탐으로 판정하지 않으려면 아래를 미리 알고 있어야 한다.
+**전부 기록만 했고 이 트랙에서 수정하지 않았다.** 정리는 후속 서버 작업 소관이다.
+
+| # | 특성 | QA 에 미치는 영향 |
+|---|---|---|
+| S-1 | `community_posts` 에 status CHECK 가 **2개 공존** — `…_status_check`(draft/published/hidden/**deleted**) + `…_status_chk`(draft/published/hidden). CHECK 는 AND 결합이라 실효 허용집합은 교집합 `{draft, published, hidden}` | **`status='deleted'` 는 저장 자체가 불가능**하다. 글 삭제는 `deleted_at`(soft) 또는 `status='hidden'` 으로만 관측된다. §3-E 의 E-5 를 그 전제로 읽을 것 |
+| S-2 | `notifications` 에 수신자류 컬럼이 7종 병존(`user_id`·`recipient_id`·`student_id`·`mentor_id`·`target_user_id`·`owner_id`·`recipient_user_id`). 멱등 UNIQUE 는 `uq_notifications_recipient_event` **1개뿐**이고 `(recipient_user_id, event_key)` 에만 걸린다 | `recipient_user_id` 를 채우지 않는 레거시 경로가 있으면 **멱등이 무력화**된다. §3-B 의 B-3 · §3-F 의 F-3 중복 검사를 반드시 돌릴 것 |
+| S-3 | `account_deletion_jobs.state` 허용값은 **9종**(`pending / locked / purging / storage_purged / finalized / auth_soft_deleted / completed / canceled / failed`) | §3-G 는 4단계가 아니라 **9단계 기준**이다. `delete-account-scenario.md` §6 의 D0~D7 표를 쓸 것 |
+| S-4 | 탈퇴 DB 함수 14종은 staging 적용 완료이나, 이를 주기 호출하는 **러너가 저장소에 0건** | §3-G 는 worker 운영화 전까지 **BLOCKED**. `pending` 에서 멈추는 것은 제품 결함이 아니라 미운영 상태다 |
+| S-5 | `cash_ledger.cash_topup` 2건이 `ref_id IS NULL` (baseline 부채) | §3-D 는 이 2건을 baseline 으로 두고, **신규 topup 행에 `ref_id` 가 채워지는지**만 별도 관측한다 |
+| S-6 | 일반 웹 auth 쿠키는 브라우저 JS 가 쓰므로 `HttpOnly=false` 가 **정상** | `mobile-session-matrix.md` §4-1 참조. 앱 WebView 표면만 4속성 강제 대상이다 |

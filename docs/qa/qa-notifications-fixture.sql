@@ -7,6 +7,11 @@
 -- 파일    : docs/qa/qa-notifications-fixture.sql
 -- 목적    : 실기기 QA 「알림 25건」 시나리오용 데이터 초안
 --           (알림 허브 페이지네이션·카테고리 서브탭·읽음 처리·딥링크 검증)
+-- 총 생성량: **27행** = §2 학생 25행(시나리오 본체) + §3 멘토 2행(유형 커버리지 보조).
+--           시나리오 이름의 "25건"은 학생 알림 허브에 보이는 건수를 뜻한다.
+--           멘토 2행은 학생에게 갈 수 없는 수신자 전용 유형(individual_question_assigned·
+--           new_application)을 채워 18/18 커버리지를 완성하기 위한 것이며, 학생 허브
+--           건수(25)에는 포함되지 않는다. 검증 SELECT §5-1 의 기대값은 25 / 2 / 27 이다.
 -- 대상 DB : ssambership-staging (lbeqxarxothkmzqvpudy) 전용 — production 절대 금지
 -- 실행 권한: service_role (record_domain_notification 은 postgres·service_role EXECUTE 전용)
 -- 선행 SQL: 132(record_domain_notification) · 155/157/158/159(원자화) — staging 적용 확인됨

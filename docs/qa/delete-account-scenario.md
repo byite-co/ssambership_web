@@ -27,7 +27,7 @@
 | # | 요건 | 확인 방법 | 비고 |
 |---|---|---|---|
 | R-1 | `users.role='student'` · `status='active'` | §6-1 | 신규 가입으로 생성 |
-| R-2 | **정상 가입 플로우로 생성** (직접 SQL 시드 금지) | 가입 절차 §3 | GoTrue 컬럼 NULL 부채 회피 |
+| R-2 | **정상 가입 플로우로 생성** (직접 SQL 시드 금지) | 가입 절차 §3 | 과거 GoTrue 컬럼 NULL 부채 재발 방지(현행 staging 은 NULL 0건) |
 | R-3 | active/past_due 구독 **0** | §6-2 | 사전조건 |
 | R-4 | escrow 진행중 IQ (`open`/`assigned`/`claimed`/`answered`) **0** | §6-2 | 사전조건 |
 | R-5 | 진행중 맞춤의뢰 주문(터미널 외) **0** | §6-2 | 사전조건 |
