@@ -13,12 +13,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { runAccountDeletionJob, planAccountDeletion, type DeletionDeps } from "../accountDeletionWorker.ts";
-import type { StorageObjectRef } from "../accountDeletionPurgePlan.ts";
+import { storageObjectKey, type StorageObjectRef } from "../accountDeletionPurgePlan.ts";
 
 type Calls = string[];
 
 function makeDeps(calls: Calls, over: Partial<DeletionDeps> = {}): DeletionDeps {
   return {
+    // 기본 fixture: 수집된 객체는 전부 대상 사용자가 소유한 것으로 실측된다
+    // (소유 분류 자체는 accountDeletionOwnershipClassification.contract.test.ts 가 고정).
+    resolveObjectOwners: async (userId, refs) => {
+      calls.push("resolveObjectOwners");
+      return {
+        ownedByUser: [],
+        owners: new Map(refs.map((r) => [storageObjectKey(r), userId])),
+      };
+    },
     beginLocked: async () => {
       calls.push("beginLocked");
       return { ok: true };
@@ -203,15 +212,14 @@ test("dry-run 계획과 real-run 삭제 대상이 동일하다(§3-1 계약 6 �
 
   const realCalls: Calls = [];
   let removedTargets: StorageObjectRef[] = [];
-  let listCount = 0;
+  let purged = false;
   const realDeps = makeDeps(realCalls, {
-    listInventory: async () => {
-      listCount += 1;
-      return listCount === 1 ? inventory : [];
-    },
-    gatherDbRefs: async () => (listCount <= 1 ? dbRefs : []),
+    // 삭제가 실행되기 전(시작 게이트·계획)에는 그대로, 실행 후(재검증)에는 빈 상태.
+    listInventory: async () => (purged ? [] : inventory),
+    gatherDbRefs: async () => (purged ? [] : dbRefs),
     removeObjects: async (refs) => {
       removedTargets = [...refs];
+      purged = true;
       return refs.map((r) => `${r.bucket}/${r.path}`);
     },
   });
@@ -326,7 +334,8 @@ test("삭제는 됐지만 재조회 인벤토리가 비지 않으면 finalized �
   assert.equal(result.ok, false);
   assert.equal(result.stopped, "not_empty");
   assert.ok(!calls.includes("advance:purging->storage_purged"));
-  assert.equal(listCount, 2, "삭제 후 재조회로 빈 상태를 다시 확인한다");
+  // 시작 게이트(1)·계획(2)·삭제 후 재검증(3) — 재조회로 빈 상태를 다시 확인한다.
+  assert.equal(listCount, 3, "삭제 후 재조회로 빈 상태를 다시 확인한다");
 });
 
 test("removeObjects 가 bucket 접두 없는 key 를 돌려주면 잔여로 잡힌다(어댑터 반환 규약)", async () => {
@@ -350,8 +359,12 @@ test("storage_purged: 몰수·익명화가 finalized 전이보다 먼저, 그리
   );
 
   // 워커는 재개 가능한 if-chain 이라 한 번의 실행에서 남은 단계를 이어서 끝낸다.
+  // 시작 게이트(§3-3-b·§3-4)가 read-only 계획 산출(수집 3종 + 소유 실측)로 바뀌었다.
   assert.deepEqual(calls, [
+    "gatherDbRefs",
+    "listInventory",
     "uncoveredBuckets",
+    "resolveObjectOwners",
     "forfeit",
     "advance:storage_purged->finalized",
     "authSoftDelete",
@@ -387,7 +400,13 @@ test("auth_soft_deleted → completed 로 마무리", async () => {
   const calls: Calls = [];
   const deps = makeDeps(calls);
   await runAccountDeletionJob({ userId: "u1", state: "auth_soft_deleted", dryRun: false }, deps);
-  assert.deepEqual(calls, ["uncoveredBuckets", "advance:auth_soft_deleted->completed"]);
+  assert.deepEqual(calls, [
+    "gatherDbRefs",
+    "listInventory",
+    "uncoveredBuckets",
+    "resolveObjectOwners",
+    "advance:auth_soft_deleted->completed",
+  ]);
 });
 
 test("이미 completed 인 job 재호출은 무해(파괴 동작 0)", async () => {

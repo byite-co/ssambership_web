@@ -5,6 +5,7 @@ import type { DeletionDeps, SessionRevokeAdapter } from "@/lib/account/accountDe
 import {
   normalizeStoredObjectPath,
   storageObjectKey,
+  type ObjectOwnership,
   type StorageObjectRef,
 } from "@/lib/account/accountDeletionPurgePlan";
 import {
@@ -325,6 +326,79 @@ export function makeListInventory(
 }
 
 /**
+ * §3-3-b: storage.objects.owner_id 실측 수집기.
+ *   ① owner_id = 대상 uid 인 객체 전수(감사 대상 전 버킷) — DB 조인·prefix 가 못 찾는
+ *      "업로드는 됐지만 등록이 없는" 객체를 owner 귀속으로 수집한다.
+ *   ② 수집 합집합(refs)의 owner_id 맵 — DB 조인 결과의 소유 충돌(OWNERSHIP_CONFLICT)과
+ *      인벤토리 항목의 귀속 불능(UNATTRIBUTABLE) 판정 근거.
+ *
+ * 실측 근거(staging lbeqxarxothkmzqvpudy, 2026-07-26): 13버킷 중 7버킷 with_owner > 0
+ * (community-post-images 64/64 등), individual-question-attachments 만 5건 전부 owner NULL
+ * (전부 DB 조인 커버). owner NULL 레거시 객체는 DB 조인이 잡으면 정상 대상으로 분류된다.
+ *
+ * `storage` 스키마는 PostgREST 노출 스키마에 포함된 service role 접속을 전제한다.
+ * 조회 실패는 **예외**로 던진다 — 소유를 못 읽은 채 계획을 세우면 충돌을 못 보고
+ * 지나칠 수 있으므로 워커가 fail-closed 로 정지·재시도하게 한다.
+ */
+export function makeResolveObjectOwners(
+  admin: SupabaseClient,
+  buckets: readonly string[] = ACCOUNT_DELETION_ALL_BUCKETS
+): DeletionDeps["resolveObjectOwners"] {
+  return async (userId, refs) => {
+    const objects = () => admin.schema("storage").from("objects");
+
+    // ① 대상 uid 소유 객체 전수(전 버킷, 페이지네이션 완주).
+    const ownedByUser: StorageObjectRef[] = [];
+    for (let offset = 0; ; offset += DB_PAGE_SIZE) {
+      const { data, error } = await objects()
+        .select("bucket_id, name")
+        .eq("owner_id", userId)
+        .in("bucket_id", [...buckets])
+        .range(offset, offset + DB_PAGE_SIZE - 1);
+      if (error) {
+        throw new Error(`resolveObjectOwners(owned) failed: ${error.message}`);
+      }
+      const page = (data ?? []) as unknown as Array<{ bucket_id?: string; name?: string }>;
+      for (const row of page) {
+        if (typeof row.bucket_id === "string" && typeof row.name === "string" && row.name !== "") {
+          ownedByUser.push({ bucket: row.bucket_id, path: row.name });
+        }
+      }
+      if (page.length < DB_PAGE_SIZE) break;
+    }
+
+    // ② 수집 범위 refs 의 owner 맵 — 버킷별 name IN (…) 청크 조회.
+    const owners = new Map<string, string | null>();
+    const byBucket = new Map<string, string[]>();
+    for (const ref of refs) {
+      const list = byBucket.get(ref.bucket) ?? [];
+      list.push(ref.path);
+      byBucket.set(ref.bucket, list);
+    }
+    for (const [bucket, paths] of byBucket) {
+      for (const part of chunk(paths, IN_CHUNK)) {
+        const { data, error } = await objects()
+          .select("name, owner_id")
+          .eq("bucket_id", bucket)
+          .in("name", part);
+        if (error) {
+          throw new Error(`resolveObjectOwners(${bucket}) failed: ${error.message}`);
+        }
+        for (const row of (data ?? []) as unknown as Array<{ name?: string; owner_id?: string | null }>) {
+          if (typeof row.name !== "string" || row.name === "") continue;
+          owners.set(
+            storageObjectKey({ bucket, path: row.name }),
+            typeof row.owner_id === "string" && row.owner_id !== "" ? row.owner_id : null
+          );
+        }
+      }
+    }
+
+    return { ownedByUser, owners } satisfies ObjectOwnership;
+  };
+}
+
+/**
  * 수집 경로가 없어 계획에 담을 수 없는 버킷.
  * 하드코딩 목록이 아니라 **전 버킷 − (prefix 커버 ∪ DB 조인 커버)** 로 계산한다 —
  * 새 버킷이 전략 없이 추가되면 자동으로 여기 걸려 real-run 이 막힌다(§3-4).
@@ -410,6 +484,7 @@ export function buildDeletionDeps(
     revokeSessions: makeRevokeSessions(admin),
     gatherDbRefs: makeGatherDbRefs(admin),
     listInventory: makeListInventory(admin),
+    resolveObjectOwners: makeResolveObjectOwners(admin),
     uncoveredBuckets: makeUncoveredBuckets(),
     removeObjects: makeRemoveObjects(admin),
     forfeitWalletAndAnonymize: makeForfeitWalletAndAnonymize(admin),

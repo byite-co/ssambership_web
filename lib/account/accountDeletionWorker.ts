@@ -9,12 +9,19 @@
 //   §3-2 pending→locked 는 raw advance 가 아니라 **동의·잔액 검증과 한 트랜잭션인**
 //        beginLocked(176 account_deletion_begin_locked)로만 간다(TOCTOU 0).
 //   §3-4 수집 경로가 없는 버킷이 남아 있으면 real-run 시작 0 · storage_purged 전이 0.
+//
+// W5-c §3-3-b (owner_id 채움률 실측 > 0 → 분기 b):
+//   수집 = DB 조인 refs ∪ (storage.objects.owner_id = 대상 uid, 전 버킷) ∪ prefix 인벤토리.
+//   OWNERSHIP_CONFLICT / UNATTRIBUTABLE ≥ 1 이면 미커버 버킷과 **동일 관문**에서
+//   real-run 시작 0 · purging→storage_purged 전이 0 · record_error.
 
 import {
   buildDeletionPlan,
+  buildStoragePurgePlan,
   emptyStateSatisfied,
   purgeResidue,
   storageObjectKey,
+  type ObjectOwnership,
   type StorageObjectRef,
   type StoragePurgePlan,
 } from "./accountDeletionPurgePlan.ts";
@@ -48,6 +55,14 @@ export type DeletionDeps = {
   gatherDbRefs: (userId: string) => Promise<StorageObjectRef[]>;
   /** 버킷 인벤토리(유저 prefix, 페이지네이션 완료본). */
   listInventory: (userId: string) => Promise<StorageObjectRef[]>;
+  /**
+   * storage.objects.owner_id 실측(§3-3-b): 대상 uid 소유 객체 전수(전 버킷) +
+   * 수집 범위(refs)의 owner 맵. 실패는 예외 → 워커가 fail-closed 로 정지한다.
+   */
+  resolveObjectOwners: (
+    userId: string,
+    refs: readonly StorageObjectRef[]
+  ) => Promise<ObjectOwnership>;
   /** 수집 경로가 없어 계획에 담을 수 없는 버킷. 비어 있지 않으면 real-run 금지(§3-4). */
   uncoveredBuckets: () => Promise<readonly string[]>;
   /** 실제 삭제 — 삭제된 객체 key 목록 반환. */
@@ -66,11 +81,59 @@ export type DeletionRunResult = {
   dryRun: boolean;
   plan?: StorageObjectRef[];
   uncoveredBuckets?: string[];
+  ownershipConflicts?: StorageObjectRef[];
+  unattributable?: StorageObjectRef[];
   stopped?: string;
 };
 
 function log(deps: DeletionDeps, msg: string, meta?: Record<string, unknown>) {
   deps.log?.(msg, meta);
+}
+
+/**
+ * §3-3-b · §3-4 공용 차단 관문: 미커버 버킷 → 소유 충돌 → 귀속 불능 순으로 판정한다.
+ * 하나라도 걸리면 real-run 시작 0 · storage_purged 전이 0 (호출부가 record_error 후 정지).
+ */
+function planBlockReason(plan: StoragePurgePlan): { stopped: string; detail: string } | null {
+  if (plan.uncoveredBuckets.length > 0) {
+    return { stopped: "uncovered_buckets", detail: `uncovered_buckets: ${plan.uncoveredBuckets.join(",")}` };
+  }
+  if (plan.ownershipConflicts.length > 0) {
+    return {
+      stopped: "ownership_conflict",
+      detail: `ownership_conflict ${plan.ownershipConflicts.length}: ${plan.ownershipConflicts
+        .map(storageObjectKey)
+        .join(",")}`,
+    };
+  }
+  if (plan.unattributable.length > 0) {
+    return {
+      stopped: "unattributable",
+      detail: `unattributable ${plan.unattributable.length}: ${plan.unattributable
+        .map(storageObjectKey)
+        .join(",")}`,
+    };
+  }
+  return null;
+}
+
+function blockedResult(
+  userId: string,
+  finalState: string,
+  dryRun: boolean,
+  plan: StoragePurgePlan,
+  stopped: string
+): DeletionRunResult {
+  return {
+    ok: false,
+    userId,
+    finalState,
+    dryRun,
+    uncoveredBuckets: plan.uncoveredBuckets,
+    ownershipConflicts: plan.ownershipConflicts,
+    unattributable: plan.unattributable,
+    stopped,
+  };
 }
 
 /**
@@ -87,7 +150,12 @@ export async function planAccountDeletion(
     deps.listInventory(userId),
     deps.uncoveredBuckets(),
   ]);
-  return buildDeletionPlan({ dbRefs, inventory, uncoveredBuckets });
+  // §3-3-b: 수집 합집합(DB refs ∪ prefix 인벤토리)의 owner 실측 + 대상 uid 소유 전 버킷 객체.
+  const ownership = await deps.resolveObjectOwners(
+    userId,
+    buildStoragePurgePlan(dbRefs, inventory)
+  );
+  return buildDeletionPlan({ userId, dbRefs, inventory, ownership, uncoveredBuckets });
 }
 
 /**
@@ -102,6 +170,8 @@ export async function planAccountDeletionJob(
   log(deps, "purge_plan", {
     count: plan.refs.length,
     uncovered: plan.uncoveredBuckets.length,
+    conflicts: plan.ownershipConflicts.length,
+    unattributable: plan.unattributable.length,
     dryRun: true,
   });
   return {
@@ -111,6 +181,8 @@ export async function planAccountDeletionJob(
     dryRun: true,
     plan: plan.refs,
     uncoveredBuckets: plan.uncoveredBuckets,
+    ownershipConflicts: plan.ownershipConflicts,
+    unattributable: plan.unattributable,
     stopped: "dry_run",
   };
 }
@@ -128,19 +200,14 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
   if (dryRun) return planAccountDeletionJob(job, deps);
 
   try {
-    // ── §3-4 계약 1: 수집 경로가 없는 버킷이 하나라도 남아 있으면 real-run 을 시작하지 않는다. ──
-    //    "cron 응답에 표시했다"로 대체하지 않는다 — 상태기계에 실제로 배선한다.
-    const uncoveredAtStart = [...(await deps.uncoveredBuckets())];
-    if (uncoveredAtStart.length > 0) {
-      await deps.recordError(userId, `uncovered_buckets: ${uncoveredAtStart.join(",")}`);
-      return {
-        ok: false,
-        userId,
-        finalState: state,
-        dryRun,
-        uncoveredBuckets: uncoveredAtStart,
-        stopped: "uncovered_buckets",
-      };
+    // ── §3-4 계약 1 + §3-3-b: 미커버 버킷·소유 충돌·귀속 불능이 하나라도 있으면
+    //    real-run 을 시작하지 않는다. "cron 응답에 표시했다"로 대체하지 않는다 —
+    //    상태기계에 실제로 배선한다(계획 산출은 read-only 라 시작 게이트에서 안전하다).
+    const planAtStart = await planAccountDeletion(userId, deps);
+    const blockAtStart = planBlockReason(planAtStart);
+    if (blockAtStart) {
+      await deps.recordError(userId, blockAtStart.detail);
+      return blockedResult(userId, state, dryRun, planAtStart, blockAtStart.stopped);
     }
 
     // pending → locked: 동의·잔액·취소창 검증과 같은 트랜잭션(§3-5-A(d)).
@@ -166,11 +233,21 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
       if (await deps.advance(userId, "locked", "purging")) state = "purging";
     }
 
-    // purging: 삭제 계획 = DB refs ∪ 인벤토리(실행·계획 공용 산출 함수).
+    // purging: 삭제 계획 = DB refs ∪ owner 귀속 ∪ 인벤토리(실행·계획 공용 산출 함수).
     if (state === "purging") {
       const planned = await planAccountDeletion(userId, deps);
+      // §3-3-b: 시작 게이트 이후 나타난 충돌·귀속 불능도 삭제 전에 다시 막는다.
+      const blockBeforeRemove = planBlockReason(planned);
+      if (blockBeforeRemove) {
+        await deps.recordError(userId, blockBeforeRemove.detail);
+        return blockedResult(userId, "purging", dryRun, planned, blockBeforeRemove.stopped);
+      }
       const plan = planned.refs;
-      log(deps, "purge_plan", { count: plan.length, dryRun });
+      log(deps, "purge_plan", {
+        count: plan.length,
+        ownerAttributed: planned.ownerAttributed.length,
+        dryRun,
+      });
 
       const removed = await deps.removeObjects(plan);
       const residue = purgeResidue(plan, removed);
@@ -180,18 +257,12 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
       }
 
       // 빈 상태 재검증 — 커버 버킷만이 아니라 **수집 대상 전 버킷**을 다시 조회한다(§3-4 계약 5).
+      // §3-3-b: 재검증 시점의 미커버·충돌·귀속 불능도 storage_purged 전이를 막는다.
       const recheck = await planAccountDeletion(userId, deps);
-      if (recheck.uncoveredBuckets.length > 0) {
-        await deps.recordError(userId, `uncovered_buckets: ${recheck.uncoveredBuckets.join(",")}`);
-        return {
-          ok: false,
-          userId,
-          finalState: "purging",
-          dryRun,
-          plan,
-          uncoveredBuckets: recheck.uncoveredBuckets,
-          stopped: "uncovered_buckets",
-        };
+      const blockAtRecheck = planBlockReason(recheck);
+      if (blockAtRecheck) {
+        await deps.recordError(userId, blockAtRecheck.detail);
+        return { ...blockedResult(userId, "purging", dryRun, recheck, blockAtRecheck.stopped), plan };
       }
       if (!emptyStateSatisfied(recheck.refs)) {
         await deps.recordError(userId, `not empty after purge: ${recheck.refs.map(storageObjectKey).join(",")}`);
