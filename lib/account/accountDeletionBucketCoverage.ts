@@ -13,6 +13,32 @@
 //   등록 RPC 가 실패한 orphan 은, 사용자 prefix 로도 키잉되지 않는 버킷에서는 이 경로로
 //   찾히지 않는다. prefix 커버 버킷(아래 5종)만이 orphan 까지 포함해 완전하다.
 //   기존 orphan 정리는 이번 회차 범위 밖이다(지시서 §0).
+//
+// ── W5-c §3-3 owner_id 채움률 실측(staging, 2026-07-26, 13버킷 전수) ────────────────
+//   bucket                                   objects  with_owner  null_owner
+//   community-post-images                        64        64         0
+//   connection-note-ink                           0         0         0
+//   custom-order-deliverables                     2         2         0
+//   custom-order-message-attachments              0         0         0
+//   custom-request-application-attachments        2         2         0
+//   custom-request-post-attachments               2         2         0
+//   individual-question-attachments               5         0         5   ← 등록 RPC 경유(owner 미기록)
+//   profile-avatars                               1         1         0
+//   question-room-attachments                     7         7         0
+//   scan-annotations                              0         0         0
+//   shortform-thumbnails                          0         0         0
+//   shortform-videos                              0         0         0
+//   student-id-images                             1         1         0
+//
+//   → with_owner > 0 버킷 존재 = 지시서 §3-3 **(b) 분기**. 수집은
+//     DB 조인 refs ∪ owner_id=대상(전 버킷) ∪ prefix ∪ 유저-스코프 전 버킷 인벤토리로
+//     확장되고(classifyDeletionPlan), OWNERSHIP_CONFLICT / UNATTRIBUTABLE ≥ 1 이면
+//     미커버 버킷과 동일 관문에서 real-run 시작 0 · storage_purged 전이 0 이다.
+//     owner 부재(null)는 충돌 신호가 아니다 — individual-question-attachments 실측이
+//     보여주듯 정상 등록 경로도 owner 를 남기지 않는다(DB 조인이 소유의 정본).
+//   ★ owner 증거의 런타임 소스 실측: storage 스키마는 PostgREST 미노출(PGRST106) —
+//     증거를 읽지 못하는 동안 워커는 fail-closed 로 정지한다. 상세는
+//     accountDeletionAdapters.makeGatherOwnerEvidence 주석.
 
 /** 소유자 컬럼을 **직접** 가진 (버킷, 테이블, 소유자 컬럼, 경로 컬럼) 매핑. */
 export type DbRefSource = {

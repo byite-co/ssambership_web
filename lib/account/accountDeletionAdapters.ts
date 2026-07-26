@@ -6,6 +6,7 @@ import {
   normalizeStoredObjectPath,
   storageObjectKey,
   type StorageObjectRef,
+  type StorageOwnerEvidence,
 } from "@/lib/account/accountDeletionPurgePlan";
 import {
   ACCOUNT_DELETION_ALL_BUCKETS,
@@ -325,6 +326,81 @@ export function makeListInventory(
 }
 
 /**
+ * W5-c §3-3 (b): storage.objects 실측 owner 증거 수집.
+ *
+ * 반환 행(§ classifyDeletionPlan 입력):
+ *   ① owner_id = 대상 uid (전 버킷)          — DB 미등록 orphan 의 owner 귀속 수집
+ *   ② name LIKE '{uid}/%' (전 버킷)          — 유저-스코프 전 버킷 인벤토리(+owner)
+ *   ③ 인자 refs 의 (bucket, name) owner 실측 — OWNERSHIP_CONFLICT 판정용
+ *
+ * ★ 데이터 소스 실측(staging lbeqxarxothkmzqvpudy, 2026-07-26):
+ *   `storage` 스키마는 PostgREST 에 노출되어 있지 않다(PGRST106 —
+ *   "Only the following schemas are exposed: public, graphql_public").
+ *   따라서 이 어댑터는 현재 구성에서 **예외를 던지고**, 워커는 계획 산출 실패 →
+ *   record_error → 재시도로 fail-closed 정지한다(파괴 0). 이것은 의도된 방향이다 —
+ *   owner 증거 없이 분류를 통과시키는 fail-open 이 유일한 대안이기 때문이다.
+ *   해제 경로: 프로젝트 API 설정(Exposed schemas)에 `storage` 추가(코드 무변경) 또는
+ *   후속 회차에서 전용 SECURITY DEFINER RPC 신설(이번 회차 SQL 예산은 179·180 뿐 — §0).
+ *   Storage REST API(list/info)는 owner 를 반환하지 않아 대안이 되지 못한다(실측).
+ */
+export function makeGatherOwnerEvidence(
+  admin: SupabaseClient,
+): (userId: string, refs: StorageObjectRef[]) => Promise<StorageOwnerEvidence[]> {
+  const table = () => admin.schema("storage").from("objects");
+
+  const pushRow = (out: StorageOwnerEvidence[], row: Record<string, unknown>) => {
+    const bucket = typeof row.bucket_id === "string" ? row.bucket_id : "";
+    const path = typeof row.name === "string" ? row.name : "";
+    if (!bucket || !path) return;
+    out.push({ bucket, path, ownerId: typeof row.owner_id === "string" ? row.owner_id : null });
+  };
+
+  return async (userId, refs) => {
+    const out: StorageOwnerEvidence[] = [];
+
+    // ①+② owner 귀속 ∪ 유저-스코프 전 버킷 인벤토리 (페이지네이션 완주).
+    //     PostgREST or 구문의 like 와일드카드는 `*` 다.
+    for (let offset = 0; ; offset += DB_PAGE_SIZE) {
+      const { data, error } = await table()
+        .select("bucket_id, name, owner_id")
+        .or(`owner_id.eq.${userId},name.like.${userId}/*`)
+        .range(offset, offset + DB_PAGE_SIZE - 1);
+      if (error) {
+        // 증거를 못 읽은 채 분류하면 충돌·판별불능이 전부 "없음"으로 보인다 — 실패시킨다.
+        throw new Error(`gatherOwnerEvidence(owned) failed: ${error.message}`);
+      }
+      const page = (data ?? []) as unknown as Array<Record<string, unknown>>;
+      for (const row of page) pushRow(out, row);
+      if (page.length < DB_PAGE_SIZE) break;
+    }
+
+    // ③ 후보 refs 의 owner 실측 — 버킷별 IN 청크.
+    const byBucket = new Map<string, string[]>();
+    for (const ref of refs) {
+      if (!ref?.bucket || !ref?.path) continue;
+      const list = byBucket.get(ref.bucket) ?? [];
+      list.push(ref.path.replace(/^\/+/, ""));
+      byBucket.set(ref.bucket, list);
+    }
+    for (const [bucket, paths] of byBucket) {
+      for (const part of chunk(paths, IN_CHUNK)) {
+        const { data, error } = await table()
+          .select("bucket_id, name, owner_id")
+          .eq("bucket_id", bucket)
+          .in("name", part);
+        if (error) {
+          throw new Error(`gatherOwnerEvidence(${bucket}) failed: ${error.message}`);
+        }
+        for (const row of (data ?? []) as unknown as Array<Record<string, unknown>>) {
+          pushRow(out, row);
+        }
+      }
+    }
+    return out;
+  };
+}
+
+/**
  * 수집 경로가 없어 계획에 담을 수 없는 버킷.
  * 하드코딩 목록이 아니라 **전 버킷 − (prefix 커버 ∪ DB 조인 커버)** 로 계산한다 —
  * 새 버킷이 전략 없이 추가되면 자동으로 여기 걸려 real-run 이 막힌다(§3-4).
@@ -410,6 +486,7 @@ export function buildDeletionDeps(
     revokeSessions: makeRevokeSessions(admin),
     gatherDbRefs: makeGatherDbRefs(admin),
     listInventory: makeListInventory(admin),
+    gatherOwnerEvidence: makeGatherOwnerEvidence(admin),
     uncoveredBuckets: makeUncoveredBuckets(),
     removeObjects: makeRemoveObjects(admin),
     forfeitWalletAndAnonymize: makeForfeitWalletAndAnonymize(admin),

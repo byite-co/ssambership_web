@@ -9,15 +9,23 @@
 //   §3-2 pending→locked 는 raw advance 가 아니라 **동의·잔액 검증과 한 트랜잭션인**
 //        beginLocked(176 account_deletion_begin_locked)로만 간다(TOCTOU 0).
 //   §3-4 수집 경로가 없는 버킷이 남아 있으면 real-run 시작 0 · storage_purged 전이 0.
+//
+// W5-c §3-3 (b): storage.objects.owner_id 실측(with_owner > 0 버킷 존재)에 따라
+//   계획 산출이 분류를 동반한다 — OWNERSHIP_CONFLICT 또는 UNATTRIBUTABLE ≥ 1 이면
+//   미커버 버킷과 **동일 관문**에서 real-run 시작 0 · purging→storage_purged 전이 0
+//   · record_error 기록. 충돌·판별불능 객체는 삭제 대상(refs)에 들어가지 않는다.
 
 import {
-  buildDeletionPlan,
+  buildStoragePurgePlan,
+  classifyDeletionPlan,
   emptyStateSatisfied,
   purgeResidue,
   storageObjectKey,
+  type ClassifiedDeletionPlan,
   type StorageObjectRef,
-  type StoragePurgePlan,
+  type StorageOwnerEvidence,
 } from "./accountDeletionPurgePlan.ts";
+import { ACCOUNT_DELETION_PREFIX_BUCKETS } from "./accountDeletionBucketCoverage.ts";
 
 export type DeletionJob = { userId: string; state: string; dryRun: boolean };
 
@@ -48,6 +56,14 @@ export type DeletionDeps = {
   gatherDbRefs: (userId: string) => Promise<StorageObjectRef[]>;
   /** 버킷 인벤토리(유저 prefix, 페이지네이션 완료본). */
   listInventory: (userId: string) => Promise<StorageObjectRef[]>;
+  /**
+   * storage.objects 실측 owner 증거(§3-3 (b)):
+   *   ① owner_id = 대상 uid (전 버킷) — DB 미등록 orphan 의 owner 귀속 수집
+   *   ② name 이 `{uid}/` 로 시작하는 행 (전 버킷 유저-스코프 인벤토리)
+   *   ③ 인자 refs(DB 조인 ∪ prefix 인벤토리 후보)의 owner lookup — 충돌 판정용
+   * 읽지 못하면 예외로 실패해야 한다(증거 없이 계획을 세우면 분류가 공허해진다 — fail-closed).
+   */
+  gatherOwnerEvidence: (userId: string, refs: StorageObjectRef[]) => Promise<StorageOwnerEvidence[]>;
   /** 수집 경로가 없어 계획에 담을 수 없는 버킷. 비어 있지 않으면 real-run 금지(§3-4). */
   uncoveredBuckets: () => Promise<readonly string[]>;
   /** 실제 삭제 — 삭제된 객체 key 목록 반환. */
@@ -66,6 +82,9 @@ export type DeletionRunResult = {
   dryRun: boolean;
   plan?: StorageObjectRef[];
   uncoveredBuckets?: string[];
+  /** §3-3 (b) 차단 사유 개수(있을 때만) — 상세 목록은 record_error 와 plan 산출로 남는다. */
+  ownershipConflicts?: number;
+  unattributable?: number;
   stopped?: string;
 };
 
@@ -81,13 +100,52 @@ function log(deps: DeletionDeps, msg: string, meta?: Record<string, unknown>) {
 export async function planAccountDeletion(
   userId: string,
   deps: DeletionDeps
-): Promise<StoragePurgePlan> {
+): Promise<ClassifiedDeletionPlan> {
   const [dbRefs, inventory, uncoveredBuckets] = await Promise.all([
     deps.gatherDbRefs(userId),
     deps.listInventory(userId),
     deps.uncoveredBuckets(),
   ]);
-  return buildDeletionPlan({ dbRefs, inventory, uncoveredBuckets });
+  // owner lookup 은 후보(합집합·dedup) 기준 — 증거가 없는 후보는 "owner 미실측"으로 남는다.
+  const ownerEvidence = await deps.gatherOwnerEvidence(
+    userId,
+    buildStoragePurgePlan(dbRefs, inventory)
+  );
+  return classifyDeletionPlan({
+    userId,
+    dbRefs,
+    inventory,
+    ownerEvidence,
+    uncoveredBuckets,
+    prefixBuckets: ACCOUNT_DELETION_PREFIX_BUCKETS,
+  });
+}
+
+/**
+ * §3-3 (b) 차단 판정 — 미커버 버킷 차단과 동일 관문에서 쓰인다.
+ * 충돌이 판별불능보다 먼저다(둘 다 있으면 사람이 볼 사안 중 더 강한 신호를 앞세운다).
+ */
+function classificationBlocker(
+  plan: ClassifiedDeletionPlan
+): { stopped: "ownership_conflict" | "unattributable"; detail: string } | null {
+  if (plan.ownershipConflicts.length > 0) {
+    const sample = plan.ownershipConflicts
+      .slice(0, 3)
+      .map((c) => `${c.bucket}/${c.path}`)
+      .join(",");
+    return {
+      stopped: "ownership_conflict",
+      detail: `ownership_conflict ${plan.ownershipConflicts.length}: ${sample}`,
+    };
+  }
+  if (plan.unattributable.length > 0) {
+    const sample = plan.unattributable.slice(0, 3).map(storageObjectKey).join(",");
+    return {
+      stopped: "unattributable",
+      detail: `unattributable ${plan.unattributable.length}: ${sample}`,
+    };
+  }
+  return null;
 }
 
 /**
@@ -102,6 +160,8 @@ export async function planAccountDeletionJob(
   log(deps, "purge_plan", {
     count: plan.refs.length,
     uncovered: plan.uncoveredBuckets.length,
+    ownershipConflicts: plan.ownershipConflicts.length,
+    unattributable: plan.unattributable.length,
     dryRun: true,
   });
   return {
@@ -111,6 +171,8 @@ export async function planAccountDeletionJob(
     dryRun: true,
     plan: plan.refs,
     uncoveredBuckets: plan.uncoveredBuckets,
+    ownershipConflicts: plan.ownershipConflicts.length,
+    unattributable: plan.unattributable.length,
     stopped: "dry_run",
   };
 }
@@ -143,6 +205,25 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
       };
     }
 
+    // ── §3-3 (b): real-run 시작 전 분류 게이트 — 충돌·판별불능이 있으면 계정을 잠그지도 않는다.
+    //    (locked 이후 재개된 job 은 purging 단계의 같은 분류가 파괴 전에 다시 막는다.)
+    if (state === "pending") {
+      const preflight = await planAccountDeletion(userId, deps);
+      const blocker = classificationBlocker(preflight);
+      if (blocker) {
+        await deps.recordError(userId, blocker.detail);
+        return {
+          ok: false,
+          userId,
+          finalState: state,
+          dryRun,
+          ownershipConflicts: preflight.ownershipConflicts.length,
+          unattributable: preflight.unattributable.length,
+          stopped: blocker.stopped,
+        };
+      }
+    }
+
     // pending → locked: 동의·잔액·취소창 검증과 같은 트랜잭션(§3-5-A(d)).
     if (state === "pending") {
       const begun = await deps.beginLocked(userId);
@@ -166,9 +247,23 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
       if (await deps.advance(userId, "locked", "purging")) state = "purging";
     }
 
-    // purging: 삭제 계획 = DB refs ∪ 인벤토리(실행·계획 공용 산출 함수).
+    // purging: 삭제 계획 = DB refs ∪ owner 귀속 ∪ 인벤토리(실행·계획 공용 산출 함수).
     if (state === "purging") {
       const planned = await planAccountDeletion(userId, deps);
+      // §3-3 (b): 분류 차단은 removeObjects 보다 먼저 — 충돌·판별불능이 있으면 아무것도 지우지 않는다.
+      const blockerAtPlan = classificationBlocker(planned);
+      if (blockerAtPlan) {
+        await deps.recordError(userId, blockerAtPlan.detail);
+        return {
+          ok: false,
+          userId,
+          finalState: "purging",
+          dryRun,
+          ownershipConflicts: planned.ownershipConflicts.length,
+          unattributable: planned.unattributable.length,
+          stopped: blockerAtPlan.stopped,
+        };
+      }
       const plan = planned.refs;
       log(deps, "purge_plan", { count: plan.length, dryRun });
 
@@ -191,6 +286,21 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
           plan,
           uncoveredBuckets: recheck.uncoveredBuckets,
           stopped: "uncovered_buckets",
+        };
+      }
+      // §3-3 (b): 재검증 시점의 충돌·판별불능도 storage_purged 전이를 막는다(미커버와 동일 관문).
+      const blockerAtRecheck = classificationBlocker(recheck);
+      if (blockerAtRecheck) {
+        await deps.recordError(userId, blockerAtRecheck.detail);
+        return {
+          ok: false,
+          userId,
+          finalState: "purging",
+          dryRun,
+          plan,
+          ownershipConflicts: recheck.ownershipConflicts.length,
+          unattributable: recheck.unattributable.length,
+          stopped: blockerAtRecheck.stopped,
         };
       }
       if (!emptyStateSatisfied(recheck.refs)) {

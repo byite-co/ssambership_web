@@ -42,6 +42,10 @@ function makeDeps(calls: Calls, over: Partial<DeletionDeps> = {}): DeletionDeps 
       calls.push("listInventory");
       return [] as StorageObjectRef[];
     },
+    gatherOwnerEvidence: async () => {
+      calls.push("gatherOwnerEvidence");
+      return [];
+    },
     uncoveredBuckets: async () => {
       calls.push("uncoveredBuckets");
       return [];
