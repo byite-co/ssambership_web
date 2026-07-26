@@ -4,8 +4,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildDeletionPlan,
   buildStoragePurgePlan,
   emptyStateSatisfied,
+  normalizeStoredObjectPath,
   purgeResidue,
   storageObjectKey,
 } from "../accountDeletionPurgePlan.ts";
@@ -50,4 +52,57 @@ test("삭제 결과 검사: 계획 대비 미삭제 잔여 반환", () => {
   const residue = purgeResidue(plan, removed);
   assert.deepEqual(residue.map(storageObjectKey), ["b/y"]);
   assert.deepEqual(purgeResidue(plan, ["b/x", "b/y"]), []);
+});
+
+// ── W5 §3-1 / §3-3: 계획 정본 + 저장 참조 정규화 ────────────────────────────
+
+test("buildDeletionPlan: refs 와 미커버 목록을 함께 담는다(정렬·dedup)", () => {
+  const plan = buildDeletionPlan({
+    dbRefs: [{ bucket: "shortform-videos", path: "u/v.mp4" }],
+    inventory: [{ bucket: "profile-avatars", path: "u/a.png" }],
+    uncoveredBuckets: ["z-bucket", "a-bucket", "z-bucket", ""],
+  });
+  assert.deepEqual(plan.refs.map(storageObjectKey), [
+    "profile-avatars/u/a.png",
+    "shortform-videos/u/v.mp4",
+  ]);
+  assert.deepEqual(plan.uncoveredBuckets, ["a-bucket", "z-bucket"]);
+});
+
+test("정규화: `bucket/path` ref 에서 버킷 접두를 벗긴다", () => {
+  assert.equal(
+    normalizeStoredObjectPath("community-post-images", "community-post-images/u1/a.png"),
+    "u1/a.png"
+  );
+});
+
+test("정규화: 과거 서명 URL 에서 경로만 뽑고 token 은 버린다", () => {
+  const signed =
+    "https://x.supabase.co/storage/v1/object/sign/shortform-videos/u1/v.mp4?token=SECRET&x=1";
+  assert.equal(normalizeStoredObjectPath("shortform-videos", signed), "u1/v.mp4");
+});
+
+test("정규화: 맨 경로(uuid 시작)는 그대로 통과한다", () => {
+  assert.equal(
+    normalizeStoredObjectPath(
+      "individual-question-attachments",
+      "a3f6404f-e4bd-47ec-8d37-eb861bb8140d/582fa883-file.jpg"
+    ),
+    "a3f6404f-e4bd-47ec-8d37-eb861bb8140d/582fa883-file.jpg"
+  );
+});
+
+test("정규화: 다른 버킷 ref 는 null — 과삭제 방지", () => {
+  assert.equal(normalizeStoredObjectPath("shortform-videos", "community-post-images/u1/a.png"), null);
+  assert.equal(
+    normalizeStoredObjectPath("shortform-videos", "https://x.supabase.co/object/sign/other/u1/a.png"),
+    null
+  );
+});
+
+test("정규화: 빈 값·null·공백은 null", () => {
+  assert.equal(normalizeStoredObjectPath("b", null), null);
+  assert.equal(normalizeStoredObjectPath("b", undefined), null);
+  assert.equal(normalizeStoredObjectPath("b", "   "), null);
+  assert.equal(normalizeStoredObjectPath("", "b/x.png"), null);
 });
