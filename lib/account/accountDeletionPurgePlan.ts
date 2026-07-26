@@ -19,14 +19,54 @@ export type StorageObjectRef = { bucket: string; path: string };
 
 /**
  * storage.objects.owner_id 실측 결과(어댑터가 공급).
- *   ownedByUser: owner_id = 대상 uid 인 객체 전수(전 버킷) — 수집 합집합의 owner 축.
- *   owners: 수집 범위 객체의 owner_id. 값 null = 행은 있으나 owner 미기록,
- *           엔트리 부재 = storage.objects 행 자체가 확인되지 않음(이미 삭제된 DB ref 등).
+ *   ownedByUser: owner_id = 대상 uid 인 객체 전수(감사 대상 버킷) — 수집 합집합의 owner 축.
+ *   owners: 객체별 owner 실측. 값 null = 행은 있으나 owner 미기록,
+ *           엔트리 부재 = owner 가 확인되지 않음(행 부재·미기록·타인 소유 구분 없음).
+ *
+ * ★ 181 이후 실어댑터의 공급 범위(W5-e E2): PostgREST 가 storage 스키마를 노출하지
+ *   않아(PGRST106) 조회를 service_role 전용 RPC `account_deletion_storage_owner_refs`
+ *   로 전환했다. RPC 는 **대상 uid 소유 객체의 (bucket_id, name)만** 반환하므로
+ *   owners 맵에는 owner = 대상 uid 인 엔트리만 실린다 — 타인 owner 값·null owner 행은
+ *   런타임에 더 이상 관측되지 않는다(엔트리 부재로 수렴). 그 결과:
+ *     · DB 조인 ref 의 타인-owner 이상치는 OWNERSHIP_CONFLICT 대신 "owner 미확인 →
+ *       정상 삭제 대상"으로 분류된다(수집 술어가 전부 본인-업로드 조인이라 이 조합은
+ *       등록 이상에서만 발생 — W5-e 지시서가 반환 2컬럼·owner 미반환을 명시 잠금).
+ *     · 아래 buildDeletionPlan 의 4분류·차단 관문 자체는 불변 — owner 값을 공급하는
+ *       어댑터가 다시 생기면 그대로 동작한다.
  */
 export type ObjectOwnership = {
   ownedByUser: readonly StorageObjectRef[];
   owners: ReadonlyMap<string, string | null>;
 };
+
+/**
+ * 181 RPC `account_deletion_storage_owner_refs` 반환 행 → ObjectOwnership 매핑(순수).
+ * 감사 대상 버킷 밖의 행은 버리고, (bucket, name) 중복은 1회만 싣는다.
+ * bucket_id·name 이 문자열이 아니거나 빈 문자열이면 행을 버린다(방어적 — RPC 형상은
+ * TABLE(bucket_id text, name text) 로 고정이지만 런타임 데이터를 신뢰하지 않는다).
+ */
+export type StorageOwnerRefRow = { bucket_id?: string | null; name?: string | null };
+
+export function buildObjectOwnershipFromOwnerRefRows(
+  userId: string,
+  rows: readonly StorageOwnerRefRow[],
+  auditedBuckets: readonly string[],
+): ObjectOwnership {
+  const audited = new Set(auditedBuckets);
+  const ownedByUser: StorageObjectRef[] = [];
+  const owners = new Map<string, string | null>();
+  for (const row of rows) {
+    if (typeof row.bucket_id !== "string" || row.bucket_id === "") continue;
+    if (typeof row.name !== "string" || row.name === "") continue;
+    if (!audited.has(row.bucket_id)) continue;
+    const ref: StorageObjectRef = { bucket: row.bucket_id, path: row.name };
+    const k = key(ref);
+    if (owners.has(k)) continue;
+    ownedByUser.push(ref);
+    owners.set(k, userId);
+  }
+  return { ownedByUser, owners };
+}
 
 /** DB 조인으로 수집됐지만 storage 소유자가 다른 사용자로 실측된 객체 — 삭제 금지·차단. */
 export type OwnershipConflict = StorageObjectRef & { ownerId: string };
