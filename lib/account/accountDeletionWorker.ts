@@ -8,7 +8,7 @@ import {
   purgeResidue,
   storageObjectKey,
   type StorageObjectRef,
-} from "@/lib/account/accountDeletionPurgePlan";
+} from "./accountDeletionPurgePlan.ts";
 
 export type DeletionJob = { userId: string; state: string; dryRun: boolean };
 
