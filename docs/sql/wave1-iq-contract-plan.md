@@ -562,7 +562,7 @@ v19·v20 의 클라이언트측 AMBIGUOUS 방어는 서버 실태와 무관하�
 | 169 | `169_iq_attachment_storage_delete_policy.sql` | ✅ | `2026-07-25 18:56:14` | `iqa_storage_delete_unregistered_owner` 정책 실재 · `iqa_storage_*` 정책 4건 |
 | 170 | `170_review_eligibility_relationship_based.sql` | ✅ | `2026-07-25 19:00:59` | 자격 쌍 **0 → 1** · 구 3경로 집계 로직 제거 확인 |
 | 171 | `171_reviews_author_update_and_updated_at.sql` | ✅ | `2026-07-25 19:03:43` | `reviews.updated_at` 실재 · 정책 7건 · 작성자 공격 6종 전부 거부 |
-| 172 | (파일 없음) | **`DEFERRED_W4`** | — | 승인 백필·부분 유니크 인덱스 **둘 다 W4 이연**. `mentor_school_verifications` 0행·인덱스 3건 무변경 |
+| 172 | (파일 없음) | **`DEFERRED_W4_HISTORICAL_NO_BACKFILL`** | — | 번호 172 는 **영구 결번**(파일 신설 금지). 부분 유니크 인덱스는 W4 에서 **174** 로 처리했고, **과거 승인 백필은 하지 않는다**(대상 0행 — W4 범위 밖). 이 행은 그대로 유지한다 |
 | 173 | `173_reviews_moderated_author_edit_guard.sql` | ✅ | `2026-07-25 20:4x` (W3b 라운드) | 정책 **7건 유지**(신설·삭제 0 · `reviews_update_author.qual` 만 변경) · 트리거 작성자 분기 가드 **1개** · 2계층 공격 테스트 14항 전건 합격 |
 
 > 173 은 W3b 보정 라운드에서 추가됐다. 172 는 **건너뛴 번호**이며 위 행의 `DEFERRED_W4` 는 그대로 유지된다.
