@@ -60,33 +60,11 @@ export async function uploadQuestionRoomAttachment(
   return { isImage, filename: name, storagePath: path, mime, error: null };
 }
 
-/**
- * 첨부 v2 계약(§2-1): `question_attachments` 행이 첨부의 유일한 정본 — insert 는 필수.
- * 실패 시 호출측이 방금 올린 storage 객체를 정리(remove)하고 사용자에게 에러를 돌려준다.
- */
-export async function insertQuestionAttachmentRecord(
-  supabase: SupabaseClient,
-  params: {
-    threadId: string;
-    messageId: string | null;
-    authorId: string;
-    storagePath: string;
-    fileName: string | null;
-    mimeType: string | null;
-  }
-): Promise<{ error: string | null }> {
-  const { error } = await supabase.from("question_attachments").insert({
-    thread_id: params.threadId,
-    message_id: params.messageId,
-    author_id: params.authorId,
-    storage_path: params.storagePath,
-    file_name: params.fileName,
-    mime_type: params.mimeType,
-  });
-  return { error: error ? error.message : null };
-}
+// P1-8A: `question_attachments` 행 등록은 `qna_register_attachment` RPC 로 일원화(경로 thread-id 검증 +
+//  멘토 첫 첨부 answered 전이 + exactly-once 알림 원자화). 구 직접 INSERT helper(insertQuestionAttachmentRecord)
+//  는 제거됐다. 업로드/보상 삭제만 이 모듈이 담당한다.
 
-/** 행 insert 실패 시 고아 객체 정리(best-effort — 실패해도 사용자 흐름은 막지 않음). */
+/** 행 등록 실패 시 방금 올린 미등록 객체 정리(best-effort — 실패해도 사용자 흐름은 막지 않음). */
 export async function removeQuestionRoomAttachmentObjectBestEffort(
   supabase: SupabaseClient,
   storagePath: string

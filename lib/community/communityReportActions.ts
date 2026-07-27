@@ -1,7 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { revalidateCommunityPaths } from "@/lib/community/communityRevalidate";
 import { getServerAuthUser } from "@/lib/auth/getCurrentUser";
 import { createClient } from "@/lib/supabase/server";
 import { isCommunityPostUuid } from "@/lib/community/communityQueries";
@@ -86,15 +86,14 @@ export async function submitCommunityContentReportAction(formData: FormData) {
     redirect(applyReportSearch(returnPath, "err", denied ? "denied" : "save"));
   }
 
-  revalidatePath("/admin/reports");
-  revalidatePath("/admin");
-  revalidatePath("/community/board");
-  revalidatePath(`/community/board/${targetId}`);
-  revalidatePath("/community/shortform");
-  revalidatePath(`/community/shortform/${targetId}`);
-  revalidatePath("/community/shorts");
-  revalidatePath(`/community/shorts/${targetId}`);
-  revalidatePath("/community");
+  // 매트릭스: 신고 접수 × (공개 목록·상세·관리자 큐). 신고만으로 노출은 바뀌지 않지만
+  // 관리자 검수 큐(`/admin/reports`·`/admin/moderation`)는 즉시 갱신돼야 한다.
+  revalidateCommunityPaths({
+    mutation: "report_create",
+    kind: variant === "shortform" ? "shortform" : "board",
+    postId: targetId,
+    extraPaths: ["/admin"],
+  });
 
   redirect(applyReportSearch(returnPath, "ok"));
 }

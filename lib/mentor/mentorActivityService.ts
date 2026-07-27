@@ -3,7 +3,6 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { computeProratedRefundEstimate } from "@/lib/subscribe/subscriptionRefundProration";
-import { insertNotificationBestEffort } from "@/lib/notifications/notificationInsert";
 import { refreshSubscriptionSettlementItemsBestEffort } from "@/lib/mentor/subscriptionSettlementItems";
 import {
   MENTOR_TERMINATION_NOTICE_DAYS,
@@ -122,19 +121,8 @@ export async function startMentorTermination(
 
   await deactivateMentorPlans(admin, mentorId);
 
+  // 구독 학생 알림은 158 트리거(mentor_profiles activity_status→terminating 전이)가 원자적으로 fan-out 한다.
   const subs = await activeSubscriptionsForMentor(admin, mentorId);
-  for (const sub of subs) {
-    const studentId = str(sub.student_id);
-    if (!studentId) continue;
-    await insertNotificationBestEffort({
-      recipientUserId: studentId,
-      type: "mentor_termination_notice",
-      title: "멘토 활동 종료 예정",
-      body: `구독 중인 멘토가 활동을 종료합니다. 2주 후(${effectiveAt.slice(0, 10)}) 구독이 정리되며 남은 기간은 환불됩니다. 그때까지는 정상 이용할 수 있어요.`,
-      link: "/subscriptions",
-      metadata: { mentor_id: mentorId, effective_at: effectiveAt },
-    });
-  }
 
   await logEvent(admin, mentorId, "termination_requested", null, {
     effective_at: effectiveAt,
@@ -199,6 +187,8 @@ export async function finalizeMentorTermination(
     });
 
     const paymentId = str(billing?.payment_id) ?? str(sub.payment_id);
+    // 정본 연결: 이 환불이 대응하는 current billing event(id)를 기록한다(150 FK).
+    const billingEventId = str(billing?.id) ?? str(sub.last_billing_event_id);
     if (estimate.amountCents > 0) {
       const { error: insErr } = await admin.from("refunds").insert({
         user_id: studentId,
@@ -206,19 +196,13 @@ export async function finalizeMentorTermination(
         status: "pending",
         payment_id: paymentId,
         subscription_id: subscriptionId,
+        billing_event_id: billingEventId,
         request_type: "subscription_mentor_suspended",
         reason: "멘토 활동 종료에 따른 잔여기간 환불(잔여 100%)",
       });
+      // 환불 접수 알림은 158 트리거(refunds INSERT, request_type=subscription_mentor_suspended)가 원자적으로 발행한다.
       if (!insErr) {
         refundsCreated += 1;
-        await insertNotificationBestEffort({
-          recipientUserId: studentId,
-          type: "mentor_termination_refund",
-          title: "멘토 활동 종료 — 환불 접수",
-          body: `멘토 활동 종료로 남은 기간 환불(${estimate.amountCents.toLocaleString("ko-KR")}캐시)이 접수되었습니다. 관리자 검토 후 처리됩니다.`,
-          link: "/support/refunds",
-          metadata: { mentor_id: mentorId, subscription_id: subscriptionId },
-        });
       }
     }
 
@@ -278,11 +262,11 @@ export async function startMentorPause(
   const { error } = await admin.from("mentor_profiles").update(patch).eq("user_id", mentorId);
   if (error) return { ok: false, error: error.message };
 
-  // 쉰 일수만큼 구독 기간 연장(과금 보호)
+  // 쉰 일수만큼 구독 기간 연장(과금 보호).
+  // 학생 알림은 158 트리거(mentor_profiles activity_status→paused 전이)가 원자적으로 fan-out 한다.
   const subs = await activeSubscriptionsForMentor(admin, mentorId);
   for (const sub of subs) {
     const subscriptionId = str(sub.id);
-    const studentId = str(sub.student_id);
     if (!subscriptionId) continue;
     const newPeriodEnd = addDaysIso(str(sub.current_period_end), days, now);
     const newNextBilling = sub.next_billing_at ? addDaysIso(str(sub.next_billing_at), days, now) : newPeriodEnd;
@@ -290,16 +274,6 @@ export async function startMentorPause(
       .from("subscriptions")
       .update({ current_period_end: newPeriodEnd, next_billing_at: newNextBilling })
       .eq("id", subscriptionId);
-    if (studentId) {
-      await insertNotificationBestEffort({
-        recipientUserId: studentId,
-        type: "mentor_pause_notice",
-        title: "멘토 일시 휴식 안내",
-        body: `구독 중인 멘토가 ${pauseUntil.slice(0, 10)}까지 일시 휴식합니다. 쉰 기간만큼 구독 기간이 자동 연장됩니다.`,
-        link: "/subscriptions",
-        metadata: { mentor_id: mentorId, pause_until: pauseUntil, extended_days: days },
-      });
-    }
   }
 
   await logEvent(
@@ -317,8 +291,7 @@ export async function startMentorPause(
 /** 멘토 조기 복귀(또는 자동 복귀 확정). */
 export async function resumeMentorActivity(
   admin: Admin,
-  mentorId: string,
-  now: Date = new Date()
+  mentorId: string
 ): Promise<MentorActivityResult> {
   const profile = await loadMentorProfile(admin, mentorId);
   if (!profile) return { ok: false, error: "멘토 프로필을 찾을 수 없습니다." };

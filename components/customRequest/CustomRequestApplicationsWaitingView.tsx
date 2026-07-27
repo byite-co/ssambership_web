@@ -107,11 +107,15 @@ export function CustomRequestApplicationsWaitingView(props: CustomRequestApplica
                 <WaitingCountdown deadlineIso={post.deadlineIso} className="mt-2" />
               </div>
             </div>
+            {/* P2-28: 알림 설정 기능(P2-17)이 아직 없어 무동작 버튼이었다 → 명시적 disabled + 사유 표시. */}
             <button
               type="button"
-              className="btn btn-ghost mt-4 !min-h-[40px] !border-[#2563EB]/30 !bg-[#2563EB]/5 !text-[#2563EB] hover:!bg-[#2563EB]/10"
+              disabled
+              aria-disabled="true"
+              title="알림 설정 기능은 준비 중이에요."
+              className="btn btn-ghost mt-4 !min-h-[40px] cursor-not-allowed !border-slate-200 !bg-slate-50 !text-slate-400"
             >
-              알림 설정
+              알림 설정 (준비 중)
             </button>
           </section>
 
@@ -211,8 +215,15 @@ export function CustomRequestApplicationsWaitingView(props: CustomRequestApplica
             </ul>
           </section>
 
-          <button type="button" className="btn btn-primary w-full !min-h-[44px] !text-sm">
-            새로운 지원 알림 설정하기
+          {/* P2-28: 지원 알림 설정 기능 미구현 → 무동작 대신 명시적 disabled + 사유. */}
+          <button
+            type="button"
+            disabled
+            aria-disabled="true"
+            title="지원 알림 설정 기능은 준비 중이에요."
+            className="btn btn-primary w-full !min-h-[44px] !text-sm cursor-not-allowed !bg-slate-200 !text-slate-500"
+          >
+            새로운 지원 알림 설정하기 (준비 중)
           </button>
         </aside>
       </div>

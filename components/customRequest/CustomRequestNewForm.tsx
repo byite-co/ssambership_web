@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { submitCustomRequestNew } from "@/lib/customRequest/customRequestComposeActions";
 import { CustomRequestFlowStepper } from "@/components/customRequest/CustomRequestFlowStepper";
 import { CustomRequestPolicyNotice } from "@/components/customRequest/CustomRequestPolicyNotice";

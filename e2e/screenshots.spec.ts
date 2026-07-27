@@ -13,11 +13,14 @@ import type { Page } from "@playwright/test";
 import { ACCOUNTS, login } from "./helpers/auth";
 import { admin } from "./helpers/db";
 
-type Shot = [name: string, path: string | null];
+/** firstId 에서 쓰는 최소 표면 — supabase 빌더 깊은 제네릭 대신 구조 타입으로 고정. */
+type FirstIdQuery = {
+  eq(column: string, value: unknown): FirstIdQuery;
+} & PromiseLike<{ data: Array<{ id?: string }> | null }>;
 
-async function firstId(table: string, filter?: (q: any) => any): Promise<string | null> {
+async function firstId(table: string, filter?: (q: FirstIdQuery) => FirstIdQuery): Promise<string | null> {
   try {
-    let q = admin().from(table).select("id").limit(1);
+    let q = admin().from(table).select("id").limit(1) as unknown as FirstIdQuery;
     if (filter) q = filter(q);
     const { data } = await q;
     const row = (data as Array<{ id?: string }> | null)?.[0];

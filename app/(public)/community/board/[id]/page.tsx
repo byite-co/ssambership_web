@@ -8,6 +8,7 @@ import {
   loadBoardComments,
 } from "@/lib/community/communityBoardQueries";
 import { isCommunityPostUuid } from "@/lib/community/communityQueries";
+import { authorModerationNotice } from "@/lib/community/communityModerationVisibility";
 import { BoardViewTracker } from "@/components/community/BoardViewTracker";
 import { loadFavoriteMentorIdsForUser } from "@/lib/mentor/mentorFavorites";
 import { BlockUserButton } from "@/components/blocks/BlockUserButton";
@@ -37,7 +38,7 @@ export default async function CommunityBoardDetailPage(props: Props) {
   let loadError: string | null = null;
 
   if (idOk) {
-    const res = await getCommunityBoardPost(supabase, id);
+    const res = await getCommunityBoardPost(supabase, id, user?.id ?? null);
     if (res.error) {
       loadError = "\uAC8C\uC2DC\uAE00\uC744 \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4.";
     } else if (res.post && res.row) {
@@ -56,6 +57,9 @@ export default async function CommunityBoardDetailPage(props: Props) {
     const fav = await loadFavoriteMentorIdsForUser(supabase, user.id);
     authorFavorited = fav.ids.has(authorMentorId);
   }
+
+  // 관리자 숨김 글은 작성자 본인에게만 행이 유지되고, 이 배너로 사유를 함께 보여준다.
+  const moderationNotice = authorModerationNotice(row, user?.id ?? null);
 
   const missing = !idOk || (!post && !loadError);
   const { nodes: rawComments, error: commentsError } = post
@@ -80,6 +84,12 @@ export default async function CommunityBoardDetailPage(props: Props) {
           <p className="text-sm text-slate-600">{"\uAC8C\uC2DC\uAE00\uC744 \uCC3E\uC744 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4."}</p>
         ) : post && row ? (
           <>
+            {moderationNotice ? (
+              <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+                <p className="text-xs font-extrabold text-amber-900">{moderationNotice.badgeLabel}</p>
+                <p className="mt-1 text-xs font-semibold text-amber-800">{moderationNotice.reason}</p>
+              </div>
+            ) : null}
             <BoardViewTracker postId={id} />
             <CommunityBoardDetail
               post={post}
@@ -96,6 +106,7 @@ export default async function CommunityBoardDetailPage(props: Props) {
               reportErrorCode={reportErrorCode}
               authorMentorId={authorMentorId}
               authorFavorited={authorFavorited}
+              isAuthor={!!user && !!post.authorId && post.authorId === user.id}
             />
             {/* W-blocks(v1): 신고와 같은 화면에서 차단 접근(신고+차단 병존, 스펙 §4) */}
             {canBlockAuthor && post.authorId ? (

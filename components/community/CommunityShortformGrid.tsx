@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { CommunityShortformVideoCard } from "@/components/community/CommunityShortformVideoCard";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import type { ShortformCard } from "@/lib/community/communityShortformQueries";
 
 const PAGE_SIZE = 6;
@@ -13,19 +14,14 @@ const PAGE_SIZE_MOBILE = 4;
  */
 export function CommunityShortformGrid({ items }: { items: ShortformCard[] }) {
   const [page, setPage] = useState(1);
-  // 탭·카테고리 변경(=items 교체) 시 1페이지로 리셋.
-  useEffect(() => {
+  // 탭·카테고리 변경(=items 교체) 시 1페이지로 리셋 — effect 대신 렌더 중 파생 리셋(안전 변환 패턴).
+  const [prevItems, setPrevItems] = useState(items);
+  if (prevItems !== items) {
+    setPrevItems(items);
     setPage(1);
-  }, [items]);
-  // 모바일은 페이지당 4개, 데스크탑은 기존 6개. 초기값=데스크탑값(SSR/hydration 일치) → 마운트 후 보정.
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const apply = () => setPageSize(mq.matches ? PAGE_SIZE_MOBILE : PAGE_SIZE);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
+  }
+  // 모바일은 페이지당 4개, 데스크탑은 기존 6개. SSR 스냅샷=데스크탑 → hydration 후 보정(useMediaQuery).
+  const pageSize = useMediaQuery("(max-width: 767px)") ? PAGE_SIZE_MOBILE : PAGE_SIZE;
 
   // pageSize 전환(데스크탑↔모바일) 시 currentPage 클램프로 범위 초과 방지.
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));

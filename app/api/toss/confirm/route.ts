@@ -1,90 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
-import { createServiceRoleClient } from "@/lib/supabase/admin";
-import { isAllowedChargePayKrw } from "@/lib/cash/chargePackages";
-import { recordCashTopupFromTossOrder } from "@/lib/toss/cashTopupFromPayment";
+import { confirmCashTopupForCurrentUser } from "@/lib/toss/confirmCashTopupServer";
+
+// 인증 사용자 기반 Toss 승인 라우트 — success page 와 **같은 서버 코어**
+// (confirmCashTopupForCurrentUser)를 직접 호출한다. HTTP 계약(오류 code·status·
+// 성공/duplicate 응답 형태)은 기존 클라이언트 호환을 유지한다.
+// 검증 순서: 인증·소유권·패키지 allowlist 통과 후에만 Toss 외부 승인 호출
+// (미로그인·타인 orderId·형식 오류·비허용 패키지에서 Toss fetch 0회).
 
 export async function POST(req: NextRequest) {
-  const { paymentKey, orderId, amount } = await req.json();
-
-  if (!paymentKey || !orderId || !amount || typeof amount !== "number") {
+  const body = (await req.json().catch(() => null)) as
+    | { paymentKey?: unknown; orderId?: unknown; amount?: unknown }
+    | null;
+  if (!body) {
     return NextResponse.json({ error: "invalid_params" }, { status: 400 });
   }
 
-  const secret = process.env.TOSS_SECRET_KEY;
-  if (!secret) {
-    console.error("[toss/confirm] TOSS_SECRET_KEY missing");
-    return NextResponse.json(
-      { error: "server_config", message: "결제 설정이 준비되지 않았습니다." },
-      { status: 500 }
-    );
-  }
-
-  const encoded = Buffer.from(`${secret}:`).toString("base64");
-
-  const tossRes = await fetch("https://api.tosspayments.com/v1/payments/confirm", {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${encoded}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({ paymentKey, orderId, amount }),
+  const result = await confirmCashTopupForCurrentUser({
+    paymentKey: body.paymentKey,
+    orderId: body.orderId,
+    amount: body.amount,
   });
 
-  if (!tossRes.ok) {
-    const err = await tossRes.json().catch(() => ({}));
-    console.error("[toss/confirm] failed", err);
+  if (!result.ok) {
     return NextResponse.json(
-      { error: "payment_failed", message: "결제 승인에 실패했습니다." },
-      { status: 400 }
+      { error: result.error, message: result.message },
+      { status: result.httpStatus },
     );
   }
 
-  const tossData = (await tossRes.json()) as { method?: string; totalAmount?: number };
-  const confirmedWon = Number(tossData.totalAmount ?? amount);
-  if (!Number.isFinite(confirmedWon) || confirmedWon !== amount) {
-    return NextResponse.json({ error: "amount_mismatch", message: "결제 금액이 일치하지 않습니다." }, { status: 400 });
-  }
-
-  if (!isAllowedChargePayKrw(confirmedWon)) {
-    return NextResponse.json({ error: "invalid_package", message: "허용되지 않은 충전 금액입니다." }, { status: 400 });
-  }
-
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const userIdFromOrder = orderId.match(/^cash-(.+)-(\d+)$/)?.[1];
-  if (!user || !userIdFromOrder || user.id !== userIdFromOrder) {
-    return NextResponse.json({ error: "unauthorized" }, { status: 401 });
-  }
-
-  let admin: ReturnType<typeof createServiceRoleClient>;
-  try {
-    admin = createServiceRoleClient();
-  } catch (e) {
-    console.error("[toss/confirm] service role client", e);
-    return NextResponse.json(
-      { error: "server_config", message: "충전 기록에 실패했습니다." },
-      { status: 500 }
-    );
-  }
-
-  const topup = await recordCashTopupFromTossOrder({
-    admin,
-    orderId,
-    payAmountWon: confirmedWon,
-  });
-
-  if (!topup.ok) {
-    const status = topup.code === "invalid_order" || topup.code === "invalid_package" ? 400 : 500;
-    return NextResponse.json({ error: topup.code, message: topup.message }, { status });
-  }
-
-  if (topup.duplicate) {
-    return NextResponse.json({ ok: true, duplicate: true, amount: topup.amount, payAmount: topup.payAmount });
+  if (result.duplicate) {
+    return NextResponse.json({ ok: true, duplicate: true, amount: result.amount, payAmount: result.payAmount });
   }
 
   revalidatePath("/wallet");
@@ -93,8 +39,8 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json({
     ok: true,
-    amount: topup.amount,
-    payAmount: topup.payAmount,
-    method: tossData.method ?? "카드",
+    amount: result.amount,
+    payAmount: result.payAmount,
+    method: result.method,
   });
 }

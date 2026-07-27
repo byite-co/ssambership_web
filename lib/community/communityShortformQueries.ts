@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { canAuthorViewHiddenDetail } from "@/lib/community/communityModerationVisibility";
 import type { ShortformCategorySlug } from "@/lib/community/communityShortformConstants";
 import {
   collectAuthorIdsNeedingLookup,
@@ -148,13 +149,18 @@ export async function listShortformFeed(
 
 export async function getShortformDetail(
   supabase: SupabaseClient,
-  id: string
+  id: string,
+  /** 로그인 사용자 id. 작성자 본인이면 숨김 숏폼도 배지와 함께 열람할 수 있다. */
+  viewerId?: string | null
 ): Promise<{ item: ShortformCard | null; row: Row | null; error: string | null }> {
   const { data, error } = await supabase.from("shortform_posts").select("*").eq("id", id).maybeSingle();
   if (error) return { item: null, row: null, error: error.message };
   if (!data) return { item: null, row: null, error: null };
   const row = data as Row;
-  if (row.status === "hidden") return { item: null, row, error: null };
+  // 타인·비로그인에게는 기존 not-found 그대로. 작성자 본인만 행이 유지된다.
+  if (row.status === "hidden" && !canAuthorViewHiddenDetail(row, viewerId)) {
+    return { item: null, row, error: null };
+  }
   const userMap = await shortformAuthorNameMap(supabase, [row]);
   return { item: await resolveShortformCardMedia(supabase, mapShortformRow(row, userMap)), row, error: null };
 }

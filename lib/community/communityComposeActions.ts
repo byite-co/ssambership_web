@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidateCommunityPaths } from "@/lib/community/communityRevalidate";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
@@ -62,11 +62,7 @@ export async function submitMentorCommunityPost(formData: FormData) {
       console.error("[submitMentorCommunityPost] shortform insert failed", r.error);
       redirect(buildErrorRedirect("shortform_save"));
     }
-    revalidatePath("/community/shorts");
-    revalidatePath("/community/shortform");
-    revalidatePath("/community");
-    revalidatePath(`/community/shorts/${r.id}`);
-    revalidatePath(`/community/shortform/${r.id}`);
+    revalidateCommunityPaths({ mutation: "post_create", kind: "shortform", postId: r.id });
     redirect(`/community/shortform/${r.id}`);
   }
 
@@ -75,8 +71,6 @@ export async function submitMentorCommunityPost(formData: FormData) {
     console.error("[submitMentorCommunityPost] board insert failed", r2.error);
     redirect(buildErrorRedirect("board_save"));
   }
-  revalidatePath("/community/board");
-  revalidatePath("/community");
-  revalidatePath(`/community/board/${r2.id}`);
+  revalidateCommunityPaths({ mutation: "post_create", kind: "board", postId: r2.id });
   redirect(`/community/board/${r2.id}`);
 }

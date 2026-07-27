@@ -3,7 +3,13 @@
 import { useId, useRef, useState } from "react";
 
 type Props = {
-  name: string;
+  /**
+   * 폼 제출 시 파일이 실릴 FormData 키. 생략하면 input 이 name 없이 렌더돼
+   * 파일이 폼 제출(FormData)에 **구조적으로** 포함되지 않는다 — staged-upload
+   * 소비처(숏폼 등: 서명 티켓으로 Storage 직접 업로드 후 ref 만 제출)용.
+   * 액션이 `formData.get(name)` 으로 File 을 읽는 소비처는 반드시 name 을 지정할 것.
+   */
+  name?: string;
   accept: string;
   multiple?: boolean;
   required?: boolean;

@@ -10,14 +10,15 @@ export function ApplicationAttachmentLightbox(props: {
   loading: boolean;
   onClose: () => void;
 }) {
+  const { open, onClose } = props;
   useEffect(() => {
-    if (!props.open) return;
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") props.onClose();
+      if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [props.onClose, props.open]);
+  }, [onClose, open]);
 
   if (!props.open || typeof document === "undefined") return null;
 

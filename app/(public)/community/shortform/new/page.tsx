@@ -2,7 +2,7 @@ import { redirect } from "next/navigation";
 import { CommunityLayoutShell } from "@/components/community/CommunityLayoutShell";
 import { CommunityShortformComposeForm } from "@/components/community/CommunityShortformComposeForm";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
-import { communityComposePath, legacyShortformTabRedirect } from "@/lib/community/communityComposeTab";
+import { legacyShortformTabRedirect } from "@/lib/community/communityComposeTab";
 import { getShortformDraft } from "@/lib/community/communityShortformQueries";
 import { createClient } from "@/lib/supabase/server";
 

@@ -3,6 +3,9 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { cashKrwForPayKrw, isAllowedChargePayKrw } from "@/lib/cash/chargePackages";
 import { recoverPastDueSubscriptionsForStudent } from "@/lib/subscribe/subscriptionRenewalBatch";
+import { krwWonToCents, parseUserIdFromCashOrderId, recordCashTopupCore } from "@/lib/toss/tossTopupCore";
+
+export { krwWonToCents, parseUserIdFromCashOrderId };
 
 /**
  * 충전 직후 그 사용자의 past_due 구독을 즉시 복구한다(best-effort).
@@ -17,16 +20,6 @@ export async function recoverPastDueAfterTopup(admin: SupabaseClient, userId: st
   } catch (e) {
     console.error("[recoverPastDueAfterTopup]", e);
   }
-}
-
-export function parseUserIdFromCashOrderId(orderId: string): string | null {
-  const m = /^cash-(.+)-(\d+)$/.exec(orderId);
-  return m?.[1] ?? null;
-}
-
-export function krwWonToCents(won: number): number {
-  if (!Number.isFinite(won) || won <= 0 || won > 10_000_000) return 0;
-  return Math.round(won) * 100;
 }
 
 export type RecordCashTopupResult =
@@ -53,7 +46,10 @@ export async function hasCashTopupForOrderId(
 
 /**
  * Toss 결제 완료 후 캐시 충전 원장 기록 (service_role + record_cash_topup).
- * confirm·webhook 공통.
+ * confirm·webhook 공통. 판정·순서는 tossTopupCore.recordCashTopupCore(순수·계약테스트
+ * 대상)가 정본이고, 이 함수는 실제 admin 클라이언트로 포트만 배선한다.
+ * 기존 계약 유지: 신규 원장 기록 성공 시에만 past_due 복구 1회(best-effort),
+ * duplicate 재호출은 복구 재실행 없이 duplicate 로 통과(이중 적립 0).
  */
 export async function recordCashTopupFromTossOrder(params: {
   admin: SupabaseClient;
@@ -61,50 +57,34 @@ export async function recordCashTopupFromTossOrder(params: {
   payAmountWon: number;
 }): Promise<RecordCashTopupResult> {
   const { admin, orderId, payAmountWon } = params;
-
-  if (!Number.isFinite(payAmountWon) || payAmountWon <= 0) {
-    return { ok: false, code: "invalid_amount", message: "결제 금액이 올바르지 않습니다." };
-  }
-
-  if (!isAllowedChargePayKrw(payAmountWon)) {
-    return { ok: false, code: "invalid_package", message: "허용되지 않은 충전 금액입니다." };
-  }
-
-  const cashKrw = cashKrwForPayKrw(payAmountWon);
-  if (cashKrw == null) {
-    return { ok: false, code: "invalid_package", message: "허용되지 않은 충전 금액입니다." };
-  }
-
-  const userId = parseUserIdFromCashOrderId(orderId);
-  if (!userId) {
-    return { ok: false, code: "invalid_order", message: "주문 번호 형식이 올바르지 않습니다." };
-  }
-
-  const already = await hasCashTopupForOrderId(admin, orderId);
-  if (already) {
-    return { ok: true, duplicate: true, amount: cashKrw, payAmount: payAmountWon, userId };
-  }
-
-  const amountCents = krwWonToCents(cashKrw);
-  if (amountCents <= 0) {
-    return { ok: false, code: "invalid_amount", message: "충전 금액이 올바르지 않습니다." };
-  }
-
-  const { error: rpcError } = await admin.rpc("record_cash_topup", {
-    p_user_id: userId,
-    p_amount_cents: amountCents,
-    p_idempotency_key: orderId,
+  return recordCashTopupCore(orderId, payAmountWon, {
+    isAllowedPayKrw: isAllowedChargePayKrw,
+    cashKrwForPayKrw,
+    hasTopupForOrderId: (id) => hasCashTopupForOrderId(admin, id),
+    recordTopupRpc: async (userId, amountCents, idempotencyKey) => {
+      // [SERVER_GATE] topup 원장 ref_id 기록(§4-1)은 웹에서 구현할 수 없다 — 서버 SQL 소관.
+      //  1) 정본 RPC 시그니처가 record_cash_topup(uuid, bigint, text) 3인자라 ref 를 넘길 자리가 없고,
+      //     INSERT 가 ref_id 를 상수 null 로 박아 둔다(supabase/sql/020_p0_cash_topup_charge.sql:35-43).
+      //  2) cash_ledger.ref_id 는 uuid 컬럼인데(supabase/sql/004_p0_cash_disputes_admin_draft.sql:58)
+      //     orderId 는 `cash-{userId}-{ts}` 텍스트라 타입이 맞지 않는다.
+      //  3) 대안인 '내부 주문 ID' 도 없다 — payments 는 cash_topup/topup kind 를 명시적으로 거부하고
+      //     (supabase/sql/143_p1_13_state_machine_hardening.sql:31-33), 별도 topup 주문 테이블도 없다.
+      // → 주문 참조는 현재 idempotency_key(=orderId)가 유일한 정본 참조다. ref_id 기록에는
+      //   RPC 시그니처 변경 또는 ref 컬럼 확장이 선행돼야 하며 이는 트랙 3(supabase/sql) 소관이다.
+      const { error: rpcError } = await admin.rpc("record_cash_topup", {
+        p_user_id: userId,
+        p_amount_cents: amountCents,
+        p_idempotency_key: idempotencyKey,
+      });
+      if (rpcError) {
+        console.error("[recordCashTopupFromTossOrder] record_cash_topup", rpcError.message, { orderId, userId });
+        return { error: true };
+      }
+      return { error: false };
+    },
+    // P1 ① — 충전 직후 past_due 구독 즉시 복구(best-effort, 충전 흐름은 중단하지 않음)
+    recoverPastDue: (userId) => recoverPastDueAfterTopup(admin, userId),
   });
-
-  if (rpcError) {
-    console.error("[recordCashTopupFromTossOrder] record_cash_topup", rpcError.message, { orderId, userId });
-    return { ok: false, code: "ledger_failed", message: "충전 기록에 실패했습니다." };
-  }
-
-  // P1 ① — 충전 직후 past_due 구독 즉시 복구(best-effort, 충전 흐름은 중단하지 않음)
-  await recoverPastDueAfterTopup(admin, userId);
-
-  return { ok: true, duplicate: false, amount: cashKrw, payAmount: payAmountWon, userId };
 }
 
 /** webhook 고아결제 복구 성공 시 admin_action_logs 기록 (service_role). */

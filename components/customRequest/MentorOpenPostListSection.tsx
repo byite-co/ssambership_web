@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { EmptyState, LinkButton } from "@/components/design-system";
 import { mapPostRowToPublicDetail } from "@/lib/customRequest/customRequestPostMappers";
 
@@ -30,20 +31,15 @@ export function MentorOpenPostListSection(props: {
 }) {
   const [page, setPage] = useState(1);
 
-  // 탭/카테고리 변경 시 서버에서 새 rows가 내려오므로 1페이지로 리셋한다.
-  useEffect(() => {
+  // 탭/카테고리 변경 시 서버에서 새 rows가 내려오므로 1페이지로 리셋 — effect 대신 렌더 중 파생 리셋.
+  const [prevRows, setPrevRows] = useState(props.rows);
+  if (prevRows !== props.rows) {
+    setPrevRows(props.rows);
     setPage(1);
-  }, [props.rows]);
+  }
 
-  // 모바일은 페이지당 4개, 데스크탑은 기존 5개. 초기값=데스크탑값(SSR/hydration 일치) → 마운트 후 보정.
-  const [pageSize, setPageSize] = useState(PAGE_SIZE);
-  useEffect(() => {
-    const mq = window.matchMedia("(max-width: 767px)");
-    const apply = () => setPageSize(mq.matches ? 4 : PAGE_SIZE);
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
+  // 모바일은 페이지당 4개, 데스크탑은 기존 5개. SSR 스냅샷=데스크탑 → hydration 후 보정(useMediaQuery).
+  const pageSize = useMediaQuery("(max-width: 767px)") ? 4 : PAGE_SIZE;
 
   if (props.listStatus === "rpc_unavailable") {
     return (

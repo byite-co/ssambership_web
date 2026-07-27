@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { canAuthorViewHiddenDetail } from "@/lib/community/communityModerationVisibility";
 import {
   COMMUNITY_POST_CATEGORIES,
   COMMUNITY_POST_PAGE_SIZE,
@@ -204,7 +205,8 @@ export async function listCommunityBoardPosts(
     supabase
       .from("community_posts")
       .select("*")
-      .eq("status", opts.status ?? "published"),
+      .eq("status", opts.status ?? "published")
+      .is("deleted_at", null),
     sort
   );
 
@@ -285,6 +287,7 @@ export async function listCommunityPopularPostsForHome(
     .from("community_posts")
     .select("*")
     .eq("status", "published")
+    .is("deleted_at", null)
     .order("like_count", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);
@@ -310,14 +313,21 @@ export async function listCommunityPopularPostsForHome(
 
 export async function getCommunityBoardPost(
   supabase: SupabaseClient,
-  id: string
+  id: string,
+  /** 로그인 사용자 id. 작성자 본인이면 숨김 글도 배지와 함께 열람할 수 있다. */
+  viewerId?: string | null
 ): Promise<{ post: CommunityBoardPostCard | null; row: Row | null; error: string | null }> {
   const { data, error } = await supabase.from("community_posts").select("*").eq("id", id).maybeSingle();
   if (error) return { post: null, row: null, error: error.message };
   if (!data) return { post: null, row: null, error: null };
   const row = data as Row;
+  // soft-delete: 삭제된 글은 일반 상세에서 not-found 처리(행은 보존 — 관리자 감사).
+  if ((row as { deleted_at?: unknown }).deleted_at) {
+    return { post: null, row, error: null };
+  }
   const status = typeof row.status === "string" ? row.status : "published";
-  if (status === "hidden") {
+  if (status === "hidden" && !canAuthorViewHiddenDetail(row, viewerId)) {
+    // 타인·비로그인에게는 기존 not-found 그대로. 작성자 본인만 행이 유지된다.
     return { post: null, row, error: null };
   }
   if (status === "draft") {
@@ -347,6 +357,45 @@ export async function getCommunityBoardDraft(
     .eq("id", draftId)
     .eq("author_id", userId)
     .eq("status", "draft")
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (error) return { draft: null, error: error.message };
+  if (!data) return { draft: null, error: null };
+  const row = data as Row;
+  const body =
+    (typeof row.body === "string" && row.body) ||
+    (typeof row.content === "string" && row.content) ||
+    "";
+  const imageUrls = Array.isArray(row.image_urls)
+    ? (row.image_urls as unknown[]).filter((u): u is string => typeof u === "string")
+    : [];
+  return {
+    draft: {
+      id: String(row.id ?? ""),
+      title: typeof row.title === "string" ? row.title : "",
+      body,
+      category: typeof row.category === "string" ? row.category : "free",
+      imageUrls,
+    },
+    error: null,
+  };
+}
+
+/**
+ * 작성자 본인의 게시글(상태 무관: 발행/임시)을 편집용으로 로드한다. 삭제된 글은 제외.
+ * 소유권은 `.eq("author_id")` 로 강제 — 편집 화면은 본인 글만 연다(서버 update 도 재검사).
+ */
+export async function getCommunityBoardPostForEdit(
+  supabase: SupabaseClient,
+  userId: string,
+  postId: string
+): Promise<{ draft: CommunityBoardDraftRow | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("community_posts")
+    .select("id, title, body, content, category, image_urls, status, author_id")
+    .eq("id", postId)
+    .eq("author_id", userId)
+    .is("deleted_at", null)
     .maybeSingle();
   if (error) return { draft: null, error: error.message };
   if (!data) return { draft: null, error: null };
@@ -484,7 +533,11 @@ export async function listUserScrapPosts(
   }
   const ids = ((data as { post_id: string }[]) ?? []).map((r) => r.post_id).filter(Boolean);
   if (!ids.length) return { posts: [], error: null };
-  const { data: posts, error: pErr } = await supabase.from("community_posts").select("*").in("id", ids);
+  const { data: posts, error: pErr } = await supabase
+    .from("community_posts")
+    .select("*")
+    .in("id", ids)
+    .is("deleted_at", null);
   if (pErr) return { posts: [], error: pErr.message };
   const byId = new Map(((posts as Row[]) ?? []).map((r) => [String(r.id), r]));
   const ordered = ids.map((id) => byId.get(id)).filter((r): r is Row => Boolean(r));

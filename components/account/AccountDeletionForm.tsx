@@ -76,9 +76,11 @@ export function AccountDeletionForm(props: {
         </button>
       ) : (
         <div className="space-y-2">
-          <p className="text-center text-xs font-bold text-red-600">정말 탈퇴할까요? 이 작업은 되돌릴 수 없습니다.</p>
+          <p className="text-center text-xs font-bold text-red-600">
+            정말 탈퇴할까요? 요청 후 30분 안에는 취소할 수 있고, 그 뒤에는 되돌릴 수 없습니다.
+          </p>
           <FormSubmitButton
-            idleLabel="네, 계정을 삭제합니다"
+            idleLabel="네, 탈퇴를 요청합니다"
             pendingLabel="탈퇴 처리 중…"
             disabled={disabled}
             className="w-full rounded-xl bg-red-600 px-4 py-3 text-sm font-extrabold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"

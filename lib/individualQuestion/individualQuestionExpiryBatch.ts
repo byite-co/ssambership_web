@@ -1,7 +1,6 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { insertNotificationBestEffort } from "@/lib/notifications/notificationInsert";
 import type { IndividualQuestionEscrowResult } from "@/lib/individualQuestion/individualQuestionTypes";
 import { individualQuestionExpiryBatchLimit } from "@/lib/individualQuestion/individualQuestionExpiryConfig";
 
@@ -9,8 +8,6 @@ type Row = Record<string, unknown>;
 
 // status별 만료 환불 대상. answered/released/refunded/canceled/escrowed는 제외.
 const EXPIRABLE_STATUSES = ["open", "assigned", "claimed"] as const;
-
-const STUDENT_DETAIL_PATH = "/individual-questions";
 
 export type IndividualQuestionExpiryBatchSummary = {
   at: string;
@@ -25,41 +22,11 @@ function getQuestionId(row: Row): string | null {
   return typeof row.id === "string" && row.id.trim() ? row.id : null;
 }
 
-function getStudentId(row: Row): string | null {
-  return typeof row.student_id === "string" && row.student_id.trim() ? row.student_id : null;
-}
-
-function getTitle(row: Row): string {
-  return typeof row.title === "string" && row.title.trim() ? row.title.trim() : "개별 질문";
-}
-
 function firstRpcResult(
   data: IndividualQuestionEscrowResult | IndividualQuestionEscrowResult[] | null
 ): IndividualQuestionEscrowResult | null {
   if (Array.isArray(data)) return data[0] ?? null;
   return data;
-}
-
-// 만료 환불 시 학생에게 best-effort 알림. 실패해도 배치는 계속.
-async function notifyStudentRefundBestEffort(row: Row): Promise<void> {
-  const studentId = getStudentId(row);
-  const questionId = getQuestionId(row);
-  if (!studentId || !questionId) return;
-  try {
-    await insertNotificationBestEffort({
-      recipientUserId: studentId,
-      type: "individual_question_expired_refunded",
-      title: "개별 질문이 환불되었어요",
-      body: `"${getTitle(row)}" 질문에 답변이 없어 캐시가 환불되었어요.`,
-      link: `${STUDENT_DETAIL_PATH}/${questionId}`,
-      metadata: {
-        questionId,
-        reason: "expired_no_answer",
-      },
-    });
-  } catch (error) {
-    console.error("[individualQuestionExpiry] notification failed", { questionId, error });
-  }
 }
 
 async function refundExpiredQuestion(
@@ -84,7 +51,7 @@ async function refundExpiredQuestion(
   if (!result) return { code: "error", message: "empty_rpc_result" };
 
   if (result.ok && result.code === "refunded") {
-    await notifyStudentRefundBestEffort(row);
+    // expired_refunded 알림은 155 AFTER UPDATE(status→refunded) 트리거가 학생에게 원자 발행(best-effort 제거).
     return { code: "refunded" };
   }
   if (result.ok && result.code === "already_refunded") {

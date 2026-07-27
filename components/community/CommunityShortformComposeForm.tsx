@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { submitShortformUploadAction } from "@/lib/community/communityShortformActions";
-import { SHORTFORM_CATEGORIES } from "@/lib/community/communityShortformConstants";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  createShortformVideoUploadTicketAction,
+  createShortformVideoUploadTicketFromAppAction,
+  submitShortformUploadAction,
+  submitShortformUploadFromAppAction,
+} from "@/lib/community/communityShortformActions";
+import { SHORTFORM_CATEGORIES, SHORTFORM_VIDEO_MAX_BYTES } from "@/lib/community/communityShortformConstants";
+import { SHORTFORM_VIDEO_BUCKET, SHORTFORM_VIDEO_MIME } from "@/lib/community/shortformVideoRef";
 import type { ShortformDraftRow } from "@/lib/community/communityShortformQueries";
 import { CommunityComposeTopBar } from "@/components/community/CommunityComposeTopBar";
 import { CommunityFileDropzone } from "@/components/community/CommunityFileDropzone";
+import { createClient } from "@/lib/supabase/client";
 import { AppToast } from "@/components/ui/AppToast";
 
 const FORM_ID = "shortform-upload-form";
@@ -23,48 +30,184 @@ type Props = {
   errorCode: string | null;
   draftSaved: boolean;
   draft: ShortformDraftRow | null;
+  /**
+   * "app" = 모바일 앱 WebView 표면: 앱 전용 finalize 액션(완료 브릿지 redirect)을 쓰고
+   * 뒤로 링크를 숨긴다(취소는 앱 네이티브 UI). 기본값은 웹.
+   */
+  surface?: "web" | "app";
 };
 
+function messageForError(code: string | null): string | null {
+  if (!code) return null;
+  if (code === "policy") return "외부 연락처·대필 요청은 정책상 제한됩니다.";
+  if (code === "mentor_only") return "멘토 계정만 업로드할 수 있어요.";
+  if (code === "rights") return "권리 보유 확인이 필요합니다.";
+  if (code === "video" || code === "video_upload") return "영상 업로드가 필요합니다.";
+  if (code === "video_size") return "영상은 최대 500MB까지입니다.";
+  if (code === "account_blocked") return "계정 상태를 확인해 주세요.";
+  return "저장에 실패했습니다.";
+}
+
+function cryptoRandomUuid(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (c?.randomUUID) return c.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (ch) => {
+    const r = (Math.random() * 16) | 0;
+    const v = ch === "x" ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 export function CommunityShortformComposeForm(props: Props) {
-  const [previewName, setPreviewName] = useState<string | null>(props.draft?.videoUrl ? "저장된 영상" : null);
-  const [toast, setToast] = useState<string | null>(null);
+  const supabase = useMemo(() => createClient(), []);
   const hasStoredVideo = Boolean(props.draft?.videoUrl);
+  const isAppSurface = props.surface === "app";
 
+  const formRef = useRef<HTMLFormElement>(null);
+  const videoRefInputRef = useRef<HTMLInputElement>(null);
+  const requestIdInputRef = useRef<HTMLInputElement>(null);
+  const intentInputRef = useRef<HTMLInputElement>(null);
+  const uploadedGateRef = useRef(false);
+
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(messageForError(props.errorCode));
+  const [toast, setToast] = useState<string | null>(props.draftSaved ? "임시저장됨" : null);
+  const [requestId, setRequestId] = useState<string>("");
+
+  // 단일 영상: 새 선택 시 이전 object URL revoke(교체·언마운트 누수 방지).
   useEffect(() => {
-    if (props.draftSaved) setToast("임시저장됨");
-  }, [props.draftSaved]);
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
 
-  const err =
-    props.errorCode === "policy"
-      ? "외부 연락처·대필 요청은 정책상 제한됩니다."
-      : props.errorCode === "mentor_only"
-      ? "멘토 계정만 업로드할 수 있어요."
-      : props.errorCode === "rights"
-        ? "권리 보유 확인이 필요합니다."
-        : props.errorCode === "video" || props.errorCode === "video_upload"
-          ? "영상 업로드가 필요합니다."
-          : props.errorCode === "video_size"
-            ? "영상은 최대 500MB까지입니다."
-            : props.errorCode
-              ? "저장에 실패했습니다."
-              : null;
+  function onPickVideo(list: FileList | null) {
+    const file = list?.[0] ?? null;
+    if (!file) {
+      // 단일 영상 state 는 append 아니라 replace — 선택 취소 시 초기화.
+      setVideoFile(null);
+      setPreviewUrl(null);
+      return;
+    }
+    if (!SHORTFORM_VIDEO_MIME.has((file.type || "").toLowerCase())) {
+      setError("지원하지 않는 영상 형식입니다. (mp4/mov/webm)");
+      return;
+    }
+    if (file.size > SHORTFORM_VIDEO_MAX_BYTES) {
+      setError("영상은 최대 500MB까지입니다.");
+      return;
+    }
+    setError(null);
+    setVideoFile(file);
+    setPreviewUrl(URL.createObjectURL(file)); // 이전 URL 은 effect cleanup 이 revoke.
+  }
+
+  async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
+    const submitter = (e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const submitterIntent = submitter?.name === "intent" ? submitter.value : "";
+    const intent = submitterIntent === "draft" || submitterIntent === "publish" ? submitterIntent : "publish";
+
+    if (uploadedGateRef.current) {
+      uploadedGateRef.current = false;
+      return;
+    }
+    e.preventDefault();
+    if (busy) return;
+
+    const fd = new FormData(formRef.current ?? undefined);
+    const title = String(fd.get("title") ?? "").trim();
+    const rights = fd.get("rightsAck") === "on";
+    if (!title) {
+      setError("제목을 입력해 주세요.");
+      return;
+    }
+    if (intent === "publish" && !rights) {
+      setError("권리 보유 확인이 필요합니다.");
+      return;
+    }
+    if (intent === "publish" && !videoFile && !hasStoredVideo) {
+      setError("영상 업로드가 필요합니다.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      // 최초 submit 시점의 intent 를 hidden input 에 고정한다 — 업로드 await 이후
+      // 재제출이 (busy 재렌더로 disabled 가 된) submitter 전달에 의존하지 않게 하기
+      // 위함이다. disabled 컨트롤은 FormData 에 실리지 않아 draft→publish 변질
+      // 위험이 있었다.
+      if (intentInputRef.current) intentInputRef.current.value = intent;
+
+      let rid = requestId;
+      if (!rid) {
+        rid = cryptoRandomUuid();
+        setRequestId(rid);
+      }
+      if (videoFile) {
+        // 앱 표면은 전용 티켓 액션(쿠키 재발급 시에도 HttpOnly 유지)을 태운다.
+        const requestTicket = isAppSurface
+          ? createShortformVideoUploadTicketFromAppAction
+          : createShortformVideoUploadTicketAction;
+        const ticket = await requestTicket({
+          contentType: (videoFile.type || "video/mp4").toLowerCase(),
+        });
+        if (!ticket.ok) {
+          setError(messageForError(ticket.error) ?? "영상 업로드 준비에 실패했어요.");
+          setBusy(false);
+          return;
+        }
+        const { error: upErr } = await supabase.storage
+          .from(SHORTFORM_VIDEO_BUCKET)
+          .uploadToSignedUrl(ticket.path, ticket.token, videoFile);
+        if (upErr) {
+          setError("영상 업로드에 실패했어요. 다시 시도해 주세요.");
+          setBusy(false);
+          return;
+        }
+        if (videoRefInputRef.current) videoRefInputRef.current.value = ticket.ref;
+      } else if (videoRefInputRef.current) {
+        videoRefInputRef.current.value = "";
+      }
+      if (requestIdInputRef.current) requestIdInputRef.current.value = rid;
+      uploadedGateRef.current = true;
+      // submitter 를 넘기지 않는다 — intent 는 위에서 hidden input 에 캡처됐다.
+      formRef.current?.requestSubmit();
+    } catch {
+      setError("저장에 실패했어요. 다시 시도해 주세요.");
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
-      <CommunityComposeTopBar backHref="/community/shortform" formId={FORM_ID} />
+      <CommunityComposeTopBar
+        backHref={isAppSurface ? null : "/community/shortform"}
+        formId={FORM_ID}
+        disabled={busy}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <form
           id={FORM_ID}
-          action={submitShortformUploadAction}
+          ref={formRef}
+          action={isAppSurface ? submitShortformUploadFromAppAction : submitShortformUploadAction}
+          onSubmit={onSubmit}
           className="space-y-4 rounded-2xl border border-slate-200 bg-white p-6"
         >
           {props.draft ? <input type="hidden" name="draftId" value={props.draft.id} /> : null}
           {hasStoredVideo ? <input type="hidden" name="videoUrl" value={props.draft?.videoUrl ?? ""} /> : null}
+          <input type="hidden" name="videoRef" ref={videoRefInputRef} defaultValue="" />
+          <input type="hidden" name="requestId" ref={requestIdInputRef} defaultValue="" />
+          {/* 최초 submit 의 intent 캡처용 — 서버는 getAll("intent") 중 첫 유효값을 읽어
+              JS 비활성(submitter 값)·JS 활성(이 hidden 값) 어느 경로든 의도를 보존한다. */}
+          <input type="hidden" name="intent" ref={intentInputRef} defaultValue="" />
 
-          {err ? (
+          {error ? (
             <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900">
-              {err}
+              {error}
             </p>
           ) : null}
 
@@ -74,6 +217,7 @@ export function CommunityShortformComposeForm(props: Props) {
               name="title"
               required
               maxLength={100}
+              readOnly={busy}
               defaultValue={props.draft?.title ?? ""}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             />
@@ -100,16 +244,17 @@ export function CommunityShortformComposeForm(props: Props) {
               <p className="mt-1 text-xs text-slate-500">임시저장된 영상이 있습니다. 새 파일을 선택하면 교체됩니다.</p>
             ) : null}
             <div className="mt-2">
+              {/* name 미지정: 파일이 폼 FormData 에 구조적으로 실리지 않는다(413 원천 차단).
+                  실제 업로드는 서명 티켓 → Storage 직접 업로드 → hidden videoRef 제출.
+                  선택 파일명 표기는 Dropzone 내부 label 이 정본(한 줄). */}
               <CommunityFileDropzone
-                name="video"
                 accept="video/mp4,video/quicktime,video/webm"
-                required={!hasStoredVideo}
+                disabled={busy}
                 buttonLabel="영상 파일 선택"
                 hint="클릭하거나 영상 파일을 끌어다 놓으세요"
-                onFilesChange={(files) => setPreviewName(files?.[0]?.name ?? (hasStoredVideo ? "저장된 영상" : null))}
+                onFilesChange={onPickVideo}
               />
             </div>
-            {previewName ? <p className="mt-1 text-xs font-semibold text-slate-700">{previewName}</p> : null}
           </div>
 
           <label className="block text-sm font-extrabold text-slate-800">
@@ -118,6 +263,7 @@ export function CommunityShortformComposeForm(props: Props) {
               name="body"
               maxLength={500}
               rows={4}
+              readOnly={busy}
               defaultValue={props.draft?.body ?? ""}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             />
@@ -127,6 +273,7 @@ export function CommunityShortformComposeForm(props: Props) {
             출처 (선택)
             <input
               name="source"
+              readOnly={busy}
               defaultValue={props.draft?.source ?? ""}
               className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
             />
@@ -141,9 +288,11 @@ export function CommunityShortformComposeForm(props: Props) {
         <aside className="space-y-4 lg:sticky lg:top-24 lg:self-start">
           <div className="rounded-2xl border border-slate-200 bg-white p-4">
             <p className="text-xs font-extrabold uppercase tracking-wide text-slate-500">미리보기</p>
-            <div className="mx-auto mt-3 flex aspect-[9/16] max-h-[360px] w-full max-w-[200px] items-center justify-center rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 p-4 text-center">
-              {previewName ? (
-                <p className="text-xs font-bold text-slate-700">{previewName}</p>
+            <div className="mx-auto mt-3 flex aspect-[9/16] max-h-[360px] w-full max-w-[200px] items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-200 bg-slate-50 p-1 text-center">
+              {previewUrl ? (
+                <video src={previewUrl} controls className="h-full w-full rounded-lg object-contain" />
+              ) : hasStoredVideo ? (
+                <p className="text-xs font-bold text-slate-700">저장된 영상</p>
               ) : (
                 <p className="text-xs leading-relaxed text-slate-500">업로드한 영상의 미리보기가 여기에 표시됩니다.</p>
               )}

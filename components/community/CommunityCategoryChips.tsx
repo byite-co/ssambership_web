@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 type CategoryOption = { slug: string; label: string };
 
@@ -21,9 +21,14 @@ export function CommunityCategoryChips({ categories, name, defaultSlug = "free",
   const options = categories.filter((c) => c.slug !== "all");
   const [selected, setSelected] = useState(() => pickInitial(categories, defaultSlug));
 
-  useEffect(() => {
+  // 외부 값(카테고리 구성·기본값·resetKey) 변경 시 선택값 리셋 — effect 대신 렌더 중 파생 리셋
+  // (react-hooks/set-state-in-effect 안전 변환 패턴, 내용 기반 key 라 배열 identity 변화에도 안정).
+  const syncKey = `${resetKey ?? ""}|${defaultSlug}|${options.map((c) => c.slug).join(",")}`;
+  const [prevSyncKey, setPrevSyncKey] = useState(syncKey);
+  if (prevSyncKey !== syncKey) {
+    setPrevSyncKey(syncKey);
     setSelected(pickInitial(categories, defaultSlug));
-  }, [categories, defaultSlug, resetKey]);
+  }
 
   return (
     <fieldset>

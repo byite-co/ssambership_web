@@ -9,6 +9,10 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { logAdminAction } from "@/lib/admin/adminActionLog";
 import { mapDataErrorMessage } from "@/lib/utils/mapDataError";
 import { MENTOR_ACADEMIC_RECORD_CHANGE_TABLE } from "@/lib/mentor/mentorAcademicRecordChange";
+import {
+  ADMIN_SERVICE_ROLE_UNAVAILABLE_MESSAGE,
+  resolveAdminWriteClient,
+} from "@/lib/admin/adminWriteClient";
 
 const PATH = "/admin/academic-record-changes";
 const TABLE = MENTOR_ACADEMIC_RECORD_CHANGE_TABLE;
@@ -28,12 +32,16 @@ function okUrl(kind: "approve" | "reject" | "resubmit"): string {
   return `${PATH}?ok=${encodeURIComponent(kind)}`;
 }
 
-async function writeClient(): Promise<SupabaseClient> {
-  try {
-    return createServiceRoleClient();
-  } catch {
-    return createClient();
-  }
+/**
+ * W4-A: service role 실패 시 일반 세션 클라이언트로 내려가던 폴백을 제거했다(fail-closed).
+ * 이 파일에서는 폴백이 실제 데이터 발산을 일으켰다 — `mentor_profiles` 에는 관리자 UPDATE
+ * 정책이 없어서, 세션 클라이언트로 내려가면 요청 행만 approved 로 바뀌고 `university_name`
+ * 갱신은 0행으로 조용히 넘어가 성공으로 로깅됐다. 반환이 null 이면 처리하지 않고 중단한다.
+ * (본 변경은 해당 보안 폴백에 한정한다 — 학적변경 기능 전체를 재설계하지 않는다.)
+ */
+function writeClientOrNull(): SupabaseClient | null {
+  const resolved = resolveAdminWriteClient(createServiceRoleClient);
+  return resolved.ok ? (resolved.client as SupabaseClient) : null;
 }
 
 async function updateReviewableRow(
@@ -83,7 +91,10 @@ export async function approveMentorAcademicRecordChangeAction(formData: FormData
     redirect(errUrl("승인하려면 확정 학교명을 입력해야 합니다."));
   }
 
-  const admin = await writeClient();
+  const admin = writeClientOrNull();
+  if (!admin) {
+    redirect(errUrl(ADMIN_SERVICE_ROLE_UNAVAILABLE_MESSAGE));
+  }
   const reviewedAt = new Date().toISOString();
   const { row, error } = await updateReviewableRow(admin, requestId, {
     status: "approved",
@@ -141,7 +152,10 @@ export async function rejectMentorAcademicRecordChangeAction(formData: FormData)
     redirect(errUrl("반려 사유를 입력해 주세요."));
   }
 
-  const admin = await writeClient();
+  const admin = writeClientOrNull();
+  if (!admin) {
+    redirect(errUrl(ADMIN_SERVICE_ROLE_UNAVAILABLE_MESSAGE));
+  }
   const reviewedAt = new Date().toISOString();
   const { row, error } = await updateReviewableRow(admin, requestId, {
     status: "rejected",
@@ -180,7 +194,10 @@ export async function requestMentorAcademicRecordChangeResubmitAction(formData: 
     redirect(errUrl("재제출 요청 사유를 입력해 주세요."));
   }
 
-  const admin = await writeClient();
+  const admin = writeClientOrNull();
+  if (!admin) {
+    redirect(errUrl(ADMIN_SERVICE_ROLE_UNAVAILABLE_MESSAGE));
+  }
   const reviewedAt = new Date().toISOString();
   const { row, error } = await updateReviewableRow(admin, requestId, {
     status: "resubmit_required",

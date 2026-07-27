@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { ClipboardList, Clock, Sparkles } from "lucide-react";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { EmptyState } from "@/components/common/EmptyState";
 import { getSubjectLabel } from "@/lib/subjects/subjectCatalog";
 import { claimOpenIndividualQuestionAction } from "@/lib/individualQuestion/individualQuestionActions";

@@ -64,6 +64,18 @@ export function MeDraftsList(props: { items: CommunityMeDraftItem[] }) {
   );
 }
 
+/**
+ * 관리자 처분 배지 — 작성자 본인 표면에서만 렌더된다(item.moderation 은 본인일 때만 채워진다).
+ * 공개 목록·타인 표면에는 애초에 행이 오지 않으므로 이 배지도 노출되지 않는다.
+ */
+function ModerationBadge(props: { label: string }) {
+  return (
+    <span className="inline-flex shrink-0 rounded-lg border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-extrabold text-amber-800">
+      {props.label}
+    </span>
+  );
+}
+
 export function MePostsList(props: { items: CommunityMePostListItem[] }) {
   if (props.items.length === 0) return null;
   return (
@@ -73,13 +85,19 @@ export function MePostsList(props: { items: CommunityMePostListItem[] }) {
           <div className="flex min-w-0 flex-1 items-start gap-2">
             <KindBadge kind={item.kind} />
             <div className="min-w-0 flex-1">
-              {item.linkHref ? (
-                <Link href={item.linkHref} className="font-bold text-slate-900 hover:text-blue-700">
-                  <span className="line-clamp-2">{item.title}</span>
-                </Link>
-              ) : (
-                <span className="font-bold text-slate-700 line-clamp-2">{item.title}</span>
-              )}
+              <span className="flex flex-wrap items-center gap-1.5">
+                {item.linkHref ? (
+                  <Link href={item.linkHref} className="font-bold text-slate-900 hover:text-blue-700">
+                    <span className="line-clamp-2">{item.title}</span>
+                  </Link>
+                ) : (
+                  <span className="font-bold text-slate-700 line-clamp-2">{item.title}</span>
+                )}
+                {item.moderation ? <ModerationBadge label={item.moderation.badgeLabel} /> : null}
+              </span>
+              {item.moderation ? (
+                <p className="mt-1 text-xs font-semibold text-amber-800">{item.moderation.reason}</p>
+              ) : null}
               {item.dateLabel ? <p className="mt-0.5 text-xs text-slate-500">{item.dateLabel}</p> : null}
             </div>
           </div>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { selectMentorApplicationForOrder } from "@/lib/customRequest/customRequestOrderActions";
 
 export function SelectMentorApplicationForm(props: {

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { notificationsHref, type NotificationCategory } from "@/lib/notifications/notificationCategories";
 
 type Filter = "all" | "unread";
 
@@ -8,41 +9,36 @@ const STY = {
 } as const;
 
 /**
- * /notifications?filter=all|unread
+ * /notifications?filter=all|unread — 현재 카테고리를 보존(필터 변경 시 cursor 초기화).
  */
-export function NotificationFilterTabs(props: { current: Filter }) {
-  const { current } = props;
+export function NotificationFilterTabs(props: { current: Filter; category: NotificationCategory }) {
+  const { current, category } = props;
   return (
     <div className="flex flex-wrap gap-2" role="tablist" aria-label="알림 필터">
-      <FilterLink href="/notifications" label="전체" active={current === "all"} filterParam={null} />
       <FilterLink
-        href="/notifications?filter=unread"
+        href={notificationsHref({ filter: "all", category })}
+        label="전체"
+        active={current === "all"}
+        id="notif-filter-all"
+      />
+      <FilterLink
+        href={notificationsHref({ filter: "unread", category })}
         label="읽지 않음"
         active={current === "unread"}
-        filterParam="unread"
+        id="notif-filter-unread"
       />
     </div>
   );
 }
 
-function FilterLink({
-  href,
-  label,
-  active,
-  filterParam,
-}: {
-  href: string;
-  label: string;
-  active: boolean;
-  filterParam: string | null;
-}) {
+function FilterLink({ href, label, active, id }: { href: string; label: string; active: boolean; id: string }) {
   return (
     <Link
       href={href}
       className={`rounded-lg border px-3 py-1.5 text-xs font-extrabold ${active ? STY.active : STY.idle}`}
       aria-selected={active}
       role="tab"
-      id={filterParam ? `notif-filter-${filterParam}` : "notif-filter-all"}
+      id={id}
     >
       {label}
     </Link>

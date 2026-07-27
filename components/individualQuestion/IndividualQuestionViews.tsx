@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { CheckCircle2, Clock, Inbox, MessageCircle, MessageCircleCheck, MessageSquareText, Paperclip, ReceiptText, ShieldCheck, Sparkles, WalletCards } from "lucide-react";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { EmptyState } from "@/components/common/EmptyState";
 import { listCardClassName, type ListCardTone } from "@/components/design-system/ListCard";
 import { getSubjectLabel } from "@/lib/subjects/subjectCatalog";

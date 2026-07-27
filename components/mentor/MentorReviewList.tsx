@@ -50,41 +50,65 @@ export function MentorReviewList(props: { mentorId: string }) {
   const [loadingMore, setLoadingMore] = useState(false);
   const limit = 5;
 
+  // fetch(순수)와 결과 반영을 분리 — effect 본문에서 동기 setState 없이(await 이후에만) 반영하기 위함.
+  const fetchPage = useCallback(
+    async (pageNum: number): Promise<ListResponse> => {
+      const res = await fetch(
+        `/api/reviews?mentorId=${encodeURIComponent(props.mentorId)}&page=${pageNum}&limit=${limit}`
+      );
+      return (await res.json()) as ListResponse;
+    },
+    [props.mentorId]
+  );
+
+  const applyListResponse = useCallback((json: ListResponse, pageNum: number, append: boolean) => {
+    if (!json.ok || !json.items) return;
+    const items = json.items;
+    setItems((prev) => (append ? [...prev, ...items] : items));
+    setTotal(json.total ?? 0);
+    setAvgRating(json.avgRating ?? null);
+    if (json.distribution) {
+      setDistribution({
+        1: json.distribution[1] ?? 0,
+        2: json.distribution[2] ?? 0,
+        3: json.distribution[3] ?? 0,
+        4: json.distribution[4] ?? 0,
+        5: json.distribution[5] ?? 0,
+      });
+    }
+    setPage(pageNum);
+  }, []);
+
+  // 이벤트 콜백·버튼 핸들러용(스피너 동기 표시 포함). effect 본문에서는 직접 호출하지 않는다.
   const load = useCallback(
     async (pageNum: number, append: boolean) => {
       if (append) setLoadingMore(true);
       else setLoading(true);
       try {
-        const res = await fetch(
-          `/api/reviews?mentorId=${encodeURIComponent(props.mentorId)}&page=${pageNum}&limit=${limit}`
-        );
-        const json = (await res.json()) as ListResponse;
-        if (!json.ok || !json.items) return;
-        const items = json.items;
-        setItems((prev) => (append ? [...prev, ...items] : items));
-        setTotal(json.total ?? 0);
-        setAvgRating(json.avgRating ?? null);
-        if (json.distribution) {
-          setDistribution({
-            1: json.distribution[1] ?? 0,
-            2: json.distribution[2] ?? 0,
-            3: json.distribution[3] ?? 0,
-            4: json.distribution[4] ?? 0,
-            5: json.distribution[5] ?? 0,
-          });
-        }
-        setPage(pageNum);
+        applyListResponse(await fetchPage(pageNum), pageNum, append);
       } finally {
         setLoading(false);
         setLoadingMore(false);
       }
     },
-    [props.mentorId]
+    [applyListResponse, fetchPage]
   );
 
   useEffect(() => {
-    void load(1, false);
-  }, [load]);
+    // 초기 로드 — loading 초기값이 true 라 동기 setState 불필요, 반영은 전부 await 이후.
+    let cancelled = false;
+    (async () => {
+      try {
+        const json = await fetchPage(1);
+        if (!cancelled) applyListResponse(json, 1, false);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchPage, applyListResponse]);
 
   useEffect(() => {
     const onUpdate = () => void load(1, false);
@@ -132,7 +156,7 @@ export function MentorReviewList(props: { mentorId: string }) {
                     <span className="text-amber-500 text-sm">{starIcons(item.rating)}</span>
                   </div>
                   <p className="mt-0.5 text-xs text-slate-500">
-                    {item.gradeSubject} · 구독 {item.subscriptionCount}회 · {formatDate(item.createdAt)}
+                    {item.gradeSubject} · {formatDate(item.createdAt)}
                   </p>
                   <p className="mt-2 text-sm leading-relaxed text-slate-800">{item.content}</p>
                   {item.mentorReply ? (

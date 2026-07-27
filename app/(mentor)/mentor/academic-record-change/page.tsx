@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { PageScaffold } from "@/components/shell/PageScaffold";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
+import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { CommunityFileDropzone } from "@/components/community/CommunityFileDropzone";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/routeGuard";

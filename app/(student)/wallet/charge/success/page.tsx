@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { CheckCircle2 } from "lucide-react";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
 import { findChargePackageByPayKrw } from "@/lib/cash/chargePackages";
 import { parseWalletBalanceBreakdown } from "@/lib/cash/parseWalletBalanceKrw";
 import { fetchWalletBalanceByUserId } from "@/lib/cash/cashQueries";
+import { confirmCashTopupForCurrentUser } from "@/lib/toss/confirmCashTopupServer";
 import { WalletChargeSidebar } from "@/components/cash/WalletChargeSidebar";
 
 type Props = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
@@ -34,23 +34,12 @@ export default async function WalletChargeSuccessPage({ searchParams }: Props) {
     redirect("/wallet/charge?error=" + encodeURIComponent("결제 정보가 올바르지 않습니다."));
   }
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-  const cookieHeader = (await headers()).get("cookie") ?? "";
-
-  const res = await fetch(`${baseUrl}/api/toss/confirm`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      ...(cookieHeader ? { Cookie: cookieHeader } : {}),
-    },
-    body: JSON.stringify({ paymentKey, orderId, amount: payKrw }),
-    cache: "no-store",
-  });
-
-  if (!res.ok) {
-    const body = (await res.json().catch(() => null)) as { message?: string } | null;
-    const msg = body?.message ?? "충전 확인에 실패했습니다.";
-    redirect("/wallet/charge?error=" + encodeURIComponent(msg));
+  // confirm 라우트와 같은 서버 코어를 '직접' 호출한다 — 공개 URL 경유·서버 내부
+  // self-fetch·쿠키 문자열 재전달 경로는 제거됐다(사이트 URL 환경변수 의존 없음).
+  // 세션은 현재 요청 컨텍스트의 서버 클라이언트가 그대로 읽는다.
+  const result = await confirmCashTopupForCurrentUser({ paymentKey, orderId, amount: payKrw });
+  if (!result.ok) {
+    redirect("/wallet/charge?error=" + encodeURIComponent(result.message || "충전 확인에 실패했습니다."));
   }
 
   const pkg = findChargePackageByPayKrw(payKrw);

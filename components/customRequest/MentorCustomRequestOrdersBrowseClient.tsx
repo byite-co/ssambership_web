@@ -63,13 +63,13 @@ export function MentorCustomRequestOrdersBrowseClient(props: {
   const [tab, setTab] = useState<MentorOrderBrowseTabId>(defaultTab);
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
+  // initialTab 변경 시 탭·페이지 리셋 — effect(+disable) 대신 렌더 중 파생 리셋(안전 변환 패턴).
+  const [prevInitialTab, setPrevInitialTab] = useState(props.initialTab);
+  if (prevInitialTab !== props.initialTab) {
+    setPrevInitialTab(props.initialTab);
     setTab(resolveDefaultTab(props.initialTab));
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(1);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.initialTab]);
+  }
 
   // 모바일은 페이지당 5개, 데스크탑은 기존 10개. 초기값=데스크탑값(SSR/hydration 일치) → 마운트 후 보정.
   const [pageSize, setPageSize] = useState(PAGE_SIZE);

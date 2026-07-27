@@ -13,6 +13,16 @@ import {
 } from "@/lib/mentor/schoolVerificationConstants";
 import { loadSchoolClassificationCatalogs } from "@/lib/mentor/schoolClassificationCatalog";
 import { mapDataErrorMessage } from "@/lib/utils/mapDataError";
+import {
+  ADMIN_SERVICE_ROLE_UNAVAILABLE_MESSAGE,
+  resolveAdminWriteClient,
+} from "@/lib/admin/adminWriteClient";
+import {
+  APPROVE_MENTOR_SCHOOL_VERIFICATION_RPC,
+  buildApproveMentorSchoolVerificationParams,
+  mapApproveMentorSchoolVerificationError,
+  parseApproveMentorSchoolVerificationResult,
+} from "@/lib/admin/mentorSchoolVerificationApproval";
 
 const PATH = "/admin/mentor-approval";
 const TABLE = "mentor_school_verifications";
@@ -32,12 +42,14 @@ function okUrl(kind: "school-approve" | "school-reject" | "school-resubmit"): st
   return `${PATH}?ok=${encodeURIComponent(kind)}`;
 }
 
-async function writeClient(): Promise<SupabaseClient> {
-  try {
-    return createServiceRoleClient();
-  } catch {
-    return createClient();
-  }
+/**
+ * W4-A: service role 실패 시 일반 세션 클라이언트로 내려가던 폴백을 제거했다(fail-closed).
+ * 폴백은 권한 상승은 아니었지만 `SUPABASE_SERVICE_ROLE_KEY` 누락을 조용히 가렸다.
+ * 반환이 null 이면 호출부는 처리하지 않고 중단한다.
+ */
+function writeClientOrNull(): SupabaseClient | null {
+  const resolved = resolveAdminWriteClient(createServiceRoleClient);
+  return resolved.ok ? (resolved.client as SupabaseClient) : null;
 }
 
 async function asMajorCategory(value: string): Promise<VerifiedMajorCategory | null> {
@@ -121,30 +133,34 @@ export async function approveMentorSchoolVerificationAction(formData: FormData) 
     redirect(errUrl("정규화 학교 키를 만들 수 없습니다. 학교명을 확인해 주세요."));
   }
 
-  const admin = await writeClient();
+  // 승인은 서버 정본 RPC 한 경로로만 한다(SQL 174).
+  // ★ 관리자 세션 클라이언트로 호출한다 — RPC 의 is_admin() 이 호출자 JWT 의 auth.uid() 를
+  //   읽으므로 service role 클라이언트로 부르면 정상 관리자도 NOT_ADMIN 이 된다.
+  const session = await createClient();
   const reviewedAt = new Date().toISOString();
-  const patch = {
-    status: "approved",
-    verified_university_name: verifiedUniversityName,
-    verified_university_id: verifiedUniversityId,
-    verified_department_name: verifiedDepartmentName,
-    verified_major_category: verifiedMajorCategory,
-    school_tier: schoolTier,
-    reviewed_by: user.id,
-    reviewed_at: reviewedAt,
-    reject_reason: null,
-  };
+  const { data, error } = await session.rpc(
+    APPROVE_MENTOR_SCHOOL_VERIFICATION_RPC,
+    buildApproveMentorSchoolVerificationParams({
+      verificationId,
+      universityName: verifiedUniversityName,
+      universityId: verifiedUniversityId,
+      departmentName: verifiedDepartmentName,
+      majorCategory: verifiedMajorCategory,
+      schoolTier,
+    })
+  );
 
-  const { row, error } = await updateReviewableRow(admin, verificationId, patch);
   if (error) {
-    redirect(errUrl(mapDataErrorMessage(error)));
+    redirect(errUrl(mapApproveMentorSchoolVerificationError(error.message)));
   }
+  const row = parseApproveMentorSchoolVerificationResult(data);
   if (!row) {
-    redirect(errUrl("이미 처리되었거나 심사 대기 상태가 아닌 요청입니다."));
+    redirect(errUrl(mapApproveMentorSchoolVerificationError(null)));
   }
 
-  await logSchoolVerificationAction(user.id, "mentor_school_verification_approve", row.id, {
-    mentorId: row.mentor_id,
+  await logSchoolVerificationAction(user.id, "mentor_school_verification_approve", row.verificationId, {
+    mentorId: row.mentorId,
+    supersededCount: row.supersededCount,
     verifiedUniversityName,
     verifiedUniversityId,
     verifiedDepartmentName,
@@ -170,7 +186,10 @@ export async function rejectMentorSchoolVerificationAction(formData: FormData) {
     redirect(errUrl("반려 사유를 입력해 주세요."));
   }
 
-  const admin = await writeClient();
+  const admin = writeClientOrNull();
+  if (!admin) {
+    redirect(errUrl(ADMIN_SERVICE_ROLE_UNAVAILABLE_MESSAGE));
+  }
   const reviewedAt = new Date().toISOString();
   const { row, error } = await updateReviewableRow(admin, verificationId, {
     status: "rejected",
@@ -209,7 +228,10 @@ export async function requestMentorSchoolVerificationResubmitAction(formData: Fo
     redirect(errUrl("재제출 요청 사유를 입력해 주세요."));
   }
 
-  const admin = await writeClient();
+  const admin = writeClientOrNull();
+  if (!admin) {
+    redirect(errUrl(ADMIN_SERVICE_ROLE_UNAVAILABLE_MESSAGE));
+  }
   const reviewedAt = new Date().toISOString();
   const { row, error } = await updateReviewableRow(admin, verificationId, {
     status: "resubmit_required",

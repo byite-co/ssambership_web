@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AccountDeletionForm } from "@/components/account/AccountDeletionForm";
+import { AccountDeletionPendingPanel } from "@/components/account/AccountDeletionPendingPanel";
 import { PageScaffold } from "@/components/shell/PageScaffold";
 import { checkAccountDeletionPreconditions } from "@/lib/account/accountDeletionPreconditions";
+import { ACCOUNT_DELETION_ACTIVE_STATES } from "@/lib/account/accountDeletionJobStates";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { isAccountDeletionFeatureEnabled } from "@/lib/shell/featureFlags";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
@@ -30,6 +32,19 @@ export default async function AccountDeletePage({ searchParams }: Props) {
 
   const sp = (await searchParams) ?? {};
   const actionError = typeof sp.error === "string" && sp.error ? sp.error : null;
+  const justCanceled = sp.canceled === "1";
+
+  // 활성 saga job — 있으면 폼 대신 "요청 접수 + 취소 창" 패널을 보여준다(W5 §3-5).
+  // 웹 즉시 삭제 경로를 폐지하면서 사용자 동선이 "즉시 완료" → "요청 접수 후 취소 가능"으로 바뀐다.
+  const { data: activeJob } = await admin
+    .from("account_deletion_jobs")
+    .select("id, state, cancelable_until")
+    .eq("user_id", user.id)
+    .in("state", ACCOUNT_DELETION_ACTIVE_STATES)
+    .order("requested_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  const job = (activeJob ?? null) as { state?: string; cancelable_until?: string | null } | null;
 
   return (
     <PageScaffold
@@ -46,11 +61,25 @@ export default async function AccountDeletePage({ searchParams }: Props) {
           </p>
         ) : null}
 
+        {justCanceled && !job ? (
+          <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-900">
+            탈퇴 요청을 취소했습니다. 계정은 그대로 유지됩니다.
+          </p>
+        ) : null}
+
+        {job ? (
+          <AccountDeletionPendingPanel
+            state={job.state ?? "pending"}
+            cancelableUntil={job.cancelable_until ?? null}
+          />
+        ) : null}
+
         {/* 보존·익명화 고지 (스펙 §5 공용 문구) */}
         <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
           <h2 className="text-sm font-extrabold text-slate-900">탈퇴 시 처리 안내</h2>
           <p className="mt-2 text-[13px] leading-relaxed text-slate-600">
-            탈퇴 시 이름·닉네임·이메일 등 개인정보는 즉시 익명화되며 로그인이 영구 차단됩니다. 결제·캐시 원장·정산·주문
+            탈퇴를 요청하면 30분의 취소 창이 열리고, 창이 지나면 계정이 잠긴 뒤 순서대로 처리됩니다(세션 종료 → 업로드
+            파일 삭제 → 남은 캐시 소멸·개인정보 익명화 → 로그인 영구 차단). 결제·캐시 원장·정산·주문
             기록은 관련 법령(전자상거래법·세법)에 따라 익명 상태로 보존됩니다. 작성한 게시글·후기는 &lsquo;탈퇴회원&rsquo;
             표기로 남으며, 삭제를 원하면 탈퇴 전에 직접 삭제해 주세요. 남은 캐시는 환불 신청을 먼저 진행하거나, 소멸에
             동의해야 탈퇴할 수 있습니다.
@@ -96,18 +125,20 @@ export default async function AccountDeletePage({ searchParams }: Props) {
           </ul>
         </section>
 
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <AccountDeletionForm
-            blockersOk={pre.blockersOk}
-            requiresForfeitConsent={balanceCash > 0}
-            balanceLabel={balanceCash > 0 ? formatCashKrw(balanceCash, { unit: "캐시" }) : null}
-          />
-          {!pre.blockersOk ? (
-            <p className="mt-3 text-center text-xs font-semibold text-slate-500">
-              위 미충족 항목을 해결하면 탈퇴를 진행할 수 있어요.
-            </p>
-          ) : null}
-        </section>
+        {!job ? (
+          <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <AccountDeletionForm
+              blockersOk={pre.blockersOk}
+              requiresForfeitConsent={balanceCash > 0}
+              balanceLabel={balanceCash > 0 ? formatCashKrw(balanceCash, { unit: "캐시" }) : null}
+            />
+            {!pre.blockersOk ? (
+              <p className="mt-3 text-center text-xs font-semibold text-slate-500">
+                위 미충족 항목을 해결하면 탈퇴를 진행할 수 있어요.
+              </p>
+            ) : null}
+          </section>
+        ) : null}
       </div>
     </PageScaffold>
   );

@@ -298,14 +298,17 @@ export function PublicMentorDetailBody(props: {
                 <ReviewEligibilityBanner
                   eligibilityKnown={reviewEligibility != null}
                   eligible={reviewEligibility?.eligible === true}
+                  mode={reviewEligibility?.mode}
+                  canEdit={reviewEligibility?.canEdit}
                 />
                 <ReviewWriteModal
                   mentorId={mentorId}
                   mentorName={display.displayName}
                   initialEligible={reviewEligibility?.eligible === true}
-                  initialReason={
-                    reviewEligibility && !reviewEligibility.eligible ? reviewEligibility.reason : undefined
-                  }
+                  initialReason={reviewEligibility?.reason}
+                  initialMode={reviewEligibility?.mode}
+                  initialReviewId={reviewEligibility?.existingReviewId ?? null}
+                  initialCanEdit={reviewEligibility?.canEdit}
                 />
               </div>
             </SurfaceCard>

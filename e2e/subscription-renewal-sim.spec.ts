@@ -545,7 +545,7 @@ test("2-4 만료된 구독: 질문방 신규 thread 작성 차단", async () => 
       .single();
     room = roomIns;
   }
-  const roomId = (room as { id: string }).id;
+  const _roomId = (room as { id: string }).id;
 
   // RLS 026 (mentor_student_rooms insert는 active sub 확인) — 우리 케이스는 thread insert, qt_write_via_room 정책은 본인 방이면 통과.
   // 핵심: 앱 가드 assertThreadCreationSubscriptionAllowed는 active sub만 통과. 우리는 expired.

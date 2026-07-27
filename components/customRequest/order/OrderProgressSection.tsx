@@ -1,11 +1,6 @@
 import { pickDisplayField } from "@/lib/customRequest/customRequestQueries";
 import { submitCustomOrderRoomMessageAction } from "@/lib/customRequest/orderMessageActions";
 import type { OrderDetailPageData } from "@/lib/customRequest/orderDetailQueries";
-import {
-  formatOrderRoomDateTime,
-  normalizedPrimaryOrderStatus,
-  orderEventKindLabelForUi,
-} from "@/lib/customRequest/orderLifecycleConstants";
 import { EmptyState } from "@/components/design-system";
 import { Avatar } from "@/components/common/Avatar";
 import {
@@ -76,6 +71,8 @@ function OrderMessageAttachmentPreviewList({
           >
             {attachment.isImage && attachment.signedUrl ? (
               <div className="bg-slate-50">
+                {/* 서명 URL(단기 만료·외부 최적화 불가) — next/image 미적용, 워크스페이스 첨부 렌더와 동일 관례 */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src={attachment.signedUrl}
                   alt={attachment.fileName}
@@ -145,8 +142,6 @@ export function OrderProgressSection(props: Props) {
   const {
     detail,
     orderId: orderIdProp,
-    view,
-    actorRole,
     hasOrderPartyAccess,
     orderTerminal = false,
     embedded = false,

@@ -6,7 +6,6 @@ import {
   isOrderRowTerminalForActions,
   isOrderStatusTerminal,
   ORDER_ROOM_CARD_CLASS,
-  ORDER_ROOM_TERMINAL_MENTOR_NOTICE,
   formatOrderRoomDateTime,
   normalizedPrimaryOrderStatus,
   orderWorkspaceCurrentStepIndex,
@@ -14,7 +13,7 @@ import {
   formatOrderRoomDate,
 } from "@/lib/customRequest/orderLifecycleConstants";
 import type { AppRole } from "@/lib/types/user";
-import { OrderStatusBadge, PaymentStatusBadge } from "@/components/customRequest/order/OrderStatusBadge";
+import { OrderStatusBadge } from "@/components/customRequest/order/OrderStatusBadge";
 import { mentorCustomOrderBrowseStatus } from "@/lib/design-system/mentorOrderStatusBadge";
 import { shortOrderIdForDisplay } from "@/lib/utils/formatOrderIdForDisplay";
 
@@ -78,7 +77,7 @@ function paymentSettlementNotice(detail: OrderDetailPageData, orderRow: Record<s
 export function hasRightSettlementBlockContent(
   detail: OrderDetailPageData,
   orderRow: Record<string, unknown>,
-  actorRole?: AppRole
+  _actorRole?: AppRole
 ): boolean {
   if (detail.settlementLoadError) {
     return true;
@@ -178,7 +177,7 @@ export function OrderRoomPageHeader(props: OrderRoomPageHeaderProps) {
   if (props.view === "mentor") {
     return <OrderRoomPageHeaderMentor {...props} />;
   }
-  const { detail, view, backHref = "/custom-request" } = props;
+  const { detail, backHref = "/custom-request" } = props;
   const h = detail.header;
   const o = detail.bundle.order;
 

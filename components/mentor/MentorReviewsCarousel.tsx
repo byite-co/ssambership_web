@@ -26,26 +26,47 @@ export function MentorReviewsCarousel(props: { mentorId: string }) {
   const [activeDot, setActiveDot] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  // fetch(순수)와 결과 반영 분리 — effect 본문에서 동기 setState 없이(await 이후에만) 반영.
+  const fetchReviews = useCallback(async (): Promise<ListResponse> => {
+    const res = await fetch(
+      `/api/reviews?mentorId=${encodeURIComponent(props.mentorId)}&page=1&limit=8`
+    );
+    return (await res.json()) as ListResponse;
+  }, [props.mentorId]);
+
+  const applyReviews = useCallback((json: ListResponse) => {
+    if (json.ok && json.items) {
+      setItems(json.items);
+      setTotal(json.total ?? json.items.length);
+      setAvgRating(json.avgRating ?? null);
+    }
+  }, []);
+
+  // 이벤트 콜백용(스피너 동기 표시 포함). effect 본문에서는 직접 호출하지 않는다.
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await fetch(
-        `/api/reviews?mentorId=${encodeURIComponent(props.mentorId)}&page=1&limit=8`
-      );
-      const json = (await res.json()) as ListResponse;
-      if (json.ok && json.items) {
-        setItems(json.items);
-        setTotal(json.total ?? json.items.length);
-        setAvgRating(json.avgRating ?? null);
-      }
+      applyReviews(await fetchReviews());
     } finally {
       setLoading(false);
     }
-  }, [props.mentorId]);
+  }, [applyReviews, fetchReviews]);
 
   useEffect(() => {
-    void load();
-  }, [load]);
+    // 초기 로드 — loading 초기값이 true 라 동기 setState 불필요, 반영은 전부 await 이후.
+    let cancelled = false;
+    (async () => {
+      try {
+        const json = await fetchReviews();
+        if (!cancelled) applyReviews(json);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchReviews, applyReviews]);
 
   useEffect(() => {
     const onUpdate = () => void load();

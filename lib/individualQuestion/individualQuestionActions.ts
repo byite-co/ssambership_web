@@ -12,11 +12,11 @@ import {
   uploadIndividualQuestionAttachment,
 } from "@/lib/individualQuestion/individualQuestionAttachmentStorage";
 import { expiryDateForStatus, type IndividualQuestionExpirableStatus } from "@/lib/individualQuestion/individualQuestionExpiryConfig";
-import { fetchUserDisplayName, insertNotificationBestEffort } from "@/lib/notifications/notificationInsert";
 import { maskContactInUserText } from "@/lib/safety/trustSafetyText";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { loadSchoolClassificationCatalogs } from "@/lib/mentor/schoolClassificationCatalog";
+import { normalizeSubjectCode } from "@/lib/subjects/subjectCatalog";
 
 const STUDENT_LIST_PATH = "/individual-questions";
 const MENTOR_LIST_PATH = "/mentor/individual-questions";
@@ -108,110 +108,9 @@ async function setQuestionExpiryBestEffort(
   }
 }
 
-function mentorDisplayLabel(name: string): string {
-  const trimmed = name.trim();
-  if (!trimmed) return "멘토";
-  return trimmed.endsWith("멘토") ? trimmed : `${trimmed} 멘토`;
-}
-
-async function safeDisplayName(
-  supabase: ReturnType<typeof createServiceRoleClient>,
-  userId: string,
-  fallback: string
-): Promise<string> {
-  try {
-    const name = await fetchUserDisplayName(supabase, userId);
-    return name && name !== "사용자" ? name : fallback;
-  } catch (error) {
-    console.error("[individualQuestion] display name lookup failed", { userId, error });
-    return fallback;
-  }
-}
-
-// 지정형 질문 도착 → 지정 멘토에게 best-effort 알림. (생성 1회 전환에서만 호출 → 멱등)
-async function notifyDirectQuestionArrival(
-  supabase: ReturnType<typeof createServiceRoleClient>,
-  args: { mentorId: string; questionId: string; studentId: string }
-): Promise<void> {
-  const studentName = await safeDisplayName(supabase, args.studentId, "학생");
-  await insertNotificationBestEffort({
-    recipientUserId: args.mentorId,
-    type: "individual_question_assigned",
-    title: "새 개별 질문이 도착했어요",
-    body: `${studentName}님이 개별 질문을 보냈어요. 답변을 작성해 주세요.`,
-    link: `${MENTOR_LIST_PATH}/${args.questionId}`,
-    metadata: { questionId: args.questionId, questionType: "direct" },
-  });
-}
-
-// 공개 질문 claim → 학생에게 best-effort 알림. (claim은 원자적 1회 전환 → 멱등)
-async function notifyOpenQuestionClaimed(
-  supabase: ReturnType<typeof createServiceRoleClient>,
-  args: { studentId: string; questionId: string; mentorId: string }
-): Promise<void> {
-  const mentorName = mentorDisplayLabel(await safeDisplayName(supabase, args.mentorId, "멘토"));
-  await insertNotificationBestEffort({
-    recipientUserId: args.studentId,
-    type: "individual_question_claimed",
-    title: "멘토가 답변을 맡았어요",
-    body: `${mentorName}가 공개 질문을 맡았어요. 곧 답변을 받을 수 있어요.`,
-    link: `${STUDENT_LIST_PATH}/${args.questionId}`,
-    metadata: { questionId: args.questionId, questionType: "open" },
-  });
-}
-
-// 답변 등록 → 학생에게 best-effort 알림. (status=answered 전환 후 1회 → 멱등) 아직 지급 전.
-async function notifyAnswerRegistered(
-  supabase: ReturnType<typeof createServiceRoleClient>,
-  args: { studentId: string; questionId: string }
-): Promise<void> {
-  await insertNotificationBestEffort({
-    recipientUserId: args.studentId,
-    type: "individual_question_answered",
-    title: "답변이 등록되었어요",
-    body: "개별 질문에 답변이 등록되었어요. 내용을 확인하고 [해결됨]을 누르면 예치 캐시가 멘토에게 지급돼요.",
-    link: `${STUDENT_LIST_PATH}/${args.questionId}`,
-    metadata: { questionId: args.questionId },
-  });
-}
-
-// 대화 새 메시지 → 상대방 best-effort 알림.
-async function notifyNewIndividualQuestionMessage(
-  supabase: ReturnType<typeof createServiceRoleClient>,
-  args: { recipientUserId: string; questionId: string; toRole: "student" | "mentor" }
-): Promise<void> {
-  const link =
-    args.toRole === "mentor"
-      ? `${MENTOR_LIST_PATH}/${args.questionId}`
-      : `${STUDENT_LIST_PATH}/${args.questionId}`;
-  const body =
-    args.toRole === "mentor"
-      ? "학생이 개별 질문에 새 메시지를 보냈어요."
-      : "멘토가 개별 질문에 새 메시지를 보냈어요.";
-  await insertNotificationBestEffort({
-    recipientUserId: args.recipientUserId,
-    type: "individual_question_message",
-    title: "새 메시지가 도착했어요",
-    body,
-    link,
-    metadata: { questionId: args.questionId },
-  });
-}
-
-// 학생 확정 → 멘토에게 best-effort 알림. (release 성공 1회 → 멱등)
-async function notifyAnswerConfirmed(
-  supabase: ReturnType<typeof createServiceRoleClient>,
-  args: { mentorId: string; questionId: string }
-): Promise<void> {
-  await insertNotificationBestEffort({
-    recipientUserId: args.mentorId,
-    type: "individual_question_released",
-    title: "학생이 답변을 확정했어요",
-    body: "학생이 답변을 확정해 예치 캐시가 지급되었어요.",
-    link: `${MENTOR_LIST_PATH}/${args.questionId}`,
-    metadata: { questionId: args.questionId },
-  });
-}
+// [P1-11 원자화] 개별질문 알림(assigned/claimed/answered/released/message)은 이제 DB AFTER 트리거
+// (155_p1_11_iq_notification_atomization.sql)가 domain write 와 같은 트랜잭션에서 record_domain_notification
+// 으로 원자·멱등 기록한다. 기존 best-effort 후처리 알림 헬퍼는 이중 발송을 막기 위해 제거했다.
 
 export async function createDirectIndividualQuestionAction(formData: FormData) {
   const { user } = await requireRole("student");
@@ -219,7 +118,8 @@ export async function createDirectIndividualQuestionAction(formData: FormData) {
   const idempotencyKey = textValue(formData, "idempotencyKey");
   const title = textValue(formData, "title");
   const body = textValue(formData, "body");
-  const subject = optionalText(formData, "subject");
+  // P2-23: 과목은 정본 subjects.code 로 정규화한다(미매핑 입력은 null). 자유 문자열을 그대로 저장하지 않는다.
+  const subject = normalizeSubjectCode(optionalText(formData, "subject"));
   const topic = optionalText(formData, "topic");
   const attachment = formData.get("attachment");
   // origin=iq-tab: 개별 질문 탭 내 작성 화면(/individual-questions/direct/[mentorId])에서 제출.
@@ -272,11 +172,7 @@ export async function createDirectIndividualQuestionAction(formData: FormData) {
 
   if (result.code !== "already_exists") {
     await setQuestionExpiryBestEffort(admin, result.question_id, "assigned");
-    await notifyDirectQuestionArrival(admin, {
-      mentorId,
-      questionId: result.question_id,
-      studentId: user.id,
-    });
+    // assigned 알림은 155 AFTER INSERT 트리거가 원자 발행(best-effort 제거).
   }
 
   if (result.code !== "already_exists" && attachment instanceof File && fileHasContent(attachment)) {
@@ -301,7 +197,8 @@ export async function createOpenIndividualQuestionAction(formData: FormData) {
   const idempotencyKey = textValue(formData, "idempotencyKey");
   const title = textValue(formData, "title");
   const body = textValue(formData, "body");
-  const subject = optionalText(formData, "subject");
+  // P2-23: 과목은 정본 subjects.code 로 정규화한다(미매핑 입력은 null). 자유 문자열을 그대로 저장하지 않는다.
+  const subject = normalizeSubjectCode(optionalText(formData, "subject"));
   const topic = optionalText(formData, "topic");
   const requiredSchoolTier = optionalText(formData, "requiredSchoolTier");
   const requiredMajorCategory = optionalText(formData, "requiredMajorCategory");
@@ -389,20 +286,7 @@ export async function claimOpenIndividualQuestionAction(formData: FormData) {
   }
 
   await setQuestionExpiryBestEffort(admin, result.question_id, "claimed");
-
-  const { data: claimedRow } = await admin
-    .from("individual_questions")
-    .select("student_id")
-    .eq("id", result.question_id)
-    .maybeSingle();
-  const claimedStudentId = typeof claimedRow?.student_id === "string" ? claimedRow.student_id : null;
-  if (claimedStudentId) {
-    await notifyOpenQuestionClaimed(admin, {
-      studentId: claimedStudentId,
-      questionId: result.question_id,
-      mentorId: user.id,
-    });
-  }
+  // claimed 알림은 155 AFTER UPDATE(status→claimed) 트리거가 원자 발행(best-effort·전용 재조회 제거).
 
   revalidatePath(MENTOR_LIST_PATH);
   revalidatePath(`${MENTOR_LIST_PATH}/${result.question_id}`);
@@ -487,15 +371,7 @@ export async function sendIndividualQuestionMessageAction(formData: FormData) {
     }
   }
 
-  // 상대방 best-effort 알림.
-  if (isMentorParty && row.student_id) {
-    await notifyNewIndividualQuestionMessage(admin, { recipientUserId: row.student_id, questionId, toRole: "student" });
-  } else if (isStudentParty) {
-    const mentorId = row.claimed_mentor_id ?? row.designated_mentor_id;
-    if (mentorId) {
-      await notifyNewIndividualQuestionMessage(admin, { recipientUserId: mentorId, questionId, toRole: "mentor" });
-    }
-  }
+  // 상대방 알림은 155 AFTER INSERT(individual_question_messages) 트리거가 원자 발행(best-effort 제거).
 
   revalidatePath(MENTOR_LIST_PATH);
   revalidatePath(`${MENTOR_LIST_PATH}/${questionId}`);
@@ -549,10 +425,7 @@ export async function confirmIndividualQuestionAnswerByMentorAction(formData: Fo
 
   if (updateError) actionError(detailPath, "답변 확정 상태를 저장하지 못했습니다.");
 
-  // 지급은 학생 [해결됨] 때. 여기선 학생에게 확정 알림만.
-  if (row.student_id) {
-    await notifyAnswerRegistered(admin, { studentId: row.student_id, questionId });
-  }
+  // answered 알림은 155 AFTER UPDATE(status→answered) 트리거가 원자 발행(best-effort 제거).
 
   revalidatePath(MENTOR_LIST_PATH);
   revalidatePath(`${MENTOR_LIST_PATH}/${questionId}`);
@@ -607,10 +480,7 @@ export async function confirmIndividualQuestionAnswerAction(formData: FormData) 
     actionError(detailPath, "지급 처리에 실패했습니다. 잠시 후 다시 시도해 주세요.");
   }
 
-  const mentorId = row.claimed_mentor_id ?? row.designated_mentor_id;
-  if (mentorId) {
-    await notifyAnswerConfirmed(admin, { mentorId, questionId });
-  }
+  // released 알림은 155 AFTER UPDATE(status→released) 트리거가 멘토에게 원자 발행(best-effort 제거).
 
   revalidatePath(MENTOR_LIST_PATH);
   revalidatePath(`${MENTOR_LIST_PATH}/${questionId}`);

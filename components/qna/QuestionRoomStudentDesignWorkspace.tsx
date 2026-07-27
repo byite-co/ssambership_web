@@ -29,7 +29,6 @@ import {
   type AttachmentPreviewInfo,
   type ThreadAttachmentView,
 } from "@/lib/qna/questionRoomAttachmentView";
-import { FormSubmitButton } from "@/components/qna/FormSubmitButton";
 import { QuestionRoomNewQuestionModal } from "@/components/qna/QuestionRoomNewQuestionModal";
 import { QuestionThreadConfirmButton } from "@/components/qna/QuestionThreadConfirmButton";
 // 오답 표시 토글은 화면에서 숨김(컴포넌트·API·DB는 보존, 추후 멘토용으로 활용). UI 렌더만 제거.
@@ -58,7 +57,7 @@ import {
   threadViewCount,
   type MentorDisplayById,
 } from "@/lib/qna/questionRoomStudentDisplay";
-import { mentorSchoolLine, mentorSubjectChips } from "@/lib/mentor/mentorPublicProfileDisplay";
+import { mentorSchoolLine } from "@/lib/mentor/mentorPublicProfileDisplay";
 
 type Row = Record<string, unknown>;
 type SortKey = "newest" | "oldest";
@@ -191,39 +190,59 @@ export function QuestionRoomStudentDesignWorkspace(props: {
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("newest");
   const [newQuestionOpen, setNewQuestionOpen] = useState(false);
-  const [weeklyUsage, setWeeklyUsage] = useState<WeeklyUsageSnapshot | null>(null);
-  const [usageLoading, setUsageLoading] = useState(false);
+  const [weeklyUsage, setWeeklyUsage] = useState<WeeklyUsageSnapshot | null>(
+    () => (mentorId ? (props.initialUsageByMentorId?.[mentorId] ?? null) : null)
+  );
+  const [usageLoading, setUsageLoading] = useState(() => Boolean(mentorId));
   const [usageByMentorId, setUsageByMentorId] = useState<Record<string, WeeklyUsageSnapshot>>(
     props.initialUsageByMentorId ?? {}
   );
 
-  useEffect(() => {
-    if (mentorId && props.initialUsageByMentorId?.[mentorId]) {
-      setWeeklyUsage(props.initialUsageByMentorId[mentorId]);
-    }
-  }, [mentorId, props.initialUsageByMentorId]);
+  // 멘토 전환 시 서버 initial 값으로 즉시 표시 + 로딩 표시 — effect 대신 렌더 중 파생 리셋(안전 변환 패턴).
+  const initialUsageForMentor = mentorId ? (props.initialUsageByMentorId?.[mentorId] ?? null) : null;
+  const [prevUsageMentor, setPrevUsageMentor] = useState(mentorId);
+  if (prevUsageMentor !== mentorId) {
+    setPrevUsageMentor(mentorId);
+    if (initialUsageForMentor) setWeeklyUsage(initialUsageForMentor);
+    if (mentorId) setUsageLoading(true);
+  }
 
-  const loadUsageForMentor = useCallback(async (mid: string) => {
+  // 순수 fetch(설정 없음)와 결과 반영을 분리 — effect 본문에서 동기 setState 없이(await 이후에만) 반영.
+  const fetchUsageForMentor = useCallback(async (mid: string): Promise<WeeklyUsageSnapshot | null> => {
     try {
       const res = await fetch(`/api/question-room/weekly-usage?mentorId=${encodeURIComponent(mid)}`, {
         credentials: "include",
       });
       const json = (await res.json()) as { ok?: boolean; usage?: WeeklyUsageSnapshot };
-      if (res.ok && json.ok && json.usage) {
-        const usage = json.usage;
-        setUsageByMentorId((prev) => ({ ...prev, [mid]: usage }));
-        if (mid === mentorId) setWeeklyUsage(json.usage);
-      }
+      if (res.ok && json.ok && json.usage) return json.usage;
     } catch {
       /* ignore */
     }
-  }, [mentorId]);
+    return null;
+  }, []);
+
+  const applyUsageForMentor = useCallback(
+    (mid: string, usage: WeeklyUsageSnapshot | null) => {
+      if (!usage) return;
+      setUsageByMentorId((prev) => ({ ...prev, [mid]: usage }));
+      if (mid === mentorId) setWeeklyUsage(usage);
+    },
+    [mentorId]
+  );
 
   useEffect(() => {
     if (!mentorId) return;
-    setUsageLoading(true);
-    void loadUsageForMentor(mentorId).finally(() => setUsageLoading(false));
-  }, [mentorId, loadUsageForMentor]);
+    let cancelled = false;
+    (async () => {
+      const usage = await fetchUsageForMentor(mentorId);
+      if (cancelled) return;
+      applyUsageForMentor(mentorId, usage);
+      setUsageLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mentorId, fetchUsageForMentor, applyUsageForMentor]);
 
   useEffect(() => {
     const ids = new Set<string>();
@@ -231,10 +250,16 @@ export function QuestionRoomStudentDesignWorkspace(props: {
       const mid = partyUserIdFromRoomRow(r, "mentor");
       if (mid && mid !== mentorId) ids.add(mid);
     }
+    let cancelled = false;
     for (const mid of ids) {
-      void loadUsageForMentor(mid);
+      void fetchUsageForMentor(mid).then((usage) => {
+        if (!cancelled) applyUsageForMentor(mid, usage);
+      });
     }
-  }, [props.rooms.rows, mentorId, loadUsageForMentor]);
+    return () => {
+      cancelled = true;
+    };
+  }, [props.rooms.rows, mentorId, fetchUsageForMentor, applyUsageForMentor]);
 
   const filteredRooms = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -259,14 +284,16 @@ export function QuestionRoomStudentDesignWorkspace(props: {
   // ★질문 목록 페이지네이션 (일정 개수 초과 시)
   const THREADS_PER_PAGE = 12;
   const [threadPage, setThreadPage] = useState(1);
-  const threadTotalPages = Math.max(1, Math.ceil(sortedThreads.length / THREADS_PER_PAGE));
-  const safeThreadPage = Math.min(threadPage, threadTotalPages);
-  useEffect(() => {
-    if (threadPage > threadTotalPages) setThreadPage(threadTotalPages);
-  }, [threadPage, threadTotalPages]);
-  useEffect(() => {
+  // 방/정렬 변경 시 1페이지 리셋 — effect 대신 렌더 중 파생 리셋(안전 변환 패턴).
+  const threadListKey = `${props.roomId}|${sort}`;
+  const [prevThreadListKey, setPrevThreadListKey] = useState(threadListKey);
+  if (prevThreadListKey !== threadListKey) {
+    setPrevThreadListKey(threadListKey);
     setThreadPage(1);
-  }, [props.roomId, sort]);
+  }
+  const threadTotalPages = Math.max(1, Math.ceil(sortedThreads.length / THREADS_PER_PAGE));
+  // 표시·이동은 전부 safeThreadPage(클램프값) 기준 — 상태 동기화 effect 불필요.
+  const safeThreadPage = Math.min(threadPage, threadTotalPages);
   const pagedThreads = sortedThreads.slice(
     (safeThreadPage - 1) * THREADS_PER_PAGE,
     safeThreadPage * THREADS_PER_PAGE
@@ -873,7 +900,7 @@ export function QuestionRoomStudentDesignWorkspace(props: {
                       <button
                         type="button"
                         disabled={safeThreadPage <= 1}
-                        onClick={() => setThreadPage((p) => Math.max(1, p - 1))}
+                        onClick={() => setThreadPage(Math.max(1, safeThreadPage - 1))}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
                         aria-label="이전 페이지"
                       >
@@ -885,7 +912,7 @@ export function QuestionRoomStudentDesignWorkspace(props: {
                       <button
                         type="button"
                         disabled={safeThreadPage >= threadTotalPages}
-                        onClick={() => setThreadPage((p) => Math.min(threadTotalPages, p + 1))}
+                        onClick={() => setThreadPage(Math.min(threadTotalPages, safeThreadPage + 1))}
                         className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 transition hover:bg-slate-50 disabled:opacity-40"
                         aria-label="다음 페이지"
                       >

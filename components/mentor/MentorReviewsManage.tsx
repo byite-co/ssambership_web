@@ -69,7 +69,7 @@ export function MentorReviewsManage(props: { initialItems: ReviewCardItem[] }) {
           <Star className="h-12 w-12 text-slate-400" strokeWidth={1.5} aria-hidden />
           <h3 className="mt-4 text-lg font-black text-slate-900">아직 받은 후기가 없어요</h3>
           <p className="mt-2 max-w-md text-sm font-medium text-slate-600">
-            학생이 동일 멘토를 2회 이상 이용하면 후기를 남길 수 있어요.
+            구독 중이거나 개별 질문을 이용한 학생이 후기를 남길 수 있어요.
           </p>
         </div>
       ) : (

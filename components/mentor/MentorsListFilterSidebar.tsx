@@ -23,7 +23,6 @@ export function MentorsListFilterSidebar(props: {
   schoolOptions?: FilterOption<MentorSchoolFilter>[];
   mentorTypeOptions?: FilterOption<MentorTypeFilter>[];
 }) {
-  const id = props.idPrefix ?? "mentors";
   const schoolOptions = props.schoolOptions ?? MENTOR_SCHOOL_OPTIONS;
   const mentorTypeOptions = props.mentorTypeOptions ?? MENTOR_TYPE_OPTIONS;
   const [extraSort, setExtraSort] = useState(

@@ -879,130 +879,66 @@ comment on column public.mentor_profiles.payout_account_number is '정산 입금
 
 -- ===== 042_reviews_system.sql =====
 
--- 멘토 리뷰 (학생 작성, 멘토 답글 1회, 관리자 숨김)
+-- 멘토 리뷰 (학생 작성, 멘토 답글 1회) — 코어 스키마 (P0-2 교정본, 042와 동기화)
+-- 004(author_id/body) base 위 멱등 정합. 구 042형(student_id/content·mentor_id→mentor_profiles)을 폐기.
+-- 모더레이션 컬럼/FK는 아래 033_p1 정본, 정책은 033/045(및 별도 126) 정본 — 여기서 정의하지 않음.
 create table if not exists public.reviews (
   id uuid primary key default gen_random_uuid(),
-  mentor_id uuid not null references public.mentor_profiles (user_id) on delete cascade,
-  student_id uuid not null references auth.users (id) on delete cascade,
-  subscription_count integer not null,
-  rating integer not null check (rating between 1 and 5),
-  content text not null,
+  mentor_id uuid not null references public.users (id) on delete cascade,
+  author_id uuid not null references public.users (id) on delete cascade,
+  rating smallint not null check (rating between 1 and 5),
+  body text not null,
+  subscription_count integer,
   mentor_reply text,
   mentor_replied_at timestamptz,
   is_hidden boolean not null default false,
-  created_at timestamptz not null default now(),
-  constraint reviews_one_per_pair unique (mentor_id, student_id)
+  created_at timestamptz not null default now()
 );
 
--- [bundle compatibility]
--- 004_p0_cash_disputes_admin_draft.sql creates an early reviews table with
--- author_id/body. 042_reviews_system.sql expects student_id/content. On a
--- blank setup that runs bundle_1 first, CREATE TABLE IF NOT EXISTS above does
--- not add the later columns, so normalize the table shape before indexes/RLS.
+-- 004형 base 위 멱등 코어 컬럼 정합 (모더레이션 컬럼 제외 — 033_p1 소유)
+alter table public.reviews add column if not exists author_id uuid;
+alter table public.reviews add column if not exists body text;
+alter table public.reviews add column if not exists subscription_count integer;
+alter table public.reviews add column if not exists mentor_reply text;
+alter table public.reviews add column if not exists mentor_replied_at timestamptz;
+alter table public.reviews add column if not exists is_hidden boolean not null default false;
+
+do $$
+begin
+  if not exists (select 1 from public.reviews where body is null) then
+    alter table public.reviews alter column body set not null;
+  end if;
+end $$;
+
+-- 정본 FK 수렴 (mentor_id/author_id → users). moderated_by FK는 033_p1 소유.
+do $$
+declare c record;
+begin
+  for c in
+    select con.conname
+    from pg_constraint con
+    where con.conrelid = 'public.reviews'::regclass and con.contype = 'f'
+      and con.conkey && (
+        select coalesce(array_agg(attnum), '{}')
+        from pg_attribute
+        where attrelid = 'public.reviews'::regclass
+          and attname in ('mentor_id','author_id'))
+  loop
+    execute format('alter table public.reviews drop constraint %I', c.conname);
+  end loop;
+end $$;
 alter table public.reviews
-  add column if not exists student_id uuid references auth.users (id) on delete cascade,
-  add column if not exists subscription_count integer not null default 0,
-  add column if not exists content text,
-  add column if not exists mentor_reply text,
-  add column if not exists mentor_replied_at timestamptz,
-  add column if not exists is_hidden boolean not null default false;
-
-update public.reviews
-set student_id = author_id
-where student_id is null and author_id is not null;
-
-update public.reviews
-set content = body
-where content is null and body is not null;
-
-update public.reviews
-set content = ''
-where content is null;
-
-do $$
-begin
-  if exists (
-    select 1
-    from information_schema.columns
-    where table_schema = 'public'
-      and table_name = 'reviews'
-      and column_name = 'student_id'
-      and is_nullable = 'YES'
-  )
-  and not exists (select 1 from public.reviews where student_id is null) then
-    alter table public.reviews alter column student_id set not null;
-  end if;
-end $$;
-
-do $$
-begin
-  if exists (
-    select 1
-    from information_schema.columns
-    where table_schema = 'public'
-      and table_name = 'reviews'
-      and column_name = 'content'
-      and is_nullable = 'YES'
-  )
-  and not exists (select 1 from public.reviews where content is null) then
-    alter table public.reviews alter column content set not null;
-  end if;
-end $$;
-
-create unique index if not exists idx_reviews_one_per_pair_compat
-  on public.reviews (mentor_id, student_id)
-  where student_id is not null;
+  add constraint reviews_mentor_id_fkey foreign key (mentor_id) references public.users (id) on delete cascade,
+  add constraint reviews_author_id_fkey foreign key (author_id) references public.users (id) on delete cascade;
 
 create index if not exists idx_reviews_mentor_created on public.reviews (mentor_id, created_at desc);
-create index if not exists idx_reviews_student on public.reviews (student_id);
+create index if not exists idx_reviews_author on public.reviews (author_id);
+create unique index if not exists uq_reviews_mentor_author on public.reviews (mentor_id, author_id);
 
 alter table public.reviews enable row level security;
+-- 정책 미정의(정본: 033_*/045_*/126_reviews_rls_hardening.sql).
 
--- 공개 읽기: 숨김 제외 (본인·멘토·관리자는 숨김 포함 조회)
-drop policy if exists "reviews_select_public" on public.reviews;
-create policy "reviews_select_public" on public.reviews
-  for select
-  using (
-    is_hidden = false
-    or (select auth.uid()) = student_id
-    or (select auth.uid()) = mentor_id
-    or exists (
-      select 1 from public.users u
-      where u.id = (select auth.uid()) and u.role = 'admin'
-    )
-  );
-
--- 학생 작성 (자격은 서버/API에서 검증)
-drop policy if exists "reviews_insert_student" on public.reviews;
-create policy "reviews_insert_student" on public.reviews
-  for insert to authenticated
-  with check ((select auth.uid()) = student_id);
-
--- 멘토 답글 (본인 리뷰에만)
-drop policy if exists "reviews_update_mentor_reply" on public.reviews;
-create policy "reviews_update_mentor_reply" on public.reviews
-  for update to authenticated
-  using ((select auth.uid()) = mentor_id)
-  with check ((select auth.uid()) = mentor_id);
-
--- 관리자 숨김/복구
-drop policy if exists "reviews_admin_moderate" on public.reviews;
-create policy "reviews_admin_moderate" on public.reviews
-  for update to authenticated
-  using (
-    exists (
-      select 1 from public.users u
-      where u.id = (select auth.uid()) and u.role = 'admin'
-    )
-  )
-  with check (
-    exists (
-      select 1 from public.users u
-      where u.id = (select auth.uid()) and u.role = 'admin'
-    )
-  );
-
-comment on table public.reviews is '멘토 리뷰: 동일 멘토 2회+ 구독 학생만 작성, 수정 불가, 멘토 답글 1회';
+comment on table public.reviews is '멘토 리뷰: 자격 검증(유료 2회+ 구독) 후 학생 작성, 본문 수정 불가, 멘토 답글 1회, 관리자 모더레이션(033/126)';
 
 
 -- ===== 033_p1_admin_reviews_moderation.sql =====
