@@ -20,19 +20,20 @@ export type StorageObjectRef = { bucket: string; path: string };
 /**
  * storage.objects.owner_id 실측 결과(어댑터가 공급).
  *   ownedByUser: owner_id = 대상 uid 인 객체 전수(감사 대상 버킷) — 수집 합집합의 owner 축.
- *   owners: 객체별 owner 실측. 값 null = 행은 있으나 owner 미기록,
- *           엔트리 부재 = owner 가 확인되지 않음(행 부재·미기록·타인 소유 구분 없음).
+ *   owners: 객체별 owner 실측. 값 null = 행은 있으나 owner 미기록(또는 행 부재),
+ *           엔트리 부재 = owner 가 확인되지 않음.
  *
- * ★ 181 이후 실어댑터의 공급 범위(W5-e E2): PostgREST 가 storage 스키마를 노출하지
- *   않아(PGRST106) 조회를 service_role 전용 RPC `account_deletion_storage_owner_refs`
- *   로 전환했다. RPC 는 **대상 uid 소유 객체의 (bucket_id, name)만** 반환하므로
- *   owners 맵에는 owner = 대상 uid 인 엔트리만 실린다 — 타인 owner 값·null owner 행은
- *   런타임에 더 이상 관측되지 않는다(엔트리 부재로 수렴). 그 결과:
- *     · DB 조인 ref 의 타인-owner 이상치는 OWNERSHIP_CONFLICT 대신 "owner 미확인 →
- *       정상 삭제 대상"으로 분류된다(수집 술어가 전부 본인-업로드 조인이라 이 조합은
- *       등록 이상에서만 발생 — W5-e 지시서가 반환 2컬럼·owner 미반환을 명시 잠금).
- *     · 아래 buildDeletionPlan 의 4분류·차단 관문 자체는 불변 — owner 값을 공급하는
- *       어댑터가 다시 생기면 그대로 동작한다.
+ * ★ 실어댑터의 공급 범위(W5-f F1 — W5-e E2 의미 후퇴 복원): 181 RPC
+ *   `account_deletion_storage_owner_refs` 는 대상 uid 소유 (bucket_id, name)만 반환해
+ *   owners 맵에 타인-owner 값이 실리지 않았고, DB 조인 ref 의 타인-owner 이상치가
+ *   OWNERSHIP_CONFLICT 차단 대신 "owner 미기록 레거시"로 오인돼 삭제로 수렴했다
+ *   (W5-e 지시서 스펙 결함으로 판정). 183 RPC `account_deletion_verify_object_owners`
+ *   가 수집 ref 전건의 소유 상태를 3값('target'/'other'/'none')의 **사실**로만 알리고,
+ *   어댑터가 `applyOwnerVerdicts` 로 owners 맵에 반영해 감지를 복원했다:
+ *     'other'  → FOREIGN_OWNER_MARKER (타인 owner 의 실제 uid 는 반환·로그 불가)
+ *     'none'   → null (owner 미기록·행 부재 — 현행 정상 삭제 경로)
+ *     'target' → 대상 uid
+ *   buildDeletionPlan 의 4분류·차단 관문 자체는 W5-c 이후 불변이다.
  */
 export type ObjectOwnership = {
   ownedByUser: readonly StorageObjectRef[];
@@ -66,6 +67,60 @@ export function buildObjectOwnershipFromOwnerRefRows(
     owners.set(k, userId);
   }
   return { ownedByUser, owners };
+}
+
+/**
+ * 183 RPC `account_deletion_verify_object_owners` 반환 행 — 수집 ref 의 소유 상태 verdict.
+ * owner_state ∈ ('target','other','none') 3값. 'other' 는 사실만 알린다(타인 uid 미반환).
+ */
+export type OwnerVerdictRow = {
+  bucket_id?: string | null;
+  name?: string | null;
+  owner_state?: string | null;
+};
+
+/**
+ * verdict 'other' 를 owners 맵에 실을 때 쓰는 표지 — uuid 형식이 아니라 어떤 실사용자
+ * id 와도 일치할 수 없다. 타인 owner 의 실값은 183 이 반환하지 않으므로(least exposure)
+ * 계획·로그·record_error 어디에도 실릴 수 없다.
+ */
+export const FOREIGN_OWNER_MARKER = "(foreign-owner)";
+
+/**
+ * 183 verdict 행을 owners 맵에 반영한다(순수 — W5-f F1 OWNERSHIP_CONFLICT 감지 복원).
+ *   'target' → 대상 uid · 'other' → FOREIGN_OWNER_MARKER · 'none' → null.
+ * verdict 는 181 기반 base 보다 나중·객체별 실측이므로 같은 키를 덮어쓴다.
+ * 형식 이탈 행(bucket_id/name 비문자열·빈 문자열)은 버리고, **미지의 owner_state 는
+ * 조용히 지나가지 않고 던진다** — 소유 상태를 오독한 채 계획을 세우면 과삭제로 이어질
+ * 수 있으므로 fail-closed 로 워커를 정지시킨다.
+ */
+export function applyOwnerVerdicts(
+  userId: string,
+  base: ObjectOwnership,
+  rows: readonly OwnerVerdictRow[],
+): ObjectOwnership {
+  const owners = new Map(base.owners);
+  for (const row of rows) {
+    if (typeof row.bucket_id !== "string" || row.bucket_id === "") continue;
+    if (typeof row.name !== "string" || row.name === "") continue;
+    const k = key({ bucket: row.bucket_id, path: row.name });
+    switch (row.owner_state) {
+      case "target":
+        owners.set(k, userId);
+        break;
+      case "other":
+        owners.set(k, FOREIGN_OWNER_MARKER);
+        break;
+      case "none":
+        owners.set(k, null);
+        break;
+      default:
+        throw new Error(
+          `applyOwnerVerdicts: 알 수 없는 owner_state — fail-closed (${k})`,
+        );
+    }
+  }
+  return { ownedByUser: base.ownedByUser, owners };
 }
 
 /** DB 조인으로 수집됐지만 storage 소유자가 다른 사용자로 실측된 객체 — 삭제 금지·차단. */

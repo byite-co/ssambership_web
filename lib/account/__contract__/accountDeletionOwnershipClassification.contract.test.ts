@@ -18,7 +18,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  applyOwnerVerdicts,
   buildDeletionPlan,
+  FOREIGN_OWNER_MARKER,
   storageObjectKey,
   type ObjectOwnership,
   type StorageObjectRef,
@@ -203,6 +205,34 @@ test("OWNERSHIP_CONFLICT 1건 → real-run 시작 0 (pending 에서 beginLocked 
     calls.some((c) => c.startsWith("recordError:ownership_conflict")),
     "차단 사유를 record_error 로 남긴다"
   );
+});
+
+test("W5-f F1(T42 고정): 183 verdict 'other' 경유 충돌 → real-run 0 · 전이 0 · record_error (타인 uid 무노출)", async () => {
+  // 실어댑터 형상 그대로: 181 축(빈 base) + 183 verdict 를 applyOwnerVerdicts 로 반영.
+  const calls: Calls = [];
+  const conflicted = { bucket: "custom-order-deliverables", path: "o1/foreign.zip" };
+  const deps = makeDeps(calls, {
+    gatherDbRefs: async () => [conflicted],
+    resolveObjectOwners: async (userId) =>
+      applyOwnerVerdicts(
+        userId,
+        ownership({}),
+        [{ bucket_id: conflicted.bucket, name: conflicted.path, owner_state: "other" }]
+      ),
+  });
+  const result = await runAccountDeletionJob({ userId: UID, state: "pending", dryRun: false }, deps);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.stopped, "ownership_conflict");
+  assert.ok(!calls.includes("beginLocked"), "real-run 시작 0");
+  assert.ok(!calls.some((c) => c.startsWith("advance")), "전이 0");
+  assert.ok(!calls.some((c) => c.startsWith("removeObjects")), "삭제 0");
+  const recorded = calls.filter((c) => c.startsWith("recordError:"));
+  assert.equal(recorded.length, 1, "차단 사유를 record_error 로 남긴다");
+  assert.ok(recorded[0].includes("ownership_conflict"));
+  // record_error 내용에 타인 owner 값이 실릴 수 없다 — 표지조차 detail 에 없다(키만 실린다).
+  assert.ok(!recorded[0].includes(FOREIGN_OWNER_MARKER));
+  assert.ok(!recorded[0].includes(OTHER));
 });
 
 test("UNATTRIBUTABLE 1건 → real-run 시작 0 · 전이 0", async () => {

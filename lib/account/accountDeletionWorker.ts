@@ -57,10 +57,11 @@ export type DeletionDeps = {
   listInventory: (userId: string) => Promise<StorageObjectRef[]>;
   /**
    * storage.objects.owner_id 실측(§3-3-b): 대상 uid 소유 객체 전수 + owner 맵.
-   * 실어댑터는 181 RPC(account_deletion_storage_owner_refs) 경유라 owner 맵에
-   * 대상 uid 엔트리만 싣는다(W5-e E2 — ObjectOwnership 타입 주석 참조). refs 인자는
-   * owner 값을 객체별로 공급할 수 있는 어댑터를 위해 시그니처에 남긴다.
-   * 실패는 예외 → 워커가 fail-closed 로 정지한다.
+   * 실어댑터는 181 RPC(소유 전수)에 더해 refs 인자(수집 합집합) 전건을 183 RPC
+   * `account_deletion_verify_object_owners` 로 배치 검증해 'target'/'other'/'none'
+   * verdict 를 owner 맵에 싣는다(W5-f F1 — 타인-owner 이상치의 OWNERSHIP_CONFLICT
+   * 감지 복원, ObjectOwnership 타입 주석 참조). 실패는 예외 → 워커가 fail-closed 로
+   * 정지한다.
    */
   resolveObjectOwners: (
     userId: string,

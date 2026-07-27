@@ -3,9 +3,11 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DeletionDeps, SessionRevokeAdapter } from "@/lib/account/accountDeletionWorker";
 import {
+  applyOwnerVerdicts,
   buildObjectOwnershipFromOwnerRefRows,
   normalizeStoredObjectPath,
   storageObjectKey,
+  type OwnerVerdictRow,
   type StorageObjectRef,
   type StorageOwnerRefRow,
 } from "@/lib/account/accountDeletionPurgePlan";
@@ -326,29 +328,32 @@ export function makeListInventory(
   };
 }
 
+/** 183 verdict RPC 한 호출에 싣는 ref 수 — SQL 방어 상한 5,000 의 1/10(DB_PAGE_SIZE 동일). */
+const VERIFY_OWNERS_CHUNK = 500;
+
 /**
- * §3-3-b: storage.objects.owner_id 실측 수집기 — 181 RPC 경유(W5-e E2).
+ * §3-3-b: storage.objects.owner_id 실측 수집기 — 181 + 183 RPC 경유(W5-f F1).
  *
- * 구 구현은 PostgREST 로 `storage` 스키마를 직접 조회했지만, staging 의 노출 스키마는
- * `public, graphql_public` 뿐이라 런타임에 PGRST106("Invalid schema: storage") 으로
- * 워커가 fail-closed 정지했다(2026-07-26 read-only 재현). 조회를 service_role 전용
- * SECURITY DEFINER RPC `account_deletion_storage_owner_refs(p_user_id)` 로 전환한다
- * (SQL 181 — 177/180 동일 패턴, 반환은 (bucket_id, name) 2컬럼만).
+ * ① 181 `account_deletion_storage_owner_refs(p_user_id)` — 대상 uid **소유** 객체 전수
+ *    (ownedByUser 축). PostgREST 가 storage 스키마를 노출하지 않아(PGRST106) 도입된
+ *    service_role 전용 SECURITY DEFINER RPC 다(W5-e E2, 반환 (bucket_id, name) 2컬럼만).
+ * ② 183 `account_deletion_verify_object_owners(p_user_id, p_refs)` — 수집 합집합
+ *    (DB 조인 refs ∪ prefix 인벤토리, 워커가 refs 인자로 공급) 전건의 소유 상태를
+ *    'target'/'other'/'none' 3값의 사실로만 verdict 받아 owners 맵에 반영한다.
+ *    W5-e E2 에서 181 이 대상 uid 소유분만 반환해 타인-owner 이상치가
+ *    OWNERSHIP_CONFLICT 차단 대신 삭제로 수렴하던 의미 후퇴의 복원이다.
+ *    'other' 는 사실만 온다 — 타인 owner 의 uid 는 RPC 가 반환하지 않으므로
+ *    FOREIGN_OWNER_MARKER 로 실리고 로그·record_error 에 실값이 노출될 수 없다.
  *
- * RPC 는 대상 uid **소유** 객체만 돌려주므로 owners 맵에는 owner = 대상 uid 인
- * 엔트리만 실린다 — 객체별 타인-owner·null-owner 값은 런타임에 더 이상 관측되지
- * 않는다(의미 변화의 전문은 ObjectOwnership 타입 주석 참조). ownedByUser 축과
- * UNATTRIBUTABLE 차단(인벤토리 항목의 귀속 불능)은 그대로 동작한다.
- *
- * 조회 실패는 **예외**로 던진다 — 소유를 못 읽은 채 계획을 세우면 귀속을 오판할 수
- * 있으므로 워커가 fail-closed 로 정지·재시도하게 한다(현행 유지).
+ * 조회 실패·미지의 owner_state 는 **예외**로 던진다 — 소유를 못 읽은 채 계획을
+ * 세우면 귀속을 오판할 수 있으므로 워커가 fail-closed 로 정지·재시도하게 한다.
  */
 export function makeResolveObjectOwners(
   admin: SupabaseClient,
   buckets: readonly string[] = ACCOUNT_DELETION_ALL_BUCKETS
 ): DeletionDeps["resolveObjectOwners"] {
-  return async (userId) => {
-    // 대상 uid 소유 객체 전수 — RPC 도 PostgREST 행 상한을 받으므로 페이지네이션 완주.
+  return async (userId, refs) => {
+    // ① 대상 uid 소유 객체 전수 — RPC 도 PostgREST 행 상한을 받으므로 페이지네이션 완주.
     const rows: StorageOwnerRefRow[] = [];
     for (let offset = 0; ; offset += DB_PAGE_SIZE) {
       const { data, error } = await admin
@@ -361,7 +366,24 @@ export function makeResolveObjectOwners(
       rows.push(...page);
       if (page.length < DB_PAGE_SIZE) break;
     }
-    return buildObjectOwnershipFromOwnerRefRows(userId, rows, buckets);
+    let ownership = buildObjectOwnershipFromOwnerRefRows(userId, rows, buckets);
+
+    // ② 수집 ref 전건의 owner verdict — 배치로 나눠 전건 완주(부분 검증 금지).
+    for (const part of chunk([...refs], VERIFY_OWNERS_CHUNK)) {
+      const { data, error } = await admin.rpc("account_deletion_verify_object_owners", {
+        p_user_id: userId,
+        p_refs: part.map((r) => ({ bucket_id: r.bucket, name: r.path })),
+      });
+      if (error) {
+        throw new Error(`resolveObjectOwners(verify_owners) failed: ${error.message}`);
+      }
+      ownership = applyOwnerVerdicts(
+        userId,
+        ownership,
+        (data ?? []) as unknown as OwnerVerdictRow[]
+      );
+    }
+    return ownership;
   };
 }
 
