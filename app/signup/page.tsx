@@ -979,7 +979,7 @@ function termsBlock(
         <p className={`text-xs font-extrabold tracking-wide sm:text-sm ${kicker}`}>03 · 약관</p>
         <h2 className="mt-1.5 text-lg font-extrabold text-slate-900 sm:text-xl">필수·선택 동의</h2>
         <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
-          필수에 동의해야 가입이 완료돼요. 약관·개인정보 링크는 `NEXT_PUBLIC_*` 환경 변수로 붙일 수 있어요.
+          필수 항목에 동의해야 가입이 완료돼요.
         </p>
         <p className={`mt-0.5 text-xs sm:text-sm ${sub}`}>
           {isSky ? "학생 가입 흐름" : "멘토 가입 흐름"}에 맞는 색 톤으로 정리했어요.
@@ -1037,9 +1037,6 @@ function termsBlock(
             <span className="font-bold text-slate-900">선택</span> — 이벤트·혜택 알림 수신에 동의합니다.
           </span>
         </label>
-        {!termsUrl && !privacyUrl && (
-          <p className="text-sm text-slate-500">문서 URL은 `NEXT_PUBLIC_LEGAL_TERMS_URL` · `NEXT_PUBLIC_LEGAL_PRIVACY_URL`로 연결할 수 있어요.</p>
-        )}
         <p className="text-xs leading-relaxed text-slate-600">
           만 14세 미만은 보호자 동의 절차가 필요할 수 있어요.{" "}
           <Link href="/legal/minor-consent" className={`font-bold underline underline-offset-2 ${link}`}>
