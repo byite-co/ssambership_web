@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // 앱 WebView 표면(app/app/**) 소스 회귀 방지 스캔:
@@ -37,7 +37,7 @@ function collectFiles(dir: string): string[] {
 
 test("앱 표면 파일 존재(작성·완료 브릿지·오류 브릿지)", () => {
   const files = collectFiles(APP_SURFACE_DIR);
-  const rel = files.map((f) => f.slice(APP_SURFACE_DIR.length));
+  const rel = files.map((f) => f.slice(APP_SURFACE_DIR.length).split(sep).join("/"));
   assert.ok(rel.some((f) => f.includes("community/shortform/new")), "compose page");
   assert.ok(rel.some((f) => f.includes("bridge/complete")), "complete bridge");
   assert.ok(rel.some((f) => f.includes("bridge/error")), "error bridge");
