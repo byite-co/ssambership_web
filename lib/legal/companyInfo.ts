@@ -15,7 +15,7 @@ export const COMPANY = {
   /** 업종 (정보통신업 — 통신판매업 아님) */
   industry: "정보통신업",
   /** 고객센터·개인정보 문의 이메일 (단일 창구) */
-  contactEmail: "byite1226@gmail.com",
+  contactEmail: "hello@byite.co.kr",
   /** 고객센터 운영 시간 */
   supportHours: "평일 10:00–18:00 (주말·공휴일 제외)",
   /** 정책 시행일 */
