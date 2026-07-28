@@ -66,7 +66,7 @@ export function SiteFooter() {
           <FooterColumn title="멘토 지원" links={MENTOR_LINKS} />
         </div>
 
-        <div className="mt-10 flex flex-col gap-4 border-t border-[#E2E8F0] pt-6 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-10 flex flex-col gap-4 border-t border-[#E2E8F0] pt-6">
           <nav className="flex flex-wrap items-center gap-x-1 gap-y-2 text-sm text-slate-600" aria-label="약관 및 정책">
             {LEGAL_LINKS.map((link, index) => (
               <span key={link.label} className="inline-flex items-center">
@@ -84,13 +84,45 @@ export function SiteFooter() {
               </span>
             ))}
           </nav>
-          <p className="text-xs font-medium text-slate-500">
-            {COMPANY.name}
-            {BUSINESS_NO ? ` | 사업자등록번호: ${BUSINESS_NO}` : ""} | 고객센터:{" "}
-            <a href={`mailto:${COMPANY.contactEmail}`} className="hover:text-[#2563EB]">
-              {COMPANY.contactEmail}
-            </a>
-          </p>
+          <div className="space-y-1 text-xs font-medium leading-relaxed text-slate-500">
+            <p className="break-keep">
+              <span className="inline-block">{COMPANY.name}</span>
+              <span className="mx-2 text-slate-300" aria-hidden>
+                |
+              </span>
+              <span className="inline-block">대표: 양준용</span>
+              <span className="mx-2 text-slate-300" aria-hidden>
+                |
+              </span>
+              <span className="inline-block">사업자등록번호: {BUSINESS_NO}</span>
+              <span className="mx-2 text-slate-300" aria-hidden>
+                |
+              </span>
+              <span className="inline-block">통신판매업신고: 제2026-서울강남-04221호</span>
+            </p>
+            <p className="break-keep">
+              <span className="inline-block">주소: 서울특별시 강남구 테헤란로 441, 5층 더블유06호(삼성동, 송암빌딩)</span>
+              <span className="mx-2 text-slate-300" aria-hidden>
+                |
+              </span>
+              <span className="inline-block">
+                고객센터:{" "}
+                <a href="tel:02-6925-1883" className="hover:text-[#2563EB]">
+                  02-6925-1883
+                </a>
+              </span>
+              <span className="mx-2 text-slate-300" aria-hidden>
+                |
+              </span>
+              <span className="inline-block">
+                이메일:{" "}
+                <a href={`mailto:${COMPANY.contactEmail}`} className="hover:text-[#2563EB]">
+                  {COMPANY.contactEmail}
+                </a>
+              </span>
+            </p>
+            <p>Copyright © BYITE Inc. All rights reserved.</p>
+          </div>
         </div>
       </div>
     </footer>
