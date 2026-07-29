@@ -2257,7 +2257,7 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
 | **M7** | `..._api_web_v1_community_rpc.sql` | **F4, F5, F6** + **공용 구현부 B-1~B-4**(`core_private.community_post_*_impl`·`community_image_refs_validate`, 외부 EXECUTE 0) + GRANT — 생성과 권한 회수 동일 마이그레이션 | ✅ |
 | **M8** | `..._api_web_v1_mentor_rpc.sql` | **F7, F8** + GRANT (**불변 — rev 8 C: HD-1을 여기에 얹지 않는다**) | ✅ |
 | **M9** | `..._money_rpc.sql` | **F11 3층**(`core_private.record_cash_topup_impl` 신설 + `public.record_cash_topup` 내부 구현 교체 + `api_web_v1.record_cash_topup_v2`) + **F12** `api_web_v1.subscription_checkout_confirm_v2` + service_role 전용 GRANT·내부 구현부 EXECUTE 회수 — 전부 같은 마이그레이션 | ✅ |
-| **M10** | `..._contract_permission_assertions.sql` | 권한 실측 assertion(§21 T-PERM 계열을 SQL `DO $$ … RAISE EXCEPTION`으로) — **읽기 전용 검증 migration** | ✅ (부작용 없음) |
+| **M10** | `..._contract_permission_assertions.sql` | **최종 권한 assertion checkpoint** — M11·M12·M16을 포함한 검사 대상 마이그레이션이 전부 적용된 뒤 실행(§20.2.1). **운영 M10의 검사 범위는 카탈로그·ACL·정책·함수 속성의 읽기 전용 assertion만**이다(`DO $$ … RAISE EXCEPTION`, §21 T-PERM 중 카탈로그로 판정 가능한 항목 한정 — 상태 변경 가능 기능 테스트는 §21.10대로 브랜치 DB/로컬 스택에서 수행) | — (**rollback 객체 없음** — 상태를 만들지 않는 검증 checkpoint, §22 #2) |
 | — | *(웹 코드 전환 — migration 아님)* | 호출점을 신규 객체로 이동(§17), 프로빙 제거 | — |
 | **M11** | `..._revoke_mentor_profiles_write.sql` | §10.6 `mentor_profiles` **테이블 단위 `REVOKE ALL` + `GRANT SELECT`**(rev 8 A-3) | ✅ GRANT 복원 migration |
 | **M12** | `..._revoke_mentor_plans_write.sql` | §10.6 `mentor_plans` **테이블 단위 `REVOKE ALL` + `GRANT SELECT`**(rev 8 A-3) | ✅ GRANT 복원 migration |
@@ -2271,10 +2271,10 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
 적용 순서의 **권위(정본)는 아래 선행조건 그래프**다. 그래프를 위반하지 않는 어떤 위상 정렬도 유효하며, §20.3의 게이트 표가 각 선행조건의 상세 판정 기준을 정의한다.
 
 ```text
-M0  : 선행 없음 — 필수·최우선 적용 (rev 8 A-7)
-M15 : 선행 없음 — 독립·조기 적용 가능 (M0와 병행 권장, rev 8 A-8)
-M1  : 선행 없음
-M13 : 선행 없음
+M0  : 선행 없음 — 필수·최우선. 본 작업 체인(M1 이하) 전체의 실제 선행 간선 (rev 8 A-7)
+M15 : 선행 없음 — 유일하게 M0와 독립·병행 가능 (rev 8 A-8)
+M1  : M0
+M13 : M0
 M4  : M1 + M13                      # V1~V5 뷰 — V2가 M13 비정규화 컬럼을 참조
 M5  : M1                            # F10
 M6  : M5                            # F1·F2(F10 호출)·F3·F9 + V6/V7 RPC
@@ -2282,19 +2282,24 @@ M7  : M1                            # F4/F5/F6 + 공용 구현부 B-1~B-4
 M8  : M1                            # F7·F8
 M14 : M1                            # F13
 M9  : M5                            # F11 3층·F12(F12가 F10 내부 호출) + §20.3 사전 검사
-M10 : 검증 대상 마이그레이션 적용 후  # 권한 assertion (읽기 전용·부작용 없음)
 M11 : M8(F7)+C6 전환 · M14(F13)+C11 전환 · 백업 upsert 제거 · 직접 쓰기 0건 실측
 M12 : M8(F8)+C6 전환 · 플랜 직접 쓰기 0건 실측
 M16 : M7 + 웹·앱 F4/F5/F6 전환(C5 포함) + 앱 보상 DELETE 제거 + 직접 쓰기 0건 실측
       (§14.7 확대 게이트 7단계)
+M10 : M11 + M12 + M16               # 최종 권한 assertion checkpoint —
+      (+ 검사 대상 객체 마이그레이션 전부: M0·M1·M4~M9·M13·M14)
+      # M10이 검사하는 모든 객체·회수 마이그레이션이 먼저 적용되어야 한다.
+      # 읽기 전용·상태 0 (§20.2 표·§21.10 검사 범위 참조)
 ```
+
+- **M0 최우선의 그래프 표현:** `M1: M0`·`M13: M0` 간선으로 인해, 어떤 유효한 위상 정렬에서도 **M0는 본 작업 체인(M1·M13과 그 후행 전부)보다 먼저** 온다. M15만 M0와 독립이라 병행 가능하다.
 
 권고 직렬화 — 위 그래프의 유효한 위상 정렬 한 가지(§24.2와 동일, C 단계 삽입):
 
 ```text
-M0 · M15 → M1 → M13 → M4 → C1 → M5 → M6 → C2·C3·C4 → M7 → C5 → M8 → C6
-→ M14 → C11 → M9 → C7·C8 → M10 → (직접 쓰기·호출 0건 확인) → M11 → M12
-→ (§14.7 게이트 충족 후) M16 → C9·C10
+M0(M15 병행 가능) → M1 → M13 → M4 → C1 → M5 → M6 → C2·C3·C4 → M7 → C5 → M8 → C6
+→ M14 → C11 → M9 → C7·C8 → (직접 쓰기·호출 0건 확인) → M11 → M12
+→ (§14.7 게이트 충족 후) M16 → M10 → C9·C10
 ```
 
 ### 20.3 게이트 (앞 단계 미충족 시 다음 단계 금지)
@@ -2542,21 +2547,26 @@ CREATE TRIGGER trg_mentor_profile_privileged_guard_ins
 
 - **권한·동시성·자금 정합성**은 운영 DB가 아니라 **Supabase 브랜치 DB 또는 로컬 스택**에서 실행한다(지시서 §3 운영 DB 변경 금지).
 - 계약 테스트 중 순수 로직(오류코드 매핑·밴드 상수·ref 파싱)은 기존 `__contract__` 패턴(`node --test`)을 따른다 — 저장소에 이미 `lib/*/__contract__/*.contract.test.ts` 관행이 있다.
-- M10은 운영 적용 후 **읽기 전용 assertion**만 수행한다.
+- **M10 검사 범위 분리(운영/비운영):**
+  - **운영 M10**은 M11·M12·M16까지 적용된 뒤 실행하는 최종 checkpoint로, **카탈로그·ACL·정책·함수 속성 등 읽기 전용 assertion만** 수행한다(예: `has_schema_privilege`/`has_function_privilege`/`has_table_privilege`·`pg_policies` 존재/부재·`prosecdef`·`proconfig`·exposed schema 목록 — T-PERM-01~04·06~10·12·14, T-PERM-05의 함수 부재 확인, T-PERM-15의 GRANT·정책 부재 확인).
+  - **상태 변경 가능 기능 테스트** — 관리자 승인 동작(T-PERM-11), 가입 경로 정상 동작(T-PERM-14 후단), service_role moderation 동작(T-PERM-15 후단), V4·V5의 service_role 전행 반환 확인(T-PERM-13) 등 실제 쓰기·세션이 필요한 검증 — 는 운영 M10에 넣지 않고 **Supabase 브랜치 DB 또는 로컬 스택에서** 수행한다.
+  - T-PERM 전체를 M10 SQL 한 건으로 수행한다는 해석은 금지한다 — M10은 위 읽기 전용 부분집합만 담는다.
 
 ---
 
 ## 22. rollback 원칙 `[TO-BE]`
 
 1. **모든 rollback은 별도 추가형 migration**이다. 기존 migration 파일을 수정하지 않는다.
-2. **역순 적용 — §20.2.1 선행조건 그래프의 역방향이 정본이다.** 규칙: 어떤 마이그레이션을 되돌리기 전에, 그것에 **의존하는(그래프에서 후행하는) 마이그레이션을 먼저** 되돌린다. §20.2.1 권고 직렬화의 정확한 역방향 한 가지:
+2. **역순 적용 — §20.2.1 선행조건 그래프의 역방향이 정본이다.** 규칙: 어떤 마이그레이션을 되돌리기 전에, 그것에 **의존하는(그래프에서 후행하는) 마이그레이션을 먼저** 되돌린다. **M10은 상태를 만들지 않는 검증 checkpoint이므로 rollback 객체가 없다 — 상태 rollback 대상으로 취급하지 않는다.** 상태 rollback 직렬화(§20.2.1 역방향) 한 가지:
 
    ```text
-   M16 → M12 → M11 → M10 → M9 → M14 → M8 → M7 → M6 → M5 → M4 → M13 → M1
+   M16 → M12 → M11 → M9 → M14 → M8 → M7 → M6 → M5 → M4 → M13 → M1
    → M15 → (M0는 마지막이며 되도록 남긴다 — §20.5)
    ```
 
    핵심 역의존: M16은 M7보다 먼저 / M11은 M8·M14보다 먼저 / M12는 M8보다 먼저 / M9·M6은 M5보다 먼저 / M4는 M13·M1보다 먼저 / `api_web_v1`·`core_private` 객체(M4~M9·M14)는 스키마(M1)보다 먼저. M15는 독립이므로 위치 제약이 없다(레거시 함수 구 본문 복원 migration). (M2·M3는 retired — 롤백 대상 자체가 없다.)
+
+   **rollback 완료 후 재검증 의무:** 목표 지점까지 되돌린 뒤, M10과 동일한 **읽기 전용 assertion**(§21.10 운영 M10 범위)을 다시 실행해 복원된 권한·정책 상태가 해당 지점의 계약과 일치함을 확인한다.
 3. **F11 롤백은 코드 우선이다.** `cash_ledger`에 신규 DDL이 없으므로(rev 8 A-6 — `ref_text` 폐기) 데이터 소실 시나리오가 없다. 롤백이 필요하면 웹 호출점을 기존 3인자 `record_cash_topup`으로 되돌린 뒤 M9의 함수들을 DROP한다(레거시 함수의 내부 구현 교체분은 구 본문 복원 migration으로).
 4. **웹 코드 롤백이 DB 롤백보다 먼저**다. 신규 객체를 DROP하기 전에 웹 호출점을 레거시로 되돌린다 — 반대 순서는 즉시 장애다.
 5. **레거시는 계속 살아 있으므로 롤백이 안전하다.** §10.5대로 S2는 `public` 표면을 회수하지 않는다. F11/F12/F3는 wrapper이므로 웹이 레거시 함수를 다시 부르면 그대로 동작한다.
@@ -2657,7 +2667,7 @@ S2-2 SQL: 임시 NO-GO 유지
 - 이 문서 단독으로는 **전체 S2-1 PASS를 선언하지 않는다.** `api_app_v1` 계약 v1.1이 작성되어 두 계약의 **공용 함수·시그니처·오류코드·GRANT·테스트 대조**(§19.5)가 통과한 뒤에만 S2-1 PASS / S2-2 GO 재선언 심사가 가능하다(rev 8 G-7).
 - **SQL 작성·적용은 계속 금지**다 — 두 계약 문서의 대조 통과 전까지 S2-2는 임시 NO-GO를 유지한다.
 
-승인·대조 통과 후 권고 착수 순서(실행 순서 정본은 **§20.2.1 선행조건 그래프** — 아래는 그 유효한 위상 정렬 한 가지): **M0(필수·즉시) · M15(독립·조기) → M1 → M13 → M4 → C1 → M5 → M6 → C2·C3·C4 → M7 → C5 → M8 → C6 → M14 → C11 → M9 → C7·C8 → M10 → (호출 0건 확인) → M11 → M12 → (HD-1 게이트 7단계 충족 후) M16 → C9·C10** (M2·M3는 retired — 적용 대상 아님)
+승인·대조 통과 후 권고 착수 순서(실행 순서 정본은 **§20.2.1 선행조건 그래프** — 아래는 그 유효한 위상 정렬 한 가지): **M0(필수·최우선, M15만 병행 가능) → M1 → M13 → M4 → C1 → M5 → M6 → C2·C3·C4 → M7 → C5 → M8 → C6 → M14 → C11 → M9 → C7·C8 → (호출 0건 확인) → M11 → M12 → (HD-1 게이트 7단계 충족 후) M16 → M10(최종 읽기 전용 assertion checkpoint) → C9·C10** (M2·M3는 retired — 적용 대상 아님)
 
 ### 24.3 변경 없음 확인
 
