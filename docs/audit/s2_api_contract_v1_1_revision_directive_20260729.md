@@ -1,13 +1,13 @@
 # S2 API 계약 v1.1 개정 지시서 (정본)
 
-- **작성일:** 2026-07-29 (rev 5 — 오너 5차 검증 보정 4건 반영: room 참조 규칙을 컬럼별 표로 재동결(`payment_id`=최신 성공 checkout·재구독 갱신), F12 오류코드 우선순위·anomaly 계약 확정, M2 retired 번호 정책·부록 합계 정정, 커뮤니티 멘토 전용 정책 A-10 신설·F11 `ref_type='topup'` 기대값 명시. rev 4: topup 정본 확정·ref_text 제거·6필드 단일 계약. rev 3: NULL-safe·관계 결속·`REVOKE ALL`·`HD-1`. rev 2: stale 참조·M8·3자 일치·M0 PUBLIC EXECUTE·M11/M12 분리)
+- **작성일:** 2026-07-29 (rev 6 — 오너 6차 검증 보정 6건 반영: 늦은 과거 결제 재생 멱등 흡수 규칙·회귀 테스트, 보상 삭제 RPC 폐기·F4 멱등 재시도 정본화, `HD-1` 직접 쓰기 전면 잠금 SQL·정책 전수 목록, F11 원자적 duplicate 판정(사전 SELECT 금지), 커뮤니티 승인 멘토 한정·기존 학생 글 보존 동결, F0 허용 범위 제한·V6 필드명 정정. rev 5: room 컬럼별 표·오류코드 우선순위·M2 retired·A-10 신설. rev 4: topup 정본·6필드 단일 계약. rev 3: NULL-safe·관계 결속·`REVOKE ALL`. rev 2: stale 참조·M8·3자 일치·M0 PUBLIC EXECUTE·M11/M12 분리)
 - **세션:** schema-doc-verification (검증 전용 — 이 세션의 DB DDL/DML·코드 변경 0건)
 - **판정:**
   - 전체 S2: **GO 유지**
   - S2-1 계약서(`api_web_v1` 계약 v1.0 · `api_app_v1` 계약 v1.0): **REVISE**
   - S2-2 SQL 구현: **임시 NO-GO 유지** (v1.1 계약 확정 전 SQL 작성 금지)
 - **다음 세션 산출물:** `api_web_v1 계약 v1.1` + `api_app_v1 계약 v1.1` **문서 2건만**. SQL 0건.
-- **근거 문서:** 계약서 v1.0 2건(웹·앱), 1차 검증 보고서, 재검토서, 재검토서 타당성 분석(본 세션), 오너 보정 지시 5건(2026-07-29). **동결 완료:** stale 참조 3건(E절) · hard DELETE 논리 ID `HD-1`(C절) · topup 정본 = `idempotency_key` 단독(A-6) · M2 retired 번호 정책(A-6) · F12 관계 불일치 오류코드 4종 + 우선순위 + anomaly 계약(A-5) · room 참조 규칙 컬럼별 표(A-5) · 커뮤니티 작성 멘토 전용 원칙(A-10). **v1.1 작성 세션에서 동결해야 할 설계 선택 4건 잔존:** ① F0 대체 방식(SECURITY DEFINER 뷰 vs 비정규화, A-9) ② 보상 삭제 RPC의 이름·시그니처·오류코드·GRANT(C절) ③ 커뮤니티 승인 멘토 한정 여부(A-10) ④ 기존 학생 작성글 처리 범위(A-10).
+- **근거 문서:** 계약서 v1.0 2건(웹·앱), 1차 검증 보고서, 재검토서, 재검토서 타당성 분석(본 세션), 오너 보정 지시 6건(2026-07-29). **동결 완료:** stale 참조 3건(E절) · `HD-1` = 커뮤니티 직접 쓰기 전면 잠금 + 보상 삭제 RPC 폐기(C절) · topup 정본 = `idempotency_key` 단독 + 원자적 duplicate 판정(A-6) · M2 retired 번호 정책(A-6) · F12 오류코드 4종 + 우선순위 + anomaly 계약 + 늦은 재생 멱등 흡수(A-5) · room 참조 규칙 컬럼별 표(A-5) · 커뮤니티 승인 멘토 한정 + 기존 학생 글 보존(A-10) · F0 허용 범위 + V6 필드명(A-9). **v1.1 작성 세션 몫으로 남는 결정은 1종:** F0 계열 V2·V6·V7의 **객체별** 구현 선택 — 단, A-9의 허용 범위(security_invoker 뷰 + 비정규화 / 범위 제한 SECDEF RPC) 안에서만.
 
 모든 항목은 라이브 DB(`pg_get_functiondef`·`pg_policies`·`information_schema`)와 웹·앱 저장소 코드로 실측 확인됨. 실측 근거는 부록 참조.
 
@@ -121,9 +121,35 @@
   |---|---|---|---|
   | `student_id, mentor_id` | 방의 불변 정본 | 변경 금지 | 일치 필수 |
   | `subscription_id` | pair에 대응하는 구독 | NULL이면 채움, 다른 값이면 거부 | 일치 필수 |
-  | `payment_id` | **가장 최근 성공 checkout** | 현재 결제로 갱신 | 현재 결제와 일치 필수 |
+  | `payment_id` | **가장 최근 성공 checkout** | 현재 결제로 갱신 | 아래 재생 판정 규칙 |
 
-  (`payment_id`를 "최초 방 생성 결제의 불변 참조"로 쓰는 안은 **기각** — 최신 참조 의미론으로 고정하며, 두 의미를 섞지 않는다.) 불일치는 `ROOM_REF_MISMATCH`, 방 복구(존재하지 않는 방의 재생성) 실패는 A-2 §3(`ROOM_ENSURE_FAILED`, 자금 불변)을 따른다. 실측 참고: 현재 방 2건 중 1건은 두 참조가 NULL — 위 표의 "NULL이면 채움/갱신" 규칙으로 수렴된다.
+  (`payment_id`를 "최초 방 생성 결제의 불변 참조"로 쓰는 안은 **기각** — 최신 참조 의미론으로 고정하며, 두 의미를 섞지 않는다.) 방 복구(존재하지 않는 방의 재생성) 실패는 A-2 §3(`ROOM_ENSURE_FAILED`, 자금 불변)을 따른다. 실측 참고: 현재 방 2건 중 1건은 두 참조가 NULL — 위 표의 "NULL이면 채움/갱신" 규칙으로 수렴된다.
+- **늦은 과거 결제 재생 판정(rev 6 — 오너 확정):** 이미 성공했던 결제의 재생이 이후 재구독(P2) 성공 때문에 실패하면 멱등 계약이 시간 경과에 따라 깨진다(webhook 재시도·네트워크 지연에서 거짓 장애). `room.payment_id` 재생 판정을 다음으로 고정한다:
+
+  ```text
+  room.payment_id = 재생 중인 payment
+  → 일반 멱등 성공
+
+  room.payment_id = subscription.last_payment_id
+  이고 그 결제가 같은 pair의 더 최근 succeeded 결제
+  → 늦은 재생 성공, room.payment_id 변경 금지
+
+  room.payment_id IS NULL
+  → 재생 payment가 아니라 subscription.last_payment_id로 보정
+
+  그 외
+  → ROOM_REF_MISMATCH
+  ```
+
+  **필수 회귀 테스트(v1.1 테스트 절에 추가):**
+
+  ```text
+  P1 성공 → P2 성공 → P1 재생
+  = ok:true, idempotent:true
+  = room.payment_id는 P2 유지
+  = 원장·잔액·구독 변화 0
+  = anomaly 0
+  ```
 - **실데이터 확인(2026-07-29):** 현재 구독 결제 2건 모두 `payments.amount = 29,900(KRW)` · `mentor_plans.amount_cents = 2,990,000` · `payments.amount × 100 = amount_cents` 관계 성립.
 - **DB 계약 명시(오너 지시):** 라이브 `payments.amount`는 numeric이며 통화·정수 CHECK가 없음(실측: subscription 결제 2건 모두 `currency='KRW'`·`amount=29900`·소수 0건). 위 KRW·정수 규칙을 v1.1의 DB 계약(문서 차원)으로 명시하고, CHECK 제약 추가 여부는 S3 후보로 기재.
 - **부수 기록:** 현행 정본의 "재생 시 현재가 대조" 동작 자체가 XW-04 인접의 잠재 결함임을 v1.1 AS-IS 절에 사실로 기재.
@@ -147,6 +173,7 @@
   ```
 
   일반 `=`·`<>`는 한쪽이 NULL이면 NULL을 반환해 불일치를 놓치므로 nullable 필드에 금지.
+- **duplicate 판정의 원자성(rev 6 — 오너 확정):** 현행 `record_cash_topup(uuid,bigint,text)`은 `void`이며 충돌 시 **무음 반환**한다(실측: `on conflict (idempotency_key) do nothing returning id` 후 `v_new_ledger_id is null → return`). 이를 단순 호출하는 wrapper는 이번 호출이 신규인지 duplicate인지 알 수 없고, **사전 SELECT로 추정하는 방식은 동시 호출에서 둘 다 신규로 오판하므로 금지**한다. 확정(권장안 채택): `core_private` 공용 구현부가 `INSERT … ON CONFLICT DO NOTHING RETURNING id`의 결과와 지갑 갱신을 수행하고 **신규/duplicate를 반환값으로 판별**하며, 기존 public 3인자 함수와 신규 F11이 이를 함께 호출한다 (현행 함수 내부가 이미 이 구조이므로 공용 구현부로 추출하는 리팩터 — 로직 동일성은 회귀 테스트로 고정). 공용 구현부의 이름·시그니처·GRANT는 B절 의무에 따라 v1.1에서 전건 명세.
 - **M2 번호 정책(rev 5 — 오너 확정):** M2 제거 후 이후 번호를 당기지 않는다. stale 참조 재발 방지를 위해 **`M2: retired / no migration`으로 논리 슬롯을 남기고 M3~M12의 기존 논리 ID를 유지**한다. v1.1 부록의 객체 합계는 `column 1 → column 0`으로 정정한다 (F11은 위치·시그니처만 바뀌므로 **함수 수에는 계속 포함**).
 - **정정 2 (테스트 충전 분리, 오너 확정):** 형식 allowlist 확장으로 `cash_topup_...`을 수용하는 안은 **기각**. 정리:
   - Toss confirm/webhook → **F11** (`^cash-(.+)-(\d+)$` 주문 참조 강제)
@@ -190,7 +217,14 @@
 
 ### A-9. F0 — 관계 확인된 조회 내부로 축소
 
-- **정정:** 공개 라벨 함수 형태의 F0를 폐기하고, 라벨 도출 로직을 관계가 이미 확인된 조회(뷰·함수) 내부로 좁힘. **구현 방식(V2·V6·V7의 SECURITY DEFINER 뷰화 vs 비정규화 컬럼)은 잔존 설계 선택** — v1.1 작성 세션이 대가를 명시하고 한쪽으로 동결한다.
+- **정정:** 공개 라벨 함수 형태의 F0를 폐기하고, 라벨 도출 로직을 관계가 이미 확인된 조회(뷰·함수) 내부로 좁힘.
+- **허용 선택 범위(rev 6 — 오너 확정):** exposed schema의 일반 SECURITY DEFINER 뷰는 기반 RLS를 우회할 수 있으므로, v1.1이 허용하는 구현은 다음 둘뿐이다:
+  1. **`security_invoker = true` 뷰** + 필요한 라벨의 비정규화 컬럼
+  2. **관계를 내부에서 검증하는 범위 제한 SECURITY DEFINER RPC**
+
+  **금지:** 임의 UUID를 받는 라벨 함수, 일반(invoker 미지정) SECURITY DEFINER 뷰.
+- **객체별 결정:** V2·V6·V7은 성격이 다르므로 하나의 선택으로 일괄 처리하지 말고 **객체별로** 위 허용 범위 안에서 결정한다 (v1.1 작성 세션 몫).
+- **V6 필드명 정정(rev 6):** V6의 `amount_cents`는 결제 당시 금액이 아니라 **현재 플랜 가격**이므로 `current_plan_amount_cents` 또는 `next_renewal_amount_cents`로 개명한다.
 
 ### A-10. 커뮤니티 작성은 멘토 전용 — 제품 정책 반영 (rev 5 신설)
 
@@ -200,9 +234,10 @@
   2. 관리자도 **일반 작성 경로에서는 거부** (관리자 공지 경로는 별도 계약)
   3. 웹·앱 RPC 전환 완료 후 `community_posts`의 직접 INSERT/UPDATE 권한과 레거시 정책(`cp_write_self` · `로그인 유저 게시글 작성`) 회수 — C절 hard DELETE 게이트와 같은 "RPC 제공 → 전환 배포 → 회수" 순서 적용
   4. 앱 계약의 `ROLE_NOT_ALLOWED` 설명을 멘토 전용 기준으로 수정 (F절 공용 함수 대조표에 포함)
-- **잔존 설계 선택 (v1.1 작성 세션 동결):**
-  - **승인 멘토 한정 여부** — `role='mentor'`만 볼지, `verification_status` 승인까지 요구할지
-  - **기존 학생 작성글 처리 범위** — 열람 유지 여부, 본인 수정·삭제 허용 범위
+- **동결(rev 6 — 오너 권장 확정안 채택, 실측: 게시글 멘토 4·학생 3 전부 published):**
+  - **신규 작성 = 승인 멘토만.** 역할 불일치 → `ROLE_NOT_MENTOR`, 멘토지만 미승인 → `MENTOR_NOT_APPROVED`. 승인 판정은 기존 `individual_question_user_is_approved_mentor(auth.uid())`와 동일 헬퍼 사용(정본 checkout과 동일 기준).
+  - **기존 학생 글:** 열람 유지 · 수정 금지 · 작성자 본인의 F6 soft-delete 허용 · 관리자 moderation은 별도 경로 유지. 파괴적 정리(일괄 삭제·비공개화) 금지.
+  - **숏폼:** 현재 INSERT는 이미 멘토 전용(`sf_insert_mentor`). 승인 멘토까지 요구하므로 `sf_insert_mentor`와 숏폼 Storage INSERT 정책 2건(`shortform-videos`·`shortform-thumbnails`)도 동일 승인 헬퍼로 정합화.
 
 ---
 
@@ -210,12 +245,36 @@
 
 v1.0이 참조만 하고 정의하지 않은 공용 구현부(공용 검증기·공용 원장 기록기 등)는 v1.1에서 **함수명·시그니처·스키마 위치·GRANT까지** 전건 명세한다. "시그니처 확정" 게이트(§10 #3)는 공용 구현부 포함으로 재정의하며, 미명세 상태로는 게이트 통과 불가.
 
-## C. 커뮤니티 hard DELETE — 단계 게이트
+## C. 커뮤니티 직접 쓰기 전면 잠금 (`HD-1`) — 보상 삭제 RPC 폐기
 
-- **실측:** 앱 `lib/features/community/data/community_write_repository.dart:204-210`이 `community_posts.delete()`를 실행 — 단, **생성 실패 보상 전용** 내부 경로(공개 API·UI·라우트 없음). 즉시 DELETE 회수 시 이 보상 흐름이 파손됨.
-- **게이트 순서(변경 금지):** ① 보상 삭제 대체 RPC 제공 → ② 앱 전환 배포·보급 → ③ `community_posts` DELETE 권한·`cp_delete_own` 정책 회수.
-- **마이그레이션 번호 정정(오너 확정):** v1.0의 **M8은 F7·F8 멘토 RPC 마이그레이션이므로 그대로 유지**한다. hard DELETE 회수는 M8에 얹지 말고 **별도 게이트·별도 마이그레이션 `HD-1`**(rev 3에서 논리 ID 고정)로 추가한다. v1.0 922행의 `§20 M8 선택 항목` 참조는 삭제.
-- **잔존 설계 선택(v1.1에서 동결):** ①단계 보상 삭제 대체 RPC의 **이름·시그니처·오류코드·GRANT는 미정** — v1.1 작성 세션이 확정하고, 앱 계약의 공용 함수 대조표(F-6)에 포함시킨다.
+- **실측:** 앱 `lib/features/community/data/community_write_repository.dart:204-210` + `board_author_gate.dart:183`(`deleteOwnPostForCompensation`)이 `community_posts.delete()`를 실행 — **생성 실패 보상 전용** 내부 경로(공개 API·UI·라우트 없음).
+- **보상 삭제 RPC 폐기(rev 6 — 오너 확정):** 대체 RPC는 **만들지 않는다**. F4가 트랜잭션 RPC + `p_idempotency_key` 필수가 되면, 응답 유실·불명확 시 **같은 멱등키로 재호출**하는 것이 정본 복구 경로다(이미 성공했으면 기존 `post_id` 반환, 실패했으면 DB 트랜잭션 롤백이라 지울 행이 없음). authenticated hard-delete API는 새 공격면만 만든다. 이로써 "보상 삭제 RPC 계약"은 잔존 설계 선택에서 **삭제**. 단, **Storage에 먼저 올린 신규 이미지의 보상 삭제는 유지** — 제거 대상은 DB 게시글 hard DELETE뿐.
+- **게이트 순서(변경 금지):**
+
+  ```text
+  ① F4 앱 전환 (응답 불명확 시 같은 멱등키로 재시도)
+  ② deleteOwnPostForCompensation 및 DB 게시글 hard DELETE 코드 제거
+  ③ 앱·웹 community_posts 직접 DELETE 0건 실측 확인
+  ④ HD-1 적용 — 직접 쓰기 전면 회수
+  ```
+
+- **`HD-1` 확정(rev 6 — "hard DELETE 회수"에서 "직접 쓰기 전면 잠금"으로 확장, 별도 CW 마이그레이션 불요):** F4/F5/F6 전환과 앱 보상 DELETE 제거 후 같은 마이그레이션에서:
+
+  ```sql
+  REVOKE ALL ON public.community_posts FROM anon, authenticated;
+  GRANT SELECT ON public.community_posts TO anon, authenticated;
+  ```
+
+  같은 마이그레이션에서 제거할 정책 (2026-07-29 `pg_policies` 실측 전수):
+
+  ```text
+  INSERT: cp_write_self · 로그인 유저 게시글 작성
+  UPDATE: cp_update_own · cp_update_self · 본인 게시글 수정
+  DELETE: cp_delete_own
+  ```
+
+  SELECT 정책은 유지. 이후 쓰기는 F4/F5/F6만 통과한다.
+- **마이그레이션 번호 정정(오너 확정):** v1.0의 **M8은 F7·F8 멘토 RPC 마이그레이션이므로 그대로 유지**한다. `HD-1`은 M8에 얹지 않는 별도 마이그레이션이다. v1.0 922행의 `§20 M8 선택 항목` 참조는 삭제.
 
 ## D. blocker 재분류 확정
 
@@ -264,8 +323,9 @@ v1.0 계약서 원문(오너 제공, 2026-07-29) 대조로 3건이 확정됐다.
 2. 본 지시서 A~F를 전건 반영하고, 각 항목에 "반영 절 번호"를 역기입해 추적 가능하게 할 것.
 3. E절의 stale 참조 3건(945행·1315행·1754행)은 확정 정정값으로 교체 완료 여부를 게이트에서 확인할 것 (본 지시서 rev 2에서 원문 대조 확정 — 미확정 항목 아님).
 4. 자금 함수 3종(`confirm_subscription_checkout`·`record_cash_topup`·renewal)의 본문 분기 순서는 요약 전재가 아니라 **원문 기준 재기술** ([C4] 오측 재발 방지).
-5. **잔존 설계 선택 4건 동결 의무:** ① F0 구현 방식(A-9) ② 보상 삭제 RPC 계약(C절) ③ 커뮤니티 승인 멘토 한정 여부(A-10) ④ 기존 학생 작성글 처리 범위(A-10) — v1.1 문서에서 한쪽으로 확정하지 않으면 게이트 통과 불가.
-6. 게이트: A-1~A-10 반영 + B 공용 구현부 전건 명세 + C의 `HD-1` 신설(M8 불변) + 잔존 설계 선택 4건 동결 + F 동기화(공용 함수·시그니처·오류코드·GRANT 대조 포함) 완료 시 S2-1 PASS / S2-2 GO 재선언 심사 가능.
+5. **객체별 결정 의무:** F0 계열 V2·V6·V7의 구현을 A-9 허용 범위 안에서 **객체별로** 확정하지 않으면 게이트 통과 불가. (그 외 설계 선택은 본 지시서에서 전부 동결 완료.)
+6. **회귀 테스트 의무:** A-5의 늦은 재생 테스트(P1→P2→P1 재생)와 A-6의 공용 구현부 로직 동일성 테스트를 v1.1 테스트 절에 포함.
+7. 게이트: A-1~A-10 반영 + B 공용 구현부 전건 명세 + C의 `HD-1`(직접 쓰기 전면 잠금, M8 불변) + 5·6항 완료 + F 동기화(공용 함수·시그니처·오류코드·GRANT 대조 포함) 시 S2-1 PASS / S2-2 GO 재선언 심사 가능. SQL 작성은 두 계약 문서의 시그니처·오류코드·GRANT·테스트 대조 통과 뒤에만.
 
 ---
 
