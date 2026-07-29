@@ -1,13 +1,13 @@
 # S2 API 계약 v1.1 개정 지시서 (정본)
 
-- **작성일:** 2026-07-29 (rev 7 — 최종 착수 전 보정 5건: F12 늦은 재생 판정 재작성(`subscription.last_payment_id`=최신 결제 유일 정본·stale room 복구·회귀 테스트 4건), F11 공용 구현부 `core_private.record_cash_topup_impl`/레거시 무음 계약/신규 strict 3층 분리·보안 속성·권한 회수, `HD-1` 게이트를 anon/authenticated INSERT/UPDATE/DELETE 0건으로 확대·service_role moderation 예외 명시, 숏폼 Storage 정책 `sfv_mentor_insert` 1정책/2버킷 실측 정정, V6 `current_plan_amount_cents` 단일 확정. rev 6: 보상 삭제 RPC 폐기·HD-1 전면 잠금·원자적 duplicate·커뮤니티 동결·F0 허용 범위. rev 5: room 컬럼별 표·오류코드 우선순위·M2 retired·A-10 신설. rev 4: topup 정본·6필드 단일 계약. rev 3: NULL-safe·관계 결속·`REVOKE ALL`. rev 2: stale 참조·M8·3자 일치·M0 PUBLIC EXECUTE·M11/M12 분리)
+- **작성일:** 2026-07-29 (rev 8 — 최종 종결 보정: F12 성공 재생에서 C=`subscription.last_payment_id` 전제 실패의 안정 오류코드 `SUBSCRIPTION_REF_INVALID`(detail 3종 `LAST_PAYMENT_ID_NULL`/`LAST_PAYMENT_NOT_FOUND`/`LAST_PAYMENT_NOT_SUCCEEDED`) 확정, C 당사자 불일치는 `PARTY_BINDING_MISMATCH`, 검증(Phase 1)과 room 보정(Phase 2)의 실행 단계 분리·오류 시 business-state 쓰기 0건 보장, 기존 7단계 오류 우선순위를 9단계로 완전 교체, room 표의 `subscription_id` 재생 셀 갱신, 회귀 테스트 E~H 추가, ensure 참조 중의성 제거. rev 7 — 최종 착수 전 보정 5건: F12 늦은 재생 판정 재작성(`subscription.last_payment_id`=최신 결제 유일 정본·stale room 복구·회귀 테스트 4건), F11 공용 구현부 `core_private.record_cash_topup_impl`/레거시 무음 계약/신규 strict 3층 분리·보안 속성·권한 회수, `HD-1` 게이트를 anon/authenticated INSERT/UPDATE/DELETE 0건으로 확대·service_role moderation 예외 명시, 숏폼 Storage 정책 `sfv_mentor_insert` 1정책/2버킷 실측 정정, V6 `current_plan_amount_cents` 단일 확정. rev 6: 보상 삭제 RPC 폐기·HD-1 전면 잠금·원자적 duplicate·커뮤니티 동결·F0 허용 범위. rev 5: room 컬럼별 표·오류코드 우선순위·M2 retired·A-10 신설. rev 4: topup 정본·6필드 단일 계약. rev 3: NULL-safe·관계 결속·`REVOKE ALL`. rev 2: stale 참조·M8·3자 일치·M0 PUBLIC EXECUTE·M11/M12 분리)
 - **세션:** schema-doc-verification (검증 전용 — 이 세션의 DB DDL/DML·코드 변경 0건)
 - **판정:**
   - 전체 S2: **GO 유지**
   - S2-1 계약서(`api_web_v1` 계약 v1.0 · `api_app_v1` 계약 v1.0): **REVISE**
   - S2-2 SQL 구현: **임시 NO-GO 유지** (v1.1 계약 확정 전 SQL 작성 금지)
 - **다음 세션 산출물:** `api_web_v1 계약 v1.1` + `api_app_v1 계약 v1.1` **문서 2건만**. SQL 0건.
-- **근거 문서:** 계약서 v1.0 2건(웹·앱), 1차 검증 보고서, 재검토서, 재검토서 타당성 분석(본 세션), 오너 보정 지시 7건(2026-07-29). **동결 완료:** stale 참조 3건(E절) · `HD-1` = 커뮤니티 직접 쓰기 전면 잠금 + 보상 삭제 RPC 폐기 + 확대 게이트 7단계·service_role moderation 예외(C절) · topup 정본 = `idempotency_key` 단독 + `core_private.record_cash_topup_impl` 3층 분리·보안 속성(A-6) · M2 retired 번호 정책(A-6) · F12 오류코드 4종 + 우선순위 + anomaly 계약 + `last_payment_id` 정본 늦은 재생 판정(A-5) · room 참조 규칙 컬럼별 표(A-5) · 커뮤니티 승인 멘토 한정 + 기존 학생 글 보존 + `sfv_mentor_insert` 1정책/2버킷(A-10) · F0 허용 범위 + V6 `current_plan_amount_cents` 단일 확정(A-9). **v1.1 작성 세션 몫으로 남는 결정은 1종:** F0 계열 V2·V6·V7의 **객체별** 구현 선택 — 단, A-9의 허용 범위(security_invoker 뷰 + 비정규화 / 범위 제한 SECDEF RPC) 안에서만.
+- **근거 문서:** 계약서 v1.0 2건(웹·앱), 1차 검증 보고서, 재검토서, 재검토서 타당성 분석(본 세션), 오너 보정 지시 8건(2026-07-29). **rev 8 동결 추가:** F12 재생의 `SUBSCRIPTION_REF_INVALID` + detail 3종 · C 당사자 = `PARTY_BINDING_MISMATCH` · 9단계 오류 우선순위 단일화 · 검증 선행·쓰기 후행 2단계 구조 · room `subscription_id` NULL의 Phase 2 보정 · 테스트 E~H(A-5). **동결 완료:** stale 참조 3건(E절) · `HD-1` = 커뮤니티 직접 쓰기 전면 잠금 + 보상 삭제 RPC 폐기 + 확대 게이트 7단계·service_role moderation 예외(C절) · topup 정본 = `idempotency_key` 단독 + `core_private.record_cash_topup_impl` 3층 분리·보안 속성(A-6) · M2 retired 번호 정책(A-6) · F12 오류코드 4종 + 우선순위 + anomaly 계약 + `last_payment_id` 정본 늦은 재생 판정(A-5) · room 참조 규칙 컬럼별 표(A-5) · 커뮤니티 승인 멘토 한정 + 기존 학생 글 보존 + `sfv_mentor_insert` 1정책/2버킷(A-10) · F0 허용 범위 + V6 `current_plan_amount_cents` 단일 확정(A-9). **v1.1 작성 세션 몫으로 남는 결정은 1종:** F0 계열 V2·V6·V7의 **객체별** 구현 선택 — 단, A-9의 허용 범위(security_invoker 뷰 + 비정규화 / 범위 제한 SECDEF RPC) 안에서만.
 
 모든 항목은 라이브 DB(`pg_get_functiondef`·`pg_policies`·`information_schema`)와 웹·앱 저장소 코드로 실측 확인됨. 실측 근거는 부록 참조.
 
@@ -102,77 +102,119 @@
   | room 당사자·참조 | pair(student, mentor) 일치 + 아래 참조 규칙 | `ROOM_REF_MISMATCH` |
 
   **NULL 규칙:** 위 표의 payment·subscription·ledger 결속은 전부 **필수 관계**로, 어느 쪽이든 NULL이면 일치가 아니라 **해당 코드로 명시 거부**한다 (일반 `=`의 NULL 통과 금지). nullable 호환 관계(room 참조 컬럼)만 `IS NOT DISTINCT FROM` 또는 아래 보정 규칙을 적용한다.
-- **오류코드 우선순위(rev 5 — 기존 안정 코드와의 호환 확정):** 라이브 정본의 기존 코드(`SUCCEEDED_NO_SUBSCRIPTION`·`SUCCEEDED_NO_LEDGER`·`LEDGER_FIELD_MISMATCH`, 전부 anomaly 행 + `anomaly_id` 반환)는 **그대로 유지**하며, 새 4종은 "행은 존재하지만 관계가 다른 경우"에만 적용한다. 판정 순서 고정:
+- **오류코드 우선순위 9단계(rev 8 — rev 5의 7단계 목록을 완전 교체):** 라이브 정본의 기존 코드(`SUCCEEDED_NO_SUBSCRIPTION`·`SUCCEEDED_NO_LEDGER`·`LEDGER_FIELD_MISMATCH`, 전부 anomaly 행 + `anomaly_id` 반환)는 **그대로 유지**한다. 판정 순서:
 
   ```text
-  1. 구독 행 없음          → SUCCEEDED_NO_SUBSCRIPTION   (기존 유지)
-  2. 원장 행 없음          → SUCCEEDED_NO_LEDGER         (기존 유지)
-  3. payment–plan          → PLAN_BINDING_MISMATCH
-  4. 당사자 불일치         → PARTY_BINDING_MISMATCH
-  5. 원장 관계 불일치      → LEDGER_BINDING_MISMATCH
-  6. 원장 필드값 불일치    → LEDGER_FIELD_MISMATCH       (기존 유지 — 금액·6필드 값 대조)
-  7. 방 참조 충돌          → ROOM_REF_MISMATCH
+  1. SUCCEEDED_NO_SUBSCRIPTION
+  2. SUCCEEDED_NO_LEDGER
+  3. PLAN_BINDING_MISMATCH
+  4. PARTY_BINDING_MISMATCH — P의 학생·멘토 관계 불일치
+  5. LEDGER_BINDING_MISMATCH
+  6. LEDGER_FIELD_MISMATCH
+  7. SUBSCRIPTION_REF_INVALID — C가 NULL이거나 유효한 succeeded payment를 가리키지 않음
+  8. PARTY_BINDING_MISMATCH — C가 가리키는 payment의 학생·멘토가 subscription pair와 불일치
+  9. ROOM_REF_MISMATCH
   ```
 
-  **새 4종의 계약:** 기존 3종과 동일하게 ① anomaly 행 기록 ② 응답에 `anomaly_id` 반환 ③ **트랜잭션 부작용 0**(자금·구독·원장·결제 상태·방 어느 것도 변경하지 않음)을 명시한다. 기존 안정 코드를 새 코드로 덮어쓰는 것을 금지한다.
+  **우선순위의 의미:** ① 상위 조건이 성립하면 하위 코드로 덮어쓰지 않는다 ② 기존 안정 코드 3종을 새 코드로 치환하지 않는다 ③ 새 관계 오류코드는 행이 존재하지만 관계가 다른 경우에만 사용한다 ④ 오류 경로는 기존 anomaly 계약에 따라 안정 코드·detail·`anomaly_id`를 반환한다 ⑤ 오류 시 business-state 부작용은 0건이다 ⑥ `ROOM_ENSURE_FAILED`는 위 9단계 관계 검증을 통과한 후 Phase 2의 room 확보·복구가 실패했을 때 사용하는 **운영 오류**이므로 9단계 관계 오류 우선순위와 별도로 둔다.
+- **`SUBSCRIPTION_REF_INVALID`(rev 8 신설 — C 전제 실패의 안정 코드):** 다음 조건은 모두 `SUBSCRIPTION_REF_INVALID`로 반환하되 anomaly detail로 구분한다. detail은 내부 감사 정보이며 클라이언트 분기용 안정 코드는 `SUBSCRIPTION_REF_INVALID` 하나로 고정한다.
+
+  | 조건 | anomaly detail |
+  |---|---|
+  | `subscription.last_payment_id IS NULL` | `LAST_PAYMENT_ID_NULL` |
+  | C가 가리키는 payment 행이 없음 | `LAST_PAYMENT_NOT_FOUND` |
+  | C가 가리키는 payment가 `succeeded`가 아님 | `LAST_PAYMENT_NOT_SUCCEEDED` |
+
+  **C 당사자 불일치:** C가 가리키는 payment가 존재하고 succeeded지만 학생·멘토가 현재 subscription pair와 다르면 `SUBSCRIPTION_REF_INVALID`가 아니라 8단계의 `PARTY_BINDING_MISMATCH`를 사용한다 (`LEDGER_BINDING_MISMATCH`로 뭉개지 않는다 — 결함 계층이 payment–subscription 당사자 결속이기 때문). 두 경우 모두 anomaly 행 기록 + `anomaly_id` 반환 + room 포함 업무 상태 변경 0건 계약을 따른다. C 검증은 기존 P·ledger 검증(1~6단계)을 통과한 뒤, room 충돌 판정(9단계) 전에 수행한다.
 - **room 참조 규칙 동결(rev 5 — 오너 권장 확정안 채택):** 라이브 구조상 방·구독 모두 `(student_id, mentor_id)` UNIQUE이고, 정본 checkout은 **재구독 시 기존 구독 행을 UPDATE하며 `payment_id`·`last_payment_id`를 새 결제 ID로 교체**한다(원문 실측). 따라서 rev 4의 "참조 컬럼에 다른 값이 있으면 일괄 거부"는 정상 재구독을 막는 결함이었다 — 컬럼별 의미를 다음으로 분리 확정한다:
 
   | 컬럼 | 정본 의미 | 신규 결제 | 멱등 재생 |
   |---|---|---|---|
   | `student_id, mentor_id` | 방의 불변 정본 | 변경 금지 | 일치 필수 |
-  | `subscription_id` | pair에 대응하는 구독 | NULL이면 채움, 다른 값이면 거부 | 일치 필수 |
+  | `subscription_id` | pair에 대응하는 구독 | NULL이면 채움, 다른 값이면 거부 | 아래 재생 판정 규칙 적용 — NULL이면 Phase 2에서 현재 subscription_id로 보정, 동일하면 유지, 다른 값이면 `ROOM_REF_MISMATCH` |
   | `payment_id` | **가장 최근 성공 checkout** | 현재 결제로 갱신 | 아래 재생 판정 규칙 |
 
   (`payment_id`를 "최초 방 생성 결제의 불변 참조"로 쓰는 안은 **기각** — 최신 참조 의미론으로 고정하며, 두 의미를 섞지 않는다.) 방 복구(존재하지 않는 방의 재생성) 실패는 A-2 §3(`ROOM_ENSURE_FAILED`, 자금 불변)을 따른다. 실측 참고: 현재 방 2건 중 1건은 두 참조가 NULL — 위 표의 "NULL이면 채움/갱신" 규칙으로 수렴된다.
-- **늦은 과거 결제 재생 판정(rev 7 — 오너 확정, rev 6 규칙 폐기):** rev 6의 "`room.payment_id` = 재생 중인 payment → 일반 멱등 성공" 판정은 폐기한다 — P1 성공 → P2 성공 후 방 갱신만 누락된 stale 상태(`room.payment_id=P1`, `subscription.last_payment_id=P2`)에서 P1 재생이 방을 P1에 방치하는 결함이 있었다. **최신 결제의 유일한 정본은 `FOR UPDATE`로 잠근 `subscription.last_payment_id`**로 고정하며, `created_at`·`updated_at` 등 시각 비교로 최신성을 추론하지 않는다. 판정 순서 확정:
+- **성공 재생 판정(rev 8 — 최종 확정, rev 6·7 판정 재작성):** 기호 정의:
 
   ```text
-  C = 잠근 subscription.last_payment_id
-  P = 재생 중인 payment_id
-
-  1. C가 NULL이 아니어야 한다.
-  2. C가 가리키는 payment가 succeeded이고 동일 student/mentor pair인지 검증한다.
-
-  3. room.subscription_id:
-     - NULL이면 현재 subscription.id로 보정
-     - 현재 subscription.id와 다르면 ROOM_REF_MISMATCH
-     - 같으면 유지
-
-  4. room.payment_id:
-     - C와 같으면 유지
-     - NULL이면 C로 보정
-     - P와 같고 P != C이면 stale room으로 판정해 C로 보정
-     - P도 C도 아닌 값이면 ROOM_REF_MISMATCH
-
-  5. P = C:
-     - 최신 결제의 일반 멱등 재생
-
-  6. P != C:
-     - P 자체가 succeeded
-     - P가 동일 student/mentor pair
-     - P의 payment·subscription·ledger 결속이 모두 일치
-     위 조건을 통과한 경우에만 늦은 과거 결제 재생으로 멱등 성공
+  P = 이번 호출에서 재생하려는 succeeded payment
+  C = 잠근 subscription.last_payment_id가 가리키는 최신 성공 payment
   ```
 
-  room 보정은 자금·원장·구독·결제 상태를 변경하지 않는 **참조 복구만** 허용한다. `ROOM_REF_MISMATCH`는 기존 오류 우선순위·anomaly 계약을 유지한다 (anomaly 행 기록 · `anomaly_id` 반환 · 자금·구독·원장·결제·방 상태 변경 0건).
-
-  **필수 회귀 테스트 4건(v1.1 테스트 절에 추가):**
+  원칙: **최신 결제 정본은 오직 `subscription.last_payment_id`**(`FOR UPDATE`로 잠근 값)다. 생성시각·수정시각·UUID 순서 등으로 최신 결제를 추론하지 않는다. `P = C`면 일반 멱등 재생, `P ≠ C`면 과거 성공 결제의 늦은 재생 후보이며, 늦은 재생은 P가 succeeded이고 동일 학생·멘토 pair이며 동일 subscription의 정당한 결제인 경우에만 성공으로 흡수한다. 늦은 재생 성공에서도 자금·원장·구독·결제 상태를 반복 처리하지 않는다. (rev 6의 "`room.payment_id` = 재생 중인 payment → 일반 멱등 성공" 단순 분기는 stale room을 정상으로 오인하므로 폐기된 역사 규칙이다.)
+- **검증 선행·쓰기 후행(rev 8 — 실행 단계 분리):** 이 함수 계열은 오류를 예외가 아니라 JSONB로 반환하므로, **검증 전에 수행한 UPDATE는 오류 JSONB 반환 후에도 커밋될 수 있다**. 따라서 재생 처리를 두 단계로 분리한다.
 
   ```text
-  A. P1 성공 → P2 성공 → P1 재생, room=P2
-     → ok:true, idempotent:true / room=P2 유지 / 자금 부작용 0, anomaly 0
+  검증 선행·쓰기 후행: room 보정 INSERT/UPDATE는 모든 Phase 1 검증을 통과한 뒤에만 수행한다.
+  ```
+
+  **Phase 1 — 검증 전용 (business-state 쓰기 금지):** 필요한 payment·subscription·ledger·room 행을 조회·잠금하고, 금액·플랜·당사자·원장·최신 결제 C·room 참조 정합성을 검증한다. 이 단계에서는 room INSERT/UPDATE를 포함한 업무 객체 쓰기를 수행하지 않으며, room은 읽어서 **보정 예정값(후보)만 계산**한다.
+
+  ```text
+  1. 재생 payment(P) 행 확인·잠금
+  2. subscription 행 확인·잠금
+  3. ledger 행 확인
+  4. P의 payment–plan 결속
+  5. P의 payment–subscription 당사자 결속
+  6. P의 ledger–subscription 결속
+  7. ledger 필드값 대조
+  8. C = subscription.last_payment_id 유효성 검증 (SUBSCRIPTION_REF_INVALID / C 당사자 → PARTY_BINDING_MISMATCH)
+  9. 기존 room의 pair·subscription_id·payment_id 충돌 여부 판정 (쓰기 없음)
+  10. 모든 검증 통과 후에만 Phase 2 진입
+  ```
+
+  **오류 시 허용/금지 쓰기:**
+
+  ```text
+  허용: subscription_checkout_anomalies INSERT (감사 기록)
+  금지: room INSERT/UPDATE · 지갑·원장 변경 · 구독 변경 · payment 상태·metadata 변경
+  ```
+
+  `ROOM_REF_MISMATCH` 판정 시 Phase 2로 진입하지 않는다 (anomaly 기록 + `anomaly_id` 반환 + room 포함 업무 상태 변경 0건).
+- **Phase 1의 room 참조 판정(읽기 전용 — 후보 계산):**
+  - `room.subscription_id`: NULL → Phase 2에서 현재 `subscription.id`로 채울 후보 / 현재 `subscription.id`와 동일 → 유지 / 다른 값 → `ROOM_REF_MISMATCH`
+  - `room.payment_id`: C와 동일 → 유지 / NULL → Phase 2에서 C로 채울 후보 / P와 동일이고 `P ≠ C` → **stale room**으로 판정, Phase 2에서 C로 교체할 후보 / P도 C도 아닌 제3 결제 → `ROOM_REF_MISMATCH`
+- **Phase 2 — 검증 통과 후 room 확보·보정:** Phase 1을 전부 통과한 경우에만 실행한다.
+  - room이 없으면 **지시서 A-2의 F12 내부 `core_private.ensure_student_mentor_room` 호출**로 확보한다. 확보한 room의 pair는 subscription의 학생·멘토 pair와 일치해야 한다.
+  - `room.subscription_id IS NULL` → 현재 `subscription.id`로 보정
+  - `room.payment_id IS NULL` → C로 보정
+  - `room.payment_id = P` 이고 `P ≠ C` → stale 참조를 C로 보정
+  - `room.payment_id = C` → 변경 없음
+  - room 보정은 모든 결속 검증 통과 후 수행하는 **참조 복구**일 뿐이며, 자금 차감·원장 INSERT·subscription 갱신·payment 상태/metadata 변경을 반복하지 않는다.
+- **재생 결과:**
+  - `P = C` → `ok:true, idempotent:true`, 자금·원장·구독·결제 반복 처리 0건, room 참조가 NULL이면 Phase 2에서 복구 가능
+  - `P ≠ C` → P가 succeeded·동일 pair·동일 subscription 정당 결속·원장 관계/필드 검증을 전부 통과한 경우에만 늦은 과거 재생으로 `ok:true, idempotent:true` (자금 반복 0, room의 `payment_id`는 C 유지 또는 C로 복구, anomaly 0). 조건 미충족 시 9단계 우선순위에 따른 안정 오류를 반환한다.
+  - Phase 2의 room 확보·보정 실패 → `ROOM_ENSURE_FAILED`. 재생에서는 기존 자금·원장·구독·결제 성공 상태를 변경·복원하지 않고, room 부분 변경은 같은 statement/내부 exception block에서 롤백해 남기지 않으며, 재시도 가능하다(다음 재생에서 room 복구 재시도). 최초 checkout 실행에서는 A-2 §3대로 이번 트랜잭션의 자금·원장·구독·결제 변경을 전부 롤백한다.
+- **필수 회귀 테스트 8건(v1.1 테스트 절에 추가):**
+
+  ```text
+  A. P1 성공 → P2 성공, room=P2 → P1 늦은 재생
+     → ok:true, idempotent:true / room 변경 0 / 자금 부작용 0, anomaly 0
 
   B. P1 성공 → P2 성공 뒤 room=P1(stale) → P1 재생
-     → ok:true, idempotent:true / room을 P2로 복구 / 자금 부작용 0, anomaly 0
+     → ok:true, idempotent:true / 검증 완료 후 room을 C=P2로 복구 / 자금 부작용 0, anomaly 0
 
   C. P1 성공 → P2 성공 뒤 room.payment_id=NULL → P1 재생
-     → ok:true, idempotent:true / room을 P2로 복구 / 자금 부작용 0, anomaly 0
+     → ok:true, idempotent:true / 검증 완료 후 room.payment_id를 C=P2로 복구 / 자금 부작용 0, anomaly 0
 
-  D. room.payment_id가 P도 C도 아닌 제3 결제
-     → ROOM_REF_MISMATCH + anomaly_id / 모든 상태 변경 0
+  D. room.payment_id가 C도 P도 아닌 제3 결제
+     → ROOM_REF_MISMATCH + anomaly_id / business-state 쓰기 0
+
+  E. subscription.last_payment_id IS NULL
+     → SUBSCRIPTION_REF_INVALID, detail=LAST_PAYMENT_ID_NULL + anomaly_id / room 변경 0
+
+  F. C 행이 없거나 succeeded가 아님
+     → SUBSCRIPTION_REF_INVALID, detail=LAST_PAYMENT_NOT_FOUND 또는 LAST_PAYMENT_NOT_SUCCEEDED + anomaly_id / room 변경 0
+
+  G. C는 succeeded이나 subscription과 당사자가 다름
+     → PARTY_BINDING_MISMATCH + anomaly_id / room 변경 0
+
+  H. room 참조가 NULL 또는 stale 후보지만 P·ledger·관계 검증이 실패
+     → 해당 상위 안정 오류 반환 / 후보였던 room 보정은 실행되지 않음 / room 변경 0
   ```
 
-  **실측 한계 명시:** 현재 라이브 DB에는 pair당 succeeded 결제가 최대 1건이므로 P1→P2 상황은 실데이터로 확인된 것이 아니다 — 계약 fixture로 검증할 **미래 경계 조건**이다.
+  **fixture 명시:** 현재 라이브 DB에는 pair당 succeeded 결제가 최대 1건이므로 P1→P2 시나리오는 실데이터 검증 주장이 아니라, 재구독·늦은 재생을 검증하는 **테스트 fixture 기반 회귀 계약**이다.
 - **실데이터 확인(2026-07-29):** 현재 구독 결제 2건 모두 `payments.amount = 29,900(KRW)` · `mentor_plans.amount_cents = 2,990,000` · `payments.amount × 100 = amount_cents` 관계 성립.
 - **DB 계약 명시(오너 지시):** 라이브 `payments.amount`는 numeric이며 통화·정수 CHECK가 없음(실측: subscription 결제 2건 모두 `currency='KRW'`·`amount=29900`·소수 0건). 위 KRW·정수 규칙을 v1.1의 DB 계약(문서 차원)으로 명시하고, CHECK 제약 추가 여부는 S3 후보로 기재.
 - **부수 기록:** 현행 정본의 "재생 시 현재가 대조" 동작 자체가 XW-04 인접의 잠재 결함임을 v1.1 AS-IS 절에 사실로 기재.
@@ -366,7 +408,7 @@ v1.0 계약서 원문(오너 제공, 2026-07-29) 대조로 3건이 확정됐다.
 3. E절의 stale 참조 3건(945행·1315행·1754행)은 확정 정정값으로 교체 완료 여부를 게이트에서 확인할 것 (본 지시서 rev 2에서 원문 대조 확정 — 미확정 항목 아님).
 4. 자금 함수 3종(`confirm_subscription_checkout`·`record_cash_topup`·renewal)의 본문 분기 순서는 요약 전재가 아니라 **원문 기준 재기술** ([C4] 오측 재발 방지).
 5. **객체별 결정 의무:** F0 계열 V2·V6·V7의 구현을 A-9 허용 범위 안에서 **객체별로** 확정하지 않으면 게이트 통과 불가. (그 외 설계 선택은 본 지시서에서 전부 동결 완료.)
-6. **회귀 테스트 의무:** A-5의 늦은 재생 테스트 4건(A~D — stale room 복구·NULL 복구·제3 결제 거부 포함)과 A-6의 회귀 테스트 6건(레거시 신규/동일 duplicate/충돌 duplicate·동시 호출·지갑 증분 1회·F11 strict 구분)을 v1.1 테스트 절에 포함. P1→P2 fixture는 실데이터가 아닌 미래 경계 조건임을 테스트 주석에 명시.
+6. **회귀 테스트 의무:** A-5의 재생 테스트 **8건(A~H** — stale room 복구·NULL 복구·제3 결제 거부·`SUBSCRIPTION_REF_INVALID` detail 3종·C 당사자 불일치·검증 실패 시 보정 미실행 포함**)**과 A-6의 회귀 테스트 6건(레거시 신규/동일 duplicate/충돌 duplicate·동시 호출·지갑 증분 1회·F11 strict 구분)을 v1.1 테스트 절에 포함. P1→P2 fixture는 실데이터가 아닌 미래 경계 조건임을 테스트 주석에 명시. **rev 8 조건:** v1.1의 F12 절은 A-5의 검증 선행·쓰기 후행 2단계 구조와 9단계 오류 우선순위를 그대로 옮겨야 게이트를 통과한다.
 7. 게이트: A-1~A-10 반영 + B 공용 구현부 전건 명세 + C의 `HD-1`(직접 쓰기 전면 잠금, M8 불변) + 5·6항 완료 + F 동기화(공용 함수·시그니처·오류코드·GRANT 대조 포함) 시 S2-1 PASS / S2-2 GO 재선언 심사 가능. SQL 작성은 두 계약 문서의 시그니처·오류코드·GRANT·테스트 대조 통과 뒤에만.
 
 ---
