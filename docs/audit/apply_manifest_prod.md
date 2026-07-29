@@ -8,7 +8,7 @@
 ## 0. 상태·범위
 
 - 대상: fresh/clean 설치와 운영 배포의 적용 순서 정본.
-- staging 실적용 이력(권위 있음): `123 · 124 · 125 · 126 · 129` — `docs/audit/sql_apply_manifest.md` 하단 표.
+- **staging 실적용 이력의 상세 정본 = `docs/audit/sql_apply_manifest.md` 하단 적용 이력표**(132~183 등 이후 기록 누적). `123·124·125·126·129`는 당시(2026-07-19)의 역사적 checkpoint이며, 현재 전체 적용 이력을 열거한 목록이 아니다.
 - `supabase_migrations` 원장은 저장소 파일 번호와 드리프트가 크므로 **운영 정의가 우선**하고, 수동 적용은 원장에 가짜 행으로 기재하지 않는다.
 - **클린 DB 재현 검증 완료(2026-07-30, 후보 C 정본):** Supabase CLI 2.110.0 / PostgreSQL 17.6 환경에서 정규 적용 후보 **175개**를 §2~§4 순서로 전건 적용해 **175/175 성공**했다. 게이트 결과 G0·G1·G2_STRUCTURAL_REPLAY·G3·G4 PASS / G5 완료. 상세 결과·후보 이력은 §7. (구 "클린 DB 재현 미실행" 검증 부채는 이 검증으로 해소.)
 
@@ -37,7 +37,7 @@
 
 | 분류 | 파일 | 사유 |
 |---|---|---|
-| inventory/reference-only | `002_app_core_schema_draft.sql` | 인벤토리 초안 — 헤더가 "바로 적용하지 마세요"인 참고용 파일. 실행 대상 아님(보존). 178개 후보 실측에서 002 중복 정의 실패의 원인(§7) |
+| inventory/reference-only | `002_app_core_schema_draft.sql` | 인벤토리 초안 — 헤더가 "바로 적용하지 마세요"인 참고용 파일. 실행 대상 아님(보존). 최초 178개 실행 실측에서 002 중복 정의 실패의 원인(§7) |
 | one-off 정리 | `071_individual_question_test_data_cleanup.sql` | 마이그레이션 아님. 운영/클린 적용 전 별도 승인 |
 | Storage 감사 | `039_storage_buckets_private_audit.sql` | 점검 SQL(버킷 private 확인). 데이터 변경 아님 |
 | READ-ONLY 진단 | `146_p2_1_avatar_document_crossref_diagnostic.sql` | 진단 전용(DDL·DML 없음) — 적용 대상 아님(§146 표 "미적용(진단)") |
@@ -45,7 +45,8 @@
 | 지급 게이트 후속 | `153_p2_25_pay_due_payouts_convergence.sql` | 지급 게이트로 제외된 `105·106·107·109·110·111·114`를 필수 선행으로 요구하는 staging 수렴 파일. 지급 스택 승인 전에는 같은 게이트에 묶어 clean-install 제외(§5) |
 | 지급 게이트 후속 | `156_p2_25_payout_scheduler_foundation.sql` | `153`과 지급 객체를 필수 선행으로 요구하는 scheduler 기반 파일. 동일 게이트(§5) |
 | 운영 시드 | `184_seed_additional_admin.sql` | 특정 운영자 계정 시드(멱등 one-off). 스키마 migration 아님 — 환경별 별도 승인·실행 |
-| 예약·결번 | `127`(예약 미생성) · `172`(결번) | §6 예약번호 — 파일이 없어 순서에 없음. 구 예약 `128·130·131`은 파일 생성·적용됨(정규 포함) |
+
+> **참고(파일 수 집계 제외 — 파일 자체가 없음):** `127`(예약 미생성) · `172`(결번)는 실제 SQL 파일이 아니므로 위 제외 **15개** 집계에 포함되지 않는다(§6 예약번호 — 파일이 없어 순서에도 없음). 구 예약 `128·130·131`은 파일 생성·적용됨(정규 포함). 정본 산식: **실제 SQL 파일 190개 − 실제 제외 파일 15개 = 정규 적용 파일 175개.**
 
 **정규 포함 명시(분류 확정 2026-07-30):**
 
@@ -175,7 +176,7 @@
 - 정규 적용 후보: **175개** (§3 제외 15개를 뺀 `supabase/sql/*.sql`. 목록 산정·포함 근거는 `sql_apply_manifest.md` §clean-install 적용 집합).
 - 결과: **175/175 적용 성공.** 마지막 파일 = `183_p1_10_account_deletion_verify_object_owners.sql`.
 - 게이트: **G0·G1·G2_STRUCTURAL_REPLAY·G3·G4 PASS / G5 완료.**
-- 후보 이력: 178개(=175 + `002_app_core_schema_draft` + `153` + `156`)는 002 중복 정의로 실패 → 177개(002 초안 제외)는 `153`의 지급 객체 부재로 실패 → **175개(`153`·`156` 추가 제외) 전건 PASS = 후보 C 정본**. 상세는 `sql_apply_manifest.md` §후보 검증 이력.
+- 후보 이력: **최초 178개 실행**(후보 B 아님, `002_app_core_schema_draft`·`153`·`156` 포함)은 #3 `002` 중복 정의 오류로 실패 → **후보 B 177개**(`002_app_core_schema_draft`만 제외)는 `153`의 지급 객체 부재로 실패(`167`~`169` 미도달) → **후보 C 175개**(`002_app_core_schema_draft`·`153`·`156` 제외) **175/175 전건 PASS = 정본**(`167`~`169` 실제 도달·적용 성공). 상세는 `sql_apply_manifest.md` §후보 검증 이력.
 - 적용 후 대조(운영·재검증 시): `docs/audit/db_permission_audit_queries.sql` 실행 → `docs/audit/db_expected_state.md` 대조. 클린설치 리뷰 정본 = 교정 `042` → `123` → `126`(§4).
 - 판정: `MANIFEST_POLICY_CLASSIFICATION_DEBT: RESOLVED` · `SAFE_TEST_ENV_UNAVAILABLE: RESOLVED` · `Data API baseline: RESOLVED` · `G0~G5: PASS` · `READY_FOR_S2_2_GO: YES` — 단 `READY_FOR_S2_2_GO`는 M0~M17 구현 브랜치·migration version 배정에 착수할 수 있다는 의미이며, **운영 DB 적용 승인이나 제품 배포 완료를 의미하지 않는다.**
 

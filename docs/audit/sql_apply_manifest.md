@@ -33,7 +33,7 @@
 아래는 파일명 숫자순을 기본으로 하되, 중복 번호와 의존 관계를 반영한 큰 흐름이다. 운영 DB 재실행 순서가 아니라 신규 환경 부트스트랩 검토용이다.
 
 1. Base auth/profile: `001_initial_auth_profile.sql`.
-2. Core/QnA base: `002_p0_subscriptions_questions_draft.sql`. (`002_app_core_schema_draft.sql`은 inventory/reference-only — 실행하지 않는다. 178개 후보 실측에서 002 중복 정의 실패의 원인 — 아래 「후보 검증 이력」.)
+2. Core/QnA base: `002_p0_subscriptions_questions_draft.sql`. (`002_app_core_schema_draft.sql`은 inventory/reference-only — 실행하지 않는다. 최초 178개 실행 실측에서 002 중복 정의 실패의 원인 — 아래 「후보 검증 이력」.)
 3. Custom request base: `003_p0_custom_request_draft.sql` 이후 `002_custom_request_orders_status.sql`.
 4. Cash/disputes/community draft: `004_p0_cash_disputes_admin_draft.sql`.
 5. Public read and custom request hardening: `005`-`018`.
@@ -73,9 +73,9 @@
 
 ### 후보 검증 이력 (2026-07-30)
 
-- 후보 B **178개**(=175 + `002_app_core_schema_draft` + `153` + `156`): `002_app_core_schema_draft`의 **중복 정의로 실패**. `167`~`169`는 **미도달**(적용 시도 없음).
-- 보정 후보 **177개**(002 초안 제외): `153`이 지급 게이트 제외 객체를 요구해 **지급 객체 부재로 실패**.
-- 후보 C **175개**(`153`·`156` 추가 제외): **전건 PASS.** `167`~`169` 포함 전 파일이 후보 C 에서 실제 적용 성공.
+- **최초 178개 실행**(후보 B 아님 — 명명 전 최초 실측): `002_app_core_schema_draft`·`153`·`156` 포함. **#3 `002` 중복 정의 오류로 실패.**
+- **후보 B 177개**: `002_app_core_schema_draft`만 제외. `153`이 지급 게이트 제외 객체를 요구해 **지급 객체 부재로 실패.** `167`~`169`는 **미도달**(적용 시도 없음).
+- **후보 C 175개**: `002_app_core_schema_draft`·`153`·`156` 제외. **175/175 전건 PASS.** `167`~`169`는 실제 도달·적용 성공.
 
 ## 전체 SQL 파일 목록
 
