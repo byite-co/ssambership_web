@@ -1006,6 +1006,11 @@ api_web_v1.community_post_soft_delete(p_post_id uuid) RETURNS jsonb
   - update 성공: `{ok:true, contract_version:1, post_id, updated_at, removed_image_refs:[…]}`
   - soft_delete 성공: `{ok:true, contract_version:1, post_id, deleted_at}`
 - 멱등: create는 `p_idempotency_key` **필수**, `(author_id, create_idempotency_key)` 기준. 근거: `community_posts_author_idem_key` UNIQUE INDEX가 이미 존재한다(실측). **응답 유실·불명확 시 같은 멱등키로 F4를 재호출하는 것이 생성 복구의 정본 경로다**(rev 8 C — 이미 성공했으면 기존 `post_id` 반환, 실패했으면 트랜잭션 롤백이라 지울 행이 없다). **응답 불명확·유실은 실패 확정이 아니므로, Storage 신규 객체는 재호출로 성공/실패가 확정되기 전에는 삭제하지 않는다**(§14.4 보상 규약 — 재호출 선행·보상 삭제 후행). authenticated hard-delete 보상 RPC는 **만들지 않는다.**
+- **F4 멱등 재생 판정 우선순위(replay-first):** 재생 판정은 신규 쓰기 검증보다 **먼저**다.
+  1. `auth.uid()` 확인 및 author binding(`p_author_id = auth.uid()` 도출) **직후**, 역할·승인·계정 write-block·본문·이미지 ref 등 **신규 쓰기 검증보다 먼저** `(author_id, create_idempotency_key)`로 **기존 커밋 행을 조회**한다.
+  2. 기존 행이 있으면 — 새 쓰기와 Storage 삭제 **없이** — 기존 `post_id` + `idempotent_replay:true`를 반환한다(재생 성공은 현재 시점의 역할·승인·본문 재검증 결과에 좌우되지 않는다 — 이미 커밋된 사실의 멱등 확인이기 때문).
+  3. 기존 행이 **없을 때만** 신규 쓰기 검증(작성 자격·계정 상태·본문·이미지 ref)과 INSERT를 수행한다.
+  4. **단순 재호출 오류(연결 실패·timeout·예상 밖 SQL 예외 전파)는 "미커밋 확인"으로 간주하지 않는다** — 성공도 확정 실패도 아니므로 §14.4대로 객체를 보존한 채 재시도한다. "미커밋 확인"은 이 replay-first 조회가 기존 행 없음을 판정하고 신규 경로가 **확정 실패 envelope**(`ok:false` 도메인 거부) 또는 rollback으로 종결된 경우만이다.
 - update는 `p_expected_updated_at`으로 낙관적 충돌 검사 → 불일치 시 `UPDATE_CONFLICT`.
 - soft_delete는 `deleted_at`을 세우고 **행을 지우지 않는다.** hard delete를 하지 않는다(XW-09 대응의 계약 측면. `community_posts` 직접 쓰기 자체의 전면 회수는 §14.7 **HD-1**(M16)이 담당한다 — rev 8 C. v1.0의 "§20 M8 선택 항목" 참조는 삭제: M8은 F7·F8 멘토 RPC 마이그레이션으로 **불변**이며 HD-1은 M8에 얹지 않는 별도 마이그레이션이다).
 - 이미지 ref 검증(공용 검증기 B-4, 각 ref마다 전부): 허용 버킷인지 / path 첫 세그먼트가 `p_owner_id`(= 호출 wrapper의 `auth.uid()`)인지 / `storage.objects`에 실제 존재하는지 / 소유자·MIME·크기가 계약과 맞는지 / 개수 ≤ 5.
@@ -1876,7 +1881,7 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
   - **DB finalize의 확정 실패·rollback 확인:** 신규 Storage 객체를 보상 삭제한다(트랜잭션 롤백이므로 지울 DB 행은 없다).
   - **DB finalize 응답 불명확·응답 유실:** Storage 객체를 **삭제하지 말고**, **동일 멱등키로 F4를 먼저 재호출**한다 — 이것이 생성 복구의 **정본 경로**다(rev 8 C).
     - 재호출 성공 또는 기존 `post_id` 반환(멱등 재생): 게시글이 커밋된 것이므로 **객체를 유지**한다(먼저 지우면 커밋된 글의 image ref가 깨진다).
-    - 확정 실패 및 게시물 미커밋 확인: **그때** 신규 객체를 보상 삭제한다.
+    - 확정 실패 및 게시물 미커밋 확인: **그때** 신규 객체를 보상 삭제한다. **"미커밋 확인"의 판정 주체는 §7 F4의 replay-first 판정이다** — 재호출이 `(author_id, create_idempotency_key)` 기존 행 없음을 판정하고 신규 경로에서 확정 실패 envelope(`ok:false` 도메인 거부) 또는 rollback으로 종결된 경우만 해당한다. **단순 재호출 오류(연결 실패·timeout·예상 밖 예외)는 미커밋 확인이 아니다** — 객체를 보존한 채 재시도한다. **별도 조회 RPC는 신설하지 않는다**(F4 재호출 자체가 조회를 겸한다).
   - **DB 게시글을 hard DELETE하는 보상 RPC·직접 DELETE 경로는 계속 금지한다**(authenticated hard-delete API는 새 공격면만 만든다).
 - update 성공은 `removed_image_refs`를 반환한다. 클라이언트는 commit 이후 제거된 구객체를 best-effort 삭제한다.
 - **보상 삭제 실패는 사용자 성공을 뒤집지 않는다.** orphan 정리 대상으로 기록한다.
@@ -2164,7 +2169,7 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
 | 확인 항목 | 결과 | 근거 |
 |---|---|---|
 | 공용 기능의 의미·오류코드가 불필요하게 갈라지지 않는가 | **조건부 충족** | 커뮤니티·질문방은 §19.1대로 동일 계약. 단 (a) 앱 계약 §4.3 오류 목록에 `SUBSCRIPTION_REFUND_PENDING` 누락(§3.7 #5), (b) 앱 계약이 정본을 envelope로 가정(§3.7 #4) → **앱 계약 보정 2건 필요** |
-| 커뮤니티 이미지 ref·서명 URL·업로드·보상 삭제 규약이 동등한가 | **충족** | §14.5 표 — ref 형식·TTL 3600초·5장/5MiB/4MIME·보상 삭제·soft delete 전부 일치 |
+| 커뮤니티 이미지 ref·서명 URL·업로드·보상 삭제 규약이 동등한가 | **조건부 충족 — 앱 v1.1이 새 웹 정본으로 재동기화된 뒤 PASS** | §14.5 표 — ref 형식·TTL 3600초·5장/5MiB/4MIME·soft delete는 일치. 보상 삭제는 웹 v1.1이 정본을 **재호출 선행·보상 삭제 후행**(§14.4·§7 F4 replay-first)으로 개정했으므로, 앱 계약 §6.3의 구순서("불명확 시 선삭제")가 §19.5 #8로 재동기화되어야 PASS |
 | 질문방·무료질문 자격 판단이 모순되지 않는가 | **충족(구조적 보장)** | 웹 F2·앱 wrapper가 **동일한 F10**을 호출. 소비는 양쪽 모두 정본 `qna_create_question_thread`가 수행 |
 | 앱 금지 기능이 `api_app_v1`에 유입되지 않는가 | **충족** | F11·F12는 `api_web_v1`에 있고 `anon`·`authenticated` EXECUTE 없음(service_role 전용) → 앱 anon 키로 도달 불가. 내부 구현부(`core_private`)는 외부 EXECUTE 0 |
 | `FORFEIT_CONSENT_REQUIRED`가 앱에서 웹 유도로 처리되는가 | **계약상 충족 · 구현 미완(실측 확정)** | §19.4-D. 웹 유도 인프라는 존재하나 **FORFEIT 분기에 연결돼 있지 않다.** `V_fix` 릴리스 대기 상태 — 이번 계약이 침범하지 않음 |
@@ -2479,6 +2484,7 @@ CREATE TRIGGER trg_mentor_profile_privileged_guard_ins
 | T-CONC-07 | F8을 3 tier 동시 호출 | 전부 반영 또는 전부 실패(트랜잭션) |
 | **T-CONC-08** | **전환기 교착 검증(C3)**: 같은 (payment, plan) 쌍에 대해 **F12**와 **레거시 `confirm_subscription_checkout` 직접 호출**을 동시 실행 | 교착(40P01) **0건**. 두 경로의 잠금 순서가 `payments` → advisory → `mentor_plans`로 동일함을 확인 |
 | **T-CONC-09** | **멱등 재생 + 가격 변경(rev 8 A-5 재작성)**: F12 성공 → 멘토가 `amount_cents` 변경 → **동일 `p_payment_id`·기존 `p_expected_amount_cents`로 재시도** | **가격 변경 후 재생 = `{ok:true, idempotent:true}`, anomaly 기록 없음.** `PLAN_AMOUNT_CHANGED`·`LEDGER_FIELD_MISMATCH`가 아니어야 한다(재생은 현재 플랜 가격을 읽지 않고 `payments.amount × 100`과 기존 원장 행만 비교 — §7 F12) |
+| **T-CONC-10** | **F4 응답 유실 복구(replay-first — §7 F4·§14.4)**: 이미지 객체 업로드 → F4가 **DB commit에 성공했으나 응답을 유실**한 것으로 모사 → **재호출 전에 Storage DELETE가 0회인지 확인** → 동일 멱등키로 F4 재호출 | 동일 `post_id` + `idempotent_replay:true` / 글 **1건** / 원래 `image_refs` **불변** / 참조 객체 **전부 존재**(서명 URL 발급 가능). **추가 분기:** 확정 rollback·미커밋(replay-first가 기존 행 없음 + 확정 실패 envelope로 종결)인 경우**에만** 신규 객체 보상 삭제가 일어난다 |
 
 ### 21.4 자금 정합성 테스트 (T-FIN)
 
@@ -2654,7 +2660,7 @@ CREATE TRIGGER trg_mentor_profile_privileged_guard_ins
 | 10 | 현재 호출점 → 신규 객체 → 레거시 호환표 완료 | ✅ | §17 (30행) · §18 |
 | 11 | `api_app_v1`과 제품 경계 대조 완료 | ✅ | §19 + **§19.4 앱 저장소 실측**(RPC 27/27, 테이블 24/24) |
 | 12 | 삭제 없는 migration 분해안과 적용 순서 완료 | ✅ | §20 (M0~M16, M2·M3 retired + 게이트 + callsite 전환 C1~C11) |
-| 13 | 구현 검수용 test matrix 완료 | ✅ | §21 (T-CON 8 · T-PERM 15 · T-CONC 9 · T-FIN 7 · T-SEC 14 · T-REG 7 · **T-REP 8 · T-TOP 6** = **74건**) |
+| 13 | 구현 검수용 test matrix 완료 | ✅ | §21 (T-CON 8 · T-PERM 15 · T-CONC 10 · T-FIN 7 · T-SEC 14 · T-REG 7 · **T-REP 8 · T-TOP 6** = **75건**) |
 | 14 | AS-IS와 TO-BE가 명확히 분리됨 | ✅ | 절마다 `[AS-IS]`/`[TO-BE]` 표시, 문서 상단 "읽는 법" |
 | 15 | 미검증 사실을 추정으로 채운 항목 0건 | ✅ | §23.2에 U-01~U-16으로 전부 명시(U-09·U-10 해소). §16.2의 TOSS env 2종은 **미검증**으로 표기(추정 아님) |
 | 16 | DB·GitHub·코드·Vercel 변경 0건 | ✅ | §24.3 |
