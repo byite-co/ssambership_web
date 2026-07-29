@@ -1005,7 +1005,7 @@ api_web_v1.community_post_soft_delete(p_post_id uuid) RETURNS jsonb
   - create 성공: `{ok:true, contract_version:1, post_id, idempotent_replay:false}` / 멱등 재생: `idempotent_replay:true` + 기존 `post_id`
   - update 성공: `{ok:true, contract_version:1, post_id, updated_at, removed_image_refs:[…]}`
   - soft_delete 성공: `{ok:true, contract_version:1, post_id, deleted_at}`
-- 멱등: create는 `p_idempotency_key` **필수**, `(author_id, create_idempotency_key)` 기준. 근거: `community_posts_author_idem_key` UNIQUE INDEX가 이미 존재한다(실측). **응답 유실·불명확 시 같은 멱등키로 F4를 재호출하는 것이 생성 복구의 정본 경로다**(rev 8 C — 이미 성공했으면 기존 `post_id` 반환, 실패했으면 트랜잭션 롤백이라 지울 행이 없다). authenticated hard-delete 보상 RPC는 **만들지 않는다.**
+- 멱등: create는 `p_idempotency_key` **필수**, `(author_id, create_idempotency_key)` 기준. 근거: `community_posts_author_idem_key` UNIQUE INDEX가 이미 존재한다(실측). **응답 유실·불명확 시 같은 멱등키로 F4를 재호출하는 것이 생성 복구의 정본 경로다**(rev 8 C — 이미 성공했으면 기존 `post_id` 반환, 실패했으면 트랜잭션 롤백이라 지울 행이 없다). **응답 불명확·유실은 실패 확정이 아니므로, Storage 신규 객체는 재호출로 성공/실패가 확정되기 전에는 삭제하지 않는다**(§14.4 보상 규약 — 재호출 선행·보상 삭제 후행). authenticated hard-delete 보상 RPC는 **만들지 않는다.**
 - update는 `p_expected_updated_at`으로 낙관적 충돌 검사 → 불일치 시 `UPDATE_CONFLICT`.
 - soft_delete는 `deleted_at`을 세우고 **행을 지우지 않는다.** hard delete를 하지 않는다(XW-09 대응의 계약 측면. `community_posts` 직접 쓰기 자체의 전면 회수는 §14.7 **HD-1**(M16)이 담당한다 — rev 8 C. v1.0의 "§20 M8 선택 항목" 참조는 삭제: M8은 F7·F8 멘토 RPC 마이그레이션으로 **불변**이며 HD-1은 M8에 얹지 않는 별도 마이그레이션이다).
 - 이미지 ref 검증(공용 검증기 B-4, 각 ref마다 전부): 허용 버킷인지 / path 첫 세그먼트가 `p_owner_id`(= 호출 wrapper의 `auth.uid()`)인지 / `storage.objects`에 실제 존재하는지 / 소유자·MIME·크기가 계약과 맞는지 / 개수 ≤ 5.
@@ -1871,8 +1871,13 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
 
 - create의 `p_idempotency_key`는 **필수**이며 `(author_id, create_idempotency_key)` 기준으로 멱등이다(UNIQUE INDEX `community_posts_author_idem_key` 실측).
 - 멱등 재생 성공은 기존 `post_id` + `idempotent_replay:true`를 반환한다.
-- 업로드 중 하나가 실패하면 **그 요청에서 이미 올린 객체를 즉시 삭제**한다(Storage 보상 삭제 — **유지**).
-- DB finalize 실패·응답 불명확이면 이번 요청에 Storage에 새로 올린 객체를 보상 삭제하고, **같은 멱등키로 F4를 재호출**해 성공 여부를 확정한다 — 이것이 생성 복구의 **정본 경로**다(rev 8 C). 이미 성공했으면 기존 `post_id`가 반환되고, 실패했으면 DB 트랜잭션 롤백이라 지울 행이 없다. **DB 게시글을 hard DELETE하는 보상 RPC·직접 DELETE 경로는 만들지 않는다**(authenticated hard-delete API는 새 공격면만 만든다).
+- **응답 불명확·응답 유실은 실패 확정이 아니다 — 재호출 선행·보상 삭제 후행:**
+  - **업로드 단계 실패:** 이미 업로드한 신규 Storage 객체를 **즉시 보상 삭제**한다(Storage 보상 삭제 — **유지**).
+  - **DB finalize의 확정 실패·rollback 확인:** 신규 Storage 객체를 보상 삭제한다(트랜잭션 롤백이므로 지울 DB 행은 없다).
+  - **DB finalize 응답 불명확·응답 유실:** Storage 객체를 **삭제하지 말고**, **동일 멱등키로 F4를 먼저 재호출**한다 — 이것이 생성 복구의 **정본 경로**다(rev 8 C).
+    - 재호출 성공 또는 기존 `post_id` 반환(멱등 재생): 게시글이 커밋된 것이므로 **객체를 유지**한다(먼저 지우면 커밋된 글의 image ref가 깨진다).
+    - 확정 실패 및 게시물 미커밋 확인: **그때** 신규 객체를 보상 삭제한다.
+  - **DB 게시글을 hard DELETE하는 보상 RPC·직접 DELETE 경로는 계속 금지한다**(authenticated hard-delete API는 새 공격면만 만든다).
 - update 성공은 `removed_image_refs`를 반환한다. 클라이언트는 commit 이후 제거된 구객체를 best-effort 삭제한다.
 - **보상 삭제 실패는 사용자 성공을 뒤집지 않는다.** orphan 정리 대상으로 기록한다.
 - soft delete는 게시글 행과 이미지 참조를 감사 목적으로 보존한다. 실제 객체 purge는 계정삭제·보존정책 작업이 담당한다.
@@ -1886,7 +1891,7 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
 | 이미지 쓰기 | F4/F5 (최대 5장, 5 MiB, 4종 MIME, UID 경로) | `api_app_v1.community_post_create/update` (동일 제한) | ✅ **동일 계약** |
 | ref 형식 | `community-post-images/{uid}/{object}` | 동일 | ✅ |
 | 레거시 URL 호환 | path 추출 후 재서명 | 동일 | ✅ |
-| 보상 삭제 | 요청 단위 신규 객체 삭제 + orphan 기록 | 동일 | ✅ |
+| 보상 삭제 | **재호출 선행·보상 삭제 후행**(§14.4 — 확정 실패 시에만 요청 단위 신규 객체 삭제) + orphan 기록 | 앱 계약 v1.0 §6.3은 "응답 불명확 시 선삭제" 구순서 — **v1.1에서 §14.4 규약으로 동기화**(§19.5 #8) | ⚠→✅ (앱 계약 v1.1 동기화 시 충족) |
 | soft delete | F6 (hard delete 금지) | `community_post_soft_delete` (동일) | ✅ |
 | 본문 검증 | 연락처 마스킹만(금지어 폐지 확정 — rev 8 D) | 동일 규칙 공유 필수 | ✅ **공용 검증부(B-1~B-4) 공유로 구조적 보장** — 앱 전용 약한 규칙 금지(앱 계약 §6.2) |
 | 작성 자격 | **승인 멘토 전용**(F4 — rev 8 A-10) | 동일(`ROLE_NOT_MENTOR` 재정의 — §19.5) | ✅ 공용 구현부가 판정 |
@@ -2226,6 +2231,7 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
 5. **주간 사용량 pair-party 가드(rev 8 A-8):** 레거시 `get_weekly_question_usage`에 NULL-safe pair-party 가드가 추가된다(§7 F1). **앱 호출(자기 학생 ID 전달)은 `auth.uid() = p_student_id`로 통과하므로 영향이 없다** — 이 사실을 앱 계약에 명기한다.
 6. **공용 커뮤니티 내부 함수 대조표(오너 확정):** 웹·앱 계약이 공유하는 커뮤니티 내부 함수의 **이름·시그니처·오류코드·GRANT가 웹 계약과 동일**함을 증명하는 대조표를 앱 계약 v1.1에 추가한다. 대조 기준(본 문서): `core_private.community_post_create_impl(uuid,text,text,text,text[],text,uuid)` · `community_post_update_impl(uuid,uuid,text,text,text,text[],text,timestamptz)` · `community_post_soft_delete_impl(uuid,uuid)` · `community_image_refs_validate(uuid,text[])` — 전부 `SECURITY INVOKER`·`search_path=''`·외부 EXECUTE 0(§7 F4·F5·F6, §10.3). 공용 방 확보는 `core_private.ensure_student_mentor_room(uuid,uuid,uuid,uuid,boolean)`(§7 F10). 오류코드는 §9.2~9.4, envelope는 §8.1.
 7. **`ROLE_NOT_ALLOWED` 재정의(rev 8 A-10):** 앱 계약의 커뮤니티 작성 오류코드 설명을 멘토 전용(`ROLE_NOT_MENTOR`·`MENTOR_NOT_APPROVED`) 기준으로 수정한다(§9.4).
+8. **보상 삭제 순서 정정:** 앱 계약 §6.3의 "DB finalize 실패·응답 불명확이면 이번 요청 신규 객체를 보상 삭제" 규정을 **§14.4의 재호출 선행·보상 삭제 후행 규약으로 동기화**한다 — 응답 불명확·유실은 실패 확정이 아니며, 동일 멱등키 재호출(또는 멱등키 재조회)로 성공/실패를 확정하기 전에는 Storage 신규 객체를 삭제하지 않는다. 커밋된 글의 image ref 파손을 막는 규칙이다. DB 게시물 hard DELETE 보상 처리는 계속 금지.
 
 **동기화 의무:** 웹 지시서와 앱 지시서 사이의 오류코드·room 의미론·테스트 기대값은 동일해야 한다 — F12 재생 계약(§7 F12: `subscription.last_payment_id` 유일 정본 · `SUBSCRIPTION_REF_INVALID` detail 3종 · C 당사자 = `PARTY_BINDING_MISMATCH` · 9단계 우선순위 · 검증 선행·쓰기 후행 · room nullable 참조의 Phase 2 복구 · 늦은 과거 재생의 무부작용 멱등 성공 · 테스트 A~H)이 그 기준이다.
 
