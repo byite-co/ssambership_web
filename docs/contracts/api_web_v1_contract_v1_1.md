@@ -611,8 +611,9 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA core_private REVOKE EXECUTE ON FUNCTIONS FROM
 
 ### 5.4 Data API 노출 설정
 
-- Supabase Dashboard(또는 프로젝트 설정)의 **Exposed schemas**에 `api_web_v1`을 추가한다. `api_app_v1`도 같은 방식으로 추가된다(앱 계약 §3.1).
+- Supabase Dashboard(또는 프로젝트 설정)의 **Exposed schemas**에 `api_web_v1`을 추가한다(**D-API-W**). `api_app_v1`도 같은 방식으로 추가된다(**D-API-A** — 앱 계약 §3.1). **이 두 단계는 SQL migration이 아니라 플랫폼 설정이며, 시점·검증·rollback 절차는 §20.6이 정본이다.**
 - `core_private`는 **절대 추가하지 않는다.** 노출 여부는 §21 T-PERM-03 테스트로 회귀 감시한다.
+- 대시보드가 Exposed schemas를 관리하는 상태에서는 임의로 `ALTER ROLE authenticator SET pgrst.db_schemas`를 실행하지 않는다(§20.6).
 - `public`은 레거시 호환 때문에 S2에서 **계속 노출 상태로 유지**한다(§18).
 
 ---
@@ -2238,6 +2239,14 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
 7. **`ROLE_NOT_ALLOWED` 재정의(rev 8 A-10):** 앱 계약의 커뮤니티 작성 오류코드 설명을 멘토 전용(`ROLE_NOT_MENTOR`·`MENTOR_NOT_APPROVED`) 기준으로 수정한다(§9.4).
 8. **보상 삭제 순서 정정:** 앱 계약 §6.3의 "DB finalize 실패·응답 불명확이면 이번 요청 신규 객체를 보상 삭제" 규정을 **§14.4의 재호출 선행·보상 삭제 후행 규약으로 동기화**한다 — 응답 불명확·유실은 실패 확정이 아니며, 동일 멱등키 재호출(또는 멱등키 재조회)로 성공/실패를 확정하기 전에는 Storage 신규 객체를 삭제하지 않는다. 커밋된 글의 image ref 파손을 막는 규칙이다. DB 게시물 hard DELETE 보상 처리는 계속 금지.
 
+9. **`api_app_v1` DB 표면의 소유 migration 확정(v1.1 canon 보정 — rev 8 F, M17 신설):** 아래를 앱 계약 v1.1 재동기화 시 명기한다.
+   - **`api_app_v1` DB 표면(스키마·`community_posts_v1` 뷰·앱 wrapper 5종)은 웹 저장소의 `M17`이 생성한다**(§20.2 M17). 앱 계약 §3.1·§3.2·§3.3이 요구하는 객체의 SQL 정본 소유자는 M17이다.
+   - **앱 저장소는 S2 공용 DB migration의 SQL 정본을 별도로 만들지 않는다.** DB migration의 소유 저장소는 `ssambership_web/supabase/sql`로 확정한다 — 앱 저장소의 기존 `supabase/migrations` 스냅샷 체계(IQ 첨부 기록용)를 S2 공용 DB migration 정본으로 사용하지 않는다.
+   - **앱 제품 코드 전환은 `M17` 적용 + `D-API-A`(Exposed schemas에 `api_app_v1` 추가·§20.6) 이후에만** 시작한다. 그 전에는 앱이 호출할 표면이 존재하지 않거나 REST로 도달할 수 없다.
+   - **M16(HD-1)은 앱 Gate 4 통과와 직접 쓰기 0건 확인 전에는 금지**된다(§20.3 M16 게이트). M17 적용 직후 M16을 실행하지 않는다.
+   - 앱 wrapper 5종의 시그니처·GRANT·envelope는 앱 계약 §3.3·§10 Gate 4와 **완전히 동일**해야 하며, `core_private` 구현부는 M7·M5가 만든 동일 객체를 **공유**한다(복제 금지 — §12 대조표).
+   - **앱 계약 v1.1은 이 보정을 반영한 새 웹 정본 commit·SHA-256으로 다시 동기화해야 한다**(앱 §14 대조표의 "웹 정본 정체성" 행을 새 값으로 갱신 — 구 정본 `53120d02…`/`0df3a98d…` 참조를 남기지 않는다).
+
 **동기화 의무:** 웹 지시서와 앱 지시서 사이의 오류코드·room 의미론·테스트 기대값은 동일해야 한다 — F12 재생 계약(§7 F12: `subscription.last_payment_id` 유일 정본 · `SUBSCRIPTION_REF_INVALID` detail 3종 · C 당사자 = `PARTY_BINDING_MISMATCH` · 9단계 우선순위 · 검증 선행·쓰기 후행 · room nullable 참조의 Phase 2 복구 · 늦은 과거 재생의 무부작용 멱등 성공 · 테스트 A~H)이 그 기준이다.
 
 ---
@@ -2254,7 +2263,7 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
 
 ### 20.2 migration 논리 ID·분해안
 
-> **번호는 시간 순서가 아니라 논리 ID다.** M0~M16 각 번호는 마이그레이션의 정체성(객체 묶음)을 가리키며, 표의 나열 순서는 적용 순서가 아니다. **적용 순서의 정본은 §20.2.1의 선행조건 그래프**이고, 각 간선의 상세 조건은 §20.3 게이트 표가 정의한다. **M2·M3는 retired 슬롯**이다(rev 8 A-6의 번호 불변 정책 — 번호를 당기지 않고 논리 슬롯으로 유지, stale 참조 재발 방지) — 적용·롤백 대상이 아니다.
+> **번호는 시간 순서가 아니라 논리 ID다.** M0~M17 각 번호는 마이그레이션의 정체성(객체 묶음)을 가리키며, 표의 나열 순서는 적용 순서가 아니다. **적용 순서의 정본은 §20.2.1의 선행조건 그래프**이고, 각 간선의 상세 조건은 §20.3 게이트 표가 정의한다. **M2·M3는 retired 슬롯**이다(rev 8 A-6의 번호 불변 정책 — 번호를 당기지 않고 논리 슬롯으로 유지, stale 참조 재발 방지) — 적용·롤백 대상이 아니다. **M17은 v1.1 canon 보정으로 신설된 `api_app_v1` DB 표면 소유 migration이다**(rev 8 F 보정 — v1.0/v1.1 초판에서 `api_app_v1` 스키마·뷰·wrapper를 생성하는 소유 migration이 M0~M16에 누락돼 있던 계약 결함을 해소한다. 앱 계약 §3.1·§3.2·§3.3·§10이 요구하는 표면의 SQL 정본 소유자가 없던 문제 — §19.5 #9·부록 C).
 
 | # | migration | 내용 | 되돌릴 수 있나 |
 |---|---|---|---|
@@ -2276,6 +2285,7 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
 | **M14** | `..._api_web_v1_payout_account_rpc.sql` | **F13** `mentor_payout_account_update_self` + GRANT (rev 8 A-4) — **M11 게이트 ②의 선행 조건** | ✅ DROP FUNCTION |
 | **M15** | `..._weekly_usage_pair_party_guard.sql` | 레거시 `public.get_weekly_question_usage`에 **NULL-safe pair-party 가드** 추가(rev 8 A-8 — §7 F1). M0처럼 독립·조기 적용 가능 | ✅ 가드 없는 구 본문 복원 migration |
 | **M16** | `..._community_direct_write_lockdown.sql` | **HD-1**(rev 8 C — §14.7): `community_posts` `REVOKE ALL` + `GRANT SELECT` + 쓰기 정책 6종 제거 | ✅ GRANT·정책 복원 migration |
+| **M17** | `..._api_app_v1_surface.sql` | **`api_app_v1` DB 표면(rev 8 F 보정 — 앱 계약 §3 소유 migration 누락 해소).** ① `api_app_v1` 스키마 ② `REVOKE ALL ON SCHEMA api_app_v1 FROM PUBLIC, anon` ③ `GRANT USAGE ON SCHEMA api_app_v1 TO authenticated` ④ `api_app_v1.community_posts_v1` 뷰(`security_invoker=true`) ⑤ 앱 wrapper 5종(`ensure_free_question_room`·`qna_create_question_thread`·`community_post_create`·`community_post_update`·`community_post_soft_delete`) ⑥ 각 객체 최소 GRANT/REVOKE(외부는 `authenticated`만, `PUBLIC`·`anon` 불필요 권한 0) ⑦ default privilege 방어(`ALTER DEFAULT PRIVILEGES … REVOKE EXECUTE FROM PUBLIC`) ⑧ 시그니처는 앱 계약 §3.3·§3.4·§10 Gate 4의 identity argument와 완전 동일. **`core_private` 구현부(B-1~B-4·F10)는 M7·M5가 만든 동일 객체를 공유 — 복제 금지.** (Data API Exposed schemas 추가는 SQL이 아닌 플랫폼 단계 D-API-A, §20.6) | ✅ wrapper·뷰·스키마 DROP migration(**단, §22 순서 — Exposed schemas에서 `api_app_v1` 제거·PostgREST 반영이 DROP보다 선행**) |
 
 #### 20.2.1 실행 순서 정본 — 선행조건 그래프
 
@@ -2293,12 +2303,15 @@ M7  : M1                            # F4/F5/F6 + 공용 구현부 B-1~B-4
 M8  : M1                            # F7·F8
 M14 : M1                            # F13
 M9  : M5                            # F11 3층·F12(F12가 F10 내부 호출) + §20.3 사전 검사
+M17 : M5 + M7 + M13                 # api_app_v1 표면(스키마·community_posts_v1·앱 wrapper 5종) — rev 8 F 보정
+                                    #   M5=F10(ensure_free_question_room 호출) · M7=공용 impl B-1~B-4(F4/F5/F6 wrapper 호출)
+                                    #   M13=community_posts_v1 의 author_label·author_role 사용 · M1은 M5·M7 선행이라 간접 충족
 M11 : M8(F7)+C6 전환 · M14(F13)+C11 전환 · 백업 upsert 제거 · 직접 쓰기 0건 실측
 M12 : M8(F8)+C6 전환 · 플랜 직접 쓰기 0건 실측
-M16 : M7 + 웹·앱 F4/F5/F6 전환(C5 포함) + 앱 보상 DELETE 제거 + 직접 쓰기 0건 실측
-      (§14.7 확대 게이트 7단계)
-M10 : M11 + M12 + M16               # 최종 권한 assertion checkpoint —
-      (+ 검사 대상 객체 마이그레이션 전부: M0·M1·M4~M9·M13·M14)
+M16 : M7 + M17 + 웹·앱 F4/F5/F6 전환(C5 포함) + 앱 보상 DELETE 제거 + 직접 쓰기 0건 실측
+      (§14.7 확대 게이트 7단계 + 앱 Gate 4 통과 — M17 적용 직후 M16 실행 금지: 앱 코드 전환·Gate 4가 별도 선행)
+M10 : M11 + M12 + M16 + M17         # 최종 권한 assertion checkpoint —
+      (+ 검사 대상 객체 마이그레이션 전부: M0·M1·M4~M9·M13·M14·M17)
       # M10이 검사하는 모든 객체·회수 마이그레이션이 먼저 적용되어야 한다.
       # 읽기 전용·상태 0 (§20.2 표·§21.10 검사 범위 참조)
 ```
@@ -2308,9 +2321,10 @@ M10 : M11 + M12 + M16               # 최종 권한 assertion checkpoint —
 권고 직렬화 — 위 그래프의 유효한 위상 정렬 한 가지(§24.2와 동일, C 단계 삽입):
 
 ```text
-M0(M15 병행 가능) → M1 → M13 → M4 → C1 → M5 → M6 → C2·C3·C4 → M7 → C5 → M8 → C6
-→ M14 → C11 → M9 → C7·C8 → (직접 쓰기·호출 0건 확인) → M11 → M12
-→ (§14.7 게이트 충족 후) M16 → M10 → C9·C10
+M0(M15 병행 가능) → M1 → M13 → M4 → [D-API-W: api_web_v1 Exposed schemas 추가 — C1 이전] → C1 → M5 → M6 → C2·C3·C4 → M7 → C5
+→ M17 → [D-API-A: api_app_v1 Exposed schemas 추가 — 앱 Gate 4 이전] → 앱 F4/F5/F6·Gate 4 전환
+→ M8 → C6 → M14 → C11 → M9 → C7·C8 → (직접 쓰기·호출 0건 확인) → M11 → M12
+→ (§14.7 게이트 + 앱 Gate 4 충족 후) M16 → M10 → C9·C10
 ```
 
 ### 20.3 게이트 (앞 단계 미충족 시 다음 단계 금지)
@@ -2322,8 +2336,10 @@ M0(M15 병행 가능) → M1 → M13 → M4 → C1 → M5 → M6 → C2·C3·C4 
 | M9 이전 | F11 3층 계약 테스트(§21.9 T-TOP) + F12 재생 계약 테스트(§21.8 T-REP) 설계 확정. **F12 배포 전 사전 검사(rev 8 A-2 §3):** "기존 succeeded 구독 결제 중 `mentor_student_rooms` 행이 없는 건"을 탐지·보정하는 점검 절차 수행 |
 | **M11 이전** | ① F7 전환 완료 ② **M14(F13) 적용 + 웹 호출부(`lib/mentor/mentorPayoutAccountActions.ts`) 전환** ③ `syncAfterSignUpWithSession` 백업 upsert 제거 ④ 프로필 직접 쓰기 실측 0건 확인(웹·앱 — 앱 영향 없음은 **§19.4-B에서 실측 완료**) |
 | **M12 이전** | ① F8 전환 완료 ② 플랜 직접 쓰기 실측 0건 확인 |
-| **M16(HD-1) 이전** | §14.7 확대 게이트 7단계 — F4/F5/F6 웹·앱 전환 + 멱등 재시도 구현 + 앱 보상 DELETE 제거 + 직접 쓰기 0건 확인 + service_role moderation 예외 목록화 |
-| 전 단계 공통 | Data API exposed schema에 `core_private`가 **없음** 확인 |
+| **M17 이전** | M5(F10)·M7(공용 impl B-1~B-4)·M13(comments 라벨 비정규화) 적용 + `api_app_v1`에 `PUBLIC`·`anon` 권한 0건 실측 + **`core_private` 구현부 복제 0건**(M7·M5 객체 공유 확인) |
+| **D-API-A(플랫폼 단계) 이전** | M17 적용 완료·`api_app_v1` 생성 확인. Data API Exposed schemas 추가는 SQL migration이 **아님**(§20.6). 앱 Gate 4 전환 이전 완료 |
+| **M16(HD-1) 이전** | §14.7 확대 게이트 7단계 — F4/F5/F6 웹·앱 전환 + 멱등 재시도 구현 + 앱 보상 DELETE 제거 + 직접 쓰기 0건 확인 + service_role moderation 예외 목록화 + **M17 적용 + D-API-A 노출 + 앱 Gate 4 통과** |
+| 전 단계 공통 | Data API exposed schema에 `core_private`가 **없음** 확인. `api_web_v1`·`api_app_v1`은 **노출**(D-API-W·D-API-A, §20.6) |
 
 ### 20.4 웹 callsite 전환 계획 (migration 사이에 끼는 코드 작업)
 
@@ -2430,6 +2446,27 @@ CREATE TRIGGER trg_mentor_profile_privileged_guard_ins
 - **이 문서는 M0를 적용하지 않는다(문서 계약).** 적용 여부는 rev 8 A-7로 **필수 확정**됐고(구 B-06 해소), 시점은 S2 착수 즉시·우선이다.
 - 동일 논리의 `mentor_plans` 밴드 강제 트리거도 가능하지만, 밴드 상수를 DB에 이중 정의하게 되므로 **F8(M8)로 처리하는 것을 권고**한다. 급하면 `amount_cents > 0` 및 tier allowlist CHECK만 먼저 거는 것도 선택지다.
 
+### 20.6 Data API exposed schema 플랫폼 단계 (migration 아님 — rev 8 F 보정)
+
+`api_web_v1`·`api_app_v1`을 웹·앱 클라이언트가 PostgREST로 호출하려면 Data API의 **Exposed schemas** 목록에 포함돼야 한다. 이는 **SQL migration이 아니라 Supabase 플랫폼 설정**이므로 M계열 migration과 분리해 별도 operational step으로 관리한다(M17이 `api_app_v1` 객체를 만들지만, 노출 자체는 이 플랫폼 단계가 담당한다). 대시보드가 Exposed schemas를 관리하는 상태에서는 **임의로 `ALTER ROLE authenticator SET pgrst.db_schemas`를 실행하지 않는다**(플랫폼 설정과 이원화되어 드리프트가 생긴다).
+
+| 단계 | 내용 | 시점 |
+|---|---|---|
+| **D-API-W** | `api_web_v1`을 Exposed schemas에 추가 | M1 적용 후 · **C1(웹 읽기 경로 전환) 이전** 완료 |
+| **D-API-A** | `api_app_v1`을 Exposed schemas에 추가 | **M17 적용 후 · 앱 Gate 4 전환 이전** 완료 |
+
+목표 상태:
+
+```text
+api_web_v1   : exposed
+api_app_v1   : exposed
+core_private : never exposed
+```
+
+- `core_private`는 Exposed schemas에 **절대 포함하지 않는다.** `anon`·`authenticated`·`service_role`에 스키마 USAGE와 외부 EXECUTE가 **0**이어야 한다(§10.1·§21 T-PERM-01·03·06).
+- **설정 변경 후 검증 의무:** Exposed schemas 변경은 PostgREST가 즉시 반영하지 않을 수 있다. 변경 후 (a) PostgREST schema cache reload(`NOTIFY pgrst, 'reload schema'` 또는 대시보드 저장 시 자동 reload) 반영 여부, (b) 신규 스키마의 wrapper·뷰가 실제 REST로 도달 가능한지, (c) `core_private` 미포함을 확인한다.
+- **rollback:** Exposed schemas에서 스키마를 제거하고 schema cache를 reload한다. M17 rollback은 이 플랫폼 단계(제거·반영)가 객체 DROP보다 **선행**한다(§22).
+
 ---
 
 ---
@@ -2484,7 +2521,7 @@ CREATE TRIGGER trg_mentor_profile_privileged_guard_ins
 | T-CONC-07 | F8을 3 tier 동시 호출 | 전부 반영 또는 전부 실패(트랜잭션) |
 | **T-CONC-08** | **전환기 교착 검증(C3)**: 같은 (payment, plan) 쌍에 대해 **F12**와 **레거시 `confirm_subscription_checkout` 직접 호출**을 동시 실행 | 교착(40P01) **0건**. 두 경로의 잠금 순서가 `payments` → advisory → `mentor_plans`로 동일함을 확인 |
 | **T-CONC-09** | **멱등 재생 + 가격 변경(rev 8 A-5 재작성)**: F12 성공 → 멘토가 `amount_cents` 변경 → **동일 `p_payment_id`·기존 `p_expected_amount_cents`로 재시도** | **가격 변경 후 재생 = `{ok:true, idempotent:true}`, anomaly 기록 없음.** `PLAN_AMOUNT_CHANGED`·`LEDGER_FIELD_MISMATCH`가 아니어야 한다(재생은 현재 플랜 가격을 읽지 않고 `payments.amount × 100`과 기존 원장 행만 비교 — §7 F12) |
-| **T-CONC-10** | **F4 응답 유실 복구(replay-first — §7 F4·§14.4)**: 이미지 객체 업로드 → F4가 **DB commit에 성공했으나 응답을 유실**한 것으로 모사 → **재호출 전에 Storage DELETE가 0회인지 확인** → 동일 멱등키로 F4 재호출 | 동일 `post_id` + `idempotent_replay:true` / 글 **1건** / 원래 `image_refs` **불변** / 참조 객체 **전부 존재**(서명 URL 발급 가능). **추가 분기:** 확정 rollback·미커밋(replay-first가 기존 행 없음 + 확정 실패 envelope로 종결)인 경우**에만** 신규 객체 보상 삭제가 일어난다 |
+| **T-CONC-10** | **(canonical 소유 = M7 — rev 8 F 보정)** **F4 응답 유실 복구(replay-first — §7 F4·§14.4)**: 이미지 객체 업로드 → F4가 **DB commit에 성공했으나 응답을 유실**한 것으로 모사 → **재호출 전에 Storage DELETE가 0회인지 확인** → 동일 멱등키로 F4 재호출 | 동일 `post_id` + `idempotent_replay:true` / 글 **1건** / 원래 `image_refs` **불변** / 참조 객체 **전부 존재**(서명 URL 발급 가능). **추가 분기:** 확정 rollback·미커밋(replay-first가 기존 행 없음 + 확정 실패 envelope로 종결)인 경우**에만** 신규 객체 보상 삭제가 일어난다 |
 
 ### 21.4 자금 정합성 테스트 (T-FIN)
 
@@ -2560,7 +2597,19 @@ CREATE TRIGGER trg_mentor_profile_privileged_guard_ins
 - **권한·동시성·자금 정합성**은 운영 DB가 아니라 **Supabase 브랜치 DB 또는 로컬 스택**에서 실행한다(지시서 §3 운영 DB 변경 금지).
 - 계약 테스트 중 순수 로직(오류코드 매핑·밴드 상수·ref 파싱)은 기존 `__contract__` 패턴(`node --test`)을 따른다 — 저장소에 이미 `lib/*/__contract__/*.contract.test.ts` 관행이 있다.
 - **M10 검사 범위 분리(운영/비운영):**
-  - **운영 M10**은 M11·M12·M16까지 적용된 뒤 실행하는 최종 checkpoint로, **카탈로그·ACL·정책·함수 속성 등 읽기 전용 assertion만** 수행한다(예: `has_schema_privilege`/`has_function_privilege`/`has_table_privilege`·`pg_policies` 존재/부재·`prosecdef`·`proconfig`·exposed schema 목록 — T-PERM-01~04·06~10·12·14, T-PERM-05의 함수 부재 확인, T-PERM-15의 GRANT·정책 부재 확인).
+  - **운영 M10**은 M11·M12·M16·**M17**까지 적용된 뒤 실행하는 최종 checkpoint로, **카탈로그·ACL·정책·함수 속성 등 읽기 전용 assertion만** 수행한다(예: `has_schema_privilege`/`has_function_privilege`/`has_table_privilege`·`pg_policies` 존재/부재·`prosecdef`·`proconfig`·exposed schema 목록 — T-PERM-01~04·06~10·12·14, T-PERM-05의 함수 부재 확인, T-PERM-15의 GRANT·정책 부재 확인, **M17의 `api_app_v1` 스키마·wrapper 5종·뷰 GRANT 및 `PUBLIC`·`anon` 권한 0건 확인**).
+
+### 21.11 M17(`api_app_v1` 표면) 테스트 소유권 (v1.1 보정 — rev 8 F)
+
+migration별 테스트 소유를 아래와 같이 고정한다. 같은 시나리오라도 **표면이 다르면 소유 migration이 다르다.**
+
+| 소유 | 테스트 범위 |
+|---|---|
+| **M7** | 공용 구현부 B-1~B-4와 **웹** F4/F5/F6. **`T-CONC-10`의 canonical 소유**(웹 표면 replay-first·Storage 보존) · T-CONC-06 · T-CON-07·08 |
+| **M17** | **앱 Gate 4**(앱 계약 §10) · 앱 wrapper 5종의 **시그니처·GRANT·envelope**(앱 계약 §3.3 identity argument 완전 일치) · `api_app_v1.community_posts_v1` 필드·권한(T-CON-07의 앱 측) · **앱 표면에서 T-CONC-10과 동일한 응답 유실 시나리오 재검증**(동일 멱등키 F4 재호출 → 동일 `post_id`+`idempotent_replay:true`, 재호출 전 Storage DELETE 0회, `image_refs` 불변) |
+
+- **M9는 `T-CONC-10`을 소유하지 않는다.** M9의 테스트는 T-CONC-02·03·04·08·09 · T-FIN(01~07) · T-REP A~H · T-TOP 01~06이다(자금·재생 계약 전용).
+- M17의 앱 표면 재검증은 M7의 canonical 판정을 대체하지 않는다 — **같은 공용 구현부(B-1)가 두 표면에서 동일하게 동작함을 증명**하는 이중 확인이다.
   - **상태 변경 가능 기능 테스트** — 관리자 승인 동작(T-PERM-11), 가입 경로 정상 동작(T-PERM-14 후단), service_role moderation 동작(T-PERM-15 후단), V4·V5의 service_role 전행 반환 확인(T-PERM-13) 등 실제 쓰기·세션이 필요한 검증 — 는 운영 M10에 넣지 않고 **Supabase 브랜치 DB 또는 로컬 스택에서** 수행한다.
   - T-PERM 전체를 M10 SQL 한 건으로 수행한다는 해석은 금지한다 — M10은 위 읽기 전용 부분집합만 담는다.
 
@@ -2572,11 +2621,22 @@ CREATE TRIGGER trg_mentor_profile_privileged_guard_ins
 2. **역순 적용 — §20.2.1 선행조건 그래프의 역방향이 정본이다.** 규칙: 어떤 마이그레이션을 되돌리기 전에, 그것에 **의존하는(그래프에서 후행하는) 마이그레이션을 먼저** 되돌린다. **M10은 상태를 만들지 않는 검증 checkpoint이므로 rollback 객체가 없다 — 상태 rollback 대상으로 취급하지 않는다.** 상태 rollback 직렬화(§20.2.1 역방향) 한 가지:
 
    ```text
-   M16 → M12 → M11 → M9 → M14 → M8 → M7 → M6 → M5 → M4 → M13 → M1
+   M16 → M12 → M11 → M9 → M14 → M8 → M17 → M7 → M6 → M5 → M4 → M13 → M1
    → M15 → (M0는 마지막이며 되도록 남긴다 — §20.5)
    ```
 
-   핵심 역의존: M16은 M7보다 먼저 / M11은 M8·M14보다 먼저 / M12는 M8보다 먼저 / M9·M6은 M5보다 먼저 / M4는 M13·M1보다 먼저 / `api_web_v1`·`core_private` 객체(M4~M9·M14)는 스키마(M1)보다 먼저. M15는 독립이므로 위치 제약이 없다(레거시 함수 구 본문 복원 migration). (M2·M3는 retired — 롤백 대상 자체가 없다.)
+   핵심 역의존: M16은 M7·M17보다 먼저 / **M17은 M7·M5·M13보다 먼저**(앱 표면이 공용 구현부·라벨 컬럼에 의존) / M11은 M8·M14보다 먼저 / M12는 M8보다 먼저 / M9·M6은 M5보다 먼저 / M4는 M13·M1보다 먼저 / `api_web_v1`·`api_app_v1`·`core_private` 객체(M4~M9·M14·M17)는 스키마(M1·M17)보다 먼저. M15는 독립이므로 위치 제약이 없다(레거시 함수 구 본문 복원 migration). (M2·M3는 retired — 롤백 대상 자체가 없다.)
+
+   **M17 rollback 필수 선행 순서(rev 8 F 보정 — `..._api_app_v1_surface_rollback.sql`):**
+
+   1. **앱 제품 코드를 구 `public` 경로로 먼저 복원**한다(웹 코드 우선 원칙 #4와 동일 — 앱도 동일).
+   2. `api_app_v1` 호출 **0건**을 실측 확인한다.
+   3. **Data API Exposed schemas에서 `api_app_v1`을 제거**한다(플랫폼 단계 D-API-A의 역방향, §20.6).
+   4. PostgREST 설정 반영(schema cache reload)을 확인한다.
+   5. 그 다음에만 M17의 wrapper 5종 → 뷰 → 스키마를 DROP한다.
+   6. M7·M5·M13 rollback은 **M17 rollback 완료 이후에만** 가능하다.
+
+   > **금지:** Exposed schemas에 남아 있는 스키마를 먼저 DROP하지 않는다 — PostgREST가 존재하지 않는 스키마를 계속 노출 대상으로 들고 있어 schema cache 오류·요청 실패가 발생할 수 있다. 반드시 **노출 제거 → 반영 확인 → DROP** 순서다.
 
    **rollback 완료 후 재검증 의무:** 목표 지점까지 되돌린 뒤, M10과 동일한 **읽기 전용 assertion**(§21.10 운영 M10 범위)을 다시 실행해 복원된 권한·정책 상태가 해당 지점의 계약과 일치함을 확인한다.
 3. **F11 롤백은 코드 우선이다.** `cash_ledger`에 신규 DDL이 없으므로(rev 8 A-6 — `ref_text` 폐기) 데이터 소실 시나리오가 없다. 롤백이 필요하면 웹 호출점을 기존 3인자 `record_cash_topup`으로 되돌린 뒤 M9의 함수들을 DROP한다(레거시 함수의 내부 구현 교체분은 구 본문 복원 migration으로).
@@ -2659,8 +2719,8 @@ CREATE TRIGGER trg_mentor_profile_privileged_guard_ins
 | 9 | account-deletion 비활성 유지 + 운영 계약 확정 | ✅ | §15 (변경 0건, GET/POST 경계, 대안 비교) |
 | 10 | 현재 호출점 → 신규 객체 → 레거시 호환표 완료 | ✅ | §17 (30행) · §18 |
 | 11 | `api_app_v1`과 제품 경계 대조 완료 | ✅ | §19 + **§19.4 앱 저장소 실측**(RPC 27/27, 테이블 24/24) |
-| 12 | 삭제 없는 migration 분해안과 적용 순서 완료 | ✅ | §20 (M0~M16, M2·M3 retired + 게이트 + callsite 전환 C1~C11) |
-| 13 | 구현 검수용 test matrix 완료 | ✅ | §21 (T-CON 8 · T-PERM 15 · T-CONC 10 · T-FIN 7 · T-SEC 14 · T-REG 7 · **T-REP 8 · T-TOP 6** = **75건**) |
+| 12 | 삭제 없는 migration 분해안과 적용 순서 완료 | ✅ | §20 (**활성 16개 = M0·M1·M4~M17**, M2·M3 retired + 게이트 + callsite 전환 C1~C11 + 플랫폼 단계 D-API-W·D-API-A §20.6). **M17은 v1.1 canon 보정 신설**(`api_app_v1` 표면 소유 migration 누락 해소 — §19.5 #9·부록 C) |
+| 13 | 구현 검수용 test matrix 완료 | ✅ | §21 (T-CON 8 · T-PERM 15 · T-CONC 10 · T-FIN 7 · T-SEC 14 · T-REG 7 · **T-REP 8 · T-TOP 6** = **75건**) + **§21.11 migration별 테스트 소유권**(M7 = T-CONC-10 canonical · M17 = 앱 Gate 4·앱 wrapper 시그니처/GRANT/envelope·`community_posts_v1`·앱 표면 응답 유실 재검증 · M9는 T-CONC-10 미소유) |
 | 14 | AS-IS와 TO-BE가 명확히 분리됨 | ✅ | 절마다 `[AS-IS]`/`[TO-BE]` 표시, 문서 상단 "읽는 법" |
 | 15 | 미검증 사실을 추정으로 채운 항목 0건 | ✅ | §23.2에 U-01~U-16으로 전부 명시(U-09·U-10 해소). §16.2의 TOSS env 2종은 **미검증**으로 표기(추정 아님) |
 | 16 | DB·GitHub·코드·Vercel 변경 0건 | ✅ | §24.3 |
@@ -2671,15 +2731,20 @@ CREATE TRIGGER trg_mentor_profile_privileged_guard_ins
 
 ```text
 웹 계약 v1.1 작성 완료
-앱 계약 교차대조 대기
-S2-1: REVISE 유지
-S2-2 SQL: 임시 NO-GO 유지
+웹 계약 보정 완료(M17 + D-API-A 신설 — api_app_v1 migration ownership 결함 해소)
+앱 계약 재동기화 대기 (새 웹 정본 commit·SHA-256 기준)
+S2-1: 웹 계약 보정 완료 후 앱 재동기화 대기
+S2-2: BLOCKED
+      SAFE_TEST_ENV_UNAVAILABLE 유지
+      Data API 현재 Exposed schemas 목록 확인 대기
 ```
+
+> **보정 판정 주석(v1.1 canon 보정):** 이 보정은 **구현 승인이 아니다.** `api_app_v1` 표면 소유 migration 누락이라는 계약 결함을 M17·D-API-A로 해소한 문서 보정이며, S2-2는 안전 테스트 환경 미확보(`SAFE_TEST_ENV_UNAVAILABLE`)와 Data API 현재 노출 목록 미확인으로 **BLOCKED를 유지**한다.
 
 - 이 문서 단독으로는 **전체 S2-1 PASS를 선언하지 않는다.** `api_app_v1` 계약 v1.1이 작성되어 두 계약의 **공용 함수·시그니처·오류코드·GRANT·테스트 대조**(§19.5)가 통과한 뒤에만 S2-1 PASS / S2-2 GO 재선언 심사가 가능하다(rev 8 G-7).
 - **SQL 작성·적용은 계속 금지**다 — 두 계약 문서의 대조 통과 전까지 S2-2는 임시 NO-GO를 유지한다.
 
-승인·대조 통과 후 권고 착수 순서(실행 순서 정본은 **§20.2.1 선행조건 그래프** — 아래는 그 유효한 위상 정렬 한 가지): **M0(필수·최우선, M15만 병행 가능) → M1 → M13 → M4 → C1 → M5 → M6 → C2·C3·C4 → M7 → C5 → M8 → C6 → M14 → C11 → M9 → C7·C8 → (호출 0건 확인) → M11 → M12 → (HD-1 게이트 7단계 충족 후) M16 → M10(최종 읽기 전용 assertion checkpoint) → C9·C10** (M2·M3는 retired — 적용 대상 아님)
+승인·대조 통과 후 권고 착수 순서(실행 순서 정본은 **§20.2.1 선행조건 그래프** — 아래는 그 유효한 위상 정렬 한 가지): **M0(필수·최우선, M15만 병행 가능) → M1 → M13 → M4 → [D-API-W] → C1 → M5 → M6 → C2·C3·C4 → M7 → C5 → M17 → [D-API-A] → 앱 F4/F5/F6·Gate 4 전환 → M8 → C6 → M14 → C11 → M9 → C7·C8 → (호출 0건 확인) → M11 → M12 → (HD-1 게이트 7단계 + 앱 Gate 4 충족 후) M16 → M10(최종 읽기 전용 assertion checkpoint) → C9·C10** (M2·M3는 retired — 적용 대상 아님. D-API-W·D-API-A는 migration이 아닌 플랫폼 단계 — §20.6)
 
 ### 24.3 변경 없음 확인
 
@@ -2824,3 +2889,15 @@ SQL 파일 작성, Vercel 설정 변경, PR 생성·머지는 0건이다.
 | **V2** (A-9 객체별) | §6 V2 — `security_invoker` 뷰 + `comments.author_label`·`author_role` 비정규화(M13) | 반영 완료 | `community_posts` 실측 선례와 동일 패턴, U-11 해소 |
 | **V6** (A-9 객체별 + 필드 단일 확정) | §6 V6 — 범위 제한 SECDEF RPC `api_web_v1.my_subscriptions_self()`, 금액 필드 `current_plan_amount_cents` 단일 확정(+금지 선언문 1회) | 반영 완료 | 당사자 판정식 = `subscriptions_select_parties` 동일 |
 | **V7** (A-9 객체별) | §6 V7 — 범위 제한 SECDEF RPC `api_web_v1.mentor_settlement_self()` | 반영 완료 | 판정식 = `ssi_select_mentor_own` 동일, 내부 참조 3종 미노출 |
+
+### 부록 C-1. v1.1 canon 보정 추적표 (M17 — 오너 지시 2026-07-30 역기입)
+
+| 항목 | 내용 |
+|---|---|
+| **결함** | `api_app_v1` migration ownership 누락 — 앱 계약 §3.1(스키마)·§3.2(`community_posts_v1` 뷰)·§3.3(wrapper 5종)·§10(Gate 4)이 요구하는 DB 표면을 **생성하는 소유 migration이 M0~M16에 없었다.** §20.2 M1은 `api_web_v1`·`core_private` 두 스키마만 생성하며, 다른 어떤 M도 `api_app_v1`을 만들지 않았다. 또한 Exposed schemas 추가가 migration과 구분되지 않아 앱 표면의 도달 가능 시점이 계약에 없었다 |
+| **해소** | **M17 신설**(`..._api_app_v1_surface.sql` — 스키마·REVOKE/GRANT·뷰·wrapper 5종·최소 GRANT·default privilege 방어, 시그니처는 앱 §3.3·§10과 완전 동일, `core_private` 구현부는 M7·M5 객체 공유·복제 금지) + **rollback `..._api_app_v1_surface_rollback.sql`** + **D-API-W·D-API-A 플랫폼 단계 분리**(§20.6) |
+| **선행조건** | `M17 : M5 + M7 + M13` (M1은 M5·M7의 선행이라 간접 충족). `M16 : M7 + M17 + 앱 전환·Gate 4`, `M10 : 기존 + M17` |
+| **반영 절** | §5.4(D-API-W·D-API-A 연결) · §19.5 #9(앱 동기화 의무 신규 항목) · §20.2 M17 행·논리 ID 서문 · §20.2.1 그래프 간선·M16·M10·권고 직렬화 · §20.3 게이트(M17 이전·D-API-A 이전·M16 이전·전 단계 공통) · **§20.6 신설**(Data API 플랫폼 단계) · §21.3 T-CONC-10(M7 canonical 표시) · **§21.11 신설**(migration별 테스트 소유권) · §21.10(운영 M10 범위에 M17) · §22 #2(역순에 M17·rollback 6단계 필수 선행·DROP 선행 금지) · §24.1 #12·#13 · §24.2 판정 |
+| **개수 정합** | 활성 forward migration **16개**(M0·M1·M4~M17) · retired **M2·M3** · rollback 없는 상태 0 checkpoint **M10** · **forward+rollback 쌍 15개** |
+| **테스트 소유권** | M7 = 공용 B-1~B-4·웹 F4/F5/F6·**T-CONC-10 canonical** / M17 = 앱 Gate 4·앱 wrapper 시그니처·GRANT·envelope·`community_posts_v1`·앱 표면 응답 유실 재검증 / **M9는 T-CONC-10 미소유**(T-CONC-02·03·04·08·09·T-FIN·T-REP A~H·T-TOP 1~6) |
+| **판정** | 구현 승인 아님 — S2-1은 앱 재동기화 대기, S2-2는 `BLOCKED`(`SAFE_TEST_ENV_UNAVAILABLE` 유지 · Data API 현재 목록 확인 대기) |
