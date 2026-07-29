@@ -4,12 +4,12 @@
 
 이 문서는 `supabase/sql/`의 현재 SQL 파일 목록, 숫자 접두어 중복, fresh DB 기준 권장 적용 순서를 정리한다. 이미 운영 DB에 적용된 마이그레이션은 재번호하지 않는다. 중복 번호는 이력 보존 대상으로 취급하고, 미적용 파일만 팀 합의 후 다음 빈 번호로 복제/정리한다.
 
-현재 다음 신규 번호: `185` (정본 최대 `183` · `184` 시드 존재 · 결번 `127`·`172` 미사용 유지).
+레거시 3자리 번호 체계의 다음 번호는 `185`이며(정본 최대 `183` · `184` 시드 존재 · 결번 `127`·`172` 미사용 유지) **S2 M0~M17에는 적용하지 않는다.** S2 신규 migration 은 물리 정책 정본(`docs/audit/s2_2_migration_physical_policy_20260730.md`)에 따라 UTC timestamp 파일명(`supabase/sql/<TS>_<STEM>.sql`)을 사용한다.
 
 ## 원칙
 
 - 기존 적용 SQL 파일은 수정하거나 재번호하지 않는다.
-- 보안 보정은 항상 새 번호 파일로 추가한다.
+- 레거시 보정은 새 3자리 번호 파일로 추가한다. S2 M0~M17 은 물리 정책 정본에 따라 UTC timestamp 파일을 사용하며 3자리 번호를 쓰지 않는다.
 - 같은 숫자 접두어 파일이 있으면 파일명과 의존 주석을 함께 보고 적용 순서를 결정한다.
 - `073`, `073b`처럼 뒤늦은 실DB 드리프트 보정 파일은 정규 번호 뒤에 이어 적용된 보정으로 간주한다.
 - `071_individual_question_test_data_cleanup.sql`은 one-off 정리 스크립트로, 일반 fresh DB 마이그레이션 필수 목록과 분리한다.
@@ -251,8 +251,8 @@
 
 | logical_id | file_path | file_basename | sha256 | environment | ledger_version | ledger_name | applied_at | verification_result |
 |---|---|---|---|---|---|---|---|---|
-| M0 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
-| M15 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
+| M0 | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` | `20260729211929_mentor_profile_privileged_column_guard.sql` | `3bb2edd97b921900f93d460f206add873c80b6cbcf1782844b6c5e835184d94c` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: baseline 175 + forward 177/177 PASS · 검증기 38/38 PASS · rollback 후 기준선 복원 · reapply 재검증 PASS (원격 미적용 — ledger 채번 없음) |
+| M15 | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` | `20260729211941_weekly_usage_pair_party_guard.sql` | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: forward 177/177 PASS · pair-party 가드 허용 3종/거부 2종/NULL 우회 0 · 함수 identity·ACL 불변 · rollback 후 functiondef md5 `d0d31620671c6f9707a7b9d324d1ed35` 기준선 복원 · reapply 재검증 PASS (원격 미적용) |
 | M1 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
 | M13 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
 | M4 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
@@ -289,5 +289,5 @@
 | M4 | 미생성 | 미생성 | 미생성 | 미생성 | C1 호출부 선복원, M13·M1보다 선행 | 11 | 동일 |
 | M13 | 미생성 | 미생성 | 미생성 | 미생성 | M4 rollback 완료 후(백필 값 소실 주의 — 계약 §20.2) | 12 | 동일 |
 | M1 | 미생성 | 미생성 | 미생성 | 미생성 | 스키마 내 객체(M4~M9·M14) rollback 완료 후 — 빈 스키마만 DROP | 13 | 동일 |
-| M15 | 미생성 | 미생성 | 미생성 | 미생성 | 독립 — 위치 제약 없음(가드 없는 구 본문 복원) | 14 | 동일 |
-| M0 | 미생성 | 미생성 | 미생성 | 미생성 | 최후미 — 되도록 남긴다(§20.5 심층 방어) | 15 | 동일 |
+| M15 | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` | `supabase/rollback/20260729211941_weekly_usage_pair_party_guard_rollback.sql` | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | `42f5266d270b71b4caa6730e505665423342d0a2588199330781d4d3e0eb6363` | 독립 — 위치 제약 없음(가드 없는 구 본문 복원 — 098 정본 전체 정의 명시 복원, 로컬 PG17 왕복 검증 PASS) | 14 | 동일 |
+| M0 | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` | `supabase/rollback/20260729211929_mentor_profile_privileged_column_guard_rollback.sql` | `3bb2edd97b921900f93d460f206add873c80b6cbcf1782844b6c5e835184d94c` | `a6fbea2a93360eebfaea61f8e4d1c27d2beac7e32d50fe2a36ba9184d887d35e` | 최후미 — 되도록 남긴다(§20.5 심층 방어). 트리거 2종+함수만 명시 DROP(로컬 PG17 왕복 검증 PASS) | 15 | 동일 |

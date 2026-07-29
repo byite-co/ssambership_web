@@ -186,12 +186,12 @@ S2 rollback: 15개 — clean-install 불포함
 
 ## 9. M0~M17 물리 계획표
 
-> **M0~M17은 논리 ID이며 물리 timestamp가 아니다.** `<TSn>` = 권고 생성 순서 n번째에 §5 절차로 채번되는 UTC `YYYYMMDDHHMMSS`. 모든 timestamp·SHA-256·ledger version은 현재 **미생성**이다(invent 금지). M2·M3는 retired 슬롯 — 파일을 만들지 않는다. D-API-W·D-API-A·C1~C11은 SQL 파일이 아니다.
+> **M0~M17은 논리 ID이며 물리 timestamp가 아니다.** `<TSn>` = 권고 생성 순서 n번째에 §5 절차로 채번되는 UTC `YYYYMMDDHHMMSS`. **Batch A(M0·M15)는 2026-07-30(KST) 세션에서 §5 절차로 실채번·구현·로컬 검증 완료됐다(§9.1 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** 나머지 M1~M17의 timestamp·SHA-256·ledger version은 현재 **미생성**이다(invent 금지). M2·M3는 retired 슬롯 — 파일을 만들지 않는다. D-API-W·D-API-A·C1~C11은 SQL 파일이 아니다.
 
 | 논리 ID | 계약 filename stem | 직접 선행조건 | 권고 생성 순서 | forward 물리 경로 형식 | rollback 경로 형식 | rollback 여부 | 구현 batch |
 |---|---|---|---:|---|---|---|---|
-| M0 | mentor_profile_privileged_column_guard | 없음 | 1 | `supabase/sql/<TS1>_mentor_profile_privileged_column_guard.sql` | `supabase/rollback/<TS1>_mentor_profile_privileged_column_guard_rollback.sql` | 있음 | A |
-| M15 | weekly_usage_pair_party_guard | 없음 | 2 | `supabase/sql/<TS2>_weekly_usage_pair_party_guard.sql` | `supabase/rollback/<TS2>_weekly_usage_pair_party_guard_rollback.sql` | 있음 | A |
+| M0 | mentor_profile_privileged_column_guard | 없음 | 1 | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` (**실채번 TS1=20260729211929** — §9.1) | `supabase/rollback/20260729211929_mentor_profile_privileged_column_guard_rollback.sql` | 있음 | A |
+| M15 | weekly_usage_pair_party_guard | 없음 | 2 | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` (**실채번 TS2=20260729211941** — §9.1) | `supabase/rollback/20260729211941_weekly_usage_pair_party_guard_rollback.sql` | 있음 | A |
 | M1 | api_web_v1_schemas | M0 | 3 | `supabase/sql/<TS3>_api_web_v1_schemas.sql` | `supabase/rollback/<TS3>_api_web_v1_schemas_rollback.sql` | 있음 | B |
 | M13 | comments_author_label_denormalize | M0 | 4 | `supabase/sql/<TS4>_comments_author_label_denormalize.sql` | `supabase/rollback/<TS4>_comments_author_label_denormalize_rollback.sql` | 있음 | B |
 | M4 | api_web_v1_read_views | M1+M13 | 5 | `supabase/sql/<TS5>_api_web_v1_read_views.sql` | `supabase/rollback/<TS5>_api_web_v1_read_views_rollback.sql` | 있음 | B |
@@ -206,6 +206,28 @@ S2 rollback: 15개 — clean-install 불포함
 | M12 | revoke_mentor_plans_write | 전환 게이트(M8+C6 · 플랜 직접 쓰기 0건) | 14 | `supabase/sql/<TS14>_revoke_mentor_plans_write.sql` | `supabase/rollback/<TS14>_revoke_mentor_plans_write_rollback.sql` (동일 원칙) | 있음 | F |
 | M16 | community_direct_write_lockdown | M7+M17+D-API-A+웹·앱 전환+앱 Gate 4+§14.7 7단계 | 15 | `supabase/sql/<TS15>_community_direct_write_lockdown.sql` | `supabase/rollback/<TS15>_community_direct_write_lockdown_rollback.sql` (GRANT+정책 6종 복원) | 있음 | F |
 | M10 | contract_permission_assertions | M11+M12+M15+M16+M17 (활성 predecessor 15개 전건) | 16 | `supabase/sql/<TS16>_contract_permission_assertions.sql` | 해당 없음 | 없음 (상태 0 checkpoint) | F |
+
+### 9.1 Batch A 실체 역기입 (2026-07-30 KST — `LOCAL_PASS`)
+
+Batch A(M0·M15)는 §5 절차대로 `supabase migration new`로 timestamp를 실채번(사람 임의 입력 0)한 뒤
+`supabase/sql/`로 이동해 구현했고(`supabase/migrations/` 잔존 0), 격리 로컬 스택
+(Supabase CLI 2.110.0 / PostgreSQL 17.6, 운영·staging 반입 0)에서 baseline 후보 C 175개
+적용(175/175) 후 forward 2건을 순차 적용해 **177/177 PASS**, 반복 검증기
+(`scripts/verify/s2_2_batch_a_verify.sql`) **38/38 PASS**, rollback(M15→M0) 후
+**forward 전 카탈로그 기준선 완전 복원**(mentor_profiles 트리거 집합·weekly 함수
+functiondef md5 `d0d31620671c6f9707a7b9d324d1ed35`·prosrc SHA-256
+`b5c39e0a47328fecedc848f35cf0493dee524778879cedccbf9af15fef90b2d8`·ACL 동일), 재적용 후
+재검증 **38/38 PASS**를 확인했다. 상태 = **`LOCAL_PASS`** — staging·production 원장에는
+**미적용**이며 ledger version/name 기록은 원격 적용 시점에만 한다(§3).
+
+| 논리 ID | timestamp | forward 파일 | forward SHA-256 | rollback 파일 | rollback SHA-256 | 상태 |
+|---|---|---|---|---|---|---|
+| M0 | `20260729211929` | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` | `3bb2edd97b921900f93d460f206add873c80b6cbcf1782844b6c5e835184d94c` | `supabase/rollback/20260729211929_mentor_profile_privileged_column_guard_rollback.sql` | `a6fbea2a93360eebfaea61f8e4d1c27d2beac7e32d50fe2a36ba9184d887d35e` | `LOCAL_PASS` |
+| M15 | `20260729211941` | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | `supabase/rollback/20260729211941_weekly_usage_pair_party_guard_rollback.sql` | `42f5266d270b71b4caa6730e505665423342d0a2588199330781d4d3e0eb6363` | `LOCAL_PASS` |
+
+- timestamp 는 UTC `YYYYMMDDHHMMSS`(2026-07-29T21:19Z대 = KST 2026-07-30 06:19대 채번). `TS1(M0) < TS2(M15)` 충족.
+- M1~M17 나머지는 계속 **미생성**(invent 금지) — 위 §9 계획표의 `<TSn>` 형식 유지.
+- 상세 ledger mapping·rollback 인벤토리 실체는 `sql_apply_manifest.md` 「S2 환경별 적용 대조표·rollback 인벤토리」에 기록.
 
 ## 10. Batch A~F 계획표
 

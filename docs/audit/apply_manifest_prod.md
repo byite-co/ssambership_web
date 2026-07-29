@@ -201,4 +201,18 @@
 - **적용 전 확인:** 적용 직전 동일 ledger name 존재 여부를 확인하고, 이미 존재하면 자동 재적용하지 않고 중단한다. migration repair·원장 PATCH·수동 원장 행 삽입·삭제 금지, 운영 DB 임의 `execute_sql` DDL 금지. 위반·불일치 발생 시 `MIGRATION_HISTORY_DRIFT` 즉시 재활성(조건 8종 = 정책 문서 §4).
 - **rollback 정본 경로:** `supabase/rollback/<FORWARD_FILE_TS>_<STEM>_rollback.sql` — forward clean-install과 구조적으로 분리하며 **정규 clean-install 파일 수에 포함하지 않는다**(`supabase/sql/*.sql`·미래 재귀 glob에 포함 금지). 실행은 장애 시 오너 승인 후 파일 1건을 명시적으로 골라 `apply_migration`으로 수행하고, 원장에는 **새 행으로 append**한다(forward 원장 행 삭제·수정·reverted 처리 금지, Management API의 선택적 `rollback` 필드 미사용). M10은 상태 0 checkpoint — rollback 파일 없음.
 - **정규 산식(S2 완료 시):** 기존 baseline **175** + S2 forward **16**(M0·M1·M4~M17, M2·M3 retired) = **191**. S2 rollback **15**개·D-API-W·D-API-A·C1~C11은 SQL 적용 파일 수에 불포함. 기존 175개 순서·제외 15개·후보 C 판정(§7)은 변경하지 않는다.
-- **편입 시점:** Batch별 로컬 PG17 검증 PASS 후 해당 forward만 본 문서에 편입한다. 이 절 작성 시점 기준 S2 파일은 전부 **미생성**이며, 실제 timestamp·SHA-256·ledger version은 생성·적용 후에만 기록한다(invent 금지).
+- **편입 시점:** Batch별 로컬 PG17 검증 PASS 후 해당 forward만 본 문서에 편입한다. Batch A(M0·M15)는 아래 §9.1로 편입 완료. 나머지 S2 파일(M1·M4~M17)은 **미생성**이며, 실제 timestamp·SHA-256·ledger version은 생성·적용 후에만 기록한다(invent 금지).
+
+### 9.1 Batch A 편입 (2026-07-30 KST — 로컬 PG17 검증 PASS, 원격 미적용)
+
+정규 clean-install 순서: §2~§4의 기존 175개(마지막 `183_p1_10_account_deletion_verify_object_owners.sql`) 뒤에 아래 S2 forward 2건을 timestamp 순으로 이어 적용한다.
+
+| 순서 | 파일 | SHA-256 | 로컬 검증 |
+|---:|---|---|---|
+| 176 | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` (M0) | `3bb2edd97b921900f93d460f206add873c80b6cbcf1782844b6c5e835184d94c` | PG17.6 forward·rollback·reapply PASS |
+| 177 | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` (M15) | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | PG17.6 forward·rollback·reapply PASS |
+
+- **현재 정규 clean-install: 기존 baseline 175 + Batch A forward 2 = 177** (2026-07-30 로컬 재현: 177/177 적용 성공 + Batch A 검증기 38/38 PASS + rollback 왕복·재적용 재검증 PASS).
+- **최종 목표(S2 완주 시): 기존 baseline 175 + S2 forward 16 = 191.** 현재 177과 혼동하지 않는다.
+- rollback 2건(`supabase/rollback/20260729211929_..._rollback.sql`·`20260729211941_..._rollback.sql`)은 **정규 적용 수에서 제외**한다(§9 rollback 정본 경로 규칙).
+- 본 편입은 **로컬 검증 실적**이다 — staging·production 원장 적용 실적이 아니며, 원격 적용·ledger 기록은 오너 승인 후 `sql_apply_manifest.md` 대조표에 환경별로 기록한다.
