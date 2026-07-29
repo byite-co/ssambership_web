@@ -10,7 +10,7 @@
 - 대상: fresh/clean 설치와 운영 배포의 적용 순서 정본.
 - staging 실적용 이력(권위 있음): `123 · 124 · 125 · 126 · 129` — `docs/audit/sql_apply_manifest.md` 하단 표.
 - `supabase_migrations` 원장은 저장소 파일 번호와 드리프트가 크므로 **운영 정의가 우선**하고, 수동 적용은 원장에 가짜 행으로 기재하지 않는다.
-- **검증 부채:** 이 환경에는 `supabase` CLI가 없어 `supabase db reset` + 순차 적용의 **클린 DB 재현을 실행하지 못했다.** 이 부재는 코드·DRAFT 작성을 막는 HARD STOP이 아니다. 단, CLI 환경 확보 전에는 클린 DB 재현을 PASS로 기록하지 않는다(재현 명령은 §7).
+- **클린 DB 재현 검증 완료(2026-07-30, 후보 C 정본):** Supabase CLI 2.110.0 / PostgreSQL 17.6 환경에서 정규 적용 후보 **175개**를 §2~§4 순서로 전건 적용해 **175/175 성공**했다. 게이트 결과 G0·G1·G2_STRUCTURAL_REPLAY·G3·G4 PASS / G5 완료. 상세 결과·후보 이력은 §7. (구 "클린 DB 재현 미실행" 검증 부채는 이 검증으로 해소.)
 
 ## 1. 번들 폐기 (deprecated)
 
@@ -26,23 +26,38 @@
 2. 같은 숫자 접두어(중복) 및 의존 역전은 §4 예외표로 덮어쓴다.
 3. `NNNb_` 파일은 대응 `NNN` 직후에 보정으로 적용.
 4. 기존 적용 SQL은 수정·재번호하지 않는다. 보안·수렴 보정은 새 번호로만 추가.
-5. **DRAFT(`[DRAFT — DB 미적용]`)·one-off·기능플래그·지급 스택은 정규 순차 적용에서 제외**(§3).
-6. 수동 staging 적용은 성공 후에만 `sql_apply_manifest.md`에 기록.
+5. **inventory/reference-only 초안·one-off·감사/진단 SQL·운영 시드·지급 스택(게이트, `[DRAFT — DB 미적용]` 포함)은 정규 순차 적용에서 제외**(§3).
+6. **기능 플래그 OFF 는 런타임 기능 비활성화일 뿐, schema migration 제외 사유가 아니다.** 플래그 파일(예: `115`·`116`·`151`·`152`)의 스키마도 정규 clean-install 에 포함한다.
+7. **본 문서의 manifest 분류가 오래된 SQL 파일 헤더 문구보다 우선한다.** 예: `115`·`116` 헤더의 "라이브 미적용", `167`~`169` 헤더의 "초안·staging 미적용" 은 작성 당시의 역사 문구다. 기존 migration 불변 원칙에 따라 SQL 파일 자체는 수정하지 않으며, 현재 판정은 §3·§7 이 정본이다.
+8. 수동 staging 적용은 성공 후에만 `sql_apply_manifest.md`에 기록.
 
-## 3. 정규 적용 제외 (별도 게이트)
+## 3. 정규 적용 제외 (별도 게이트) — 총 15개 파일
+
+정규 clean-install 적용 후보 = `supabase/sql/*.sql` 전체 190개 중 아래 **15개**를 제외한 **175개**(2026-07-30 후보 C 검증 PASS — §7).
 
 | 분류 | 파일 | 사유 |
 |---|---|---|
-| DRAFT 미적용 | `105 106 107 108 109 110` (지급 스택 초안) | `[DRAFT — DB 미적용]`. 지급 스택 게이트(§5)에서만 취급 |
+| inventory/reference-only | `002_app_core_schema_draft.sql` | 인벤토리 초안 — 헤더가 "바로 적용하지 마세요"인 참고용 파일. 실행 대상 아님(보존). 178개 후보 실측에서 002 중복 정의 실패의 원인(§7) |
 | one-off 정리 | `071_individual_question_test_data_cleanup.sql` | 마이그레이션 아님. 운영/클린 적용 전 별도 승인 |
 | Storage 감사 | `039_storage_buckets_private_audit.sql` | 점검 SQL(버킷 private 확인). 데이터 변경 아님 |
-| 지급 스택 | `105 106 107 108 109 110 111 114` | 내부지갑 적립 모델·자금 코드 승인·독립 2세션 검증 전 운영 적용 금지(§5) |
-| 예약(미생성) | `127 128 130 131` | §6 예약번호 — 파일 생성 전까지 순서에 없음 |
+| READ-ONLY 진단 | `146_p2_1_avatar_document_crossref_diagnostic.sql` | 진단 전용(DDL·DML 없음) — 적용 대상 아님(§146 표 "미적용(진단)") |
+| 지급 스택 게이트 | `105 106 107 108 109 110 111 114` (8개, `105`~`110`은 `[DRAFT — DB 미적용]`) | 내부지갑 적립 모델·자금 코드 승인·독립 2세션 검증 전 운영 적용 금지(§5) |
+| 지급 게이트 후속 | `153_p2_25_pay_due_payouts_convergence.sql` | 지급 게이트로 제외된 `105·106·107·109·110·111·114`를 필수 선행으로 요구하는 staging 수렴 파일. 지급 스택 승인 전에는 같은 게이트에 묶어 clean-install 제외(§5) |
+| 지급 게이트 후속 | `156_p2_25_payout_scheduler_foundation.sql` | `153`과 지급 객체를 필수 선행으로 요구하는 scheduler 기반 파일. 동일 게이트(§5) |
+| 운영 시드 | `184_seed_additional_admin.sql` | 특정 운영자 계정 시드(멱등 one-off). 스키마 migration 아님 — 환경별 별도 승인·실행 |
+| 예약·결번 | `127`(예약 미생성) · `172`(결번) | §6 예약번호 — 파일이 없어 순서에 없음. 구 예약 `128·130·131`은 파일 생성·적용됨(정규 포함) |
+
+**정규 포함 명시(분류 확정 2026-07-30):**
+
+- `115_account_deletion.sql` · `116_user_blocks.sql` — **정규 clean-install 포함.** 기능 플래그 파일이지만 §2 원칙 6에 따라 스키마는 포함한다. 근거: staging migration 원장 `20260704135803 / 115_account_deletion` · `20260704135524 / 116_user_blocks`, 현 staging 카탈로그에 `public.user_deletion_log` · `public.anonymize_user_for_deletion(uuid,text)` · `public.user_blocks` 실존, `154` 이후 account-deletion migration 이 115 의 함수·객체를 필수 선행으로 사용.
+- `167_iq_attachment_unique_question_storage_path.sql` · `168_iq_attachment_register_rpc_idempotent.sql` · `169_iq_attachment_storage_delete_policy.sql` — **정규 clean-install 포함.** 현재 staging historical baseline 에 세 파일과 동일한 객체 효과가 존재하며, fresh install 수렴을 위해 포함한다(정확한 파일↔원장 매핑은 확인되지 않았다 — 상세 근거는 `sql_apply_manifest.md`).
+- 위 5개 파일 헤더의 "라이브 미적용"·"초안·staging 미적용" 문구보다 본 분류가 우선한다(§2 원칙 7).
 
 ## 4. 순서 예외표 (숫자순 위반·의존)
 
 | 파일 | 규칙 |
 |---|---|
+| **시작 순서(고정)** | `001` → `002_p0_subscriptions_questions_draft` → `003_p0_custom_request_draft` → `002_custom_request_orders_status` → 이후 정본 순서(숫자순+본 표). `002_app_core_schema_draft` 는 실행하지 않는다(§3 inventory/reference-only) |
 | `002_custom_request_orders_status.sql` | `003_p0_custom_request_draft.sql` 이후 |
 | `033_p1_admin_reviews_moderation.sql` | `042_reviews_system.sql` 이후 |
 | `033_question_threads_topic.sql`, `034_mentor_favorites.sql`, `032_*`, `039_*` 중복 | `sql_apply_manifest.md` §숫자 접두어 중복 표 기준 |
@@ -54,6 +69,7 @@
 
 확정 적용 순서: **`105 → 106 → 107 → 109 → 110 → 111 → 114 → 108`**.
 
+- **게이트 범위 = `105~111 · 114 · 153 · 156`.** `153`(P2-25 지급 수렴)·`156`(P2-25 scheduler 기반)은 게이트로 제외된 지급 객체를 필수 선행으로 요구하므로 같은 게이트에 묶어 정규 clean-install 에서 제외한다(§3). 게이트 승인 시 위 확정 순서 적용 후 `153 → 156` 순으로 적용한다.
 - 현행 확정 모델 = **즉시 내부지갑 적립**(실은행 송금 아님).
 - 자금 코드 승인 + staging fixture + 독립 2세션 경쟁 검증 전 **운영 적용 금지**.
 - P2-25 필수 교정(주문/settlement ID 분리, `(source_type,source_id)` 전역 UNIQUE, `108` ON CONFLICT/RETURNING, 실 INSERT 행만 합산, 중복 자동삭제 금지·대사)과 함께만 확정.
@@ -152,27 +168,25 @@
 - **최종 판정**: **P1-8A = `IMPLEMENTED_WITH_CONCURRENCY_DEBT`** (Storage OR-우회 0, 직접 write 우회 서버 트리거로 봉쇄, pending-refund 연동 완료; 독립 2세션 first-answered/한도 경쟁 실측만 부채). **P1-13 = `IMPLEMENTED_WITH_CONCURRENCY_DEBT`** (구조적 잠금: pair advisory lock + uq_subscriptions_pair UNIQUE/ON CONFLICT 검증; 독립 2세션 실측만 부채). Part 5 dead-code 제거로 eslint warning 0.
 - 잔여 노트: P1-13 가격은 mentor_plans 정본만 사용(미가격 플랜 멘토 명시적 오류=배포 전 검증). pending-refund 는 refunds.subscription_id+request_type 기준(P1-13 billing-event 정본 확정 시 last_billing_event_id helper 로 교체 가능). direct 정책·open→pending 최종 제거 = P1-8B(WAITING_EXTERNAL_APP).
 
-## 7. 클린 DB 재현 (검증 부채 — 미실행)
+## 7. 클린 DB 재현 검증 (2026-07-30 — 후보 C PASS)
 
-`supabase` CLI 부재로 아래를 **실행하지 못함**. CLI 환경 확보 시 실행하고, 그 전에는 PASS로 기록하지 않는다.
+검증 환경: **Supabase CLI 2.110.0 / PostgreSQL 17.6** (fresh local stack, `supabase db reset` 후 순차 적용).
 
-```
-# CLI 환경에서:
-supabase db reset                       # 로컬 스택 초기화
-# 본 문서 §2~§4 순서로 supabase/sql/*.sql 를 numeric+예외표 순 적용
-#   (DRAFT·one-off·지급스택·감사 SQL 제외)
-# 클린설치 리뷰 정본 = 교정 042 → 123 → 126
-# 적용 후 docs/audit/db_permission_audit_queries.sql 실행 →
-#   docs/audit/db_expected_state.md 대조
-```
+- 정규 적용 후보: **175개** (§3 제외 15개를 뺀 `supabase/sql/*.sql`. 목록 산정·포함 근거는 `sql_apply_manifest.md` §clean-install 적용 집합).
+- 결과: **175/175 적용 성공.** 마지막 파일 = `183_p1_10_account_deletion_verify_object_owners.sql`.
+- 게이트: **G0·G1·G2_STRUCTURAL_REPLAY·G3·G4 PASS / G5 완료.**
+- 후보 이력: 178개(=175 + `002_app_core_schema_draft` + `153` + `156`)는 002 중복 정의로 실패 → 177개(002 초안 제외)는 `153`의 지급 객체 부재로 실패 → **175개(`153`·`156` 추가 제외) 전건 PASS = 후보 C 정본**. 상세는 `sql_apply_manifest.md` §후보 검증 이력.
+- 적용 후 대조(운영·재검증 시): `docs/audit/db_permission_audit_queries.sql` 실행 → `docs/audit/db_expected_state.md` 대조. 클린설치 리뷰 정본 = 교정 `042` → `123` → `126`(§4).
+- 판정: `MANIFEST_POLICY_CLASSIFICATION_DEBT: RESOLVED` · `SAFE_TEST_ENV_UNAVAILABLE: RESOLVED` · `Data API baseline: RESOLVED` · `G0~G5: PASS` · `READY_FOR_S2_2_GO: YES` — 단 `READY_FOR_S2_2_GO`는 M0~M17 구현 브랜치·migration version 배정에 착수할 수 있다는 의미이며, **운영 DB 적용 승인이나 제품 배포 완료를 의미하지 않는다.**
 
-## 8. 001–129 정본 순서 (요약)
+## 8. 001–183 정본 순서 (요약)
 
-- **001–085:** `docs/audit/sql_apply_manifest.md`의 「전체 SQL 파일 목록」·「Fresh DB 권장 적용 흐름」·「숫자 접두어 중복」표를 그대로 사용(파일별 의존 주석 포함). 본 문서 §3·§4 예외를 우선 적용.
+- **001–085:** 시작 순서(고정, §4): `001` → `002_p0_subscriptions_questions_draft` → `003_p0_custom_request_draft` → `002_custom_request_orders_status` → 이후 정본 순서. `002_app_core_schema_draft` 는 실행하지 않는다(§3). 나머지는 `docs/audit/sql_apply_manifest.md`의 「전체 SQL 파일 목록」·「Fresh DB 권장 적용 흐름」·「숫자 접두어 중복」표를 그대로 사용(파일별 의존 주석 포함). 본 문서 §3·§4 예외를 우선 적용. 039 감사·071 one-off 제외.
 - **086–104:** 숫자순. 금융/에스크로/개별질문/구독 후속(086 정산항목, 088 주문상태전이 RPC, 090 맞춤의뢰 5%, 091 개별질문 환불 래퍼, 094 IQ 가격, 095 구독 15%, 096 IQ 15%, 098 주간사용량 생성시집계, 099 구독환불 settlement-paid 가드, 101 댓글 관리자 모더레이션, 102 계정상태, 103 멘토 활동정지, 104 경고). one-off·DRAFT 없음.
-- **105–114:** 지급 스택(§5 게이트) + 정규(112·113). 순차 적용 대상에서 지급 스택 제외.
-- **115–121:** 숫자순(115 계정삭제, 116 차단, 117 첨부 v2 백필, 118 이미지 ref 백필, 119 users role 가드, 120 관리자 콘솔, 121 멘토 플랜 밴드 클램프).
+- **105–114:** 지급 스택(§5 게이트 = `105~111·114`) 제외 + 정규(112·113)만 순차 적용.
+- **115–121:** 숫자순 **전건 정규 포함**(115 계정삭제, 116 차단 — 기능 플래그와 무관하게 스키마 포함(§3), 117 첨부 v2 백필, 118 이미지 ref 백필, 119 users role 가드, 120 관리자 콘솔, 121 멘토 플랜 밴드 클램프).
 - **122–126, 129:** staging 수동 적용 완료(권위 = `sql_apply_manifest.md` 하단 표). 클린설치 시 122 → (교정 042) → 123 → 124 → 125 → 126 → 129 순, 리뷰 정본 수렴 규칙 준수.
-- **127·128·130·131:** 예약(미생성).
+- **127:** 예약(미생성) · **172:** 결번. 구 예약 `128·130·131`은 생성·적용됨(§6 해소 경과 참조) — 정규 순번으로 포함.
+- **130–183:** 숫자순. 단 §3 제외 반영 — `146`(READ-ONLY 진단)·`153`·`156`(지급 게이트 후속) 제외, `167~169` 포함(§3), 클린설치 시 `132`(outbox) 는 `136` 이전 선행(§6). 정규 적용의 마지막 파일 = `183_p1_10_account_deletion_verify_object_owners.sql`. `184`는 운영 시드로 정규 집합 제외(§3).
 
 > 이 문서는 순서·정책의 정본이고, 파일별 1줄 설명·중복 근거의 상세는 `sql_apply_manifest.md`가 보조한다. 두 문서가 다르면 **순서·정책은 본 문서**, **파일별 상세는 sql_apply_manifest.md**가 정본이다.

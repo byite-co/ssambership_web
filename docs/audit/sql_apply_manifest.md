@@ -4,7 +4,7 @@
 
 이 문서는 `supabase/sql/`의 현재 SQL 파일 목록, 숫자 접두어 중복, fresh DB 기준 권장 적용 순서를 정리한다. 이미 운영 DB에 적용된 마이그레이션은 재번호하지 않는다. 중복 번호는 이력 보존 대상으로 취급하고, 미적용 파일만 팀 합의 후 다음 빈 번호로 복제/정리한다.
 
-현재 다음 신규 번호: `086`.
+현재 다음 신규 번호: `185` (정본 최대 `183` · `184` 시드 존재 · 결번 `127`·`172` 미사용 유지).
 
 ## 원칙
 
@@ -13,12 +13,14 @@
 - 같은 숫자 접두어 파일이 있으면 파일명과 의존 주석을 함께 보고 적용 순서를 결정한다.
 - `073`, `073b`처럼 뒤늦은 실DB 드리프트 보정 파일은 정규 번호 뒤에 이어 적용된 보정으로 간주한다.
 - `071_individual_question_test_data_cleanup.sql`은 one-off 정리 스크립트로, 일반 fresh DB 마이그레이션 필수 목록과 분리한다.
+- **manifest 의 명시 분류가 오래된 SQL 파일 헤더 문구보다 우선한다.** 예: `115`·`116` 헤더의 "라이브 미적용", `167`~`169` 헤더의 "초안·staging 미적용"은 작성 당시의 역사 문구다. 기존 migration 불변 원칙에 따라 SQL 파일은 수정하지 않으며, 현재 판정은 아래 「clean-install 적용 집합」과 `apply_manifest_prod.md` §3·§7 이 정본이다.
+- **기능 플래그 OFF 는 런타임 기능 비활성화일 뿐, schema migration 제외 사유가 아니다.**
 
 ## 숫자 접두어 중복
 
 | 번호 | 파일 | 판정/조치 |
 | --- | --- | --- |
-| `002` | `002_app_core_schema_draft.sql`, `002_p0_subscriptions_questions_draft.sql`, `002_custom_request_orders_status.sql` | 이미 존재하는 중복. 재번호 금지. fresh DB에서는 `001` 이후 core/qna를 먼저 보고, `002_custom_request_orders_status.sql`은 `003` 이후 적용 의존. |
+| `002` | `002_app_core_schema_draft.sql`, `002_p0_subscriptions_questions_draft.sql`, `002_custom_request_orders_status.sql` | 이미 존재하는 중복. 재번호 금지. `002_app_core_schema_draft.sql`은 **inventory/reference-only — 실행 대상 아님**(아래 「clean-install 적용 집합」). 실행 시작 순서(고정, 후보 C): `001` → `002_p0_subscriptions_questions_draft` → `003_p0_custom_request_draft` → `002_custom_request_orders_status` → 이후 정본 순서. |
 | `032` | `032_p0_weekly_question_usage.sql`, `032_p1_admin_content_reports.sql` | 이미 존재하는 중복. 각각 QnA usage와 admin content reports로 독립. 재번호 금지. |
 | `033` | `033_question_threads_topic.sql`, `033_p1_admin_reviews_moderation.sql` | 이미 존재하는 중복. reviews moderation은 `042_reviews_system.sql` 이후 의존. 재번호 금지. |
 | `034` | `034_mentor_favorites.sql`, `034_p1_admin_disputes_processing.sql` | 이미 존재하는 중복. favorites와 admin disputes로 독립. 재번호 금지. |
@@ -31,7 +33,7 @@
 아래는 파일명 숫자순을 기본으로 하되, 중복 번호와 의존 관계를 반영한 큰 흐름이다. 운영 DB 재실행 순서가 아니라 신규 환경 부트스트랩 검토용이다.
 
 1. Base auth/profile: `001_initial_auth_profile.sql`.
-2. Core/QnA base: `002_app_core_schema_draft.sql`, `002_p0_subscriptions_questions_draft.sql`.
+2. Core/QnA base: `002_p0_subscriptions_questions_draft.sql`. (`002_app_core_schema_draft.sql`은 inventory/reference-only — 실행하지 않는다. 178개 후보 실측에서 002 중복 정의 실패의 원인 — 아래 「후보 검증 이력」.)
 3. Custom request base: `003_p0_custom_request_draft.sql` 이후 `002_custom_request_orders_status.sql`.
 4. Cash/disputes/community draft: `004_p0_cash_disputes_admin_draft.sql`.
 5. Public read and custom request hardening: `005`-`018`.
@@ -43,12 +45,44 @@
 11. Individual question escrow and cleanup: `070`; `071`은 one-off cleanup이므로 운영/fresh 적용 전 별도 승인 필요.
 12. Security hardening and C/D follow-ups: `072`-`085`. `073`/`073b`, `078`, `083`, `084`, `085`는 출시 전 보안 점검에서 특히 대조한다.
 
+## clean-install 적용 집합 (후보 C 정본 — 2026-07-30 검증 완료)
+
+> 검증 환경: **Supabase CLI 2.110.0 / PostgreSQL 17.6**. 결과: **175/175 적용 성공**, G0·G1·G2_STRUCTURAL_REPLAY·G3·G4 PASS / G5 완료. 마지막 파일 `183_p1_10_account_deletion_verify_object_owners.sql`. 순서·정책 정본은 `apply_manifest_prod.md` §2~§4·§7.
+
+**총 적용 대상 = 175개** — `supabase/sql/*.sql` 전체 190개 중 아래 **15개** 제외.
+
+| 제외 파일 | 분류 |
+|---|---|
+| `002_app_core_schema_draft.sql` | **inventory/reference-only — 실행 대상 아님**("바로 적용하지 마세요" 초안, 참고용 보존) |
+| `039_storage_buckets_private_audit.sql` | 점검(감사) SQL |
+| `071_individual_question_test_data_cleanup.sql` | one-off 정리 |
+| `105 106 107 108 109 110 111 114` (8개) | 지급 스택 게이트(`apply_manifest_prod.md` §5) |
+| `146_p2_1_avatar_document_crossref_diagnostic.sql` | READ-ONLY 진단 |
+| `153_p2_25_pay_due_payouts_convergence.sql` | **지급 게이트 종속 제외** — 게이트로 제외된 `105·106·107·109·110·111·114`를 필수 선행으로 요구 |
+| `156_p2_25_payout_scheduler_foundation.sql` | **지급 게이트 종속 제외** — `153`과 지급 객체를 필수 선행으로 요구 |
+| `184_seed_additional_admin.sql` | 운영 계정 시드(멱등 one-off) — 스키마 migration 아님, 환경별 별도 실행 |
+
+### 포함 확정 (2026-07-30 분류)
+
+- `115_account_deletion.sql` · `116_user_blocks.sql` — **clean-install 포함.** 근거: staging migration 원장 `20260704135803 / 115_account_deletion` · `20260704135524 / 116_user_blocks`, 현재 staging 카탈로그에 `public.user_deletion_log` · `public.anonymize_user_for_deletion(uuid,text)` · `public.user_blocks` 실존, `154` 이후 account-deletion migration 이 115 의 함수·객체를 필수 선행으로 사용. 기능 플래그 OFF 는 런타임 기능 비활성화일 뿐 스키마 제외 사유가 아니다(원칙). 두 파일 헤더의 "라이브 미적용"은 현재 상태와 맞지 않는 역사 문구이며, **본 manifest 판정이 헤더보다 우선한다**(SQL 파일은 수정하지 않는다).
+- `167_iq_attachment_unique_question_storage_path.sql` · `168_iq_attachment_register_rpc_idempotent.sql` · `169_iq_attachment_storage_delete_policy.sql` — **clean-install 포함(historical baseline 효과 수렴용).** 현재 staging 카탈로그 실측:
+  - `167` 효과: `individual_question_attachments` 에 UNIQUE `(question_id, storage_path)` — constraint `uq_iqa_question_storage_path` 실존.
+  - `168` 효과: `add_individual_question_attachment(uuid,text,text,text,uuid) RETURNS jsonb` · SECURITY DEFINER · ACL postgres·authenticated·service_role · btrim → party/path/message 검증 → ON CONFLICT 멱등 처리 — 파일 본문과 동일한 현재 정의.
+  - `169` 효과: `storage.objects` policy `iqa_storage_delete_unregistered_owner` — DELETE / authenticated · bucket + owner + party + 미등록 객체 조건.
+  - 단, **"167·168·169 파일이 해당 번호로 migration 원장에 적용됐다"고 단정하지 않는다 — 정확한 파일↔원장 매핑은 확인되지 않았다.** 현재 staging historical baseline 에 세 파일과 동일한 객체 효과가 존재하며, fresh install 수렴을 위해 세 파일을 포함한다. 세 파일 헤더의 "초안·staging 미적용"은 현재 카탈로그 기준 stale 한 역사 문구다(SQL 파일은 수정하지 않는다).
+
+### 후보 검증 이력 (2026-07-30)
+
+- 후보 B **178개**(=175 + `002_app_core_schema_draft` + `153` + `156`): `002_app_core_schema_draft`의 **중복 정의로 실패**. `167`~`169`는 **미도달**(적용 시도 없음).
+- 보정 후보 **177개**(002 초안 제외): `153`이 지급 게이트 제외 객체를 요구해 **지급 객체 부재로 실패**.
+- 후보 C **175개**(`153`·`156` 추가 제외): **전건 PASS.** `167`~`169` 포함 전 파일이 후보 C 에서 실제 적용 성공.
+
 ## 전체 SQL 파일 목록
 
 | 번호 | 중복 | 파일 | 설명 |
 | --- | --- | --- | --- |
 | 001 |  | `001_initial_auth_profile.sql` | Supabase SQL Editor에 붙여넣어 한 번에 실행하세요. (필요 시 팀에서 마이그레이션으로 옮깁니다.) |
-| 002 | yes | `002_app_core_schema_draft.sql` | [의존 순서] 이 파일은 001_initial_auth_profile.sql 이후 적용할 것 |
+| 002 | yes | `002_app_core_schema_draft.sql` | **inventory/reference-only — 실행 대상 아님**(2026-07-30 확정, 「clean-install 적용 집합」). 헤더의 [의존 순서] 문구는 역사 기록 |
 | 002 | yes | `002_custom_request_orders_status.sql` | [의존 순서] 이 파일은 003_p0_custom_request_draft.sql 이후 적용할 것 |
 | 002 | yes | `002_p0_subscriptions_questions_draft.sql` | [의존 순서] 이 파일은 001_initial_auth_profile.sql 이후 적용할 것 |
 | 003 |  | `003_p0_custom_request_draft.sql` | DRAFT P0 (003) — 맞춤의뢰(포스트·지원·주문) + 주문–결제 연결 + 납품/리비전/메시지/이벤트 |
