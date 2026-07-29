@@ -1,13 +1,13 @@
 # S2 API 계약 v1.1 개정 지시서 (정본)
 
-- **작성일:** 2026-07-29 (rev 2 — 오너 2차 검증 보정 6건 반영: stale 참조 확정, M8 충돌 해소, F11 전건 대조 7필드, F12 3자 일치·재생·방 확보 트랜잭션 의미, M0 PUBLIC EXECUTE 회수, M11/M12 분리)
+- **작성일:** 2026-07-29 (rev 3 — 오너 3차 검증 보정 4건 반영: F11 NULL-safe 대조 규칙, F12 재생 관계 결속·`ROOM_ENSURE_FAILED`, M11·M12 `REVOKE ALL`+`GRANT SELECT` 전면 회수, hard DELETE 논리 ID `HD-1` 고정. rev 2: stale 참조 확정, M8 충돌 해소, 7필드 목록, 3자 일치, M0 PUBLIC EXECUTE 회수, M11/M12 분리)
 - **세션:** schema-doc-verification (검증 전용 — 이 세션의 DB DDL/DML·코드 변경 0건)
 - **판정:**
   - 전체 S2: **GO 유지**
   - S2-1 계약서(`api_web_v1` 계약 v1.0 · `api_app_v1` 계약 v1.0): **REVISE**
   - S2-2 SQL 구현: **임시 NO-GO 유지** (v1.1 계약 확정 전 SQL 작성 금지)
 - **다음 세션 산출물:** `api_web_v1 계약 v1.1` + `api_app_v1 계약 v1.1` **문서 2건만**. SQL 0건.
-- **근거 문서:** 계약서 v1.0 2건(웹·앱), 1차 검증 보고서, 재검토서, 재검토서 타당성 분석(본 세션), 오너 최종 보정 지시 2건(2026-07-29). stale 참조 3건은 오너 제공 v1.0 원문 대조로 확정 완료(E절) — 미확정 항목 없음.
+- **근거 문서:** 계약서 v1.0 2건(웹·앱), 1차 검증 보고서, 재검토서, 재검토서 타당성 분석(본 세션), 오너 보정 지시 3건(2026-07-29). **stale 참조 3건은 확정 완료(E절). v1.1 작성 세션에서 동결해야 할 설계 선택 2건 잔존:** ① F0 대체 방식(SECURITY DEFINER 뷰 vs 비정규화, A-9) ② 보상 삭제 RPC의 이름·시그니처·오류코드·GRANT(C절). hard DELETE 마이그레이션 논리 ID는 **`HD-1`로 고정** — 그 외 미확정 항목 없음.
 
 모든 항목은 라이브 DB(`pg_get_functiondef`·`pg_policies`·`information_schema`)와 웹·앱 저장소 코드로 실측 확인됨. 실측 근거는 부록 참조.
 
@@ -29,20 +29,27 @@
   2. **F10 처리 확정(오너 채택):** **F12가 내부에서 `core_private.ensure_student_mentor_room`을 호출하고 응답에 `room_id`를 포함해 반환한다.** 구독 성공 시 질문방 존재를 필수 불변조건으로 승격. §17 #3의 "웹 JS → F10 직접 호출" 행 삭제. (대안이던 `api_web_v1.ensure_student_mentor_room_server`는 채택하지 않음.)
   3. **방 확보의 트랜잭션 의미(오너 확정):**
      - **최초 실행:** 방 확보 실패 시 자금 차감·구독 생성/갱신·원장 기록·결제 상태 변경을 **전부 롤백** (부분 성공 금지)
-     - **성공 재생:** 기존 자금 처리를 반복하지 않고, 방을 **조회·복구**한 뒤 `room_id`를 반환
+     - **성공 재생:** 기존 자금 처리를 반복하지 않고, 방을 **조회·복구**한 뒤 `room_id`를 반환. 재생 중 방 복구가 실패하면 **기존 자금 처리를 건드리지 않고** 안정 코드 **`ROOM_ENSURE_FAILED`**로 실패한다 (자금 상태는 성공인 채 유지, 재시도 가능).
      - **사전 검사:** 배포 전에 "기존 succeeded 구독 결제 중 `mentor_student_rooms` 행이 없는 건"을 탐지·보정하는 점검 절차를 v1.1 배포 게이트에 추가
-  3. §5.2의 "비노출 스키마가 유일한 구조적 방어" 논리 폐기 — 정본 방어선은 **GRANT(EXECUTE) 기반**이며, 스키마 비노출은 내부 구현부 은닉 수단으로만 기술.
+  4. §5.2의 "비노출 스키마가 유일한 구조적 방어" 논리 폐기 — 정본 방어선은 **GRANT(EXECUTE) 기반**이며, 스키마 비노출은 내부 구현부 은닉 수단으로만 기술.
 
 ### A-3. 컬럼 단위 REVOKE는 무효 — M11·M12 테이블 단위 전면 회수로 교체 (분리 유지)
 
 - **결함(확정·실측):** `anon`·`authenticated`가 `mentor_profiles`·`mentor_plans`에 **테이블 단위** INSERT/UPDATE/DELETE(및 TRUNCATE) 권한 보유. PostgreSQL은 테이블 단위 권한이 있으면 컬럼 단위 REVOKE가 실효 없음 → v1.0의 컬럼 단위 회수는 적용해도 XW-02가 닫히지 않음.
-- **정정(오너 확정 — v1.0의 M11·M12 분리 구조 유지):**
-  - **M11:** `REVOKE INSERT, UPDATE, DELETE ON public.mentor_profiles FROM anon, authenticated` — `mentor_profiles` 직접 쓰기 회수
-  - **M12:** `REVOKE INSERT, UPDATE, DELETE ON public.mentor_plans FROM anon, authenticated` — `mentor_plans` 직접 쓰기 회수
+- **정정(오너 확정 — v1.0의 M11·M12 분리 구조 유지, rev 3에서 전면 회수로 강화):** 라이브 권한은 두 역할 모두 7종(SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER)이므로 비SELECT 전부를 회수한다. `REVOKE ALL` + `GRANT SELECT` 형태로 고정:
+
+  ```sql
+  -- M11
+  REVOKE ALL ON public.mentor_profiles FROM anon, authenticated;
+  GRANT SELECT ON public.mentor_profiles TO anon, authenticated;
+  -- M12
+  REVOKE ALL ON public.mentor_plans FROM anon, authenticated;
+  GRANT SELECT ON public.mentor_plans TO anon, authenticated;
+  ```
 - **적용 게이트:**
   - **M11 전:** ① F7 전환 완료 ② A-4 정산계좌 RPC 적용 + 웹 호출부(`lib/mentor/mentorPayoutAccountActions.ts`) 전환 ③ `syncAfterSignUpWithSession` 백업 upsert 제거 ④ 프로필 직접 쓰기 실측 0건 확인
   - **M12 전:** ① F8 전환 완료 ② 플랜 직접 쓰기 실측 0건 확인
-- **참고(실측):** 현재 실효 방어는 전적으로 RLS(`mentor_update_own` 등 own-row 정책)뿐임. TRUNCATE는 RLS 대상이 아니나 PostgREST가 TRUNCATE를 노출하지 않아 HTTP 경로는 없음 — 위생 차원에서 함께 회수 권장.
+- **참고(실측):** 현재 실효 방어는 전적으로 RLS(`mentor_update_own` 등 own-row 정책)뿐임. TRUNCATE는 RLS 대상이 아니나 PostgREST가 TRUNCATE를 노출하지 않아 즉각적인 HTTP 공격 경로는 아님 — 그러나 "최소 권한·전면 회수" 계약이므로 위 `REVOKE ALL` 형태로 TRUNCATE·REFERENCES·TRIGGER까지 함께 회수한다.
 
 ### A-4. 정산계좌 전용 RPC 신설 (F7에 통합 금지)
 
@@ -85,6 +92,19 @@
   - 기존 정본 함수(`confirm_subscription_checkout`)를 **다시 호출하지 않음**
   - `payments.amount × 100`과 **기존 원장 행만** 비교
   - T-CONC-09 기대값을 "가격 변경 후 재생 = `ok:true, idempotent:true`, anomaly 기록 없음"으로 재작성.
+- **재생 — 관계 결속(오너 확정, rev 3):** 금액 비교와 별도로 다음 결속을 전건 검증하고, 하나라도 불일치 시 재생 성공을 반환하지 않는다:
+
+  ```text
+  payments.plan_id = p_plan_id
+  payments.user_id = subscription.student_id
+  payments.mentor_id = subscription.mentor_id
+  ledger.user_id = payments.user_id
+  ledger.ref_id = subscription.id
+  room.student_id / room.mentor_id = 해당 payments의 student / mentor
+  ```
+
+  방 복구 실패 시의 동작은 A-2 §3(`ROOM_ENSURE_FAILED`, 자금 불변)을 따른다.
+- **실데이터 확인(2026-07-29):** 현재 구독 결제 2건 모두 `payments.amount = 29,900(KRW)` · `mentor_plans.amount_cents = 2,990,000` · `payments.amount × 100 = amount_cents` 관계 성립.
 - **DB 계약 명시(오너 지시):** 라이브 `payments.amount`는 numeric이며 통화·정수 CHECK가 없음(실측: subscription 결제 2건 모두 `currency='KRW'`·`amount=29900`·소수 0건). 위 KRW·정수 규칙을 v1.1의 DB 계약(문서 차원)으로 명시하고, CHECK 제약 추가 여부는 S3 후보로 기재.
 - **부수 기록:** 현행 정본의 "재생 시 현재가 대조" 동작 자체가 XW-04 인접의 잠재 결함임을 v1.1 AS-IS 절에 사실로 기재.
 
@@ -103,6 +123,12 @@
   ```
 
   이와 **별도로** `p_idempotency_key = p_order_ref` 강제를 유지한다. (정본 checkout이 `sub_debit` 원장에 쓰는 확립된 관행의 확장.)
+- **NULL-safe 비교 규칙(오너 확정, rev 3):** topup 원장 행의 `ref_id`는 **NULL이 정본 상태**다(`docs/sql/topup-ref-id-canon.md` — 정본 참조는 `idempotency_key`, `cash_ledger_idempotency_key_key UNIQUE` 실재). 일반 `=`·`<>`는 한쪽이 NULL이면 NULL을 반환해 불일치를 놓치므로 금지하고, 다음으로 고정한다:
+  1. 멱등 충돌 후 기존 원장 행을 **`FOR UPDATE`로 재조회**
+  2. `ref_id`는 **`IS NULL`** 기대값으로 검증
+  3. 나머지 nullable 필드는 전부 **`IS NOT DISTINCT FROM`** 비교
+  4. 7필드 중 하나라도 다르면 `LEDGER_FIELD_MISMATCH`
+- **`ref_text` 사실 명시(실측):** `cash_ledger.ref_text` 컬럼은 라이브에 **존재하지 않는다**(2026-07-29 실측). 7필드 대조는 v1.1 원장 스키마 기준이므로, v1.1 계약은 `ref_text` 신설 마이그레이션(컬럼 정의·기존 행 NULL 유지·append-only 불변 원칙과의 정합)을 F11과 같은 절에서 함께 확정해야 하며, 신설 전 배포 순서에서는 기존 6필드만 대조한다.
 - **정정 2 (테스트 충전 분리, 오너 확정):** 형식 allowlist 확장으로 `cash_topup_...`을 수용하는 안은 **기각**. 정리:
   - Toss confirm/webhook → **F11** (`^cash-(.+)-(\d+)$` 주문 참조 강제)
   - 개발·스테이징 테스트 충전(`walletTopupActions.ts`, 키 형식 `cash_topup_{uid}_{ts}_{hex}`) → **기존 `record_cash_topup` 유지**
@@ -145,7 +171,7 @@
 
 ### A-9. F0 — 관계 확인된 조회 내부로 축소
 
-- **정정:** 공개 라벨 함수 형태의 F0를 폐기하고, 라벨 도출 로직을 관계가 이미 확인된 조회(뷰·함수) 내부로 좁힘. 대가(V2·V6·V7의 SECURITY DEFINER 뷰화 또는 비정규화 컬럼)를 v1.1 §에 명시하고 선택지를 고정할 것.
+- **정정:** 공개 라벨 함수 형태의 F0를 폐기하고, 라벨 도출 로직을 관계가 이미 확인된 조회(뷰·함수) 내부로 좁힘. **구현 방식(V2·V6·V7의 SECURITY DEFINER 뷰화 vs 비정규화 컬럼)은 잔존 설계 선택** — v1.1 작성 세션이 대가를 명시하고 한쪽으로 동결한다.
 
 ---
 
@@ -157,7 +183,8 @@ v1.0이 참조만 하고 정의하지 않은 공용 구현부(공용 검증기·
 
 - **실측:** 앱 `lib/features/community/data/community_write_repository.dart:204-210`이 `community_posts.delete()`를 실행 — 단, **생성 실패 보상 전용** 내부 경로(공개 API·UI·라우트 없음). 즉시 DELETE 회수 시 이 보상 흐름이 파손됨.
 - **게이트 순서(변경 금지):** ① 보상 삭제 대체 RPC 제공 → ② 앱 전환 배포·보급 → ③ `community_posts` DELETE 권한·`cp_delete_own` 정책 회수.
-- **마이그레이션 번호 정정(오너 확정):** v1.0의 **M8은 F7·F8 멘토 RPC 마이그레이션이므로 그대로 유지**한다. hard DELETE 회수는 M8에 얹지 말고 **별도 게이트·별도 마이그레이션(`HD-1` 또는 새 M번호)**으로 추가한다. v1.0 922행의 `§20 M8 선택 항목` 참조는 삭제.
+- **마이그레이션 번호 정정(오너 확정):** v1.0의 **M8은 F7·F8 멘토 RPC 마이그레이션이므로 그대로 유지**한다. hard DELETE 회수는 M8에 얹지 말고 **별도 게이트·별도 마이그레이션 `HD-1`**(rev 3에서 논리 ID 고정)로 추가한다. v1.0 922행의 `§20 M8 선택 항목` 참조는 삭제.
+- **잔존 설계 선택(v1.1에서 동결):** ①단계 보상 삭제 대체 RPC의 **이름·시그니처·오류코드·GRANT는 미정** — v1.1 작성 세션이 확정하고, 앱 계약의 공용 함수 대조표(F-6)에 포함시킨다.
 
 ## D. blocker 재분류 확정
 
@@ -205,7 +232,8 @@ v1.0 계약서 원문(오너 제공, 2026-07-29) 대조로 3건이 확정됐다.
 2. 본 지시서 A~F를 전건 반영하고, 각 항목에 "반영 절 번호"를 역기입해 추적 가능하게 할 것.
 3. E절의 stale 참조 3건(945행·1315행·1754행)은 확정 정정값으로 교체 완료 여부를 게이트에서 확인할 것 (본 지시서 rev 2에서 원문 대조 확정 — 미확정 항목 아님).
 4. 자금 함수 3종(`confirm_subscription_checkout`·`record_cash_topup`·renewal)의 본문 분기 순서는 요약 전재가 아니라 **원문 기준 재기술** ([C4] 오측 재발 방지).
-5. 게이트: A-1~A-9 반영 + B 공용 구현부 전건 명세 + C의 hard DELETE 별도 마이그레이션 신설(M8 불변) + F 동기화 완료 시 S2-1 REVISE 해제, S2-2 NO-GO 해제 심사 가능.
+5. **잔존 설계 선택 2건 동결 의무:** ① F0 구현 방식(A-9) ② 보상 삭제 RPC 계약(C절) — v1.1 문서에서 한쪽으로 확정하지 않으면 게이트 통과 불가.
+6. 게이트: A-1~A-9 반영 + B 공용 구현부 전건 명세 + C의 `HD-1` 신설(M8 불변) + 잔존 설계 선택 2건 동결 + F 동기화(공용 함수·시그니처·오류코드·GRANT 대조 포함) 완료 시 S2-1 PASS / S2-2 GO 재선언 심사 가능.
 
 ---
 
