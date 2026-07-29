@@ -1,13 +1,13 @@
 # S2 API 계약 v1.1 개정 지시서 (정본)
 
-- **작성일:** 2026-07-29 (rev 3 — 오너 3차 검증 보정 4건 반영: F11 NULL-safe 대조 규칙, F12 재생 관계 결속·`ROOM_ENSURE_FAILED`, M11·M12 `REVOKE ALL`+`GRANT SELECT` 전면 회수, hard DELETE 논리 ID `HD-1` 고정. rev 2: stale 참조 확정, M8 충돌 해소, 7필드 목록, 3자 일치, M0 PUBLIC EXECUTE 회수, M11/M12 분리)
+- **작성일:** 2026-07-29 (rev 4 — 오너 4차 검증 보정 반영: topup 정본 `idempotency_key` 단독 확정·`ref_text`/M2/4인자 F11 제거·6필드 단일 계약, F12 관계 불일치 안정 오류코드 4종·NULL 명시 거부 규칙, room 참조 정본성 동결(pair 정본·NULL 보정·상충 거부). rev 3: F11 NULL-safe, 관계 결속, `REVOKE ALL`, `HD-1` 고정. rev 2: stale 참조 확정, M8 충돌 해소, 3자 일치, M0 PUBLIC EXECUTE 회수, M11/M12 분리)
 - **세션:** schema-doc-verification (검증 전용 — 이 세션의 DB DDL/DML·코드 변경 0건)
 - **판정:**
   - 전체 S2: **GO 유지**
   - S2-1 계약서(`api_web_v1` 계약 v1.0 · `api_app_v1` 계약 v1.0): **REVISE**
   - S2-2 SQL 구현: **임시 NO-GO 유지** (v1.1 계약 확정 전 SQL 작성 금지)
 - **다음 세션 산출물:** `api_web_v1 계약 v1.1` + `api_app_v1 계약 v1.1` **문서 2건만**. SQL 0건.
-- **근거 문서:** 계약서 v1.0 2건(웹·앱), 1차 검증 보고서, 재검토서, 재검토서 타당성 분석(본 세션), 오너 보정 지시 3건(2026-07-29). **stale 참조 3건은 확정 완료(E절). v1.1 작성 세션에서 동결해야 할 설계 선택 2건 잔존:** ① F0 대체 방식(SECURITY DEFINER 뷰 vs 비정규화, A-9) ② 보상 삭제 RPC의 이름·시그니처·오류코드·GRANT(C절). hard DELETE 마이그레이션 논리 ID는 **`HD-1`로 고정** — 그 외 미확정 항목 없음.
+- **근거 문서:** 계약서 v1.0 2건(웹·앱), 1차 검증 보고서, 재검토서, 재검토서 타당성 분석(본 세션), 오너 보정 지시 4건(2026-07-29). **rev 4에서 동결 완료:** stale 참조 3건(E절) · hard DELETE 논리 ID `HD-1`(C절) · topup 정본 = `idempotency_key` 단독(A-6) · F12 관계 불일치 오류코드 4종(A-5) · room 참조 정본성 = pair 정본 + NULL 보정 + 상충 거부(A-5). **v1.1 작성 세션에서 동결해야 할 설계 선택 2건 잔존:** ① F0 대체 방식(SECURITY DEFINER 뷰 vs 비정규화, A-9) ② 보상 삭제 RPC의 이름·시그니처·오류코드·GRANT(C절).
 
 모든 항목은 라이브 DB(`pg_get_functiondef`·`pg_policies`·`information_schema`)와 웹·앱 저장소 코드로 실측 확인됨. 실측 근거는 부록 참조.
 
@@ -92,43 +92,44 @@
   - 기존 정본 함수(`confirm_subscription_checkout`)를 **다시 호출하지 않음**
   - `payments.amount × 100`과 **기존 원장 행만** 비교
   - T-CONC-09 기대값을 "가격 변경 후 재생 = `ok:true, idempotent:true`, anomaly 기록 없음"으로 재작성.
-- **재생 — 관계 결속(오너 확정, rev 3):** 금액 비교와 별도로 다음 결속을 전건 검증하고, 하나라도 불일치 시 재생 성공을 반환하지 않는다:
+- **재생 — 관계 결속(오너 확정, rev 3 / 오류코드·NULL 규칙 rev 4):** 금액 비교와 별도로 다음 결속을 전건 검증한다. 불일치 시 재생 성공을 반환하지 않으며, 관계 계층별로 **안정 오류코드**를 반환한다:
 
-  ```text
-  payments.plan_id = p_plan_id
-  payments.user_id = subscription.student_id
-  payments.mentor_id = subscription.mentor_id
-  ledger.user_id = payments.user_id
-  ledger.ref_id = subscription.id
-  room.student_id / room.mentor_id = 해당 payments의 student / mentor
-  ```
+  | 결속 | 검증 | 불일치 코드 |
+  |---|---|---|
+  | payment–plan | `payments.plan_id = p_plan_id` | `PLAN_BINDING_MISMATCH` |
+  | payment–subscription 당사자 | `payments.user_id = subscription.student_id` · `payments.mentor_id = subscription.mentor_id` | `PARTY_BINDING_MISMATCH` |
+  | ledger–subscription | `ledger.user_id = payments.user_id` · `ledger.ref_id = subscription.id` | `LEDGER_BINDING_MISMATCH` |
+  | room 당사자·참조 | pair(student, mentor) 일치 + 아래 참조 규칙 | `ROOM_REF_MISMATCH` |
 
-  방 복구 실패 시의 동작은 A-2 §3(`ROOM_ENSURE_FAILED`, 자금 불변)을 따른다.
+  **NULL 규칙:** 위 표의 payment·subscription·ledger 결속은 전부 **필수 관계**로, 어느 쪽이든 NULL이면 일치가 아니라 **해당 코드로 명시 거부**한다 (일반 `=`의 NULL 통과 금지). nullable 호환 관계(room 참조 컬럼)만 `IS NOT DISTINCT FROM` 또는 아래 보정 규칙을 적용한다.
+- **room 참조 정본성 동결(rev 4 — 실측: 방 2건 중 1건은 `payment_id`·`subscription_id` NULL):**
+  - 방의 **정본 식별은 pair(`student_id`, `mentor_id`)**다. `payment_id`·`subscription_id`는 이력 참조용 선택값으로 유지한다.
+  - 성공 재생에서 방의 참조 컬럼이 **NULL이면 이번 결제·구독으로 보정(backfill)**한다.
+  - 참조 컬럼에 **다른 값이 이미 있으면** 보정하지 않고 `ROOM_REF_MISMATCH`로 거부한다.
+  - 방 복구(존재하지 않는 방의 재생성) 실패 시의 동작은 A-2 §3(`ROOM_ENSURE_FAILED`, 자금 불변)을 따른다.
 - **실데이터 확인(2026-07-29):** 현재 구독 결제 2건 모두 `payments.amount = 29,900(KRW)` · `mentor_plans.amount_cents = 2,990,000` · `payments.amount × 100 = amount_cents` 관계 성립.
 - **DB 계약 명시(오너 지시):** 라이브 `payments.amount`는 numeric이며 통화·정수 CHECK가 없음(실측: subscription 결제 2건 모두 `currency='KRW'`·`amount=29900`·소수 0건). 위 KRW·정수 규칙을 v1.1의 DB 계약(문서 차원)으로 명시하고, CHECK 제약 추가 여부는 S3 후보로 기재.
 - **부수 기록:** 현행 정본의 "재생 시 현재가 대조" 동작 자체가 XW-04 인접의 잠재 결함임을 v1.1 AS-IS 절에 사실로 기재.
 
-### A-6. F11 — duplicate 필드 대조 강제 + 테스트 충전 분리
+### A-6. F11 — topup 정본 확정(`idempotency_key` 단독) + 6필드 NULL-safe 대조 + 테스트 충전 분리
 
-- **정정 1 (duplicate 전건 대조 — 7필드 확정):** F11 재생 경로는 기존 원장 행의 다음 7개 필드를 **전부 명시적으로** 대조하고, 하나라도 불일치 시 `LEDGER_FIELD_MISMATCH`:
+- **topup 정본 확정(오너 채택, rev 4):** 정본 공인 문서 `docs/sql/topup-ref-id-canon.md`를 **전부 유지**한다 — 주문 정본은 `idempotency_key`(=`orderId`, UNIQUE 제약 실재), `ref_id`는 NULL이 정상, **신규 DDL 불요**, `record_cash_topup` 3인자 유지. 이 정본과 충돌하는 v1.0의 **`ref_text` 컬럼·M2·4인자 F11은 전부 제거**한다 (`p_idempotency_key = p_order_ref`를 강제하는 이상 `ref_text`는 같은 문자열의 중복 저장일 뿐 새 추적 정보를 제공하지 않음). rev 2의 7필드 목록과 rev 3의 "신설 전 6필드/신설 후 7필드" 이중 계약은 **본 항으로 대체**한다 — F11은 선행 스키마가 갖춰진 **한 가지 계약**으로만 배포한다.
+- **확정 계약:**
+  1. `api_web_v1`의 F11 진입점은 **3인자 envelope wrapper** — `order_ref`를 그대로 멱등키로 사용(`p_idempotency_key = p_order_ref`, 별도 인자 아님)
+  2. Toss 주문 참조 형식 `^cash-(.+)-(\d+)$` 강제
+  3. V5의 topup `order_ref`는 **`idempotency_key`에서 반환**
+- **duplicate 전건 대조 — 기존 6필드, NULL-safe:** 멱등 충돌 후 기존 원장 행을 **`FOR UPDATE`로 재조회**하고 다음 6필드를 전부 대조, 하나라도 다르면 `LEDGER_FIELD_MISMATCH`:
 
   ```text
-  user_id
-  delta_cents
-  reason
-  ref_type
-  ref_id
-  ref_text
-  idempotency_key
+  user_id           -- IS NOT DISTINCT FROM
+  delta_cents       -- IS NOT DISTINCT FROM
+  reason            -- IS NOT DISTINCT FROM ('cash_topup')
+  ref_type          -- IS NOT DISTINCT FROM
+  ref_id            -- IS NULL (topup 정본 상태)
+  idempotency_key   -- = p_order_ref (NOT NULL 강제 후 비교)
   ```
 
-  이와 **별도로** `p_idempotency_key = p_order_ref` 강제를 유지한다. (정본 checkout이 `sub_debit` 원장에 쓰는 확립된 관행의 확장.)
-- **NULL-safe 비교 규칙(오너 확정, rev 3):** topup 원장 행의 `ref_id`는 **NULL이 정본 상태**다(`docs/sql/topup-ref-id-canon.md` — 정본 참조는 `idempotency_key`, `cash_ledger_idempotency_key_key UNIQUE` 실재). 일반 `=`·`<>`는 한쪽이 NULL이면 NULL을 반환해 불일치를 놓치므로 금지하고, 다음으로 고정한다:
-  1. 멱등 충돌 후 기존 원장 행을 **`FOR UPDATE`로 재조회**
-  2. `ref_id`는 **`IS NULL`** 기대값으로 검증
-  3. 나머지 nullable 필드는 전부 **`IS NOT DISTINCT FROM`** 비교
-  4. 7필드 중 하나라도 다르면 `LEDGER_FIELD_MISMATCH`
-- **`ref_text` 사실 명시(실측):** `cash_ledger.ref_text` 컬럼은 라이브에 **존재하지 않는다**(2026-07-29 실측). 7필드 대조는 v1.1 원장 스키마 기준이므로, v1.1 계약은 `ref_text` 신설 마이그레이션(컬럼 정의·기존 행 NULL 유지·append-only 불변 원칙과의 정합)을 F11과 같은 절에서 함께 확정해야 하며, 신설 전 배포 순서에서는 기존 6필드만 대조한다.
+  일반 `=`·`<>`는 한쪽이 NULL이면 NULL을 반환해 불일치를 놓치므로 nullable 필드에 금지.
 - **정정 2 (테스트 충전 분리, 오너 확정):** 형식 allowlist 확장으로 `cash_topup_...`을 수용하는 안은 **기각**. 정리:
   - Toss confirm/webhook → **F11** (`^cash-(.+)-(\d+)$` 주문 참조 강제)
   - 개발·스테이징 테스트 충전(`walletTopupActions.ts`, 키 형식 `cash_topup_{uid}_{ts}_{hex}`) → **기존 `record_cash_topup` 유지**
