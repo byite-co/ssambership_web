@@ -191,3 +191,14 @@
 - **130–183:** 숫자순. 단 §3 제외 반영 — `146`(READ-ONLY 진단)·`153`·`156`(지급 게이트 후속) 제외, `167~169` 포함(§3), 클린설치 시 `132`(outbox) 는 `136` 이전 선행(§6). 정규 적용의 마지막 파일 = `183_p1_10_account_deletion_verify_object_owners.sql`. `184`는 운영 시드로 정규 집합 제외(§3).
 
 > 이 문서는 순서·정책의 정본이고, 파일별 1줄 설명·중복 근거의 상세는 `sql_apply_manifest.md`가 보조한다. 두 문서가 다르면 **순서·정책은 본 문서**, **파일별 상세는 sql_apply_manifest.md**가 정본이다.
+
+## 9. S2 신규 migration 물리 정책 (2026-07-30 오너 확정 — 요약)
+
+> 정본 상세: `docs/audit/s2_2_migration_physical_policy_20260730.md`. 기록 양식: `sql_apply_manifest.md` 「S2 환경별 적용 대조표·rollback 인벤토리」. 이 절은 운영 적용 관점의 요약이다.
+
+- **forward 정본 경로:** `supabase/sql/<FILE_TS>_<STEM>.sql` — UTC timestamp 파일명(계약 §20.1). timestamp는 사람이 임의 입력하지 않고 `supabase migration new <stem>`으로 채번한 뒤 파일을 즉시 `supabase/sql/`로 이동한다(`supabase/migrations/` 잔존·이중 보존 금지, 한 건씩 순차 생성). S2 신규분에 기존 숫자 번호 접두어를 쓰지 않는다.
+- **stable migration identity 1:1 (구 「숫자 version 3자 동일성」 폐기):** 불변 식별자는 ① repository file basename ② ledger `name` ③ repository file SHA-256. `apply_migration`의 `name`은 파일 basename에서 `.sql`만 제거한 값과 정확히 같아야 하고, 동일 환경에서 하나의 ledger name은 정확히 한 행에만 대응한다. ledger `version`은 **환경별 서버 자동 채번값으로 수용**한다 — 파일 timestamp와 다를 수 있고, staging·production 간 달라도 정상. 파일명·SHA-256은 최초 커밋 이후 불변(적용 후 개명 금지).
+- **적용 전 확인:** 적용 직전 동일 ledger name 존재 여부를 확인하고, 이미 존재하면 자동 재적용하지 않고 중단한다. migration repair·원장 PATCH·수동 원장 행 삽입·삭제 금지, 운영 DB 임의 `execute_sql` DDL 금지. 위반·불일치 발생 시 `MIGRATION_HISTORY_DRIFT` 즉시 재활성(조건 8종 = 정책 문서 §4).
+- **rollback 정본 경로:** `supabase/rollback/<FORWARD_FILE_TS>_<STEM>_rollback.sql` — forward clean-install과 구조적으로 분리하며 **정규 clean-install 파일 수에 포함하지 않는다**(`supabase/sql/*.sql`·미래 재귀 glob에 포함 금지). 실행은 장애 시 오너 승인 후 파일 1건을 명시적으로 골라 `apply_migration`으로 수행하고, 원장에는 **새 행으로 append**한다(forward 원장 행 삭제·수정·reverted 처리 금지, Management API의 선택적 `rollback` 필드 미사용). M10은 상태 0 checkpoint — rollback 파일 없음.
+- **정규 산식(S2 완료 시):** 기존 baseline **175** + S2 forward **16**(M0·M1·M4~M17, M2·M3 retired) = **191**. S2 rollback **15**개·D-API-W·D-API-A·C1~C11은 SQL 적용 파일 수에 불포함. 기존 175개 순서·제외 15개·후보 C 판정(§7)은 변경하지 않는다.
+- **편입 시점:** Batch별 로컬 PG17 검증 PASS 후 해당 forward만 본 문서에 편입한다. 이 절 작성 시점 기준 S2 파일은 전부 **미생성**이며, 실제 timestamp·SHA-256·ledger version은 생성·적용 후에만 기록한다(invent 금지).
