@@ -2277,7 +2277,7 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
 | **M7** | `..._api_web_v1_community_rpc.sql` | **F4, F5, F6** + **공용 구현부 B-1~B-4**(`core_private.community_post_*_impl`·`community_image_refs_validate`, 외부 EXECUTE 0) + GRANT — 생성과 권한 회수 동일 마이그레이션 | ✅ |
 | **M8** | `..._api_web_v1_mentor_rpc.sql` | **F7, F8** + GRANT (**불변 — rev 8 C: HD-1을 여기에 얹지 않는다**) | ✅ |
 | **M9** | `..._money_rpc.sql` | **F11 3층**(`core_private.record_cash_topup_impl` 신설 + `public.record_cash_topup` 내부 구현 교체 + `api_web_v1.record_cash_topup_v2`) + **F12** `api_web_v1.subscription_checkout_confirm_v2` + service_role 전용 GRANT·내부 구현부 EXECUTE 회수 — 전부 같은 마이그레이션 | ✅ |
-| **M10** | `..._contract_permission_assertions.sql` | **최종 권한 assertion checkpoint** — M11·M12·M16을 포함한 검사 대상 마이그레이션이 전부 적용된 뒤 실행(§20.2.1). **운영 M10의 검사 범위는 카탈로그·ACL·정책·함수 속성의 읽기 전용 assertion만**이다(`DO $$ … RAISE EXCEPTION`, §21 T-PERM 중 카탈로그로 판정 가능한 항목 한정 — 상태 변경 가능 기능 테스트는 §21.10대로 브랜치 DB/로컬 스택에서 수행) | — (**rollback 객체 없음** — 상태를 만들지 않는 검증 checkpoint, §22 #2) |
+| **M10** | `..._contract_permission_assertions.sql` | **최종 권한 assertion checkpoint** — **M10 자신을 제외한 활성 predecessor migration 15개**(M0·M1·M4~M9·M11~M17 — M2·M3 retired 제외)가 **전부 적용된 뒤** 실행(§20.2.1. 직접 선행조건은 M11+M12+**M15**+M16+M17). **운영 M10의 검사 범위는 카탈로그·ACL·정책·함수 속성의 읽기 전용 assertion만**이다(`DO $$ … RAISE EXCEPTION`, §21 T-PERM 중 카탈로그로 판정 가능한 항목 한정 — 상태 변경 가능 기능 테스트는 §21.10대로 브랜치 DB/로컬 스택에서 수행) | — (**rollback 객체 없음** — 상태를 만들지 않는 검증 checkpoint, §22 #2) |
 | — | *(웹 코드 전환 — migration 아님)* | 호출점을 신규 객체로 이동(§17), 프로빙 제거 | — |
 | **M11** | `..._revoke_mentor_profiles_write.sql` | §10.6 `mentor_profiles` **테이블 단위 `REVOKE ALL` + `GRANT SELECT`**(rev 8 A-3) | ✅ GRANT 복원 migration |
 | **M12** | `..._revoke_mentor_plans_write.sql` | §10.6 `mentor_plans` **테이블 단위 `REVOKE ALL` + `GRANT SELECT`**(rev 8 A-3) | ✅ GRANT 복원 migration |
@@ -2314,9 +2314,12 @@ M12 : M8(F8)+C6 전환 · 플랜 직접 쓰기 0건 실측
 M16 : M7 + M17 + D-API-A + 웹·앱 F4/F5/F6 전환(C5 포함) + 앱 Gate 4
       + 앱 보상 DELETE 제거 + 직접 쓰기 0건 실측 + §14.7 확대 게이트 7단계
       # M17 적용 직후 M16 실행 금지 — D-API-A(노출)·앱 코드 전환·Gate 4가 별도 선행
-M10 : M11 + M12 + M16 + M17         # 최종 권한 assertion checkpoint —
-      (+ 검사 대상 객체 마이그레이션 전부: M0·M1·M4~M9·M13·M14·M17 — 활성 16개 전부)
-      # M10이 검사하는 모든 객체·회수 마이그레이션이 먼저 적용되어야 한다.
+M10 : M11 + M12 + M15 + M16 + M17    # 최종 권한 assertion checkpoint —
+      # M10 자신을 제외한 활성 predecessor migration 15개가 전부 적용된 뒤 실행한다.
+      # 검사 대상(중복 없는 명시 목록): M0·M1·M4·M5·M6·M7·M8·M9·M11·M12·M13·M14·M15·M16·M17
+      #   (= 활성 16개 중 M10 자신 제외 15개. M2·M3는 retired — 대상 아님)
+      # M15는 M0와 독립·병행 가능(조기 적용 가능)하지만, 최종 checkpoint인 M10 이전에는
+      #   반드시 완료돼야 한다 — M10이 M15의 pair-party 가드 상태를 검사하기 때문이다.
       # 읽기 전용·상태 0 (§20.2 표·§21.10 검사 범위 참조)
 ```
 
@@ -2589,7 +2592,7 @@ core_private : never exposed
 | T-REG-03 | 잠금값: tier id `limited/standard/premium`, cap `1.0/2.5/4.5`, 수수료 15%/5%/15%, 주간한도 4/9/999 |
 | T-REG-04 | cron 3종의 메서드·킬스위치·CRON_SECRET 동작 불변 |
 | T-REG-05 | Realtime publication이 **3테이블 그대로**(신규 추가 0) |
-| T-REG-06 | `public` 함수 개수·시그니처가 S2 전후 동일(신규는 `api_web_v1`/`core_private`에만) |
+| T-REG-06 | `public` 함수 **개수·identity argument**는 S2 전후 동일(기존 `public` 함수의 **계약된 본문 교체는 허용**하되 — M15 `get_weekly_question_usage` pair-party 가드·M9 `record_cash_topup` 내부 구현 교체 — **신규 `public` 함수 추가 0**). 신규 함수는 **`api_web_v1`·`api_app_v1`·`core_private`에만** 생성한다(M17의 `api_app_v1` wrapper 5종 포함) |
 | T-REG-07 | 웹 로그인·가입 플로 정상(세션 쿠키 회귀 없음) |
 
 ### 21.8 F12 재생 회귀 테스트 (T-REP — rev 8 A-5 필수 8건)
@@ -2623,7 +2626,7 @@ core_private : never exposed
 - **권한·동시성·자금 정합성**은 운영 DB가 아니라 **Supabase 브랜치 DB 또는 로컬 스택**에서 실행한다(지시서 §3 운영 DB 변경 금지).
 - 계약 테스트 중 순수 로직(오류코드 매핑·밴드 상수·ref 파싱)은 기존 `__contract__` 패턴(`node --test`)을 따른다 — 저장소에 이미 `lib/*/__contract__/*.contract.test.ts` 관행이 있다.
 - **M10 검사 범위 분리(운영/비운영):**
-  - **운영 M10**은 M11·M12·M16·**M17**까지 적용된 뒤 실행하는 최종 checkpoint로, **카탈로그·ACL·정책·함수 속성 등 읽기 전용 assertion만** 수행한다. **M10이 SQL로 판정할 수 있는 것:** `api_web_v1`·`api_app_v1`·`core_private` **스키마 존재** · schema privilege(`has_schema_privilege`) · 함수 **identity argument** · 함수 EXECUTE 권한(`has_function_privilege`) · View 권한(`has_table_privilege`) · `prosecdef` · `proconfig` · 정책(`pg_policies`) 존재/부재 · GRANT·REVOKE 실측 · **`core_private` 외부 USAGE·EXECUTE 0** — T-PERM-01·02·04·06~10·12·14, T-PERM-05의 함수 부재 확인, T-PERM-15의 GRANT·정책 부재 확인, **M17의 `api_app_v1` 스키마·wrapper 5종·View GRANT 및 `PUBLIC`·`anon` 권한 0건 확인**.
+  - **운영 M10**은 **M10 자신을 제외한 활성 predecessor migration 15개**(M0·M1·M4~M9·M11~M17 — 직접 선행조건 M11·M12·**M15**·M16·M17 포함)가 전부 적용된 뒤 실행하는 최종 checkpoint로, **카탈로그·ACL·정책·함수 속성 등 읽기 전용 assertion만** 수행한다. **M10이 SQL로 판정할 수 있는 것:** `api_web_v1`·`api_app_v1`·`core_private` **스키마 존재** · schema privilege(`has_schema_privilege`) · 함수 **identity argument** · 함수 EXECUTE 권한(`has_function_privilege`) · View 권한(`has_table_privilege`) · `prosecdef` · `proconfig` · 정책(`pg_policies`) 존재/부재 · GRANT·REVOKE 실측 · **`core_private` 외부 USAGE·EXECUTE 0** — T-PERM-01·02·04·06~10·12·14, T-PERM-05의 함수 부재 확인, T-PERM-15의 GRANT·정책 부재 확인, **M17의 `api_app_v1` 스키마·wrapper 5종·View GRANT 및 `PUBLIC`·`anon` 권한 0건 확인**.
   - **운영 M10이 판정하지 않는 것(플랫폼 단계로 이동):** **Data API Exposed schemas 목록은 M10 SQL이 직접 판정하지 않는다** — 이 프로젝트에서 노출 목록은 플랫폼 설정이며 DB role `rolconfig`로 읽을 수 없음이 실측됐다(§20.6.1). 노출 목록 확인(`api_web_v1` 포함·`api_app_v1` 포함·`core_private` 미포함)과 실제 PostgREST 요청 성공/거부·`PGRST106`/`PGRST002` 부재 확인은 **D-API-W·D-API-A의 플랫폼 단계 증거**로 수행한다(§20.6.2, T-PERM-03).
 
 ### 21.11 M17(`api_app_v1` 표면) 테스트 소유권 (v1.1 보정 — rev 8 F)
@@ -2938,10 +2941,11 @@ SQL 파일 작성, Vercel 설정 변경, PR 생성·머지는 0건이다.
 |---|---|
 | **결함** | `api_app_v1` migration ownership 누락 — 앱 계약 §3.1(스키마)·§3.2(`community_posts_v1` 뷰)·§3.3(wrapper 5종)·§10(Gate 4)이 요구하는 DB 표면을 **생성하는 소유 migration이 M0~M16에 없었다.** §20.2 M1은 `api_web_v1`·`core_private` 두 스키마만 생성하며, 다른 어떤 M도 `api_app_v1`을 만들지 않았다. 또한 Exposed schemas 추가가 migration과 구분되지 않아 앱 표면의 도달 가능 시점이 계약에 없었다 |
 | **해소** | **M17 신설**(`..._api_app_v1_surface.sql` — 스키마·REVOKE/GRANT·뷰·wrapper 5종·최소 GRANT·default privilege 방어, 시그니처는 앱 §3.3·§10과 완전 동일, `core_private` 구현부는 M7·M5 객체 공유·복제 금지) + **rollback `..._api_app_v1_surface_rollback.sql`** + **D-API-W·D-API-A 플랫폼 단계 분리**(§20.6) |
-| **선행조건** | **`M17 : M5 + M7`** (M1은 M5·M7의 선행이라 간접 충족. **M13 의존 없음** — M13은 `public.comments` 라벨 컬럼용이고 `api_app_v1.community_posts_v1`은 `public.community_posts`만 읽는다). `M16 : M7 + M17 + D-API-A + 웹·앱 전환 + 앱 Gate 4 + 직접 쓰기 0건 + §14.7 Gate 7단계`, `M10 : M11 + M12 + M16 + M17` |
+| **선행조건** | **`M17 : M5 + M7`** (M1은 M5·M7의 선행이라 간접 충족. **M13 의존 없음** — M13은 `public.comments` 라벨 컬럼용이고 `api_app_v1.community_posts_v1`은 `public.community_posts`만 읽는다). `M16 : M7 + M17 + D-API-A + 웹·앱 전환 + 앱 Gate 4 + 직접 쓰기 0건 + §14.7 Gate 7단계`, **`M10 : M11 + M12 + M15 + M16 + M17`**(= M10 자신 제외 활성 predecessor 15개 전건 완료 — 3차 보정) |
 | **반영 절** | §5.4(D-API-W·D-API-A 연결) · §17 전환 요약(신규 객체 총계) · §19.5 #9(앱 동기화 의무 신규 항목) · §20.2 M17 행(**객체 7개 명시**)·논리 ID 서문 · §20.2.1 그래프 간선·M16·M10·권고 직렬화 · §20.3 게이트(**M17 이전 / M17 적용 직후 / D-API-A 이전 3분할**·M16 이전·전 단계 공통) · §20.5(M1~M17) · **§20.6 신설**(Data API 플랫폼 단계) + **§20.6.1 reload 의미 구분** + **§20.6.2 D-API 검증** · §21.2 T-PERM-03(플랫폼 단계 증거로 이동) · §21.3 T-CONC-10(M7 canonical 표시) · §21.10(M10 SQL 판정 가능/불가 분리) · **§21.11 신설**(migration별 테스트 소유권) · §22 #2(역순에 M17·**M13 역의존 없음**·rollback 6단계) · §23.1(M0~M17) · **부록 A**(`api_app_v1` 7객체 행·권한·총계) · §24.1 #3·#12·#13 · §24.2 판정 |
 | **객체 수** | **M17 소유 = 정확히 7개**(schema 1 + view 1 + function 5). GRANT·REVOKE·default privilege는 객체 수에 미포함. **전체 신규 총계: view 6 · function 25(`api_web_v1` 14 + `core_private` 6 + `api_app_v1` 5) · schema 3 · column 2**. M0·M13 트리거 함수 등 부수 객체는 총계와 중복 계산하지 않음 |
 | **개수 정합** | 활성 forward migration **16개**(M0·M1·M4~M17) · retired **M2·M3** · rollback 없는 상태 0 checkpoint **M10** · **forward+rollback 쌍 15개** |
 | **테스트 소유권** | M7 = 공용 B-1~B-4·웹 F4/F5/F6·**T-CONC-10 canonical** / M17 = 앱 Gate 4·앱 wrapper 시그니처·GRANT·envelope·`community_posts_v1`·앱 표면 응답 유실 재검증 / **M9는 T-CONC-10 미소유**(T-CONC-02·03·04·08·09·T-FIN·T-REP A~H·T-TOP 1~6) |
 | **2차 보정(오너 지시 8건)** | ① M17 선행조건 `M5+M7+M13` → **`M5+M7`**(M13 의존 전건 제거) ② **존재 전 권한 검사 오류 정정** — M17 이전 게이트에서 `api_app_v1` 권한 실측 요구를 제거하고 "M17 적용 직후" 게이트로 이동, M17 이전에는 기반 컬럼 존재·identity argument·부분 객체 부재만 검사 ③ M17 객체 7개·전체 총계 정합화 + 부록 A 행 추가 ④ **운영 M10의 Exposed schemas 직접 판정 문구 제거** → D-API 플랫폼 단계 증거로 이동 ⑤ **reload 의미 구분**(설정 config reload ↔ DB schema cache reload) + D-API-A 검증에 `PGRST106`/`PGRST002` 부재·`core_private` 거부 확인 명시 ⑥ 현재 범위를 뜻하는 stale `M0~M16`·`M1~M16` → `M0~M17`·`M1~M17`(역사적 누락 설명 2건은 의도적 보존) ⑦ 실행 그래프·rollback 최종형 반영 ⑧ 전건 검증 |
+| **3차 보정(오너 지시 2건)** | ① **M10에 M15 실간선 추가** — `M10 : M11 + M12 + M16 + M17` → **`M11 + M12 + M15 + M16 + M17`**. M15가 미적용인 상태에서 최종 checkpoint가 통과되던 그래프 결함 해소. 의미를 "**M10 자신을 제외한 활성 predecessor 15개 전건 적용 후 실행**"으로 정합화하고 검사 대상을 중복 없는 명시 목록(M0·M1·M4~M9·M11~M17)으로 고정(§20.2 M10 행·§20.2.1·§21.10·부록 C-1). **M15의 M0 독립·병행·조기 적용 가능성과 rollback 독립성은 유지**(권고 순서의 `M0(M15 병행 가능)` 불변) ② **T-REG-06 stale 스키마 목록 정정** — `public` 함수 개수·**identity argument** 동일 + 계약된 본문 교체 허용(M15·M9) + 신규 `public` 함수 추가 0, 신규 함수는 **`api_web_v1`·`api_app_v1`·`core_private`**에만(M17 wrapper 5종 누락 해소) |
 | **판정** | 구현 승인 아님 — S2-1은 앱 재동기화 대기, S2-2는 `BLOCKED`(`SAFE_TEST_ENV_UNAVAILABLE` 유지 · Data API 현재 목록 확인 대기) |
