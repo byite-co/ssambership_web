@@ -2238,7 +2238,7 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
 - 이번 세션은 **migration 파일을 만들지 않는다.** 아래는 분해안이다.
 - 전부 **추가형**이다. 기존 190개 SQL을 수정·재번호·삭제하지 않는다.
 - Supabase **표준 timestamp migration**(`YYYYMMDDHHMMSS_name.sql`)을 쓰고, 번호 접두어 체계를 신규에 쓰지 않는다.
-- 각 migration에 **대응 rollback migration**을 별도로 설계한다(§22).
+- **상태를 생성·변경하는** 각 migration에는 **대응 rollback migration**을 별도로 설계한다(§22). **M2·M3(retired)와 M10(상태 0 읽기 전용 assertion checkpoint)은 예외**다.
 - 운영 DB에 대한 임의 `execute_sql` 적용을 금지한다. 검토된 단일 배포 경로(`apply_migration`)만 쓴다.
 
 ### 20.2 migration 논리 ID·분해안
@@ -2556,7 +2556,7 @@ CREATE TRIGGER trg_mentor_profile_privileged_guard_ins
 
 ## 22. rollback 원칙 `[TO-BE]`
 
-1. **모든 rollback은 별도 추가형 migration**이다. 기존 migration 파일을 수정하지 않는다.
+1. **rollback이 필요한 모든 상태 변경은 별도 추가형 migration으로 되돌린다.** 기존 migration 파일을 수정하지 않는다.
 2. **역순 적용 — §20.2.1 선행조건 그래프의 역방향이 정본이다.** 규칙: 어떤 마이그레이션을 되돌리기 전에, 그것에 **의존하는(그래프에서 후행하는) 마이그레이션을 먼저** 되돌린다. **M10은 상태를 만들지 않는 검증 checkpoint이므로 rollback 객체가 없다 — 상태 rollback 대상으로 취급하지 않는다.** 상태 rollback 직렬화(§20.2.1 역방향) 한 가지:
 
    ```text
