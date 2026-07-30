@@ -3,78 +3,62 @@
 import { revalidatePath } from "next/cache";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { isNotificationReadRow } from "@/lib/notifications/notificationsHubQueries";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import { createClient } from "@/lib/supabase/server";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Row = Record<string, unknown>;
 
 const TABLE = "notifications";
-const USER_FK = ["user_id", "recipient_id", "student_id", "mentor_id", "target_user_id", "owner_id"] as const;
-const READ_FK = ["read_at", "read_at_utc", "is_read", "seen_at", "opened_at", "viewed_at", "acknowledged_at"] as const;
-
-async function resolveRecipientColumn(supabase: SupabaseClient, userId: string): Promise<string | null> {
-  for (const col of USER_FK) {
-    const p = await supabase.from(TABLE).select("id").eq(col, userId).limit(1);
-    if (!p.error) {
-      return col;
-    }
-  }
-  return null;
-}
+// W4(C10): 수신자 FK 프로빙(6종 순회)·읽음 컬럼 프로빙(7종 순회) 제거 —
+// 정본 고정: 수신자 user_id + 읽음 is_read/read_at (133 정본 술어·132 정본 writer, 187 baseline 실측).
+const USER_COLUMN = "user_id";
+const READ_COLUMN = "is_read";
 
 /**
- * 수신자 본인 알림만 읽음 처리. read 컬럼은 스키마 탐지(is_read vs read_at 등).
+ * 수신자 본인 알림 1건 읽음 처리 — 정본 갱신(133 RPC 패턴의 단건판):
+ * is_read = true, read_at = coalesce(read_at, now()).
  */
+async function markNotificationRead(notificationId: string): Promise<{ ok: boolean; reason: string | null }> {
+  const { user } = await getServerUserWithProfile();
+  if (!user) return { ok: false, reason: "not_authenticated" };
+
+  const supabase = await createClient();
+  const { data: row, error: fe } = await supabase
+    .from(TABLE)
+    .select("id, is_read, read_at")
+    .eq("id", notificationId)
+    .eq(USER_COLUMN, user.id)
+    .maybeSingle();
+
+  if (fe) return { ok: false, reason: fe.message };
+  if (!row) return { ok: false, reason: "not_found" };
+
+  const r = row as Row;
+  if (isNotificationReadRow(r, READ_COLUMN)) {
+    revalidatePath("/notifications");
+    return { ok: true, reason: null };
+  }
+
+  const readAt = typeof r.read_at === "string" && r.read_at ? r.read_at : new Date().toISOString();
+  const { error: ue } = await supabase
+    .from(TABLE)
+    .update({ is_read: true, read_at: readAt })
+    .eq("id", notificationId)
+    .eq(USER_COLUMN, user.id);
+  if (ue) return { ok: false, reason: ue.message };
+
+  revalidatePath("/notifications");
+  return { ok: true, reason: null };
+}
+
+/** 폼(progressive-enhancement)에서 읽음 처리 — 실패는 로그로 표면화(무음 no-op 금지). */
 export async function markNotificationReadFormAction(formData: FormData): Promise<void> {
   const notificationId = String(formData.get("notificationId") ?? "").trim();
   if (!notificationId) {
     return;
   }
-
-  const { user } = await getServerUserWithProfile();
-  if (!user) {
-    return;
-  }
-
-  const supabase = await createClient();
-  const userColumn = await resolveRecipientColumn(supabase, user.id);
-  if (!userColumn) {
-    return;
-  }
-
-  const { column: readCol } = await pickExistingColumn(supabase, TABLE, READ_FK);
-  if (!readCol) {
-    return;
-  }
-
-  const { data: row, error: fe } = await supabase
-    .from(TABLE)
-    .select("*")
-    .eq("id", notificationId)
-    .eq(userColumn, user.id)
-    .maybeSingle();
-
-  if (fe || !row) {
-    return;
-  }
-
-  const r = row as Row;
-  if (isNotificationReadRow(r, readCol)) {
-    revalidatePath("/notifications");
-    return;
-  }
-
-  const patch: Record<string, unknown> = {};
-  if (readCol === "is_read" || readCol === "read" || readCol === "acknowledged") {
-    patch[readCol] = true;
-  } else {
-    patch[readCol] = new Date().toISOString();
-  }
-
-  const { error: ue } = await supabase.from(TABLE).update(patch).eq("id", notificationId).eq(userColumn, user.id);
-  if (!ue) {
-    revalidatePath("/notifications");
+  const res = await markNotificationRead(notificationId);
+  if (!res.ok && res.reason && res.reason !== "not_authenticated" && res.reason !== "not_found") {
+    console.error("[markNotificationReadFormAction]", res.reason);
   }
 }
 
@@ -82,44 +66,11 @@ export async function markNotificationReadFormAction(formData: FormData): Promis
 export async function markNotificationReadByIdAction(notificationId: string): Promise<{ ok: boolean }> {
   const id = String(notificationId ?? "").trim();
   if (!id) return { ok: false };
-
-  const { user } = await getServerUserWithProfile();
-  if (!user) return { ok: false };
-
-  const supabase = await createClient();
-  const userColumn = await resolveRecipientColumn(supabase, user.id);
-  if (!userColumn) return { ok: false };
-
-  const { column: readCol } = await pickExistingColumn(supabase, TABLE, READ_FK);
-  if (!readCol) return { ok: false };
-
-  const { data: row, error: fe } = await supabase
-    .from(TABLE)
-    .select("*")
-    .eq("id", id)
-    .eq(userColumn, user.id)
-    .maybeSingle();
-
-  if (fe || !row) return { ok: false };
-
-  const r = row as Row;
-  if (isNotificationReadRow(r, readCol)) {
-    return { ok: true };
+  const res = await markNotificationRead(id);
+  if (!res.ok && res.reason && res.reason !== "not_authenticated" && res.reason !== "not_found") {
+    console.error("[markNotificationReadByIdAction]", res.reason);
   }
-
-  const patch: Record<string, unknown> = {};
-  if (readCol === "is_read" || readCol === "read" || readCol === "acknowledged") {
-    patch[readCol] = true;
-  } else {
-    patch[readCol] = new Date().toISOString();
-  }
-
-  const { error: ue } = await supabase.from(TABLE).update(patch).eq("id", id).eq(userColumn, user.id);
-  if (!ue) {
-    revalidatePath("/notifications");
-    return { ok: true };
-  }
-  return { ok: false };
+  return { ok: res.ok };
 }
 
 /**

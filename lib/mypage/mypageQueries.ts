@@ -22,45 +22,24 @@ export type MypageMetric = {
 
 type CountResult = { n: number; error: null } | { n: null; error: string };
 
+/**
+ * S2-2 전환 W4(C10): 정본 테이블·FK 컬럼을 호출부가 명시하는 단일 count 조회.
+ * 구 FK 후보 7종 순회·오류 메시지 분기(column/schema cache → 다음 후보)는 제거했다.
+ * 조회 오류는 error 로 반환한다(0건·빈 결과로 은폐하지 않는다 — 표시층은 skeleton 상태).
+ */
 async function countRowsForUser(
   supabase: SupabaseClient,
   table: string,
+  column: string,
   userId: string
 ): Promise<CountResult> {
-  let relErr: string | null = null;
-
-  const fkCandidates = [
-    "user_id",
-    "student_id",
-    "subscriber_id",
-    "owner_id",
-    "recipient_id",
-    "reporter_id",
-    "author_id",
-  ] as const;
-
-  for (const col of fkCandidates) {
-    const { count, error } = await supabase
-      .from(table)
-      .select("*", { count: "exact", head: true })
-      .eq(col, userId);
-    if (!error && count !== null) {
-      return { n: count, error: null };
-    }
-    if (error) {
-      if (/relation|does not exist|not find/i.test(error.message)) {
-        return { n: null, error: error.message };
-      }
-      if (/column|schema cache/i.test(error.message)) {
-        continue;
-      }
-      if (/row-level security|permission denied|RLS/i.test(error.message)) {
-        return { n: null, error: error.message };
-      }
-      relErr = error.message;
-    }
-  }
-  return { n: null, error: relErr ?? "일시적으로 건수를 가져올 수 없어요" };
+  const { count, error } = await supabase
+    .from(table)
+    .select("*", { count: "exact", head: true })
+    .eq(column, userId);
+  if (error) return { n: null, error: error.message };
+  if (count === null) return { n: null, error: "일시적으로 건수를 가져올 수 없어요" };
+  return { n: count, error: null };
 }
 
 function toMetric(
@@ -105,7 +84,7 @@ export type StudentMypageBundle = {
 };
 
 /**
- * 캐시/커뮤니티 모듈을 수정하지 않고, 마이페이지 전용 count probe만 수행
+ * 캐시/커뮤니티 모듈을 수정하지 않고, 마이페이지 전용 정본 count 조회만 수행
  */
 export async function loadStudentMypageBundle(
   supabase: SupabaseClient,
@@ -116,28 +95,19 @@ export async function loadStudentMypageBundle(
   const { rows, error: roomErr } = await fetchRoomsForUser(supabase, "student", userId);
   const roomCount = { n: roomErr ? 0 : rows.length, error: roomErr };
 
-  const s = toMetric("subscriptions", "구독", await countRowsForUser(supabase, "subscriptions", userId));
-  const p = toMetric("payments", "결제", await countRowsForUser(supabase, "payments", userId));
-  const n = toMetric("notifications", "알림", await countRowsForUser(supabase, "notifications", userId));
-
-  let reviewsMetric: MypageMetric;
-  const rev = await countRowsForUser(supabase, "reviews", userId);
-  if (rev.error) {
-    const alt = await countRowsForUser(supabase, "mentor_reviews", userId);
-    const t = toMetric("mentor_reviews", "리뷰", alt);
-    reviewsMetric = t.metric;
-  } else {
-    reviewsMetric = toMetric("reviews", "리뷰", rev).metric;
-  }
-
-  let reportsMetric: MypageMetric;
-  const rep = await countRowsForUser(supabase, "reports", userId);
-  if (rep.error) {
-    const t = toMetric("abuse_reports", "신고", await countRowsForUser(supabase, "abuse_reports", userId));
-    reportsMetric = t.metric;
-  } else {
-    reportsMetric = toMetric("reports", "신고", rep).metric;
-  }
+  // W4(C10) 정본 고정: subscriptions.student_id · payments.user_id(idx_payments_user) ·
+  // notifications.user_id(notif_select_recipient) · reviews.author_id(reviews_select_author) ·
+  // content_reports.reporter_id(content_reports_select_reporter). 구 mentor_reviews /
+  // reports / abuse_reports fallback(baseline 부재 테이블)은 제거했다.
+  const s = toMetric("subscriptions", "구독", await countRowsForUser(supabase, "subscriptions", "student_id", userId));
+  const p = toMetric("payments", "결제", await countRowsForUser(supabase, "payments", "user_id", userId));
+  const n = toMetric("notifications", "알림", await countRowsForUser(supabase, "notifications", "user_id", userId));
+  const reviewsMetric = toMetric("reviews", "리뷰", await countRowsForUser(supabase, "reviews", "author_id", userId)).metric;
+  const reportsMetric = toMetric(
+    "content_reports",
+    "신고",
+    await countRowsForUser(supabase, "content_reports", "reporter_id", userId)
+  ).metric;
 
   const subsConn = s.connected;
   const payConn = p.connected;

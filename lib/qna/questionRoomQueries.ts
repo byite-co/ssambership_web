@@ -1,38 +1,23 @@
-import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import {
-  CONNECTION_NOTES_ROOM_FK_CANDIDATES,
-  QUESTION_THREADS_ROOM_FK_CANDIDATES,
+  CONNECTION_NOTES_ROOM_FK,
+  QUESTION_THREADS_ROOM_FK,
   threadMentorStudentRoomId,
 } from "@/lib/qna/questionThreadRoomRef";
 
 type QnaRole = "student" | "mentor";
 
-const STUDENT_ROOM_ID_KEYS = ["student_id", "student_user_id", "student_uid"] as const;
-const MENTOR_ROOM_ID_KEYS = ["mentor_id", "mentor_user_id", "mentor_uid"] as const;
+// W4(C10) 정본: mentor_student_rooms 당사자 컬럼은 student_id · mentor_id 뿐이다
+// (002_p0·187 baseline 실측 — student_user_id 등 별칭 열 부재). 후보 순회는 제거했다.
 
-/**
- * `mentor_student_rooms` 한 행에서 `userId`가 학생 당사자로 매칭되는지(스키마 별칭 열 대응).
- */
+/** `mentor_student_rooms` 한 행에서 `userId`가 학생 당사자인지. */
 export function userMatchesStudentInRoomRow(row: Record<string, unknown>, userId: string): boolean {
-  for (const k of STUDENT_ROOM_ID_KEYS) {
-    if (k in row && String(row[k] ?? "").trim() === userId) {
-      return true;
-    }
-  }
-  return false;
+  return String(row.student_id ?? "").trim() === userId;
 }
 
-/**
- * `mentor_student_rooms` 한 행에서 `userId`가 멘토 당사자로 매칭되는지(스키마 별칭 열 대응).
- */
+/** `mentor_student_rooms` 한 행에서 `userId`가 멘토 당사자인지. */
 export function userMatchesMentorInRoomRow(row: Record<string, unknown>, userId: string): boolean {
-  for (const k of MENTOR_ROOM_ID_KEYS) {
-    if (k in row && String(row[k] ?? "").trim() === userId) {
-      return true;
-    }
-  }
-  return false;
+  return String(row.mentor_id ?? "").trim() === userId;
 }
 
 export type QnaDataState<T> = {
@@ -59,66 +44,23 @@ export type QuestionRoomListBundleResult = QuestionRoomBundle & {
   listPreviewsByRoomId: Record<string, QuestionRoomListPreview>;
 };
 
-function fmt(err: PostgrestError | null): string | null {
-  return err ? err.message : null;
-}
-
-async function selectOrdered<T extends Record<string, unknown>>(
-  run: (orderBy: string | null) => Promise<{ data: T[] | null; error: PostgrestError | null }>,
-  orderCandidates: readonly string[]
-): Promise<{ rows: T[]; error: string | null }> {
-  for (const col of orderCandidates) {
-    const res = await run(col);
-    if (!res.error) {
-      return { rows: (res.data as T[] | null) ?? [], error: null };
-    }
-    // If ordering fails because column is missing, try the next candidate.
-    if (!/column|does not exist|schema cache/i.test(res.error.message)) {
-      return { rows: [], error: "데이터를 불러오는 중 문제가 생겼습니다. 잠시 후 다시 시도해 주세요." };
-    }
-  }
-  const fallback = await run(null);
-  return {
-    rows: (fallback.data as T[] | null) ?? [],
-    error: fmt(fallback.error) ? "데이터를 불러오는 중 문제가 생겼습니다. 잠시 후 다시 시도해 주세요." : null,
-  };
-}
+const QNA_LOAD_ERROR = "데이터를 불러오는 중 문제가 생겼습니다. 잠시 후 다시 시도해 주세요.";
 
 export async function fetchRoomsForUser(
   supabase: SupabaseClient,
   role: QnaRole,
   userId: string
 ): Promise<{ rows: Record<string, unknown>[]; error: string | null }> {
-  const table = "mentor_student_rooms";
-  const studentCols = ["student_id", "student_user_id", "student_uid"] as const;
-  const mentorCols = ["mentor_id", "mentor_user_id", "mentor_uid"] as const;
-  const candidates = role === "student" ? studentCols : mentorCols;
-
-  let lastProbeError: string | null = null;
-
-  for (const col of candidates) {
-    const probe = await supabase.from(table).select("id").eq(col, userId).limit(1);
-    if (probe.error) {
-      lastProbeError = probe.error.message;
-      continue;
-    }
-
-    return await selectOrdered<Record<string, unknown>>(
-      async (orderBy) => {
-        let q = supabase.from(table).select("*").eq(col, userId);
-        if (orderBy) {
-          q = q.order(orderBy, { ascending: false });
-        }
-        return await q;
-      },
-      ["updated_at", "created_at", "id"]
-    );
-  }
-
-  return {
-    rows: [],
-    error: lastProbeError ?? "질문방 목록을 불러올 수 없습니다. 잠시 후 다시 시도해 주세요.",
-  };
+  // W4(C10) 정본 고정: 당사자 컬럼 student_id/mentor_id, 정렬 updated_at desc(실측 존재).
+  // 구 컬럼 후보 프로빙·정렬 후보 재시도(selectOrdered)·order 생략 fallback 은 제거했다.
+  const col = role === "student" ? "student_id" : "mentor_id";
+  const { data, error } = await supabase
+    .from("mentor_student_rooms")
+    .select("*")
+    .eq(col, userId)
+    .order("updated_at", { ascending: false });
+  if (error) return { rows: [], error: QNA_LOAD_ERROR };
+  return { rows: (data as Record<string, unknown>[]) ?? [], error: null };
 }
 
 /**
@@ -168,22 +110,14 @@ export async function fetchThreadsForRoom(
   supabase: SupabaseClient,
   roomId: string
 ): Promise<{ rows: Record<string, unknown>[]; error: string | null }> {
-  const table = "question_threads";
-  const { column } = await pickExistingColumn(supabase, table, [...QUESTION_THREADS_ROOM_FK_CANDIDATES]);
-  if (!column) {
-    return { rows: [], error: "질문 주제를 불러오는 중 문제가 생겼습니다." };
-  }
-
-  return await selectOrdered<Record<string, unknown>>(
-    async (orderBy) => {
-      let q = supabase.from(table).select("*").eq(column, roomId);
-      if (orderBy) {
-        q = q.order(orderBy, { ascending: false });
-      }
-      return await q;
-    },
-    ["updated_at", "created_at", "id"]
-  );
+  // W4(C10) 정본 고정: question_threads.mentor_student_room_id, 정렬 updated_at desc.
+  const { data, error } = await supabase
+    .from("question_threads")
+    .select("*")
+    .eq(QUESTION_THREADS_ROOM_FK, roomId)
+    .order("updated_at", { ascending: false });
+  if (error) return { rows: [], error: QNA_LOAD_ERROR };
+  return { rows: (data as Record<string, unknown>[]) ?? [], error: null };
 }
 
 /** 여러 room에 속한 question_threads 를 한 번에 조회(목록 미리보기용). */
@@ -194,12 +128,10 @@ export async function fetchThreadsForRooms(
   if (roomIds.length === 0) {
     return { rows: [], error: null };
   }
-  const table = "question_threads";
-  const { column } = await pickExistingColumn(supabase, table, [...QUESTION_THREADS_ROOM_FK_CANDIDATES]);
-  if (!column) {
-    return { rows: [], error: "질문 주제를 불러오는 중 문제가 생겼습니다." };
-  }
-  const { data, error } = await supabase.from(table).select("*").in(column, roomIds);
+  const { data, error } = await supabase
+    .from("question_threads")
+    .select("*")
+    .in(QUESTION_THREADS_ROOM_FK, roomIds);
   if (error) {
     return { rows: [], error: error.message };
   }
@@ -223,18 +155,14 @@ export async function fetchMessagesForThreads(
   if (threadIds.length === 0) {
     return { rows: [], error: null };
   }
-  const table = "question_messages";
-  const { column } = await pickExistingColumn(supabase, table, ["thread_id", "question_thread_id"]);
-  if (!column) {
-    return { rows: [], error: "대화를 불러오는 중 문제가 생겼습니다." };
-  }
-  const { data, error } = await supabase.from(table).select("*").in(column, threadIds);
+  // W4(C10) 정본 고정: question_messages.thread_id (question_thread_id 별칭 열 부재).
+  const { data, error } = await supabase.from("question_messages").select("*").in("thread_id", threadIds);
   if (error) {
     return { rows: [], error: error.message };
   }
   const rows = (data as Record<string, unknown>[]) ?? [];
   const time = (m: Record<string, unknown>) => {
-    const t = Date.parse(String(m.created_at ?? m.sent_at ?? ""));
+    const t = Date.parse(String(m.created_at ?? ""));
     return Number.isNaN(t) ? 0 : t;
   };
   rows.sort((a, b) => time(a) - time(b));
@@ -245,48 +173,28 @@ export async function fetchMessagesForThread(
   supabase: SupabaseClient,
   threadId: string
 ): Promise<{ rows: Record<string, unknown>[]; error: string | null }> {
-  const table = "question_messages";
-  const { column } = await pickExistingColumn(supabase, table, ["thread_id", "question_thread_id"]);
-  if (!column) {
-    return { rows: [], error: "대화를 불러오는 중 문제가 생겼습니다." };
-  }
-
-  return await selectOrdered<Record<string, unknown>>(
-    async (orderBy) => {
-      let q = supabase.from(table).select("*").eq(column, threadId);
-      if (orderBy) {
-        q = q.order(orderBy, { ascending: true });
-      }
-      return await q;
-    },
-    ["created_at", "sent_at", "id"]
-  );
+  // W4(C10) 정본 고정: question_messages.thread_id, 정렬 created_at asc.
+  const { data, error } = await supabase
+    .from("question_messages")
+    .select("*")
+    .eq("thread_id", threadId)
+    .order("created_at", { ascending: true });
+  if (error) return { rows: [], error: QNA_LOAD_ERROR };
+  return { rows: (data as Record<string, unknown>[]) ?? [], error: null };
 }
 
 export async function fetchConnectionNotesForRoom(
   supabase: SupabaseClient,
   roomId: string
 ): Promise<{ rows: Record<string, unknown>[]; error: string | null }> {
-  const table = "connection_notes";
-  const { column } = await pickExistingColumn(
-    supabase,
-    table,
-    [...CONNECTION_NOTES_ROOM_FK_CANDIDATES]
-  );
-  if (!column) {
-    return { rows: [], error: "연결 노트를 불러오는 중 문제가 생겼습니다." };
-  }
-
-  return await selectOrdered<Record<string, unknown>>(
-    async (orderBy) => {
-      let q = supabase.from(table).select("*").eq(column, roomId);
-      if (orderBy) {
-        q = q.order(orderBy, { ascending: false });
-      }
-      return await q;
-    },
-    ["updated_at", "created_at", "id"]
-  );
+  // W4(C10) 정본 고정: connection_notes.mentor_student_room_id, 정렬 updated_at desc.
+  const { data, error } = await supabase
+    .from("connection_notes")
+    .select("*")
+    .eq(CONNECTION_NOTES_ROOM_FK, roomId)
+    .order("updated_at", { ascending: false });
+  if (error) return { rows: [], error: QNA_LOAD_ERROR };
+  return { rows: (data as Record<string, unknown>[]) ?? [], error: null };
 }
 
 function emptyBundle(partial: Partial<QuestionRoomBundle>): QuestionRoomBundle {
@@ -300,10 +208,8 @@ function emptyBundle(partial: Partial<QuestionRoomBundle>): QuestionRoomBundle {
 }
 
 function messageThreadIdFromRow(m: Record<string, unknown>): string | null {
-  for (const k of ["thread_id", "question_thread_id"] as const) {
-    const v = m[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
-  }
+  const v = m.thread_id;
+  if (typeof v === "string" && v.trim()) return v.trim();
   return null;
 }
 

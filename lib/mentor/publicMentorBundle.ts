@@ -1,17 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchMentorProfileForPublicMentor, getMentorUserPublic } from "@/lib/auth/mentorPublicRead";
 import { fetchMentorMediaSample } from "@/lib/mentor/mentorProfileQueries";
-import { probePublicReviewVisibilityColumns } from "@/lib/mentor/publicReviewVisibility";
-import { pickExistingColumn, rowsFromSupabaseData } from "@/lib/qna/safeSelect";
 import type { UserRow } from "@/lib/types/user";
 
 type Row = Record<string, unknown>;
 
-const REVIEW_TABLES = ["reviews", "mentor_reviews", "subscription_reviews"] as const;
-const REVIEW_FK = ["mentor_id", "mentor_user_id", "reviewee_id", "to_user_id", "target_user_id"] as const;
-
-const PLAN_TABLES = ["plans", "mentor_plans", "subscription_plans", "mentor_subscription_plans"] as const;
-const PLAN_FK = ["mentor_id", "mentor_user_id", "user_id", "owner_id"] as const;
+// W4(C10): REVIEW_TABLES/REVIEW_FK/PLAN_TABLES/PLAN_FK 후보 배열·프로빙 루프 제거 —
+// 정본은 public.reviews(mentor_id)와 public.mentor_plans(mentor_id) 단일 테이블(187 baseline 실측).
 
 export type MentorReviewsSummary = {
   count: number | null;
@@ -48,132 +43,75 @@ export type PublicMentorLoadResult =
       message: string;
     };
 
+/**
+ * W4(C10): 후보 테이블/컬럼 프로빙·client 집계 폴백 제거 — 정본 서버 집계 RPC
+ * public.get_mentor_review_stats(p_mentor_id, p_include_hidden=false) 단일 호출로 고정
+ * (hidden/blinded 제외 · 500 cap 없음 · 187 baseline 실측: reviews.mentor_id/rating/is_hidden/is_blinded).
+ * RPC 오류는 폴백 없이 error 필드로 표면화한다.
+ */
 export async function fetchReviewsSummary(
   supabase: SupabaseClient,
   mentorId: string
 ): Promise<MentorReviewsSummary> {
-  let lastProbe = "reviews 계열 테이블 없음 또는 RLS";
-  for (const table of REVIEW_TABLES) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) {
-      lastProbe = `${table}: ${pe.message}`;
-      continue;
-    }
-    const { column, error: cErr } = await pickExistingColumn(supabase, table, REVIEW_FK);
-    const vis = await probePublicReviewVisibilityColumns(supabase, table);
-
-    // P3-2: 'reviews' 정본 테이블은 서버 집계 RPC(get_mentor_review_stats)로 count·avg 를 얻는다.
-    //   → 최대 500건 client cap 없이 hidden/blinded 제외 집계(include_hidden=false). SECURITY DEFINER·
-    //   집계값만 반환. RPC 부재/오류 시 아래 기존 count(exact)+평균 폴백으로 진행(무회귀).
-    if (table === "reviews" && column === "mentor_id") {
-      const { data: statsData, error: rpcErr } = await supabase.rpc("get_mentor_review_stats", {
-        p_mentor_id: mentorId,
-        p_include_hidden: false,
-      });
-      if (!rpcErr) {
-        const stats = (Array.isArray(statsData) ? statsData[0] : statsData) as
-          | { review_count?: number | null; avg_rating?: number | string | null }
-          | null
-          | undefined;
-        const rpcCount = Number(stats?.review_count);
-        const rpcAvgRaw = stats?.avg_rating;
-        const rpcAvg =
-          rpcAvgRaw == null ? null : typeof rpcAvgRaw === "number" ? rpcAvgRaw : Number(rpcAvgRaw);
-        return {
-          count: Number.isFinite(rpcCount) ? rpcCount : 0,
-          avgRating: rpcAvg != null && Number.isFinite(rpcAvg) ? rpcAvg : null,
-          table,
-          probe: "reviews.mentor_id 서버 집계 RPC(get_mentor_review_stats · hidden/blinded 제외 · 500 cap 없음)",
-          error: null,
-        };
-      }
-    }
-
-    let count: number | null = null;
-    let avgRating: number | null = null;
-    let error: string | null = cErr;
-    if (column) {
-      let countQ = supabase.from(table).select("*", { count: "exact", head: true }).eq(column, mentorId);
-      if (vis.isHidden) countQ = countQ.eq(vis.isHidden, false);
-      if (vis.isBlinded) countQ = countQ.eq(vis.isBlinded, false);
-      const { count: c, error: e1 } = await countQ;
-      if (e1) error = e1.message;
-      else count = c ?? 0;
-      const { column: ratingCol } = await pickExistingColumn(supabase, table, ["rating", "score", "stars"]);
-      if (ratingCol && !error) {
-        let rateQ = supabase.from(table).select(ratingCol).eq(column, mentorId).limit(500);
-        if (vis.isHidden) rateQ = rateQ.eq(vis.isHidden, false);
-        if (vis.isBlinded) rateQ = rateQ.eq(vis.isBlinded, false);
-        const { data, error: e2 } = await rateQ;
-        if (!e2 && data?.length) {
-          const rows = rowsFromSupabaseData(data) as Row[];
-          const nums = rows
-            .map((r) => r[ratingCol])
-            .filter((v): v is number => typeof v === "number");
-          if (nums.length) {
-            avgRating = nums.reduce((a, b) => a + b, 0) / nums.length;
-          }
-        } else if (e2) {
-          error = e2.message;
-        }
-      }
-    } else {
-      let fullCountQ = supabase.from(table).select("*", { count: "exact", head: true });
-      if (vis.isHidden) fullCountQ = fullCountQ.eq(vis.isHidden, false);
-      if (vis.isBlinded) fullCountQ = fullCountQ.eq(vis.isBlinded, false);
-      const { count: c, error: e3 } = await fullCountQ;
-      if (e3) error = e3.message;
-      else count = c ?? null;
-    }
+  const { data: statsData, error: rpcErr } = await supabase.rpc("get_mentor_review_stats", {
+    p_mentor_id: mentorId,
+    p_include_hidden: false,
+  });
+  if (rpcErr) {
     return {
-      count,
-      avgRating,
-      table,
-      probe: column
-        ? `${table}.${column} 기준 집계(reviews_summary 뷰는 미사용)`
-        : `${table}: 멘토 FK 컬럼 없음 — 전체 카운트만`,
-      error,
+      count: null,
+      avgRating: null,
+      table: null,
+      probe: `get_mentor_review_stats: ${rpcErr.message}`,
+      error: rpcErr.message,
     };
   }
-  return { count: null, avgRating: null, table: null, probe: lastProbe, error: null };
+  const stats = (Array.isArray(statsData) ? statsData[0] : statsData) as
+    | { review_count?: number | null; avg_rating?: number | string | null }
+    | null
+    | undefined;
+  const rpcCount = Number(stats?.review_count);
+  const rpcAvgRaw = stats?.avg_rating;
+  const rpcAvg =
+    rpcAvgRaw == null ? null : typeof rpcAvgRaw === "number" ? rpcAvgRaw : Number(rpcAvgRaw);
+  return {
+    count: Number.isFinite(rpcCount) ? rpcCount : 0,
+    avgRating: rpcAvg != null && Number.isFinite(rpcAvg) ? rpcAvg : null,
+    table: "reviews",
+    probe: "reviews.mentor_id 서버 집계 RPC(get_mentor_review_stats · hidden/blinded 제외 · 500 cap 없음)",
+    error: null,
+  };
 }
 
-/** 멘토별 plans 계열 · 구독/결제 진입에서 재사용 */
+/**
+ * 멘토별 플랜 조회 · 구독/결제 진입에서 재사용(실차감액 소스).
+ * W4(C10): 4테이블×4FK 프로빙과 FK 미상 시 상위 12행(타 멘토 행 혼입 위험) 폴백 제거 —
+ * 정본 public.mentor_plans(mentor_id, plan_tier, amount_cents, label) 단일 쿼리로 고정(187 baseline 실측).
+ * 쿼리 오류는 폴백 없이 error 필드로 표면화한다(호출부 plans.error 검사 기존 동작 유지).
+ */
 export async function fetchPlansForMentor(
   supabase: SupabaseClient,
   mentorId: string
 ): Promise<MentorPlansLoad> {
-  let probe = "plans 계열 테이블 없음 또는 RLS";
-  for (const table of PLAN_TABLES) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) {
-      probe = `${table}: ${pe.message}`;
-      continue;
-    }
-    const { column, error: cErr } = await pickExistingColumn(supabase, table, PLAN_FK);
-    if (!column) {
-      const { data, error } = await supabase.from(table).select("*").limit(12);
-      if (error) return { rows: [], table, probe: `${table}: FK 미상 · ${error.message}`, error: error.message };
-      return {
-        rows: (data as Row[]) ?? [],
-        table,
-        probe: `${table}: 멘토 FK 없이 상위 12행(스키마 확정 후 eq)`,
-        error: cErr,
-      };
-    }
-    const { data, error } = await supabase.from(table).select("*").eq(column, mentorId).limit(12);
-    if (error) {
-      probe = `${table}.${column}: ${error.message}`;
-      continue;
-    }
+  const { data, error } = await supabase
+    .from("mentor_plans")
+    .select("*")
+    .eq("mentor_id", mentorId)
+    .limit(12);
+  if (error) {
     return {
-      rows: (data as Row[]) ?? [],
-      table,
-      probe: `${table}.${column} · 최대 12행`,
-      error: null,
+      rows: [],
+      table: "mentor_plans",
+      probe: `mentor_plans.mentor_id: ${error.message}`,
+      error: error.message,
     };
   }
-  return { rows: [], table: null, probe, error: null };
+  return {
+    rows: (data as Row[]) ?? [],
+    table: "mentor_plans",
+    probe: "mentor_plans.mentor_id · 최대 12행",
+    error: null,
+  };
 }
 
 /**

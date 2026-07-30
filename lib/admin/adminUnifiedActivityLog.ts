@@ -10,12 +10,10 @@ import {
 import { contentReportStatusLabel } from "@/lib/admin/contentReportLabels";
 import { adminDisputeStatusLabel } from "@/lib/admin/disputeLabels";
 import { orderEventKindLabelForUi } from "@/lib/customRequest/orderLifecycleConstants";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 
 type JsonRow = Record<string, unknown>;
 
 const RLS_RETRY = /permission|row-level|rls|policy|denied|42501/i;
-const MISSING = /does not exist|schema cache|could not find/i;
 
 export type AdminActivityLogEntry = {
   key: string;
@@ -192,13 +190,10 @@ async function withReadFallback<T>(
   return { data: first.data, error: first.error.message };
 }
 
-function ignorableFetchError(msg: string | null): boolean {
-  if (!msg) return false;
-  return MISSING.test(msg);
-}
-
+// W4(C10): 스키마 부재류 에러(MISSING 정규식)를 무시하던 분기 제거 — 9개 소스 테이블은 전부 187 baseline 에
+// 실존하므로 어떤 실패든 partial=true 로 표면화한다(스키마 드리프트를 무음으로 삼키지 않음).
 function markPartial(partial: { v: boolean }, err: string | null): void {
-  if (err && !ignorableFetchError(err)) partial.v = true;
+  if (err) partial.v = true;
 }
 
 export async function loadAdminUnifiedActivityLog(
@@ -212,10 +207,8 @@ export async function loadAdminUnifiedActivityLog(
   const partial = { v: false };
   const entries: AdminActivityLogEntry[] = [];
 
-  const { column: reviewsModeratedAt } = await pickExistingColumn(sessionClient, "reviews", ["moderated_at"]);
-  const reviewSelect = reviewsModeratedAt
-    ? "id, body, moderation_state, moderated_at, moderated_by, mentor_id, author_id, created_at"
-    : "id, body, mentor_id, author_id, created_at";
+  // W4(C10): reviews.moderated_at·moderation_state·moderated_by 실존(033/123 SQL, 187 baseline 실측) — 컬럼 프로빙 제거, 고정 select.
+  const reviewSelect = "id, body, moderation_state, moderated_at, moderated_by, mentor_id, author_id, created_at";
 
   // admin_action_logs — 관리자 조치의 정본 감사 트레일(logAdminAction 기록)
   {

@@ -1,12 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
-import { assertRoomParty } from "@/lib/qna/questionRoomApiAuth";
 import { nextRoomQuestionNumber } from "@/lib/qna/questionRoomMutations";
-import { WEEKLY_QUESTION_LIMIT_MESSAGE } from "@/lib/qna/questionThreadStatus";
-import { fetchWeeklyQuestionUsage } from "@/lib/qna/weeklyQuestionUsage";
-import { assertFreeQuestionAllowed } from "@/lib/qna/freeQuestionUsage";
-import { findActiveSubscriptionForPair } from "@/lib/subscribe/subscribeCheckoutService";
-import { threadRowBelongsToMentorStudentRoom } from "@/lib/qna/questionThreadRoomRef";
 import {
   confirmQuestionThreadViaRpc,
   createQuestionThreadViaRpc,
@@ -40,63 +33,8 @@ function qnaRpcCodeToStatus(code: string): 400 | 403 | 404 | 429 | 500 {
   }
 }
 
-export async function resolveMentorIdForRoom(
-  supabase: SupabaseClient,
-  roomId: string
-): Promise<{ mentorId: string | null; studentId: string | null; error: string | null }> {
-  const { data, error } = await supabase.from("mentor_student_rooms").select("*").eq("id", roomId).maybeSingle();
-  if (error || !data) {
-    return { mentorId: null, studentId: null, error: error?.message ?? "질문방을 찾을 수 없습니다." };
-  }
-  const row = data as Record<string, unknown>;
-  return {
-    mentorId: partyUserIdFromRoomRow(row, "mentor"),
-    studentId: partyUserIdFromRoomRow(row, "student"),
-    error: null,
-  };
-}
-
-export async function assertStudentCanCreateThread(
-  supabase: SupabaseClient,
-  studentId: string,
-  roomId: string
-): Promise<
-  | { ok: true; mentorId: string; useFreeQuota?: boolean }
-  | { ok: false; status: 403 | 404 | 429; error: string }
-> {
-  const party = await assertRoomParty(supabase, roomId, studentId, "student");
-  if (!party.ok) {
-    return { ok: false, status: party.status, error: party.error };
-  }
-  const mentorId = partyUserIdFromRoomRow(party.row, "mentor");
-  if (!mentorId) {
-    return { ok: false, status: 404, error: "멘토 정보를 확인할 수 없습니다." };
-  }
-
-  const active = await findActiveSubscriptionForPair(supabase, studentId, mentorId);
-  if (!active) {
-    const free = await assertFreeQuestionAllowed(supabase, studentId, mentorId);
-    if (!free.ok) {
-      return { ok: false, status: 403, error: free.userMessage };
-    }
-    return { ok: true, mentorId, useFreeQuota: true };
-  }
-
-  const { usage, error: usageError } = await fetchWeeklyQuestionUsage(supabase, studentId, mentorId);
-  if (usageError) {
-    console.error("[assertStudentCanCreateThread] get_weekly_question_usage", usageError);
-    return {
-      ok: false,
-      status: 403,
-      error: "질문 한도를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
-    };
-  }
-  if (!usage?.canAsk) {
-    return { ok: false, status: 429, error: WEEKLY_QUESTION_LIMIT_MESSAGE };
-  }
-
-  return { ok: true, mentorId };
-}
+// (W4 C10: resolveMentorIdForRoom · assertStudentCanCreateThread — 외부 호출 0 의 dead export
+//  삭제. 자격 판정 정본은 P1-8A RPC(qna_create_question_thread) 서버 분기다.)
 
 export async function createStudentQuestionThread(
   supabase: SupabaseClient,
@@ -129,21 +67,8 @@ export async function createStudentQuestionThread(
   return { ok: true, threadId: rpc.threadId };
 }
 
-export async function assertThreadInRoom(
-  supabase: SupabaseClient,
-  roomId: string,
-  threadId: string
-): Promise<{ ok: true; row: Record<string, unknown> } | { ok: false; status: 404; error: string }> {
-  const { data, error } = await supabase.from("question_threads").select("*").eq("id", threadId).maybeSingle();
-  if (error || !data) {
-    return { ok: false, status: 404, error: "질문을 찾을 수 없습니다." };
-  }
-  const row = data as Record<string, unknown>;
-  if (!threadRowBelongsToMentorStudentRoom(row, roomId)) {
-    return { ok: false, status: 404, error: "이 질문은 현재 질문방에 속하지 않습니다." };
-  }
-  return { ok: true, row };
-}
+// (W4 C10: assertThreadInRoom — 외부 호출 0 의 dead export 삭제. thread→room 소속 판정은
+//  P1-8A RPC 가 서버에서 수행한다.)
 
 export async function confirmQuestionThreadForStudent(
   supabase: SupabaseClient,

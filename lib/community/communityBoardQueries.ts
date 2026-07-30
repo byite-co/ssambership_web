@@ -390,9 +390,7 @@ export async function listPopularHashtags(
     .order("count", { ascending: false })
     .limit(limit);
   if (error) {
-    if (/relation|does not exist/i.test(error.message)) {
-      return { rows: [], error: null };
-    }
+    // W4(C10): relation-오류→빈 목록 변환 제거 — community_hashtags 는 187 baseline 실측 존재(037). 오류는 그대로 반환.
     return { rows: [], error: error.message };
   }
   const rows = ((data as { tag: string; count: number }[]) ?? []).map((r) => ({
@@ -487,7 +485,7 @@ export async function listUserScrapPosts(
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) {
-    if (/relation|does not exist/i.test(error.message)) return { posts: [], error: null };
+    // W4(C10): relation-오류→빈 목록 변환 제거 — post_reactions 는 187 baseline 실측 존재(037·130). 오류는 그대로 반환.
     return { posts: [], error: error.message };
   }
   const ids = ((data as { post_id: string }[]) ?? []).map((r) => r.post_id).filter(Boolean);

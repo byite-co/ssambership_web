@@ -2,22 +2,22 @@ import Link from "next/link";
 import { PageScaffold } from "@/components/shell/PageScaffold";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/routeGuard";
-import { firstReadableAdminTable } from "@/lib/admin/adminQueries";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { approveAdminRefundAction, rejectAdminRefundAction } from "@/lib/admin/refundActions";
 import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 
 type Props = { params: Promise<{ id: string }> };
 
+// W4(C10): 단일 후보 사전 프로브(firstReadableAdminTable(["refunds"])) 제거 — 정본 refunds
+// 단일 조회, 오류는 그대로 표시(빈 결과로 은폐하지 않음).
 export default async function AdminRefundDetailPage(props: Props) {
   await requireRole("admin");
   const { id } = await props.params;
   const supabase = await createClient();
-  const { table, error: te } = await firstReadableAdminTable(supabase, ["refunds"]);
   let row: Record<string, unknown> | null = null;
-  let loadErr: string | null = te || null;
-  if (table) {
-    const { data, error } = await supabase.from(table).select("*").eq("id", id).maybeSingle();
+  let loadErr: string | null = null;
+  {
+    const { data, error } = await supabase.from("refunds").select("*").eq("id", id).maybeSingle();
     if (error) loadErr = toAdminDisplayError(error.message, "default") ?? error.message;
     else row = (data as Record<string, unknown>) ?? null;
   }
@@ -39,13 +39,12 @@ export default async function AdminRefundDetailPage(props: Props) {
         <Link href="/admin/refunds" className="text-sm font-extrabold text-indigo-800 underline" prefetch={false}>
           ← 환불 목록
         </Link>
-        {!table ? <p className="text-sm text-amber-800">환불 테이블을 찾지 못했습니다.</p> : null}
         {loadErr ? <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">{loadErr}</p> : null}
         {row ? (
           <pre className="max-h-[420px] overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-800">
             {JSON.stringify(row, null, 2)}
           </pre>
-        ) : table && !loadErr ? (
+        ) : !loadErr ? (
           <p className="text-sm text-slate-600">해당 id의 환불 행을 찾지 못했습니다.</p>
         ) : null}
 

@@ -15,11 +15,8 @@ import {
   normalizedPrimaryOrderStatus,
   primaryOrderStatusColumnKey,
 } from "@/lib/customRequest/orderLifecycleConstants";
-import {
-  firstReadableCustomTable,
-  mergeOrderChildIdMirrorColumns,
-  ORDER_TO_DELIVERABLE_FK_CANDIDATES,
-} from "@/lib/customRequest/customRequestQueries";
+// W4(C10): 테이블/컬럼 프로빙 제거 — custom_request_orders·custom_order_deliverables 정본 고정(187 baseline 실측)
+import { buildOrderChildIdColumns, ORDER_CHILD_FK_COLUMN } from "@/lib/customRequest/customRequestQueries";
 import {
   buildDeliverableRowPayload,
   buildDeliverableStorageObjectPath,
@@ -35,7 +32,6 @@ import {
 import { isCustomOrderPaymentConfirmed } from "@/lib/customRequest/orderPaymentPolicy";
 import { recordOrderEventBestEffort } from "@/lib/customRequest/orderRoomMutations";
 import { markCustomOrderDeliveredRpc, startCustomOrderWorkRpc } from "@/lib/customRequest/orderTransitionRpc";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import { createClient } from "@/lib/supabase/server";
 
 type Row = Record<string, unknown>;
@@ -64,13 +60,11 @@ export async function startCustomOrderWorkAction(formData: FormData): Promise<vo
     redirectWithError(orderId, MENTOR_START_SCHEMA_GATE_MESSAGE);
   }
 
-  const oT = await firstReadableCustomTable(supabase, ["custom_request_orders", "request_orders"]);
-  if (!oT.table) {
-    redirectWithError(orderId, oT.error || "주문 테이블을 찾을 수 없습니다.");
-  }
-  const table = oT.table;
-
-  const { data: rowData, error: oe } = await supabase.from(table).select("*").eq("id", orderId).maybeSingle();
+  const { data: rowData, error: oe } = await supabase
+    .from("custom_request_orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
   if (oe || !rowData) {
     redirectWithError(orderId, oe?.message ?? "주문 정보를 찾을 수 없습니다.");
   }
@@ -81,15 +75,8 @@ export async function startCustomOrderWorkAction(formData: FormData): Promise<vo
     redirectWithError(orderId, "이 주문에 접근할 수 없습니다.");
   }
 
-  const { column: menCol } = await pickExistingColumn(supabase, table, [
-    "mentor_id",
-    "mentor_user_id",
-    "assignee_id",
-    "assigned_mentor_id",
-    "selected_mentor_id",
-    "expert_id",
-  ]);
-  if (!menCol || String(row[menCol]) !== user.id) {
+  // W4(C10): custom_request_orders.mentor_id(NOT NULL) 정본 — 멘토 컬럼 프로빙 제거
+  if (String(row.mentor_id) !== user.id) {
     redirectWithError(orderId, "배정된 멘토 본인만 작업을 시작할 수 있습니다.");
   }
 
@@ -134,10 +121,6 @@ export async function startCustomOrderWorkAction(formData: FormData): Promise<vo
   redirect(`${orderPath(orderId)}?ok=${encodeURIComponent("작업을 시작했습니다.")}`);
 }
 
-function isMissingColumnPostgrest(msg: string): boolean {
-  return /column|does not exist|schema cache/i.test(msg);
-}
-
 function mentorOrderFilesPath(orderId: string) {
   return `/mentor/custom-request/orders/${encodeURIComponent(orderId)}/files`;
 }
@@ -153,7 +136,7 @@ async function insertMentorDeliverableFromForm(
   file: File | null,
   note: string,
   allowWithoutStatusChange: boolean
-): Promise<{ inserted: Row; nextVersion: number; orderTable: string; orderRow: Row; menCol: string }> {
+): Promise<{ inserted: Row; nextVersion: number }> {
   if (!file && !note) {
     throw new Error("납품 파일을 선택하거나 설명을 입력하세요.");
   }
@@ -162,24 +145,18 @@ async function insertMentorDeliverableFromForm(
     if (verr) throw new Error(verr);
   }
 
-  const oT = await firstReadableCustomTable(supabase, ["custom_request_orders", "request_orders"]);
-  if (!oT.table) throw new Error(oT.error || "주문 테이블을 찾을 수 없습니다.");
-  const table = oT.table;
-  const { data: rowData, error: oe } = await supabase.from(table).select("*").eq("id", orderId).maybeSingle();
+  const { data: rowData, error: oe } = await supabase
+    .from("custom_request_orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
   if (oe || !rowData) throw new Error(oe?.message ?? "주문을 찾을 수 없습니다.");
   const row = rowData as Row;
 
   const access = canAccessOrder(row, user.id, "mentor");
   if (!access.ok) throw new Error("이 주문에 파일을 등록할 권한이 없습니다.");
-  const { column: menCol } = await pickExistingColumn(supabase, table, [
-    "mentor_id",
-    "mentor_user_id",
-    "assignee_id",
-    "assigned_mentor_id",
-    "selected_mentor_id",
-    "expert_id",
-  ]);
-  if (!menCol || String(row[menCol]) !== user.id) {
+  // W4(C10): custom_request_orders.mentor_id(NOT NULL) 정본 — 멘토 컬럼 프로빙 제거
+  if (String(row.mentor_id) !== user.id) {
     throw new Error("배정 멘토 본인만 파일을 등록할 수 있습니다.");
   }
 
@@ -213,16 +190,11 @@ async function insertMentorDeliverableFromForm(
     throw new Error(`이 상태(${norm})에서는 파일을 업로드할 수 없습니다.`);
   }
 
-  const dT = await firstReadableCustomTable(supabase, [
-    "custom_order_deliverables",
-    "order_deliverables",
-    "request_deliverables",
-  ]);
-  if (!dT.table) throw new Error(dT.error || "납품 테이블을 찾을 수 없습니다.");
-  const { column: fk } = await pickExistingColumn(supabase, dT.table, [...ORDER_TO_DELIVERABLE_FK_CANDIDATES]);
-  if (!fk) throw new Error("납품 테이블의 주문 FK를 찾을 수 없습니다.");
-
-  const { data: vrows, error: ve } = await supabase.from(dT.table).select("version").eq(fk, orderId);
+  const deliverablesTable = "custom_order_deliverables";
+  const { data: vrows, error: ve } = await supabase
+    .from(deliverablesTable)
+    .select("version")
+    .eq(ORDER_CHILD_FK_COLUMN, orderId);
   if (ve) throw new Error(ve.message);
   const list = (vrows as { version?: unknown }[] | null) ?? [];
   const nextVersion =
@@ -230,7 +202,7 @@ async function insertMentorDeliverableFromForm(
       ? Math.max(1, ...list.map((r) => (typeof r.version === "number" ? r.version : Number(r.version) || 0))) + 1
       : 1;
 
-  const idBase = await mergeOrderChildIdMirrorColumns(supabase, dT.table, orderId, { [fk]: orderId });
+  const idBase = buildOrderChildIdColumns(orderId);
 
   let storageObjectPath: string | null = null;
   let fileMeta: { objectPath: string; originalName: string; mime: string; size: number } | null = null;
@@ -258,44 +230,22 @@ async function insertMentorDeliverableFromForm(
     };
   }
 
-  const primary = await buildDeliverableRowPayload(
-    supabase,
-    dT.table,
-    idBase,
-    orderId,
-    nextVersion,
-    note,
-    fileMeta,
-    user.id
-  );
-  const fallbacks: Record<string, unknown>[] = [
-    primary,
-    { ...idBase, note, file_url: null, version: nextVersion, status: "submitted" },
-    { ...idBase, body: note, file_url: null, version: nextVersion, status: "submitted" },
-  ];
-
-  let inserted: Row | null = null;
-  for (const payload of fallbacks) {
-    const { data, error: ie } = await supabase.from(dT.table).insert(payload).select("*").maybeSingle();
-    if (!ie && data) {
-      inserted = data as Row;
-      break;
-    }
-    if (ie && isPostgresUniqueViolation(ie)) {
-      if (storageObjectPath) await removeStorageObjectBestEffort(supabase, storageObjectPath);
+  // W4(C10): payload 폴백 사다리(누락 컬럼 재시도) 제거 — 정본 payload 단일 insert
+  const payload = buildDeliverableRowPayload(idBase, nextVersion, note, fileMeta);
+  const { data, error: ie } = await supabase.from(deliverablesTable).insert(payload).select("*").maybeSingle();
+  if (ie) {
+    if (storageObjectPath) await removeStorageObjectBestEffort(supabase, storageObjectPath);
+    if (isPostgresUniqueViolation(ie)) {
       throw new Error("파일 등록 중 충돌이 발생했습니다. 다시 시도해 주세요.");
     }
-    if (ie && !isMissingColumnPostgrest(ie.message)) {
-      if (storageObjectPath) await removeStorageObjectBestEffort(supabase, storageObjectPath);
-      throw new Error(ie.message);
-    }
+    throw new Error(ie.message);
   }
-  if (!inserted) {
+  if (!data) {
     if (storageObjectPath) await removeStorageObjectBestEffort(supabase, storageObjectPath);
     throw new Error("파일 기록을 저장하지 못했습니다.");
   }
 
-  return { inserted, nextVersion, orderTable: table, orderRow: row, menCol };
+  return { inserted: data as Row, nextVersion };
 }
 
 /** 작업 파일만 업로드(주문 상태 변경 없음) */
@@ -351,36 +301,29 @@ export async function markMentorOrderDeliveredForReviewAction(formData: FormData
   const orderId = String(formData.get("orderId") ?? "").trim();
   if (!orderId) redirect("/mentor/custom-request/orders?error=" + encodeURIComponent("orderId가 필요합니다."));
 
-  const oT = await firstReadableCustomTable(supabase, ["custom_request_orders", "request_orders"]);
-  if (!oT.table) redirectFilesWithError(orderId, oT.error || "주문 테이블을 찾을 수 없습니다.");
-  const table = oT.table;
-  const { data: rowData, error: oe } = await supabase.from(table).select("*").eq("id", orderId).maybeSingle();
+  const { data: rowData, error: oe } = await supabase
+    .from("custom_request_orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
   if (oe || !rowData) redirectFilesWithError(orderId, oe?.message ?? "주문을 찾을 수 없습니다.");
   const row = rowData as Row;
 
   const access = canAccessOrder(row, user.id, "mentor");
   if (!access.ok) redirectFilesWithError(orderId, "이 주문에 접근할 수 없습니다.");
-  const { column: menCol } = await pickExistingColumn(supabase, table, [
-    "mentor_id",
-    "mentor_user_id",
-    "assignee_id",
-    "assigned_mentor_id",
-    "selected_mentor_id",
-    "expert_id",
-  ]);
-  if (!menCol || String(row[menCol]) !== user.id) {
+  // W4(C10): custom_request_orders.mentor_id(NOT NULL) 정본 — 멘토 컬럼 프로빙 제거
+  if (String(row.mentor_id) !== user.id) {
     redirectFilesWithError(orderId, "배정 멘토 본인만 납품할 수 있습니다.");
   }
 
-  const dT = await firstReadableCustomTable(supabase, [
-    "custom_order_deliverables",
-    "order_deliverables",
-    "request_deliverables",
-  ]);
-  if (!dT.table) redirectFilesWithError(orderId, "납품 파일이 없습니다.");
-  const { column: fk } = await pickExistingColumn(supabase, dT.table, [...ORDER_TO_DELIVERABLE_FK_CANDIDATES]);
-  if (!fk) redirectFilesWithError(orderId, "납품 스키마를 확인할 수 없습니다.");
-  const { count } = await supabase.from(dT.table).select("*", { count: "exact", head: true }).eq(fk, orderId);
+  // W4(C10): custom_order_deliverables.custom_request_order_id 정본 count — 오류는 오류로 처리(빈 결과와 구분)
+  const { count, error: ce } = await supabase
+    .from("custom_order_deliverables")
+    .select("*", { count: "exact", head: true })
+    .eq(ORDER_CHILD_FK_COLUMN, orderId);
+  if (ce) {
+    redirectFilesWithError(orderId, "납품 파일 목록을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
   if (!count || count < 1) {
     redirectFilesWithError(orderId, "납품할 파일을 먼저 업로드해 주세요.");
   }
@@ -454,12 +397,11 @@ export async function submitMentorOrderDeliverableAction(formData: FormData): Pr
     }
   }
 
-  const oT = await firstReadableCustomTable(supabase, ["custom_request_orders", "request_orders"]);
-  if (!oT.table) {
-    redirectWithError(orderId, oT.error || "주문 테이블을 찾을 수 없습니다.");
-  }
-  const table = oT.table;
-  const { data: rowData, error: oe } = await supabase.from(table).select("*").eq("id", orderId).maybeSingle();
+  const { data: rowData, error: oe } = await supabase
+    .from("custom_request_orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
   if (oe || !rowData) {
     redirectWithError(orderId, oe?.message ?? "주문을 찾을 수 없습니다.");
   }
@@ -469,15 +411,8 @@ export async function submitMentorOrderDeliverableAction(formData: FormData): Pr
   if (!access.ok) {
     redirectWithError(orderId, "이 주문에 납품을 등록할 권한이 없습니다.");
   }
-  const { column: menCol } = await pickExistingColumn(supabase, table, [
-    "mentor_id",
-    "mentor_user_id",
-    "assignee_id",
-    "assigned_mentor_id",
-    "selected_mentor_id",
-    "expert_id",
-  ]);
-  if (!menCol || String(row[menCol]) !== user.id) {
+  // W4(C10): custom_request_orders.mentor_id(NOT NULL) 정본 — 멘토 컬럼 프로빙 제거
+  if (String(row.mentor_id) !== user.id) {
     redirectWithError(orderId, "배정 멘토 본인만 납품을 등록할 수 있습니다.");
   }
 
@@ -508,16 +443,11 @@ export async function submitMentorOrderDeliverableAction(formData: FormData): Pr
     redirectWithError(orderId, `이 상태(${norm})에서는 납품을 등록할 수 없습니다.`);
   }
 
-  const dT = await firstReadableCustomTable(supabase, ["custom_order_deliverables", "order_deliverables", "request_deliverables"]);
-  if (!dT.table) {
-    redirectWithError(orderId, dT.error || "납품 테이블을 찾을 수 없습니다.");
-  }
-  const { column: fk } = await pickExistingColumn(supabase, dT.table, [...ORDER_TO_DELIVERABLE_FK_CANDIDATES]);
-  if (!fk) {
-    redirectWithError(orderId, "납품 테이블의 주문 FK를 찾을 수 없습니다.");
-  }
-
-  const { data: vrows, error: ve } = await supabase.from(dT.table).select("version").eq(fk, orderId);
+  const deliverablesTable = "custom_order_deliverables";
+  const { data: vrows, error: ve } = await supabase
+    .from(deliverablesTable)
+    .select("version")
+    .eq(ORDER_CHILD_FK_COLUMN, orderId);
   if (ve) {
     redirectWithError(orderId, ve.message);
   }
@@ -527,7 +457,7 @@ export async function submitMentorOrderDeliverableAction(formData: FormData): Pr
       ? Math.max(1, ...list.map((r) => (typeof r.version === "number" ? r.version : Number(r.version) || 0))) + 1
       : 1;
 
-  const idBase = await mergeOrderChildIdMirrorColumns(supabase, dT.table, orderId, { [fk]: orderId });
+  const idBase = buildOrderChildIdColumns(orderId);
 
   let storageObjectPath: string | null = null;
   let fileMeta: {
@@ -569,49 +499,31 @@ export async function submitMentorOrderDeliverableAction(formData: FormData): Pr
     };
   }
 
-  const primary = await buildDeliverableRowPayload(supabase, dT.table, idBase, orderId, nextVersion, safeNote, fileMeta, user.id);
-  const fallbacks: Record<string, unknown>[] = [
-    primary,
-    { ...idBase, note: safeNote, file_url: null, version: nextVersion, status: "submitted" },
-    { ...idBase, body: safeNote, file_url: null, version: nextVersion, status: "submitted" },
-  ];
-
-  let inserted: Row | null = null;
-  let insertErr: string | null = null;
-
-  for (const payload of fallbacks) {
-    const { data, error: ie } = await supabase.from(dT.table).insert(payload).select("*").maybeSingle();
-    if (!ie && data) {
-      inserted = data as Row;
-      break;
-    }
-    if (!ie && !data) {
-      insertErr = "insert 결과 행이 없습니다.";
-      break;
-    }
-    if (ie) {
-      insertErr = ie.message;
-      if (isPostgresUniqueViolation(ie)) {
-        if (storageObjectPath) {
-          await removeStorageObjectBestEffort(supabase, storageObjectPath);
-        }
-        redirectWithError(orderId, "납품 처리 중 충돌이 발생했습니다. 다시 시도해 주세요.");
-      }
-      if (!isMissingColumnPostgrest(ie.message)) {
-        if (storageObjectPath) {
-          await removeStorageObjectBestEffort(supabase, storageObjectPath);
-        }
-        redirectWithError(orderId, ie.message);
-      }
-    }
-  }
-  if (insertErr || !inserted) {
+  // W4(C10): payload 폴백 사다리(누락 컬럼 재시도) 제거 — 정본 payload 단일 insert
+  const payload = buildDeliverableRowPayload(idBase, nextVersion, safeNote, fileMeta);
+  const { data: insertedData, error: ie } = await supabase
+    .from(deliverablesTable)
+    .insert(payload)
+    .select("*")
+    .maybeSingle();
+  if (ie) {
     if (storageObjectPath) {
       await removeStorageObjectBestEffort(supabase, storageObjectPath);
     }
-    console.error("[submitMentorOrderDeliverableAction] insert failed", { orderId, insertErr, fk });
-    redirectWithError(orderId, "납품 기록을 저장하지 못했습니다. 스키마를 확인하거나 잠시 후 다시 시도하세요.");
+    if (isPostgresUniqueViolation(ie)) {
+      redirectWithError(orderId, "납품 처리 중 충돌이 발생했습니다. 다시 시도해 주세요.");
+    }
+    console.error("[submitMentorOrderDeliverableAction] insert failed", { orderId, insertErr: ie.message });
+    redirectWithError(orderId, ie.message);
   }
+  if (!insertedData) {
+    if (storageObjectPath) {
+      await removeStorageObjectBestEffort(supabase, storageObjectPath);
+    }
+    console.error("[submitMentorOrderDeliverableAction] insert returned no row", { orderId });
+    redirectWithError(orderId, "납품 기록을 저장하지 못했습니다. 잠시 후 다시 시도하세요.");
+  }
+  const inserted = insertedData as Row;
 
   const eventMeta = buildDeliverableSubmittedEventMetadataFromRow(inserted, nextVersion);
   await recordOrderEventBestEffort(supabase, orderId, "deliverable_submitted", user.id, eventMeta);

@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import {
   notificationCategoryTypeList,
   type NotificationCategory,
@@ -25,7 +24,6 @@ type QB = {
   not: (c: string, o: string, v: unknown) => QB;
   in: (c: string, v: readonly unknown[]) => QB;
   or: (f: string) => QB;
-  filter: (c: string, o: string, v: unknown) => QB;
   order: (c: string, o: { ascending: boolean }) => QB;
   limit: (n: number) => QB;
 };
@@ -34,19 +32,14 @@ type QCountResult = { count: number | null; error: { message: string } | null };
 
 const TABLE = "notifications";
 
-const USER_FK = ["user_id", "recipient_id", "student_id", "mentor_id", "target_user_id", "owner_id"] as const;
-const READ_FK = ["read_at", "read_at_utc", "is_read", "seen_at", "opened_at", "viewed_at", "acknowledged_at"] as const;
-const TYPE_FK = [
-  "type",
-  "kind",
-  "category",
-  "event_type",
-  "notification_type",
-  "channel",
-  "template",
-] as const;
-// 키셋 정렬 1순위 후보(존재하는 첫 컬럼). 동률은 항상 id(uuid, 유니크)로 안정화한다.
-const ORDER_CANDIDATES = ["created_at", "inserted_at", "sent_at", "updated_at"] as const;
+// W4(C10): 컬럼 후보 프로빙(수신자 FK 6종·읽음 7종·유형 7종·정렬 4종 순회) 제거 —
+// 정본 고정: 수신자 user_id(132 정본 writer 가 set) · 읽음 is_read+read_at(133 정본 술어
+// `is_read is distinct from true`) · 유형 type · 정렬 created_at (187 baseline 실측).
+const USER_COLUMN = "user_id";
+const READ_COLUMN = "is_read";
+const TYPE_COLUMN = "type";
+// 키셋 정렬 기준. 동률은 항상 id(uuid, 유니크)로 안정화한다.
+const ORDER_COLUMN = "created_at";
 // BOOL_READ_COLS 는 notificationCursor.ts 에서 import(위 re-export).
 
 /** P2-26: 서버 키셋 페이지 크기 기본값(모바일/데스크탑 공통) */
@@ -67,12 +60,13 @@ export type NotificationPageDir = "next" | "prev";
 export type NotificationHubLoad = {
   error: string | null;
   probe: string;
+  /** W4(C10): 정본 고정값(user_id/is_read/type/created_at) — 뷰 호환용으로 유지 */
   userColumn: string | null;
   readColumn: string | null;
   typeColumn: string | null;
   orderColumn: string | null;
   rows: Row[];
-  /** read 컬럼이 없어 읽지 않음 탭을 지원하지 않음 */
+  /** W4(C10): 읽음 컬럼이 is_read 로 고정되어 항상 false(뷰 호환용 유지) */
   unreadFilterBlocked: boolean;
   // ── P2-26 키셋 페이지네이션 ──
   pageSize: number;
@@ -82,7 +76,7 @@ export type NotificationHubLoad = {
   nextCursor: string | null;
   /** 이전(더 최근) 페이지 이동용 커서 = 현재 페이지 첫 행 */
   prevCursor: string | null;
-  /** 본인 전체 미읽음 수(현재 페이지가 아니라 서버 count). read 컬럼 없으면 null */
+  /** 본인 전체 미읽음 수(현재 페이지가 아니라 서버 count). count 조회 실패 시 null(0건과 구분) */
   unreadCount: number | null;
 };
 
@@ -105,13 +99,10 @@ function baseLoad(pageSize: number): NotificationHubLoad {
   };
 }
 
-// (orderCol, id) 키셋 조건. op = 'lt'(더 오래된) | 'gt'(더 최근). orderCol 없으면 id 단독.
-function applyKeyset(q: QB, orderCol: string | null, op: "lt" | "gt", cur: NotificationCursor): QB {
-  if (orderCol) {
-    // 타임스탬프 값은 예약문자(:,+,.)를 담으므로 큰따옴표로 감싼다.
-    return q.or(`${orderCol}.${op}."${cur.orderValue}",and(${orderCol}.eq."${cur.orderValue}",id.${op}.${cur.id})`);
-  }
-  return q.filter("id", op, cur.id);
+// (orderCol, id) 키셋 조건. op = 'lt'(더 오래된) | 'gt'(더 최근). W4(C10): 정렬 컬럼 고정으로 id 단독 폴백 제거.
+function applyKeyset(q: QB, orderCol: string, op: "lt" | "gt", cur: NotificationCursor): QB {
+  // 타임스탬프 값은 예약문자(:,+,.)를 담으므로 큰따옴표로 감싼다.
+  return q.or(`${orderCol}.${op}."${cur.orderValue}",and(${orderCol}.eq."${cur.orderValue}",id.${op}.${cur.id})`);
 }
 
 /**
@@ -136,70 +127,42 @@ export async function loadNotificationsHub(
   const cur = options.cursor ?? null;
   const dir: NotificationPageDir = options.dir === "prev" ? "prev" : "next";
   const out = baseLoad(pageSize);
+  // W4(C10): 테이블 probe·컬럼 프로빙 제거 — notifications(user_id, is_read, read_at, type,
+  // created_at) 187 baseline 실측. 고정 컬럼을 뷰 호환 필드로 그대로 노출한다.
+  out.userColumn = USER_COLUMN;
+  out.readColumn = READ_COLUMN;
+  out.typeColumn = TYPE_COLUMN;
+  out.orderColumn = ORDER_COLUMN;
 
-  const { error: pe } = await supabase.from(TABLE).select("id").limit(1);
-  if (pe) {
-    return { ...out, error: pe.message, probe: `${TABLE} 테이블 probe 실패` };
-  }
-
-  const { column: readCol } = await pickExistingColumn(supabase, TABLE, READ_FK);
-  const { column: typeCol } = await pickExistingColumn(supabase, TABLE, TYPE_FK);
-  const { column: orderCol } = await pickExistingColumn(supabase, TABLE, ORDER_CANDIDATES);
-  out.readColumn = readCol;
-  out.typeColumn = typeCol;
-  out.orderColumn = orderCol;
-
-  let userColumn: string | null = null;
-  let lastUserErr: string | null = null;
-  for (const col of USER_FK) {
-    const p = await supabase.from(TABLE).select("id").eq(col, userId).limit(1);
-    if (!p.error) {
-      userColumn = col;
-      break;
-    }
-    lastUserErr = p.error.message;
-  }
-  if (!userColumn) {
-    return { ...out, error: lastUserErr, probe: "user_id/recipient_id 등 FK를 찾지 못함" };
-  }
-  out.userColumn = userColumn;
-
-  if (options.filter === "unread" && !readCol) {
-    return {
-      ...out,
-      probe: `notifications · ${userColumn} · 읽지 않음 필터: read/is_read 컬럼 없음`,
-      unreadFilterBlocked: true,
-    };
-  }
-
-  const uCol = userColumn;
-  // 카테고리 → event type allowlist(서버 필터). typeCol 없으면 필터 생략(=전체).
+  // 카테고리 → event type allowlist(서버 필터).
   const categoryTypes = notificationCategoryTypeList(options.category ?? "all");
   // 스코프(수신자 → 읽음 여부 → 카테고리 event type 집합) 적용기 — cursor 이전 단계.
   const withScope = (q: QB): QB => {
-    let qq = q.eq(uCol, userId);
-    if (options.filter === "unread" && readCol) {
-      qq = BOOL_READ_COLS.has(readCol) ? qq.not(readCol, "is", true) : qq.is(readCol, null);
+    let qq = q.eq(USER_COLUMN, userId);
+    if (options.filter === "unread") {
+      // 정본 미읽음 술어(133): is_read is distinct from true
+      qq = qq.not(READ_COLUMN, "is", true);
     }
-    if (categoryTypes && typeCol) {
-      qq = qq.in(typeCol, categoryTypes);
+    if (categoryTypes) {
+      qq = qq.in(TYPE_COLUMN, categoryTypes);
     }
     return qq;
   };
-  const orderBy = (q: QB, ascending: boolean): QB => {
-    let qq = q;
-    if (orderCol) qq = qq.order(orderCol, { ascending });
-    return qq.order("id", { ascending });
-  };
+  const orderBy = (q: QB, ascending: boolean): QB =>
+    q.order(ORDER_COLUMN, { ascending }).order("id", { ascending });
 
   // 본인 전체 미읽음 수(뱃지) — 현재 페이지가 아니라 서버 count.
   let unreadCount: number | null = null;
-  if (readCol) {
+  {
     const countBase = supabase.from(TABLE).select("id", { count: "exact", head: true }) as unknown as QB;
-    let cq = countBase.eq(uCol, userId);
-    cq = BOOL_READ_COLS.has(readCol) ? cq.not(readCol, "is", true) : cq.is(readCol, null);
+    const cq = countBase.eq(USER_COLUMN, userId).not(READ_COLUMN, "is", true);
     const { count, error: ce } = (await (cq as unknown as PromiseLike<QCountResult>)) as QCountResult;
-    if (!ce) unreadCount = count ?? 0;
+    if (ce) {
+      // W4(C10): 표시 전용(뱃지) 명시적 degrade(성공 아님) — unreadCount=null 은 실패(0건과 구분), 로그로 표면화.
+      console.error("[loadNotificationsHub] unread count", ce.message);
+    } else {
+      unreadCount = count ?? 0;
+    }
   }
   out.unreadCount = unreadCount;
 
@@ -207,12 +170,12 @@ export async function loadNotificationsHub(
   // prev = cur 보다 최근(gt)을 오름차순으로 pageSize+1 → 표시 시 역순(DESC). next/first = cur 보다 과거(lt) 내림차순.
   const ascending = dir === "prev" && cur != null;
   let q = withScope(supabase.from(TABLE).select("*") as unknown as QB);
-  if (cur) q = applyKeyset(q, orderCol, ascending ? "gt" : "lt", cur);
+  if (cur) q = applyKeyset(q, ORDER_COLUMN, ascending ? "gt" : "lt", cur);
   q = orderBy(q, ascending).limit(pageSize + 1);
 
   const { data, error } = (await (q as unknown as PromiseLike<QPageResult>)) as QPageResult;
   if (error) {
-    return { ...out, error: error.message, probe: `notifications · ${userColumn} · 페이지 조회 실패` };
+    return { ...out, error: error.message, probe: `notifications · ${USER_COLUMN} · 페이지 조회 실패` };
   }
 
   let rawRows = (data as Row[]) ?? [];
@@ -222,7 +185,7 @@ export async function loadNotificationsHub(
 
   const firstRow = rows[0];
   const lastRow = rows[rows.length - 1];
-  const orderValueOf = (r: Row | undefined): string => (r && orderCol ? String(r[orderCol] ?? "") : "");
+  const orderValueOf = (r: Row | undefined): string => (r ? String(r[ORDER_COLUMN] ?? "") : "");
   const idOf = (r: Row | undefined): string => (r ? String(r.id ?? "") : "");
 
   // 진행 방향(fetch) 경계 = hasExtra. 반대 방향 = 커서로 도달했는가(=페이지1 아님).
@@ -231,7 +194,7 @@ export async function loadNotificationsHub(
 
   return {
     ...out,
-    probe: `notifications · ${userColumn} · order ${orderCol ?? "id"} · keyset ${dir}`,
+    probe: `notifications · ${USER_COLUMN} · order ${ORDER_COLUMN} · keyset ${dir}`,
     rows,
     hasNext: rows.length > 0 ? hasNext : dir === "prev",
     hasPrev: rows.length > 0 ? hasPrev : false,

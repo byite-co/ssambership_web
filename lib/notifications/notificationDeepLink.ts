@@ -1,42 +1,16 @@
 import { safeInternalNextPath } from "@/lib/auth/getPostLoginPath";
-import { getStringField } from "@/lib/qna/safeSelect";
 import type { AppRole } from "@/lib/types/user";
 
 type Row = Record<string, unknown>;
 
-const URL_KEYS = ["target_url", "link", "action_url", "href", "deep_link", "url", "path"] as const;
-
+// W4(C10): row 최상위 URL 후보 키 7종 스캔 삭제 — notifications 에 해당 컬럼이 없다(187 baseline
+// 실측). 정본 링크 위치는 metadata->>'link' / data->>'link' (132 정본 writer 가 양쪽에 기록).
 function linkFromJsonField(v: unknown): string | null {
   if (v == null || typeof v !== "object") return null;
-  const o = v as Record<string, unknown>;
-  for (const k of URL_KEYS) {
-    const s = o[k];
-    if (typeof s === "string" && s.startsWith("/")) {
-      const safe = safeInternalNextPath(s.trim());
-      if (safe) return safe;
-    }
-  }
-  return null;
-}
-
-/**
- * row에 내부 상대 경로만 허용. http(s)·// 등 외부 URL은 무시(휴리스틱으로 이어짐).
- */
-function explicitInternalPathFromRow(row: Row): string | null {
-  for (const k of URL_KEYS) {
-    const v = row[k];
-    if (typeof v !== "string") continue;
-    const t = v.trim();
-    if (!t) continue;
-    if (t.startsWith("http://") || t.startsWith("https://") || t.startsWith("//")) {
-      continue;
-    }
-    if (t.startsWith("/")) {
-      const safe = safeInternalNextPath(t);
-      if (safe) {
-        return safe;
-      }
-    }
+  const s = (v as Record<string, unknown>).link;
+  if (typeof s === "string" && s.startsWith("/")) {
+    const safe = safeInternalNextPath(s.trim());
+    if (safe) return safe;
   }
   return null;
 }
@@ -53,9 +27,6 @@ function pickId(row: Row, keys: string[]): string | null {
  * 알림 한 줄 + 역할 → 이동할 경로(placeholder 가능)
  */
 export function resolveNotificationHref(row: Row, role: AppRole, typeHint: string | null): string {
-  const direct = explicitInternalPathFromRow(row);
-  if (direct) return direct;
-
   for (const k of ["metadata", "data"] as const) {
     const nested = linkFromJsonField(row[k]);
     if (nested) return nested;
@@ -82,18 +53,11 @@ export function resolveNotificationHref(row: Row, role: AppRole, typeHint: strin
     return "/custom-request";
   }
 
+  // W4(C10): 레거시(이벤트 타입 없는 행) 휴리스틱은 유지하되, 실존 컬럼(type, body)만 읽는다.
   const t = [
     typeHint ?? "",
-    getStringField(row, [
-      "type",
-      "kind",
-      "category",
-      "event_type",
-      "title",
-      "message",
-      "body",
-    ]) ?? "",
-    getStringField(row, ["payload", "data", "meta"]) ?? "",
+    typeof row.type === "string" ? row.type : "",
+    typeof row.body === "string" ? row.body : "",
   ]
     .join(" ")
     .toLowerCase();

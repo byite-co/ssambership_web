@@ -1,4 +1,4 @@
-import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { communityComposePath } from "@/lib/community/communityComposeTab";
 import {
   authorModerationNotice,
@@ -12,65 +12,30 @@ type Row = Record<string, unknown>;
 /**
  * S2-2 전환 W1(C1): 게시판 글 읽기는 V1 `api_web_v1.community_posts_v1` 을 쓴다
  * (계약 §6 V1 · §17 #6). 노출 조건(`deleted_at IS NULL` AND (`published` OR 본인 글))
- * 은 view 소유 — 프로빙(firstReadableTable)·정렬 폴백(selectOrdered) 없이 정본
- * `created_at` 로 정렬한다. 숏폼(`shortform_posts`) 경로는 V1 대상이 아니다(유지).
+ * 은 view 소유 — 테이블 프로빙·정렬 폴백 없이 정본 `created_at` 로 정렬한다.
+ * 숏폼(`shortform_posts`) 경로는 V1 대상이 아니다(직접 테이블 조회 유지, W4(C10) 정본화).
  */
 function boardPostsView(supabase: SupabaseClient) {
   return supabase.schema(API_WEB_V1_SCHEMA).from("community_posts_v1");
 }
 
-function fmt(err: PostgrestError | null): string | null {
-  return err ? err.message : null;
-}
-
-async function firstReadableTable(supabase: SupabaseClient, candidates: readonly string[]): Promise<{ table: string | null; error: string | null }> {
-  let last = "no table candidates";
-  for (const table of candidates) {
-    const { error } = await supabase.from(table).select("*").limit(1);
-    if (!error) return { table, error: null };
-    last = error.message;
-  }
-  return { table: null, error: last };
-}
-
-async function selectOrdered<T extends Row>(
-  run: (orderBy: string | null) => Promise<{ data: T[] | null; error: PostgrestError | null }>
-): Promise<{ rows: T[]; error: string | null }> {
-  for (const col of ["created_at", "updated_at", "published_at", "id"] as const) {
-    const res = await run(col);
-    if (!res.error) return { rows: (res.data as T[] | null) ?? [], error: null };
-    if (!/column|does not exist|order/i.test(res.error.message)) {
-      return { rows: [], error: res.error.message };
-    }
-  }
-  const fb = await run(null);
-  return { rows: (fb.data as T[] | null) ?? [], error: fmt(fb.error) };
-}
+// W4(C10): 테이블 프로빙 헬퍼·정렬 컬럼 재시도 헬퍼 삭제 —
+// 숏폼 정본은 shortform_posts(author_id, created_at) 단일 테이블(187 baseline 실측)이라
+// 후보 순회가 불필요하다. getShortformPost 는 호출부 0곳(레포 전역 grep)이라 함께 삭제
+// (숏폼 상세 정본 경로는 app/(public)/community/shortform/[id]/page.tsx 가 자체 조회).
 
 export async function listShortformPosts(
   supabase: SupabaseClient,
   limit: number
 ): Promise<{ rows: Row[]; table: string | null; error: string | null }> {
-  const probe = await firstReadableTable(supabase, ["shortform_posts"] as const);
-  if (!probe.table) return { rows: [], table: null, error: probe.error };
-  const t = probe.table;
-  const res = await selectOrdered<Row>(async (orderBy) => {
-    let q = supabase.from(t).select("*");
-    if (orderBy) q = q.order(orderBy, { ascending: false });
-    return await q.limit(limit);
-  });
-  return { ...res, table: t, error: res.error };
-}
-
-export async function getShortformPost(
-  supabase: SupabaseClient,
-  id: string
-): Promise<{ row: Row | null; table: string | null; error: string | null }> {
-  const probe = await firstReadableTable(supabase, ["shortform_posts"] as const);
-  if (!probe.table) return { row: null, table: null, error: probe.error };
-  const { data, error } = await supabase.from(probe.table).select("*").eq("id", id).maybeSingle();
-  if (error) return { row: null, table: probe.table, error: error.message };
-  return { row: (data as Row) ?? null, table: probe.table, error: null };
+  // W4(C10): shortform_posts.created_at DESC 고정(187 baseline 실측) — 프로빙·정렬 폴백 제거, 오류는 그대로 반환.
+  const { data, error } = await supabase
+    .from("shortform_posts")
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) return { rows: [], table: "shortform_posts", error: error.message };
+  return { rows: (data as Row[]) ?? [], table: "shortform_posts", error: null };
 }
 
 export async function listBoardPosts(
@@ -111,31 +76,21 @@ export async function loadMyCommunityBoardPosts(
   return { rows: (data as Row[]) ?? [], error: null };
 }
 
-/** 내 활동: 숏폼 — author_id 우선, 스키마에 따라 user_id 폴백 */
+/** 내 활동: 숏폼 — shortform_posts.author_id 정본(187 baseline 실측: user_id 컬럼 부재) */
 export async function loadMyShortformPosts(
   supabase: SupabaseClient,
   userId: string,
   limit: number
 ): Promise<{ rows: Row[]; error: string | null }> {
-  const probe = await firstReadableTable(supabase, ["shortform_posts"] as const);
-  if (!probe.table) return { rows: [], error: null };
-  const t = probe.table;
-  let res = await selectOrdered<Row>(async (orderBy) => {
-    let q = supabase.from(t).select("*").eq("author_id", userId);
-    if (orderBy) q = q.order(orderBy, { ascending: false });
-    return await q.limit(limit);
-  });
-  if (res.error && /author_id|column|does not exist|schema cache/i.test(res.error)) {
-    res = await selectOrdered<Row>(async (orderBy) => {
-      let q = supabase.from(t).select("*").eq("user_id", userId);
-      if (orderBy) q = q.order(orderBy, { ascending: false });
-      return await q.limit(limit);
-    });
-  }
-  if (res.error && !/column|does not exist|order|schema cache/i.test(res.error)) {
-    return { rows: [], error: res.error };
-  }
-  return { rows: res.rows, error: null };
+  // W4(C10): 프로빙·user_id 재시도·스키마 오류→빈 목록 변환 제거 — 오류는 error 로 반환(빈 목록과 구분).
+  const { data, error } = await supabase
+    .from("shortform_posts")
+    .select("*")
+    .eq("author_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) return { rows: [], error: error.message };
+  return { rows: (data as Row[]) ?? [], error: null };
 }
 
 export async function countMyCommunityBoardPosts(supabase: SupabaseClient, userId: string): Promise<number | null> {
@@ -147,14 +102,16 @@ export async function countMyCommunityBoardPosts(supabase: SupabaseClient, userI
 }
 
 export async function countMyShortformPosts(supabase: SupabaseClient, userId: string): Promise<number | null> {
-  const probe = await firstReadableTable(supabase, ["shortform_posts"] as const);
-  if (!probe.table) return null;
-  const t = probe.table;
-  let { count, error } = await supabase.from(t).select("*", { count: "exact", head: true }).eq("author_id", userId);
-  if (error && /author_id|column|does not exist|schema cache/i.test(error.message)) {
-    ({ count, error } = await supabase.from(t).select("*", { count: "exact", head: true }).eq("user_id", userId));
+  // W4(C10): shortform_posts.author_id 고정(user_id 부재 실측) — 프로빙·재시도 제거.
+  const { count, error } = await supabase
+    .from("shortform_posts")
+    .select("*", { count: "exact", head: true })
+    .eq("author_id", userId);
+  if (error) {
+    // 표시 전용 카운트의 명시적 degrade(성공 아님): null = 조회 실패(0건과 구분), 로그로 표면화.
+    console.error("[countMyShortformPosts]", error.message);
+    return null;
   }
-  if (error) return null;
   return typeof count === "number" ? count : null;
 }
 
@@ -221,7 +178,9 @@ export type CommunityCommentListItem = {
 };
 
 /**
- * community_comments — 게시 유형 + 글 id 별. 테이블 미배포 시 rows 빈 배열(오류 메시지 없이)
+ * community_comments — 게시 유형 + 글 id 별(숏폼·레거시 경로, 016 정본).
+ * W4(C10): 테이블 미배포 가정의 relation-오류→빈 목록 변환 제거 — community_comments 는
+ * 187 baseline 실측 존재. 모든 조회 오류는 error 로 반환한다(빈 댓글과 구분).
  */
 export async function loadCommunityComments(
   supabase: SupabaseClient,
@@ -237,9 +196,6 @@ export async function loadCommunityComments(
     .order("created_at", { ascending: true });
 
   if (error) {
-    if (/relation|does not exist|schema cache/i.test(error.message)) {
-      return { rows: [], error: null };
-    }
     return { rows: [], error: "댓글을 불러오지 못했어요. 잠시 후 다시 시도해 주세요." };
   }
 

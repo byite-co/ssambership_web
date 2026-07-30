@@ -12,25 +12,19 @@ export type QuestionRoomListFilterTab = "all" | "waiting" | "needReview" | "done
 
 type Row = Record<string, unknown>;
 
-const MENTOR_ID_KEYS = ["mentor_id", "mentor_user_id", "mentor_uid"] as const;
-const STUDENT_ID_KEYS = ["student_id", "student_user_id", "student_uid"] as const;
-
+// W4(C10): mentor_student_rooms 당사자 컬럼은 student_id/mentor_id, question_messages
+// 작성자 컬럼은 author_id 뿐이다(187 baseline 실측) — 후보 키 순회 제거.
 export function partyUserIdFromRoomRow(row: Row | null | undefined, party: "mentor" | "student"): string | null {
   if (!row) return null;
-  const keys = party === "mentor" ? MENTOR_ID_KEYS : STUDENT_ID_KEYS;
-  for (const k of keys) {
-    const v = row[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
-  }
+  const v = row[party === "mentor" ? "mentor_id" : "student_id"];
+  if (typeof v === "string" && v.trim()) return v.trim();
   return null;
 }
 
 function messageAuthorId(m: Row | null | undefined): string | null {
   if (!m) return null;
-  for (const k of ["author_id", "user_id", "sender_id"] as const) {
-    const v = m[k];
-    if (typeof v === "string" && v.trim()) return v.trim();
-  }
+  const v = m.author_id;
+  if (typeof v === "string" && v.trim()) return v.trim();
   return null;
 }
 

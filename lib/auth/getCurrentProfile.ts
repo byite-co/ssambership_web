@@ -1,9 +1,10 @@
 import type { UserRow } from "@/lib/types/user";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-const BASE_USER_SELECT =
-  "id, role, status, full_name, nickname, email, grade_level, student_status, birth_date, terms_agreed_at, privacy_agreed_at, marketing_agreed, created_at, updated_at";
+// W4(C10): 존재 컬럼 프로빙 제거 — users.suspended_until 은 102 마이그레이션으로
+// 정본 존재(187 baseline 실측), users.display_name 은 부재 실측(187 baseline 0)이라 후보에서 삭제.
+const USER_SELECT =
+  "id, role, status, full_name, nickname, email, grade_level, student_status, birth_date, terms_agreed_at, privacy_agreed_at, marketing_agreed, created_at, updated_at, suspended_until";
 
 /**
  * Supabase Client + userId로 public.users 한 줄 조회 (서버/클라이언트 공용)
@@ -13,15 +14,7 @@ export async function getUserProfileById(
   supabase: SupabaseClient,
   userId: string
 ): Promise<{ data: UserRow | null; error: Error | null }> {
-  const { column: displayNameCol } = await pickExistingColumn(supabase, "users", ["display_name"]);
-  // 정지/차단 부가 컬럼(102 마이그레이션) — 미적용 운영 환경 보호를 위해 존재할 때만 select
-  const { column: suspendedUntilCol } = await pickExistingColumn(supabase, "users", [
-    "suspended_until",
-  ]);
-  const extraCols = [displayNameCol, suspendedUntilCol].filter(Boolean).join(", ");
-  const select = extraCols ? `${BASE_USER_SELECT}, ${extraCols}` : BASE_USER_SELECT;
-
-  const { data, error } = await supabase.from("users").select(select).eq("id", userId).maybeSingle();
+  const { data, error } = await supabase.from("users").select(USER_SELECT).eq("id", userId).maybeSingle();
   if (error) {
     return { data: null, error: new Error(error.message) };
   }

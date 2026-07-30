@@ -99,12 +99,14 @@ function normalizeStatus(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
 }
 
+// W4(C10): subscription_billing_events(064 — 정본 테이블·고정 컬럼) 조회 실패를 빈 Map
+// ("청구 이력 없음" 표시)으로 삼키던 silent-catch 제거 — 오류를 error 필드로 전파한다.
 async function latestSucceededBillingEventsBySubscription(
   supabase: SupabaseClient,
   subscriptionIds: string[]
-): Promise<Map<string, Row>> {
+): Promise<{ map: Map<string, Row>; error: string | null }> {
   const out = new Map<string, Row>();
-  if (!subscriptionIds.length) return out;
+  if (!subscriptionIds.length) return { map: out, error: null };
 
   const { data, error } = await supabase
     .from("subscription_billing_events")
@@ -115,24 +117,25 @@ async function latestSucceededBillingEventsBySubscription(
     .order("billing_at", { ascending: false });
 
   if (error) {
-    console.warn("[latestSucceededBillingEventsBySubscription]", error.message);
-    return out;
+    return { map: out, error: error.message };
   }
 
   for (const row of rowsFromSupabaseData(data) as Row[]) {
     const subscriptionId = stringValue(row.subscription_id);
     if (subscriptionId && !out.has(subscriptionId)) out.set(subscriptionId, row);
   }
-  return out;
+  return { map: out, error: null };
 }
 
+// W4(C10): refunds(004·069 — 정본 테이블) 조회 실패를 빈 Map(pendingRefundId=null →
+// canRequestRefund가 UI에서 fail-open)으로 삼키던 silent-catch 제거 — 오류를 전파한다.
 async function pendingRefundsBySubscription(
   supabase: SupabaseClient,
   studentId: string,
   subscriptionIds: string[]
-): Promise<Map<string, string>> {
+): Promise<{ map: Map<string, string>; error: string | null }> {
   const out = new Map<string, string>();
-  if (!subscriptionIds.length) return out;
+  if (!subscriptionIds.length) return { map: out, error: null };
 
   const { data, error } = await supabase
     .from("refunds")
@@ -142,8 +145,7 @@ async function pendingRefundsBySubscription(
     .eq("status", "pending");
 
   if (error) {
-    console.warn("[pendingRefundsBySubscription]", error.message);
-    return out;
+    return { map: out, error: error.message };
   }
 
   for (const row of rowsFromSupabaseData(data) as Row[]) {
@@ -151,7 +153,7 @@ async function pendingRefundsBySubscription(
     const refundId = stringValue(row.id);
     if (subscriptionId && refundId) out.set(subscriptionId, refundId);
   }
-  return out;
+  return { map: out, error: null };
 }
 
 async function planRowsByMentorId(
@@ -163,7 +165,9 @@ async function planRowsByMentorId(
     mentorIds.map(async (mentorId) => {
       const plans = await fetchPlansForMentor(supabase, mentorId);
       if (plans.error) {
-        console.warn("[planRowsByMentorId]", { mentorId, error: plans.error });
+        // W4(C10): display-only degrade — 다음 결제 금액 "표시"만 권장가(CLAUDE.md 정본 폴백)로
+        // 낙하하며 성공으로 위장하지 않는다(로그 유지). 실차감은 갱신 배치가 서버에서 재계산.
+        console.error("[planRowsByMentorId]", { mentorId, error: plans.error });
       }
       out.set(mentorId, assignPlansByTier(plans.rows).byTier as Partial<Record<SubscribePlanTier, Row>>);
     })
@@ -189,12 +193,22 @@ export async function loadStudentSubscriptionManagementList(
   const subscriptionIds = rows.map((row) => stringValue(row.id)).filter(Boolean) as string[];
   const mentorIds = [...new Set(rows.map((row) => stringValue(row.mentor_id)).filter(Boolean))] as string[];
 
-  const [profilesLoad, billingBySubscription, pendingRefundBySubscription, planRowsByMentor] = await Promise.all([
+  const [profilesLoad, billingLoad, pendingRefundLoad, planRowsByMentor] = await Promise.all([
     loadMentorProfilesForDirectory(supabase, mentorIds),
     latestSucceededBillingEventsBySubscription(supabase, subscriptionIds),
     pendingRefundsBySubscription(supabase, studentId, subscriptionIds),
     planRowsByMentorId(supabase, mentorIds),
   ]);
+
+  // W4(C10): 결제 이력·환불 대기 조회 실패는 목록 오류로 전파(구 silent-catch — 빈 Map — 폐기).
+  if (billingLoad.error) {
+    return { items: [], error: billingLoad.error };
+  }
+  if (pendingRefundLoad.error) {
+    return { items: [], error: pendingRefundLoad.error };
+  }
+  const billingBySubscription = billingLoad.map;
+  const pendingRefundBySubscription = pendingRefundLoad.map;
 
   // 학원법 별표4 "이용 개시" 판정을 카드별로 한 번에 조회.
   const usageStartedBySub = await bulkHasSubscriptionUsageStarted(

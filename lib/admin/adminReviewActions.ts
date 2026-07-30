@@ -9,7 +9,6 @@ import { logAdminAction } from "@/lib/admin/adminActionLog";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import {
-  firstReadableAdminTable,
   probeAdminReviewAuditColumnNames,
   probeAdminReviewModerationPlan,
   type AdminReviewAuditColumnNames,
@@ -18,7 +17,9 @@ import type { AdminReviewModerationPlan } from "@/lib/admin/reviewLabels";
 
 const PATH = "/admin/reviews";
 
-const REVIEW_TABLE_CANDIDATES = ["reviews", "mentor_reviews", "mentor_review"] as const;
+// W4(C10): 리뷰 정본 테이블은 public.reviews 뿐(mentor_reviews/mentor_review — 187 baseline 부재).
+// 구 REVIEW_TABLE_CANDIDATES 프로빙(firstReadableAdminTable) 제거.
+const REVIEW_TABLE = "reviews" as const;
 
 const ACTION_SET = new Set(["hide", "restore", "blind", "review"]);
 
@@ -40,10 +41,6 @@ function safeMsg(raw: string | null | undefined): string {
   return toAdminDisplayError(raw, "reviews") ?? "처리에 실패했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
-async function resolveReviewTable(client: SupabaseClient): Promise<string | null> {
-  const { table } = await firstReadableAdminTable(client, [...REVIEW_TABLE_CANDIDATES]);
-  return table;
-}
 
 /** 숨김 의미: boolean_true 컬럼이 true이거나, visible 반전 컬럼이 false */
 function applyHiddenSemantic(patch: Record<string, unknown>, plan: AdminReviewModerationPlan, hidden: boolean): void {
@@ -114,10 +111,7 @@ export async function moderateAdminReviewAction(formData: FormData) {
     admin = await createClient();
   }
 
-  const table = await resolveReviewTable(admin);
-  if (!table) {
-    redirect(errUrl(safeMsg("리뷰 테이블을 찾지 못했습니다.")));
-  }
+  const table = REVIEW_TABLE;
 
   const plan = await probeAdminReviewModerationPlan(admin, table);
   const audit = await probeAdminReviewAuditColumnNames(admin, table);

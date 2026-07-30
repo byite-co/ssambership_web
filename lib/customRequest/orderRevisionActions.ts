@@ -5,10 +5,8 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { canAccessOrder } from "@/lib/customRequest/orderAccess";
 import { sanitizeTrustSafetyText } from "@/lib/safety/trustSafetyText";
-import {
-  firstReadableCustomTable,
-  ORDER_TO_DELIVERABLE_FK_CANDIDATES,
-} from "@/lib/customRequest/customRequestQueries";
+// W4(C10): 테이블/컬럼 프로빙 제거 — custom_request_orders·custom_order_revisions 정본 고정(187 baseline 실측)
+import { ORDER_CHILD_FK_COLUMN } from "@/lib/customRequest/customRequestQueries";
 import {
   isOrderStatusAllowingStudentAccept,
   isOrderRowTerminalForActions,
@@ -19,12 +17,10 @@ import { getActiveDisputeBlockMessage } from "@/lib/customRequest/orderDisputeHe
 import { hasDeliverableRowsForOrder } from "@/lib/customRequest/orderStudentActions";
 import { recordOrderEventBestEffort } from "@/lib/customRequest/orderRoomMutations";
 import { requestCustomOrderRevisionRpc } from "@/lib/customRequest/orderTransitionRpc";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import { createClient } from "@/lib/supabase/server";
 
 type Row = Record<string, unknown>;
 
-const REVISION_TABLES = ["custom_order_revisions"] as const;
 const MAX_REVISION_REQUESTS_PER_ORDER = 2;
 
 function orderPath(orderId: string) {
@@ -53,12 +49,12 @@ export async function submitCustomOrderRevisionRequestAction(formData: FormData)
     redirectWithError(orderId, "수정 요청은 8,000자 이하로 입력하세요.");
   }
 
-  const oT = await firstReadableCustomTable(supabase, ["custom_request_orders", "custom_orders", "request_orders"]);
-  if (!oT.table) {
-    redirectWithError(orderId, oT.error || "주문 테이블을 찾을 수 없습니다.");
-  }
-  const table = oT.table;
-  const { data: rowData, error: oe } = await supabase.from(table).select("*").eq("id", orderId).maybeSingle();
+  // W4(C10): custom_request_orders 정본 테이블 + student_id(NOT NULL) 직접 대조 — 프로빙 제거
+  const { data: rowData, error: oe } = await supabase
+    .from("custom_request_orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
   if (oe || !rowData) {
     redirectWithError(orderId, oe?.message ?? "주문을 찾을 수 없습니다.");
   }
@@ -68,15 +64,7 @@ export async function submitCustomOrderRevisionRequestAction(formData: FormData)
   if (!access.ok) {
     redirectWithError(orderId, "이 주문에 대한 접근 권한이 없습니다.");
   }
-  const { column: stuCol } = await pickExistingColumn(supabase, table, [
-    "student_id",
-    "buyer_id",
-    "user_id",
-    "client_id",
-    "author_id",
-    "requester_id",
-  ]);
-  if (!stuCol || String(row[stuCol]) !== user.id) {
+  if (String(row.student_id) !== user.id) {
     redirectWithError(orderId, "의뢰자(학생) 본인만 수정 요청을 보낼 수 있습니다.");
   }
 
@@ -98,26 +86,26 @@ export async function submitCustomOrderRevisionRequestAction(formData: FormData)
       `납품 검토·수락 단계에서만 수정 요청할 수 있습니다(현재: ${orderStatusLabelForUi(norm)}).`
     );
   }
-  const hasDel = await hasDeliverableRowsForOrder(supabase, orderId);
-  if (!hasDel) {
+  const delCheck = await hasDeliverableRowsForOrder(supabase, orderId);
+  if (delCheck.error) {
+    // W4(C10): 조회 오류를 '납품 없음'으로 오인하지 않도록 구분해 fail-closed
+    redirectWithError(orderId, "납품 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
+  if (!delCheck.has) {
     redirectWithError(orderId, "등록된 납품이 있어야 수정 요청을 할 수 있습니다.");
   }
 
-  const revT = await firstReadableCustomTable(supabase, [...REVISION_TABLES]);
-  if (revT.table) {
-    const { column: revFk } = await pickExistingColumn(supabase, revT.table, [...ORDER_TO_DELIVERABLE_FK_CANDIDATES]);
-    if (revFk) {
-      const { count: revisionCount, error: revCountErr } = await supabase
-        .from(revT.table)
-        .select("id", { count: "exact", head: true })
-        .eq(revFk, orderId);
-      if (revCountErr) {
-        redirectWithError(orderId, "수정 요청 횟수를 확인하지 못했습니다.");
-      }
-      if ((revisionCount ?? 0) >= MAX_REVISION_REQUESTS_PER_ORDER) {
-        redirectWithError(orderId, "수정 요청 횟수를 초과했습니다. (최대 2회)");
-      }
-    }
+  // W4(C10): custom_order_revisions.custom_request_order_id 정본 count — 테이블/FK 프로빙 실패 시
+  // 횟수 제한을 건너뛰던 fail-open 분기 제거(테이블 실존 — 003, 187 baseline). 오류는 fail-closed.
+  const { count: revisionCount, error: revCountErr } = await supabase
+    .from("custom_order_revisions")
+    .select("id", { count: "exact", head: true })
+    .eq(ORDER_CHILD_FK_COLUMN, orderId);
+  if (revCountErr) {
+    redirectWithError(orderId, "수정 요청 횟수를 확인하지 못했습니다.");
+  }
+  if ((revisionCount ?? 0) >= MAX_REVISION_REQUESTS_PER_ORDER) {
+    redirectWithError(orderId, "수정 요청 횟수를 초과했습니다. (최대 2회)");
   }
 
   // 안전필터: 수정요청 글은 멘토(상대방)가 읽는 통로이므로, 다른 채널과 동일하게

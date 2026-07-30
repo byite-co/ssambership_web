@@ -6,7 +6,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireQnaActor } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
 import { draftToParam } from "@/lib/qna/draftQuery";
-import { QUESTION_THREADS_ROOM_FK_CANDIDATES, threadRowBelongsToMentorStudentRoom } from "@/lib/qna/questionThreadRoomRef";
+import { QUESTION_THREADS_ROOM_FK, threadRowBelongsToMentorStudentRoom } from "@/lib/qna/questionThreadRoomRef";
 import { userMatchesMentorInRoomRow, userMatchesStudentInRoomRow } from "@/lib/qna/questionRoomQueries";
 import { isQuestionThreadLockedForMessages } from "@/lib/qna/questionRoomUiLabels";
 import { assertThreadCreationSubscriptionAllowed } from "@/lib/qna/questionThreadSubscriptionGuard";
@@ -136,36 +136,39 @@ async function assertThreadBelongsToRoom(
   if (!data) return "thread를 찾을 수 없습니다.";
   const row = data as Record<string, unknown>;
   if (!threadRowBelongsToMentorStudentRoom(row, roomId)) {
-    const roomFkSnapshot: Record<string, unknown> = {};
-    for (const k of QUESTION_THREADS_ROOM_FK_CANDIDATES) {
-      if (k in row) roomFkSnapshot[k] = row[k];
-    }
     console.error("[assertThreadBelongsToRoom] mismatch", {
       roomId,
       threadId,
-      roomFkCandidates: [...QUESTION_THREADS_ROOM_FK_CANDIDATES],
-      roomFkSnapshot,
+      roomFk: QUESTION_THREADS_ROOM_FK,
+      roomFkValue: row[QUESTION_THREADS_ROOM_FK] ?? null,
     });
     return "이 thread는 현재 room에 속하지 않습니다.";
   }
   return null;
 }
 
-/** 완료(confirmed)·종료(closed/archived) 스레드에는 메시지 전송을 거절. 조회 실패 시엔 막지 않음(fail-open). */
+/**
+ * 완료(confirmed)·종료(closed/archived) 스레드에는 메시지 전송을 거절.
+ * W4(C9 계열 정합): 조회 실패·행 부재 시에도 통과시키지 않는다(fail-closed —
+ * 잠금 여부를 확인할 수 없으면 전송을 막는다. 구 fail-open 제거).
+ */
 async function assertThreadNotLockedForMessages(
   supabase: SupabaseClient,
   threadId: string
 ): Promise<string | null> {
   const { data, error } = await supabase
     .from("question_threads")
-    .select("*")
+    .select("id, status")
     .eq("id", threadId)
     .maybeSingle();
   if (error) {
-    console.error("[assertThreadNotLockedForMessages] question_threads select", { threadId, code: error.code, message: error.message });
-    return null;
+    console.error("[assertThreadNotLockedForMessages] question_threads select", { threadId, code: error.code });
+    return "질문 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.";
   }
-  if (data && isQuestionThreadLockedForMessages(data as Record<string, unknown>)) {
+  if (!data) {
+    return "질문을 찾을 수 없습니다.";
+  }
+  if (isQuestionThreadLockedForMessages(data as Record<string, unknown>)) {
     return "완료된 질문에는 더 이상 메시지를 보낼 수 없어요. 새 질문을 작성해 주세요.";
   }
   return null;

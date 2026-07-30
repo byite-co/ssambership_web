@@ -1,7 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
-import { firstReadableAdminTable } from "@/lib/admin/adminQueries";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import { USER_UI_LOAD_FAILED } from "@/lib/constants/userFacingMessages";
 
 type Row = Record<string, unknown>;
@@ -16,71 +14,43 @@ export type DisputeBundle = {
   probe: string;
 };
 
-function fkFromRow(row: Row, keys: string[]): string | null {
-  for (const k of keys) {
-    if (k in row && row[k] !== null && row[k] !== undefined) {
-      return String(row[k]);
-    }
-  }
-  return null;
-}
-
 /**
- * payment_id가 없을 때 order_id로 order_payments / payments 한 행 probe(캐시·맞춤의뢰 혼동 시 payload로 구분 예정)
+ * W4(C10): 맞춤의뢰 주문 → 결제 정본 경로 —
+ * order_payments(custom_request_order_id, payment_id) 링크 테이블 경유 후 payments 단건(187 baseline 실측).
+ * 테이블·컬럼 프로빙(order_payments/payments/payment_intents × FK 후보 4종) 제거. 오류는 그대로 반환.
  */
 async function fetchPaymentRowByOrderId(
   supabase: SupabaseClient,
   orderId: string
 ): Promise<{ table: string | null; row: Row | null; err: string | null }> {
-  for (const table of ["order_payments", "payments", "payment_intents"] as const) {
-    const t = await firstReadableAdminTable(supabase, [table]);
-    if (!t.table) continue;
-    const { column: oc } = await pickExistingColumn(supabase, t.table, [
-      "order_id",
-      "custom_order_id",
-      "request_order_id",
-      "custom_request_order_id",
-    ]);
-    if (!oc) continue;
-    const { data, error } = await supabase.from(t.table).select("*").eq(oc, orderId).limit(1);
-    if (error) {
-      if (!/column|schema cache/i.test(error.message)) {
-        return { table: t.table, row: null, err: error.message };
-      }
-      continue;
-    }
-    const rows = (data as Row[] | null) ?? [];
-    if (rows[0]) {
-      return { table: t.table, row: rows[0], err: null };
-    }
+  const { data, error } = await supabase
+    .from("order_payments")
+    .select("payment_id")
+    .eq("custom_request_order_id", orderId)
+    .limit(1);
+  if (error) {
+    return { table: "order_payments", row: null, err: error.message };
   }
-  return { table: null, row: null, err: null };
+  const link = ((data as Row[] | null) ?? [])[0];
+  const paymentId = link && link.payment_id != null ? String(link.payment_id) : null;
+  if (!paymentId) {
+    return { table: null, row: null, err: null };
+  }
+  return await fetchRowById(supabase, "payments", paymentId);
 }
 
-async function fetchByIdInTable(
+/** W4(C10): 후보 테이블·id 컬럼 순회(fetchByIdInTable) 제거 — 정본 테이블 1곳에서 id 단건 조회. */
+async function fetchRowById(
   supabase: SupabaseClient,
-  tableCandidates: readonly string[],
-  idValue: string,
-  idCols: readonly string[]
+  table: string,
+  idValue: string
 ): Promise<{ table: string | null; row: Row | null; err: string | null }> {
-  const t = await firstReadableAdminTable(supabase, tableCandidates);
-  if (!t.table) {
-    return { table: null, row: null, err: t.error || null };
+  const { data, error } = await supabase.from(table).select("*").eq("id", idValue).maybeSingle();
+  if (error) {
+    return { table, row: null, err: error.message };
   }
-  for (const col of idCols) {
-    const { data, error } = await supabase.from(t.table).select("*").eq(col, idValue).limit(1);
-    if (error) {
-      if (/column|schema cache/i.test(error.message)) {
-        continue;
-      }
-      return { table: t.table, row: null, err: error.message };
-    }
-    const rows = (data as Row[] | null) ?? [];
-    if (rows.length) {
-      return { table: t.table, row: rows[0], err: null };
-    }
-  }
-  return { table: t.table, row: null, err: "해당 id로 조회되지 않음" };
+  // 0건은 오류가 아니라 「연계 정보 없음」(err null)로 구분한다.
+  return { table, row: (data as Row) ?? null, err: null };
 }
 
 /** 관리자 상세 전용: 세션으로 disputes 단건이 안 될 때만 전달(requireRole 이후 서버 전용). */
@@ -99,35 +69,24 @@ export async function loadDisputeById(
   /** disputes 본문·연계 조회에 사용(관리자 읽기 우회 시 첫 성공 클라이언트를 끝까지 유지) */
   let readClient: SupabaseClient = supabase;
 
+  // W4(C10): 분쟁 정본 테이블은 disputes 단일(187 baseline 실측 — order_disputes/refund_disputes/
+  // user_disputes/support_tickets 부재). 후보 테이블 프로빙 제거. adminBypassClient 재시도는
+  // requireRole("admin") 이후 관리자 상세에서만 전달되는 의도된 service_role 경로(C)라 유지.
   const direct = await supabase.from("disputes").select("*").eq("id", id).maybeSingle();
   const sessionMiss = Boolean(direct.error || !direct.data);
+  resolvedTable = "disputes";
   if (!direct.error && direct.data) {
     dRow = direct.data as Row;
-    resolvedTable = "disputes";
   } else if (sessionMiss && opts?.adminBypassClient) {
     const bypass = await opts.adminBypassClient.from("disputes").select("*").eq("id", id).maybeSingle();
     if (!bypass.error && bypass.data) {
       readClient = opts.adminBypassClient;
       dRow = bypass.data as Row;
-      resolvedTable = "disputes";
+    } else {
+      dErr = bypass.error?.message ?? direct.error?.message ?? null;
     }
-  }
-
-  if (!dRow) {
-    const tProbe = await firstReadableAdminTable(supabase, [
-      "disputes",
-      "order_disputes",
-      "refund_disputes",
-      "user_disputes",
-      "support_tickets",
-    ] as const);
-    dErr = tProbe.error || null;
-    resolvedTable = tProbe.table;
-    if (tProbe.table) {
-      const { data, error } = await supabase.from(tProbe.table).select("*").eq("id", id).maybeSingle();
-      if (data) dRow = data as Row;
-      else dErr = error?.message ?? dErr;
-    }
+  } else {
+    dErr = direct.error?.message ?? null;
   }
 
   if (!dRow) {
@@ -142,34 +101,19 @@ export async function loadDisputeById(
     };
   }
 
-  const refundId = fkFromRow(dRow, ["refund_id", "refund_request_id", "r_id"]);
-  const payId = fkFromRow(dRow, ["payment_id", "order_payment_id", "pg_payment_id", "tx_id"]);
-  const subId = fkFromRow(dRow, ["subscription_id", "sub_id"]);
-  const cOrderId = fkFromRow(dRow, [
-    "custom_request_order_id",
-    "mentor_order_id",
-    "order_id_linked",
-    "order_id",
-    "custom_order_id",
-    "request_order_id",
-  ]);
+  // W4(C10): FK 후보 키 스캔 축소 — disputes 실존 FK 는 payment_id·subscription_id·
+  // custom_request_order_id 뿐(187 baseline 실측).
+  const payId = dRow.payment_id != null ? String(dRow.payment_id) : null;
+  const subId = dRow.subscription_id != null ? String(dRow.subscription_id) : null;
+  const cOrderId = dRow.custom_request_order_id != null ? String(dRow.custom_request_order_id) : null;
 
-  const rRef = refundId
-    ? await fetchByIdInTable(readClient, ["refunds", "refund_requests", "mentor_refunds"] as const, refundId, ["id"])
-    : { table: null, row: null, err: null };
-  let pRef = payId
-    ? await fetchByIdInTable(readClient, ["payments", "payment_intents", "order_payments"] as const, payId, [
-        "id",
-        "ext_id",
-        "mcht_trd_no",
-        "pg_tid",
-      ])
-    : { table: null, row: null, err: null };
-  const sRef = subId
-    ? await fetchByIdInTable(readClient, ["subscriptions", "user_subscriptions"] as const, subId, ["id"])
-    : { table: null, row: null, err: null };
+  // W4(C10): 환불 연계 — 후보 FK 컬럼(refund_id 등) 부재 실측(187 baseline 0) — 프로빙 제거,
+  // 현행 관측 동작(빈 결과) 고정. 기능 정본화는 비범위.
+  const rRef: { table: string | null; row: Row | null; err: string | null } = { table: null, row: null, err: null };
+  let pRef = payId ? await fetchRowById(readClient, "payments", payId) : { table: null, row: null, err: null };
+  const sRef = subId ? await fetchRowById(readClient, "subscriptions", subId) : { table: null, row: null, err: null };
   const cRef = cOrderId
-    ? await fetchByIdInTable(readClient, ["custom_request_orders", "custom_orders", "request_orders"] as const, cOrderId, ["id"])
+    ? await fetchRowById(readClient, "custom_request_orders", cOrderId)
     : { table: null, row: null, err: null };
 
   if (!pRef.row && cOrderId) {
@@ -179,25 +123,9 @@ export async function loadDisputeById(
     }
   }
 
-  let mTab: { table: string | null; rows: Row[]; err: string | null } = { table: null, rows: [], err: null };
-  const modProbe = await firstReadableAdminTable(readClient, [
-    "moderation_logs",
-    "dispute_events",
-    "support_events",
-    "admin_audit_logs",
-  ] as const);
-  if (modProbe.table) {
-    const { column: dCol } = await pickExistingColumn(readClient, modProbe.table, ["dispute_id", "ticket_id", "subject_id", "resource_id", "ref_id"] as const);
-    if (dCol) {
-      const { data, error } = await readClient.from(modProbe.table).select("*").eq(dCol, id).limit(20);
-      mTab = { table: modProbe.table, rows: (data as Row[]) ?? [], err: error?.message ?? null };
-    } else {
-      const { data, error } = await readClient.from(modProbe.table).select("*").limit(10);
-      mTab = { table: modProbe.table, rows: (data as Row[]) ?? [], err: error?.message ?? "dispute FK 없음" };
-    }
-  } else {
-    mTab = { table: null, rows: [], err: modProbe.error || null };
-  }
+  // W4(C10): 처리 로그 — 후보 테이블 부재 실측(187 baseline 0: moderation_logs/dispute_events/
+  // support_events/admin_audit_logs) — 프로빙 제거, 현행 관측 동작(빈 결과) 고정. 기능 정본화는 비범위.
+  const mTab: { table: string | null; rows: Row[]; err: string | null } = { table: null, rows: [], err: null };
 
   const probe = [resolvedTable, rRef.table, pRef.table, sRef.table, cRef.table, mTab.table]
     .filter((x) => x != null && x !== "")
@@ -286,24 +214,21 @@ export function w22EntityLine(
   return `${label}: ${bits.join(" · ")}`.trim();
 }
 
-/** 학생(기본)은 신고/원고 컬럼, 멘토는 counterparty(선택) */
+/**
+ * W4(C10): 당사자 판정 정본 컬럼 — disputes.student_id(원고) · disputes.mentor_id(상대).
+ * 나머지 후보 키(reporter_id/user_id/created_by/counterparty_id 등)는 부재 실측(187 baseline 0)이라 삭제.
+ */
 export function canPartyViewDispute(
   userId: string,
   role: "student" | "mentor",
   row: Row | null
 ): { ok: boolean; detail: string } {
   if (!row) return { ok: false, detail: "row 없음" };
-  for (const k of ["reporter_id", "user_id", "student_id", "created_by", "applicant_id", "plaintiff_id"]) {
-    if (k in row && String(row[k]) === userId) {
-      return { ok: true, detail: k };
-    }
+  if ("student_id" in row && String(row.student_id) === userId) {
+    return { ok: true, detail: "student_id" };
   }
-  if (role === "mentor") {
-    for (const k of ["mentor_id", "mentor_user_id", "defendant_id", "counterparty_id", "expert_id", "responder_id", "assigned_mentor_id"]) {
-      if (k in row && String(row[k]) === userId) {
-        return { ok: true, detail: k };
-      }
-    }
+  if (role === "mentor" && "mentor_id" in row && String(row.mentor_id) === userId) {
+    return { ok: true, detail: "mentor_id" };
   }
   return { ok: false, detail: "user 매칭 실패" };
 }

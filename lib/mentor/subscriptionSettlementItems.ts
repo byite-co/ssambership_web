@@ -32,21 +32,9 @@ const SELECT_COLUMNS = [
   "updated_at",
 ].join(", ");
 
-function isSchemaNotReadyError(error: unknown): boolean {
-  const e = error as { code?: string; message?: string } | null | undefined;
-  const code = String(e?.code ?? "");
-  const message = String(e?.message ?? "").toLowerCase();
-  return (
-    code === "42P01" ||
-    code === "42883" ||
-    code === "42703" ||
-    code === "PGRST204" ||
-    code === "PGRST205" ||
-    message.includes("schema cache") ||
-    message.includes("does not exist") ||
-    message.includes("could not find")
-  );
-}
+// W4(C10): isSchemaNotReadyError(42P01/42883/42703/PGRST204/205 로그 억제 신호) 제거 —
+// public.refresh_subscription_settlement_items() 는 187 baseline 실존이라 스키마 부재 분기는
+// 도달 불가 레거시였다. 모든 실패를 로그·error 로 남긴다.
 
 export function minorCentsToCash(value: unknown): number {
   const n = typeof value === "number" ? value : Number(value ?? 0);
@@ -91,9 +79,7 @@ export async function refreshSubscriptionSettlementItemsBestEffort(): Promise<{ 
 
   const { error } = await admin.rpc("refresh_subscription_settlement_items", {});
   if (error) {
-    if (!isSchemaNotReadyError(error)) {
-      console.error("[refreshSubscriptionSettlementItemsBestEffort]", error.message);
-    }
+    console.error("[refreshSubscriptionSettlementItemsBestEffort]", error.message);
     return { ok: false, error: error.message };
   }
   return { ok: true, error: null };
@@ -117,9 +103,10 @@ export async function loadSubscriptionSettlementRowsForMentor(
   void mentorId; // V7 이 auth.uid() 로 본인 행만 반환한다
   const { data, error } = await supabase.schema(API_WEB_V1_SCHEMA).rpc("mentor_settlement_self");
   if (error) {
-    if (!isSchemaNotReadyError(error)) {
-      console.error("[loadSubscriptionSettlementRowsForMentor] mentor_settlement_self", error.message);
-    }
+    // W4(C10): isSchemaNotReadyError 로그 억제 분기 제거 — V7 RPC 는 187 baseline 에
+    // 실존(pg_proc 실측)하므로 스키마 부재 분기는 사문이었고 실제 오류 로그만 삼켰다.
+    // 오류 시 빈 배열 반환은 정산 페이지 표시 전용 degrade(성공 아님)로 유지하되 항상 로깅한다.
+    console.error("[loadSubscriptionSettlementRowsForMentor] mentor_settlement_self", error.message);
     return [];
   }
   const rows = (Array.isArray(data) ? (data as SubscriptionSettlementItemRow[]) : [])
@@ -145,7 +132,9 @@ export async function loadSubscriptionSettlementRowsForAdmin(limit = 100): Promi
     .order("billing_at", { ascending: false })
     .limit(limit);
 
+  // W4(C10): 스키마 부재 오류를 빈 목록 성공으로 바꾸던 분기 제거 —
+  // subscription_settlement_items 는 187 baseline 에 실존(실측)하므로 사문이었고,
+  // 실오류를 관리자 콘솔에서 숨겼다. 이제 모든 오류를 error 필드로 표면화한다.
   if (!error && data) return { rows: data as unknown as SubscriptionSettlementItemRow[], error: null };
-  if (error && isSchemaNotReadyError(error)) return { rows: [], error: null };
   return { rows: [], error: error?.message ?? null };
 }

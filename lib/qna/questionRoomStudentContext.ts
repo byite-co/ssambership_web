@@ -99,7 +99,12 @@ export async function loadQuestionRoomSubscriptionContext(
     };
   }
 
-  const active = await findActiveSubscriptionForPair(supabase, studentId, mentorId);
+  // W4(C10): 정본 subscriptions 단일 조회. 조회 실패는 로그로 구분하고 표시만 기본값으로 둔다.
+  const lookup = await findActiveSubscriptionForPair(supabase, studentId, mentorId);
+  if (lookup.error) {
+    console.error("[loadQuestionRoomSubscriptionContext] subscriptions select", lookup.error);
+  }
+  const active = lookup.active;
   const tierRaw = active?.row.plan_tier;
   const planTier = typeof tierRaw === "string" && isSubscribePlanTier(tierRaw) ? tierRaw : null;
   const catalog = planTier ? getSubscribeCatalogPlan(planTier) : null;
@@ -127,10 +132,7 @@ export async function loadMessageCountsByThreadId(
   if (pack.error) return out;
 
   for (const m of pack.rows) {
-    const tid =
-      (typeof m.thread_id === "string" && m.thread_id) ||
-      (typeof m.question_thread_id === "string" && m.question_thread_id) ||
-      null;
+    const tid = typeof m.thread_id === "string" ? m.thread_id : null;
     if (tid) out[tid] = (out[tid] ?? 0) + 1;
   }
   return out;
@@ -165,10 +167,7 @@ export async function loadLastMessageByThreadId(
   if (threadIds.length === 0) return out;
   const pack = await fetchMessagesForThreads(supabase, threadIds);
   for (const m of pack.rows) {
-    const tid =
-      (typeof m.thread_id === "string" && m.thread_id) ||
-      (typeof m.question_thread_id === "string" && m.question_thread_id) ||
-      null;
+    const tid = typeof m.thread_id === "string" ? m.thread_id : null;
     if (tid) out[tid] = m;
   }
   return out;

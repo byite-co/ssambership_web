@@ -7,15 +7,15 @@ import { requireRole } from "@/lib/auth/routeGuard";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
-import { firstReadableAdminTable } from "@/lib/admin/adminQueries";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import { recordCustomOrderDisputeSplitRpc } from "@/lib/customRequest/customOrderDisputeSplitService";
 import { insertAdminDisputeNote } from "@/lib/admin/adminCaseNotes";
 import { logAdminAction } from "@/lib/admin/adminActionLog";
 
 const LIST_PATH = "/admin/disputes";
 
-const TABLE_CANDIDATES = ["disputes", "order_disputes", "refund_disputes", "user_disputes", "support_tickets"] as const;
+// W4(C10): disputes 단일 정본(004 SQL, 187 baseline 실측) — phantom 후보(order/refund/user_disputes,
+// support_tickets) 테이블 프로빙(firstReadableAdminTable)·requireDisputesTable 게이트 제거.
+const TABLE = "disputes";
 
 function textFromForm(v: FormDataEntryValue | null): string {
   return typeof v === "string" ? v.trim() : "";
@@ -35,22 +35,16 @@ function safeMsg(raw: string | null | undefined): string {
   return toAdminDisplayError(raw, "disputes") ?? "처리에 실패했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
-async function resolveDisputeTable(client: SupabaseClient): Promise<string | null> {
-  const { table } = await firstReadableAdminTable(client, [...TABLE_CANDIDATES]);
-  return table;
-}
-
 async function runDisputeUpdate(
-  table: string,
   disputeId: string,
   patch: Record<string, unknown>,
-  /** disputes 테이블일 때만 statusIn으로 상태 제한(004 스키마). null이면 상태 조건 없음(메모 전용 등). */
+  /** statusIn으로 상태 제한(004 스키마). null이면 상태 조건 없음(메모 전용 등). */
   statusIn: readonly string[] | null
 ): Promise<{ touched: boolean; errorMsg: string | null }> {
   const session = await createClient();
   const run = (client: SupabaseClient) => {
-    let q = client.from(table).update(patch).eq("id", disputeId);
-    if (statusIn?.length && table === "disputes") {
+    let q = client.from(TABLE).update(patch).eq("id", disputeId);
+    if (statusIn?.length) {
       q = q.in("status", [...statusIn]);
     }
     return q.select("id");
@@ -76,19 +70,9 @@ async function runDisputeUpdate(
   }
 }
 
-async function appendTimestampColumns(admin: SupabaseClient, table: string, patch: Record<string, unknown>): Promise<void> {
-  const updatedAt = await pickExistingColumn(admin, table, ["updated_at", "modified_at"]);
-  if (updatedAt.column) {
-    patch[updatedAt.column] = new Date().toISOString();
-  }
-}
-
-/** 상태 변경 액션은 disputes 행(004 스키마)에만 적용 */
-function requireDisputesTable(table: string | null, disputeId: string): string {
-  if (!table) redirect(errUrlDetail(disputeId, safeMsg("분쟁 테이블을 찾지 못했습니다.")));
-  if (table !== "disputes")
-    redirect(errUrlDetail(disputeId, safeMsg("상태 조치는 표준 분쟁 기록에만 사용할 수 있습니다.")));
-  return table;
+// W4(C10): disputes.updated_at 실존(004:93, modified_at 부재) — 컬럼 프로빙 제거, 고정 대입.
+function appendTimestampColumns(patch: Record<string, unknown>): void {
+  patch.updated_at = new Date().toISOString();
 }
 
 /** 검토 중: open · escalated → under_review */
@@ -103,12 +87,11 @@ export async function setDisputeUnderReviewAction(formData: FormData) {
   } catch {
     admin = await createClient();
   }
-  const table = requireDisputesTable(await resolveDisputeTable(admin), disputeId);
 
   const patch: Record<string, unknown> = { status: "under_review" };
-  await appendTimestampColumns(admin, table, patch);
+  appendTimestampColumns(patch);
 
-  const { touched, errorMsg } = await runDisputeUpdate(table, disputeId, patch, ["open", "escalated"]);
+  const { touched, errorMsg } = await runDisputeUpdate(disputeId, patch, ["open", "escalated"]);
   if (errorMsg) redirect(errUrlDetail(disputeId, safeMsg(errorMsg)));
   if (!touched) redirect(errUrlDetail(disputeId, safeMsg("이미 검토 중이거나 변경할 수 없는 상태입니다.")));
 
@@ -138,17 +121,14 @@ export async function resolveDisputeAction(formData: FormData) {
   } catch {
     admin = await createClient();
   }
-  const table = requireDisputesTable(await resolveDisputeTable(admin), disputeId);
 
+  // W4(C10): disputes.resolved_at·resolved_by 실존(034 SQL, closed_* 부재) — 컬럼 프로빙 제거.
   const patch: Record<string, unknown> = { status: "resolved" };
-  await appendTimestampColumns(admin, table, patch);
+  appendTimestampColumns(patch);
+  patch.resolved_at = new Date().toISOString();
+  patch.resolved_by = user.id;
 
-  const ra = await pickExistingColumn(admin, table, ["resolved_at", "closed_at"]);
-  if (ra.column) patch[ra.column] = new Date().toISOString();
-  const rb = await pickExistingColumn(admin, table, ["resolved_by", "closed_by"]);
-  if (rb.column) patch[rb.column] = user.id;
-
-  const { touched, errorMsg } = await runDisputeUpdate(table, disputeId, patch, ["open", "under_review", "escalated"]);
+  const { touched, errorMsg } = await runDisputeUpdate(disputeId, patch, ["open", "under_review", "escalated"]);
   if (errorMsg) redirect(errUrlDetail(disputeId, safeMsg(errorMsg)));
   if (!touched) redirect(errUrlDetail(disputeId, safeMsg("이미 종료되었거나 변경할 수 없는 상태입니다.")));
 
@@ -178,17 +158,14 @@ export async function dismissDisputeAction(formData: FormData) {
   } catch {
     admin = await createClient();
   }
-  const table = requireDisputesTable(await resolveDisputeTable(admin), disputeId);
 
+  // W4(C10): disputes.resolved_at·resolved_by 실존(034 SQL, closed_* 부재) — 컬럼 프로빙 제거.
   const patch: Record<string, unknown> = { status: "dismissed" };
-  await appendTimestampColumns(admin, table, patch);
+  appendTimestampColumns(patch);
+  patch.resolved_at = new Date().toISOString();
+  patch.resolved_by = user.id;
 
-  const ra = await pickExistingColumn(admin, table, ["resolved_at", "closed_at"]);
-  if (ra.column) patch[ra.column] = new Date().toISOString();
-  const rb = await pickExistingColumn(admin, table, ["resolved_by", "closed_by"]);
-  if (rb.column) patch[rb.column] = user.id;
-
-  const { touched, errorMsg } = await runDisputeUpdate(table, disputeId, patch, ["open", "under_review", "escalated"]);
+  const { touched, errorMsg } = await runDisputeUpdate(disputeId, patch, ["open", "under_review", "escalated"]);
   if (errorMsg) redirect(errUrlDetail(disputeId, safeMsg(errorMsg)));
   if (!touched) redirect(errUrlDetail(disputeId, safeMsg("이미 종료되었거나 변경할 수 없는 상태입니다.")));
 

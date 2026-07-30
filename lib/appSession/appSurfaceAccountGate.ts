@@ -2,10 +2,11 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 // 앱(WebView) 표면 전용 계정 게이트 — **fail-closed**.
 //
-// 일반 웹의 assertAccountActive(lib/auth/accountStatus.ts)는 조회 실패·행 없음·예외를
-// active 로 통과시키는 fail-open 가드다(웹 UX 우선 설계 — 변경하지 않는다).
-// 앱 표면(bootstrap·서명 티켓·finalize)은 세션 쿠키와 쓰기 권한을 발급하는 진입점이므로
-// 이 모듈의 strict 게이트만 사용한다: 확인할 수 없으면 전부 거부.
+// 일반 웹의 assertAccountActive(lib/auth/accountStatus.ts)도 S2-2 C9(계약 §11.5)로
+// fail-closed 로 정합화됐다(확인 불가 = 거부). 두 게이트의 차이는 방향이 아니라 엄격도다:
+// 이 모듈은 status **allowlist**(미지 값도 거부)를 쓰고, 웹 게이트는 §11.5 coalesce 판정식
+// (banned/suspended 외 상태 문자열은 통과)을 쓴다. 앱 표면(bootstrap·서명 티켓·finalize)은
+// 세션 쿠키와 쓰기 권한을 발급하는 진입점이므로 이 모듈의 strict 게이트만 사용한다.
 //
 // 3층 구조(계약 테스트는 순수 판정·DI 코어의 실제 반환값을 table-driven 으로 검증):
 //   1) strictAccountStatusDecision / strictDeletionDecision / strictMentorRoleDecision — 순수

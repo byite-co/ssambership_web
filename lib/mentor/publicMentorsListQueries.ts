@@ -4,8 +4,7 @@ import { buildMentorProfileDisplay, type MentorProfileDisplay } from "@/lib/ment
 import type { MentorsListFilters, MentorsListSort } from "@/lib/mentor/mentorsListSearchParams";
 import { MENTORS_PAGE_SIZE } from "@/lib/mentor/mentorsListSearchParams";
 import { mentorIsVerified } from "@/lib/mentor/mentorPublicProfileDisplay";
-import { probePublicReviewVisibilityColumns } from "@/lib/mentor/publicReviewVisibility";
-import { pickExistingColumn, rowsFromSupabaseData } from "@/lib/qna/safeSelect";
+import { rowsFromSupabaseData } from "@/lib/qna/safeSelect";
 import { assignPlansByTier, type PlansByTier, type SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
 import { loadMentorCapUsageBatch, type MentorCapUsage } from "@/lib/subscribe/mentorCapService";
 import { mentorVerificationStatusAllowsActivity } from "@/lib/mentor/mentorVerificationGate";
@@ -77,8 +76,7 @@ export type PublicMentorsListResult = {
   onlySelfVisibleHint: boolean;
 };
 
-const PLAN_TABLES = ["plans", "mentor_plans", "subscription_plans", "mentor_subscription_plans"] as const;
-const PLAN_FK = ["mentor_id", "mentor_user_id", "user_id", "owner_id"] as const;
+// W4(C10): PLAN_TABLES/PLAN_FK 후보 배열 제거 — 정본은 public.mentor_plans(mentor_id) 단일 테이블(187 baseline 실측).
 
 function parsePriceNumber(row: Row): number | null {
   for (const k of ["amount_cents", "price_cents", "monthly_price_cents"]) {
@@ -96,6 +94,13 @@ function parsePriceNumber(row: Row): number | null {
   return null;
 }
 
+/**
+ * W4(C10): reviews_summary 계열(부재 테이블) 프로빙 루프와 reviews 계열 후보 테이블/컬럼
+ * 프로빙 제거 — 정본 public.reviews(mentor_id, rating, is_hidden, is_blinded) 단일 쿼리로 고정
+ * (187 baseline 실측 · hidden/blinded 고정 컬럼 필터, fail-open 프로빙 폐기).
+ * 오류 시 console.error 후 빈 map 반환 — 목록 카드 리뷰 수치 표기 전용 degrade(성공 아님),
+ * probe 문자열로 오류를 진단 로그에 남긴다.
+ */
 async function batchReviewStats(
   supabase: SupabaseClient,
   mentorIds: string[]
@@ -103,138 +108,90 @@ async function batchReviewStats(
   const empty = new Map<string, { count: number | null; avg: number | null }>();
   if (!mentorIds.length) return { map: empty, probe: "멘토 id 없음" };
 
-  const summaryTables = ["reviews_summary", "mentor_review_stats", "mentor_reviews_summary"] as const;
-  for (const table of summaryTables) {
-    const { error: pe } = await supabase.from(table).select("*").limit(1);
-    if (pe) continue;
-    const { column: mid } = await pickExistingColumn(supabase, table, ["mentor_id", "mentor_user_id", "user_id"]);
-    if (!mid) continue;
-    const { data, error } = await supabase.from(table).select("*").in(mid, mentorIds);
-    if (error) continue;
-    const map = new Map<string, { count: number | null; avg: number | null }>();
-    const summaryRows = rowsFromSupabaseData(data) as Row[];
-    for (const row of summaryRows) {
-      const id = String(row[mid]);
-      const cnt =
-        typeof row.review_count === "number"
-          ? row.review_count
-          : typeof row.count === "number"
-            ? row.count
-            : typeof row.reviews_count === "number"
-              ? row.reviews_count
-              : null;
-      const avg =
-        typeof row.avg_rating === "number"
-          ? row.avg_rating
-          : typeof row.average_rating === "number"
-            ? row.average_rating
-            : typeof row.rating_avg === "number"
-              ? row.rating_avg
-              : null;
-      map.set(id, { count: cnt, avg });
-    }
-    return { map, probe: `${table} · in(${mid})` };
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("mentor_id, rating")
+    .in("mentor_id", mentorIds)
+    .eq("is_hidden", false)
+    .eq("is_blinded", false)
+    .limit(2500);
+  if (error) {
+    // 표시 전용 degrade: 리뷰 통계 없이 카드 렌더(빈 결과와 구분되도록 로그·probe에 오류 기록)
+    console.error("[mentors] batchReviewStats: reviews query failed", error.message);
+    return { map: empty, probe: `reviews.mentor_id 오류: ${error.message}` };
   }
-
-  for (const table of ["reviews", "mentor_reviews", "subscription_reviews"] as const) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) continue;
-    const { column: mid } = await pickExistingColumn(supabase, table, [
-      "mentor_id",
-      "mentor_user_id",
-      "reviewee_id",
-      "to_user_id",
-      "target_user_id",
-    ]);
-    if (!mid) continue;
-    const { column: ratingCol } = await pickExistingColumn(supabase, table, ["rating", "score", "stars"]);
-    const vis = await probePublicReviewVisibilityColumns(supabase, table);
-    let batchQ = supabase.from(table).select("*").in(mid, mentorIds).limit(2500);
-    if (vis.isHidden) batchQ = batchQ.eq(vis.isHidden, false);
-    if (vis.isBlinded) batchQ = batchQ.eq(vis.isBlinded, false);
-    const { data, error } = await batchQ;
-    if (error) continue;
-    const acc = new Map<string, { c: number; rs: number; rn: number }>();
-    const reviewRows = rowsFromSupabaseData(data) as Row[];
-    for (const row of reviewRows) {
-      const id = String(row[mid]);
-      const s = acc.get(id) ?? { c: 0, rs: 0, rn: 0 };
-      s.c += 1;
-      if (ratingCol && typeof row[ratingCol] === "number") {
-        s.rs += row[ratingCol] as number;
-        s.rn += 1;
-      }
-      acc.set(id, s);
+  const acc = new Map<string, { c: number; rs: number; rn: number }>();
+  const reviewRows = rowsFromSupabaseData(data) as Row[];
+  for (const row of reviewRows) {
+    const id = String(row.mentor_id);
+    const s = acc.get(id) ?? { c: 0, rs: 0, rn: 0 };
+    s.c += 1;
+    if (typeof row.rating === "number") {
+      s.rs += row.rating;
+      s.rn += 1;
     }
-    const map = new Map<string, { count: number | null; avg: number | null }>();
-    for (const [id, s] of acc) {
-      map.set(id, { count: s.c, avg: s.rn ? s.rs / s.rn : null });
-    }
-    return { map, probe: `${table} · in(${mid}) · 최대 2500행 집계` };
+    acc.set(id, s);
   }
-
-  return { map: empty, probe: "reviews_summary / reviews 계열 미가용 또는 RLS" };
+  const map = new Map<string, { count: number | null; avg: number | null }>();
+  for (const [id, s] of acc) {
+    map.set(id, { count: s.c, avg: s.rn ? s.rs / s.rn : null });
+  }
+  return { map, probe: "reviews.mentor_id · hidden/blinded 제외 · 최대 2500행 집계" };
 }
 
 type MentorPlanBatch = { label: string; byTier: PlansByTier; probe: string };
 
+/**
+ * W4(C10): 4테이블×4FK 프로빙 루프 제거 — 정본 public.mentor_plans(mentor_id, plan_tier,
+ * amount_cents, label) 단일 쿼리로 고정(187 baseline 실측).
+ * 오류 시 console.error 후 빈 map 반환 — 목록 카드 가격 라벨은 카탈로그 표시가 폴백으로
+ * 렌더되는 표시 전용 degrade(성공 아님 · 실차감액 경로는 fetchPlansForMentor가 별도 담당).
+ */
 async function batchPlanLabels(
   supabase: SupabaseClient,
   mentorIds: string[]
 ): Promise<{ byMentor: Map<string, MentorPlanBatch>; probe: string }> {
-  let lastProbe = "plans 테이블 없음 또는 RLS";
-
-  for (const table of PLAN_TABLES) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) {
-      lastProbe = `${table}: ${pe.message}`;
-      continue;
-    }
-    const { column: fk, error: fkErr } = await pickExistingColumn(supabase, table, PLAN_FK);
-    if (!fk) {
-      lastProbe = `${table}: ${fkErr ?? "FK 컬럼 없음"}`;
-      continue;
-    }
-    const { data, error } = await supabase.from(table).select("*").in(fk, mentorIds).limit(800);
-    if (error) {
-      lastProbe = `${table}.${fk}: ${error.message}`;
-      continue;
-    }
-    const rows = rowsFromSupabaseData(data) as Row[];
-    const rowsByMentor = new Map<string, Row[]>();
-    for (const row of rows) {
-      const mid = String(row[fk]);
-      if (!mentorIds.includes(mid)) continue;
-      const list = rowsByMentor.get(mid) ?? [];
-      list.push(row);
-      rowsByMentor.set(mid, list);
-    }
-    const out = new Map<string, MentorPlanBatch>();
-    for (const [mid, mentorRows] of rowsByMentor) {
-      const { byTier } = assignPlansByTier(mentorRows);
-      const standardPrice = byTier.standard ? parsePriceNumber(byTier.standard) : null;
-      let minPrice: number | null = null;
-      for (const tier of ["limited", "standard", "premium"] as const) {
-        const planRow = byTier[tier];
-        const p = planRow ? parsePriceNumber(planRow) : null;
-        if (p != null) minPrice = minPrice == null ? p : Math.min(minPrice, p);
-      }
-      const label =
-        standardPrice != null
-          ? `${getSubscribeCatalogPlan("standard").label} ${formatMoney(standardPrice)}`
-          : minPrice != null
-            ? `대표 ${formatMoney(minPrice)}~`
-            : null;
-      out.set(mid, {
-        label: label ?? "",
-        byTier,
-        probe: `${table}.${fk}`,
-      });
-    }
-    return { byMentor: out, probe: `${table}.${fk} · 행 ${rows.length}` };
+  const { data, error } = await supabase
+    .from("mentor_plans")
+    .select("*")
+    .in("mentor_id", mentorIds)
+    .limit(800);
+  if (error) {
+    console.error("[mentors] batchPlanLabels: mentor_plans query failed", error.message);
+    return { byMentor: new Map(), probe: `mentor_plans.mentor_id 오류: ${error.message}` };
   }
-
-  return { byMentor: new Map(), probe: lastProbe };
+  const rows = rowsFromSupabaseData(data) as Row[];
+  const rowsByMentor = new Map<string, Row[]>();
+  for (const row of rows) {
+    const mid = String(row.mentor_id);
+    if (!mentorIds.includes(mid)) continue;
+    const list = rowsByMentor.get(mid) ?? [];
+    list.push(row);
+    rowsByMentor.set(mid, list);
+  }
+  const out = new Map<string, MentorPlanBatch>();
+  for (const [mid, mentorRows] of rowsByMentor) {
+    const { byTier } = assignPlansByTier(mentorRows);
+    const standardPrice = byTier.standard ? parsePriceNumber(byTier.standard) : null;
+    let minPrice: number | null = null;
+    for (const tier of ["limited", "standard", "premium"] as const) {
+      const planRow = byTier[tier];
+      const p = planRow ? parsePriceNumber(planRow) : null;
+      if (p != null) minPrice = minPrice == null ? p : Math.min(minPrice, p);
+    }
+    const label =
+      standardPrice != null
+        ? `${getSubscribeCatalogPlan("standard").label} ${formatMoney(standardPrice)}`
+        : minPrice != null
+          ? `대표 ${formatMoney(minPrice)}~`
+          : null;
+    out.set(mid, {
+      label: label ?? "",
+      byTier,
+      probe: "mentor_plans.mentor_id",
+    });
+  }
+  return { byMentor: out, probe: `mentor_plans.mentor_id · 행 ${rows.length}` };
 }
 
 function formatMoney(n: number): string {
@@ -408,94 +365,36 @@ async function batchMentorListStats(
   }
   if (!mentorIds.length) return out;
 
-  const applyProfileStatsRow = (row: Row, mentorUserId: string) => {
-    const prev = out.get(mentorUserId);
-    if (!prev) return;
-    const answers =
-      typeof row.total_answers === "number"
-        ? row.total_answers
-        : typeof row.cumulative_answers === "number"
-          ? row.cumulative_answers
-          : typeof row.answer_count === "number"
-            ? row.answer_count
-            : prev.totalAnswers;
-    const students =
-      typeof row.connected_students === "number"
-        ? row.connected_students
-        : typeof row.student_count === "number"
-          ? row.student_count
-          : prev.connectedStudents;
-    const respMin =
-      typeof row.avg_response_minutes === "number"
-        ? row.avg_response_minutes
-        : typeof row.average_response_minutes === "number"
-          ? row.average_response_minutes
-          : null;
-    const sat =
-      typeof row.satisfaction_percent === "number"
-        ? `${Math.round(row.satisfaction_percent)}%`
-        : typeof row.satisfaction_score === "number"
-          ? `${Math.round(row.satisfaction_score)}%`
-          : prev.satisfactionLabel;
-    out.set(mentorUserId, {
-      totalAnswers: answers,
-      connectedStudents: students,
-      avgResponseLabel: respMin != null ? `${Math.round(respMin)}분` : prev.avgResponseLabel,
-      satisfactionLabel: sat,
-    });
-  };
+  // W4(C10): mentor_profiles 통계 컬럼(total_answers/connected_students/avg_response_minutes/
+  // satisfaction_* 등) select 블록과 mentor_stats/mentor_directory_stats 프로빙 루프 삭제 —
+  // 후보 컬럼·테이블 부재 실측(187 baseline 0)으로 해당 select 는 항상 42703/42P01 실패였고
+  // 무음 skip 되던 영구 사문 코드. 프로빙 제거, 현행 관측 동작(기본값 유지) 고정. 기능 정본화는 비범위.
 
+  // W4(C10): subscriptions/mentor_subscriptions/user_subscriptions 프로빙 제거 — 정본
+  // public.subscriptions.mentor_id 단일 쿼리(187 baseline 실측 · XW-10). 현행 동작대로
+  // status 무필터 행 수를 유지한다. 오류 시 console.error 후 skip — connectedStudents 는
+  // 목록 카드 표시 전용 degrade(성공 아님).
   {
-    const { error: pe } = await supabase.from("mentor_profiles").select("user_id").limit(1);
-    if (!pe) {
-      const { data, error } = await supabase
-        .from("mentor_profiles")
-        .select(
-          "user_id, total_answers, cumulative_answers, answer_count, connected_students, student_count, avg_response_minutes, average_response_minutes, satisfaction_percent, satisfaction_score"
-        )
-        .in("user_id", mentorIds);
-      if (!error) {
-        for (const row of (data as Row[]) ?? []) {
-          const mentorUserId = row.user_id != null ? String(row.user_id) : "";
-          if (mentorUserId) applyProfileStatsRow(row, mentorUserId);
+    const { data, error } = await supabase
+      .from("subscriptions")
+      .select("mentor_id")
+      .in("mentor_id", mentorIds)
+      .limit(3000);
+    if (error) {
+      console.error("[mentors] batchMentorListStats: subscriptions query failed", error.message);
+    } else {
+      const counts = new Map<string, number>();
+      for (const row of (data as Row[]) ?? []) {
+        const id = String(row.mentor_id);
+        counts.set(id, (counts.get(id) ?? 0) + 1);
+      }
+      for (const [id, c] of counts) {
+        const prev = out.get(id);
+        if (prev && prev.connectedStudents == null) {
+          out.set(id, { ...prev, connectedStudents: c });
         }
       }
     }
-  }
-
-  for (const table of ["mentor_stats", "mentor_directory_stats"] as const) {
-    const { error: pe } = await supabase.from(table).select("user_id").limit(1);
-    if (pe) continue;
-    const { column: idCol } = await pickExistingColumn(supabase, table, ["user_id", "mentor_id", "mentor_user_id"]);
-    if (!idCol) continue;
-    const { data, error } = await supabase.from(table).select("*").in(idCol, mentorIds);
-    if (error) continue;
-    for (const row of (data as Row[]) ?? []) {
-      const mentorUserId = String(row[idCol]);
-      applyProfileStatsRow(row, mentorUserId);
-    }
-    break;
-  }
-
-  for (const table of ["subscriptions", "mentor_subscriptions", "user_subscriptions"] as const) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) continue;
-    const { column: mid } = await pickExistingColumn(supabase, table, ["mentor_id", "mentor_user_id", "creator_id"]);
-    if (!mid) continue;
-    const { data, error } = await supabase.from(table).select("*").in(mid, mentorIds).limit(3000);
-    if (error) continue;
-    const counts = new Map<string, number>();
-    for (const row of (data as Row[]) ?? []) {
-      const id = String(row[mid]);
-      counts.set(id, (counts.get(id) ?? 0) + 1);
-    }
-    for (const [id, c] of counts) {
-      const prev = out.get(id);
-      if (prev && prev.connectedStudents == null) {
-        out.set(id, { ...prev, connectedStudents: c });
-      }
-    }
-    break;
   }
 
   const responseEntries = await Promise.all(

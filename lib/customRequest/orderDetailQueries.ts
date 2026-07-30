@@ -6,7 +6,7 @@ import {
   loadApplicationById,
   loadCustomPostById,
   loadOrderBundle,
-  ORDER_TO_DELIVERABLE_FK_CANDIDATES,
+  ORDER_CHILD_FK_COLUMN,
   pickDisplayField,
   pickMentorIdFromApplication,
 } from "@/lib/customRequest/customRequestQueries";
@@ -19,7 +19,6 @@ import {
 } from "@/lib/customRequest/orderMessageAttachments";
 import { loadCustomOrderSettlementItemByOrderId } from "@/lib/customRequest/orderSettlementService";
 import { loadOrderMessages, loadOrderRevisions } from "@/lib/customRequest/orderRoomMutations";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import {
   formatOrderRoomDate,
   orderStatusLabelForUi,
@@ -72,51 +71,26 @@ export function pickMentorIdFromOrderRow(r: Row | null): string | null {
 }
 
 /**
- * order_events / custom_order_events 등 — 주문 진행 로그(있으면).
+ * 주문 진행 로그 — W4(C10): order_events.custom_request_order_id + created_at asc 정본 고정
+ * (003, 187 baseline 실측; custom_order_events 등 대체 후보 테이블은 존재하지 않음). 프로빙·무정렬 재시도 제거.
  */
 export async function loadOrderEventLog(
   supabase: SupabaseClient,
   orderId: string
 ): Promise<CustomListResult> {
-  const candidates = [
-    "order_events",
-    "custom_order_events",
-    "request_order_status_events",
-    "order_status_history",
-  ] as const;
-  for (const table of candidates) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) continue;
-    const { column: fk } = await pickExistingColumn(supabase, table, [...ORDER_TO_DELIVERABLE_FK_CANDIDATES]);
-    if (!fk) continue;
-    const o1 = await supabase
-      .from(table)
-      .select("*")
-      .eq(fk, orderId)
-      .order("created_at", { ascending: true });
-    if (o1.error) {
-      const o2 = await supabase.from(table).select("*").eq(fk, orderId);
-      if (o2.error) {
-        return { table, sourceNote: "진행 기록을 불러오지 못했습니다.", rows: [], error: o2.error.message };
-      }
-      return {
-        table,
-        sourceNote: "최신 순으로 정리한 진행 기록",
-        rows: (o2.data as Row[]) ?? [],
-        error: null,
-      };
-    }
-    return {
-      table,
-      sourceNote: "진행 기록",
-      rows: (o1.data as Row[]) ?? [],
-      error: null,
-    };
+  const table = "order_events";
+  const { data, error } = await supabase
+    .from(table)
+    .select("*")
+    .eq(ORDER_CHILD_FK_COLUMN, orderId)
+    .order("created_at", { ascending: true });
+  if (error) {
+    return { table, sourceNote: "진행 기록을 불러오지 못했습니다.", rows: [], error: error.message };
   }
   return {
-    table: null,
-    sourceNote: "이 주문에 대한 단계별 기록이 별도로 없을 수 있습니다. 아래 요약·메시지를 참고하세요.",
-    rows: [],
+    table,
+    sourceNote: "진행 기록",
+    rows: (data as Row[]) ?? [],
     error: null,
   };
 }
