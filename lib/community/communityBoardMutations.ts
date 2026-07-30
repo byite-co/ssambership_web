@@ -1,10 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   COMMUNITY_BODY_MIN,
-  COMMUNITY_HASHTAG_MAX,
   type CommunityPostCategorySlug,
 } from "@/lib/community/communityBoardConstants";
+import { callApiWebV1Rpc } from "@/lib/apiWebV1/rpc";
 
+/**
+ * S2-2 전환 W2(C5): 게시글 쓰기 정본 — F4/F5/F6 (계약 §7 · §14 · §17 #8).
+ * author id·role·label 은 전달하지 않는다(서버가 auth.uid()·users 로 도출).
+ * 소유·역할·승인·계정 상태·이미지(소유자/버킷/MIME/크기/개수)·마스킹·멱등 재생은
+ * 전부 서버(F4~F6 → core_private B-1~B-4) 판정이며, 직접 INSERT/UPDATE fallback
+ * 은 만들지 않는다. envelope 오류코드는 기존 redirect 슬러그로 매핑한다.
+ */
 export type InsertBoardPostInput = {
   title: string;
   body: string;
@@ -12,65 +19,77 @@ export type InsertBoardPostInput = {
   imageUrls: string[];
   hashtags: string[];
   status: "draft" | "published";
-  authorLabel: string;
-  authorRole: string | null;
-  /** 클라 요청 UUID(중복 제출 방지). null 이면 멱등 검사 없음(레거시). */
+  /** F4 멱등키(작성 시도당 1회 생성·재시도 재사용 — 계약 §7 F4). */
   createIdempotencyKey?: string | null;
 };
 
-function isUniqueViolation(err: { code?: string } | null): boolean {
-  return err?.code === "23505";
+/** F4/F5/F6 envelope 코드 → 기존 compose redirect 슬러그. */
+function postEnvelopeCodeToSlug(code: string): string {
+  switch (code) {
+    case "TITLE_REQUIRED":
+      return "title";
+    case "BODY_TOO_SHORT":
+      return "body";
+    case "CATEGORY_INVALID":
+      return "category";
+    case "ACCOUNT_BANNED":
+    case "ACCOUNT_SUSPENDED":
+    case "ACCOUNT_DELETION_IN_PROGRESS":
+      return "account_blocked";
+    case "ROLE_NOT_MENTOR":
+    case "MENTOR_NOT_APPROVED":
+      return "role";
+    case "UPDATE_CONFLICT":
+      return "conflict";
+    default:
+      return code.startsWith("IMAGE_") ? "images" : "db";
+  }
 }
+
+/** 전송·연결 오류(응답 불명확 — 커밋 여부 미확정)인지 구분한다(§14.4 보상 분기 3). */
+export type BoardPostWriteFailure = {
+  ok: false;
+  error: string;
+  /** true = 확정 실패 envelope(미커밋 확정 — 신규 업로드 보상 삭제 허용). false = 응답 불명확(삭제 금지·동일 키 재호출). */
+  definite: boolean;
+};
 
 export async function insertCommunityBoardPost(
   supabase: SupabaseClient,
   userId: string,
   input: InsertBoardPostInput
-): Promise<{ ok: true; id: string; idempotentReplay?: boolean } | { ok: false; error: string }> {
+): Promise<{ ok: true; id: string; idempotentReplay?: boolean } | BoardPostWriteFailure> {
+  void userId; // F4 가 auth.uid() 로 작성자를 도출한다(작성자 인자 전달 금지 — W2 §4.1)
   const title = input.title.trim();
   const body = input.body.trim();
-  if (title.length < 1) return { ok: false, error: "title" };
-  if (input.status === "published" && body.length < COMMUNITY_BODY_MIN) return { ok: false, error: "body" };
-  if (input.category === "all") return { ok: false, error: "category" };
-
-  const hashtags = input.hashtags.map((t) => t.replace(/^#/, "").trim()).filter(Boolean).slice(0, COMMUNITY_HASHTAG_MAX);
-
-  const idemKey = input.createIdempotencyKey && input.createIdempotencyKey.trim() ? input.createIdempotencyKey.trim() : null;
-  const payload: Record<string, unknown> = {
-    author_id: userId,
-    title,
-    body,
-    content: body,
-    category: input.category,
-    image_urls: input.imageUrls,
-    hashtags,
-    status: input.status,
-    author_label: input.authorLabel,
-    author_role: input.authorRole,
-    create_idempotency_key: idemKey,
-  };
-
-  // 폴백 INSERT 제거: image_urls·status·author_label·author_role 을 누락한 채
-  // status default('published') 로 강제공개되던 경로를 없앤다. DB 오류는 그대로 실패.
-  const { data, error } = await supabase.from("community_posts").insert(payload).select("id").maybeSingle();
-  if (error) {
-    // 중복 제출(동일 author+요청키) → UNIQUE(23505). 기존 글을 찾아 그대로 반환(멱등 재생).
-    if (idemKey && isUniqueViolation(error as { code?: string })) {
-      const { data: existing } = await supabase
-        .from("community_posts")
-        .select("id")
-        .eq("author_id", userId)
-        .eq("create_idempotency_key", idemKey)
-        .maybeSingle();
-      const existingId =
-        existing && typeof (existing as { id: string }).id === "string" ? (existing as { id: string }).id : null;
-      if (existingId) return { ok: true, id: existingId, idempotentReplay: true };
-    }
-    return { ok: false, error: "db" };
+  if (title.length < 1) return { ok: false, error: "title", definite: true };
+  if (input.status === "published" && body.length < COMMUNITY_BODY_MIN) {
+    return { ok: false, error: "body", definite: true };
   }
-  const id = data && typeof (data as { id: string }).id === "string" ? (data as { id: string }).id : null;
-  if (!id) return { ok: false, error: "db" };
-  return { ok: true, id };
+  if (input.category === "all") return { ok: false, error: "category", definite: true };
+  const idemKey = input.createIdempotencyKey?.trim() || null;
+  if (!idemKey) return { ok: false, error: "db", definite: true };
+
+  const args = {
+    p_title: title,
+    p_body: body,
+    p_category: input.category,
+    p_idempotency_key: idemKey,
+    p_image_refs: input.imageUrls,
+    p_status: input.status,
+  };
+  let res = await callApiWebV1Rpc(supabase, "community_post_create", args);
+  if (!res.ok && res.message !== null) {
+    // 전송·연결 오류(커밋 여부 불명확) — 같은 멱등키로 정확히 1회 재호출(replay-first,
+    // §14.4 분기 3). 새 키를 만들지 않고, 재호출 전 Storage 삭제도 하지 않는다.
+    res = await callApiWebV1Rpc(supabase, "community_post_create", args);
+  }
+  if (!res.ok) {
+    return { ok: false, error: postEnvelopeCodeToSlug(res.code), definite: res.message === null };
+  }
+  const id = typeof res.row.post_id === "string" ? res.row.post_id : null;
+  if (!id) return { ok: false, error: "db", definite: true };
+  return { ok: true, id, idempotentReplay: res.row.idempotent_replay === true };
 }
 
 /**
@@ -82,67 +101,47 @@ export async function softDeleteCommunityBoardPost(
   userId: string,
   postId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { data, error } = await supabase
-    .from("community_posts")
-    .update({ deleted_at: new Date().toISOString(), updated_at: new Date().toISOString() })
-    .eq("id", postId)
-    .eq("author_id", userId)
-    .is("deleted_at", null)
-    .select("id")
-    .maybeSingle();
-  if (error) return { ok: false, error: "db" };
-  if (data && typeof (data as { id: string }).id === "string") return { ok: true };
-  // 0행: 비존재·비소유·이미삭제. 이미 삭제됐는지 확인해 멱등 성공 처리.
-  const { data: check } = await supabase
-    .from("community_posts")
-    .select("id, deleted_at")
-    .eq("id", postId)
-    .eq("author_id", userId)
-    .maybeSingle();
-  if (check && (check as { deleted_at?: unknown }).deleted_at) return { ok: true };
-  return { ok: false, error: "not_found" };
+  void userId; // F6 이 auth.uid() 소유권을 판정한다
+  const res = await callApiWebV1Rpc(supabase, "community_post_soft_delete", { p_post_id: postId });
+  if (!res.ok) {
+    return { ok: false, error: res.code === "POST_NOT_FOUND" ? "not_found" : postEnvelopeCodeToSlug(res.code) };
+  }
+  // already_deleted:true 도 정상 성공(§8.3 F6 — 멱등 재삭제)
+  return { ok: true };
 }
 
 export async function updateCommunityBoardPost(
   supabase: SupabaseClient,
   userId: string,
   postId: string,
-  input: InsertBoardPostInput
-): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
+  input: InsertBoardPostInput,
+  /** 낙관 잠금 기준값 — 편집 화면 로드 시점의 updated_at(계약 §7 F5). */
+  expectedUpdatedAt: string
+): Promise<{ ok: true; id: string; removedImageRefs: string[] } | { ok: false; error: string }> {
+  void userId; // F5 가 auth.uid() 소유권을 판정한다
   const title = input.title.trim();
   const body = input.body.trim();
   if (title.length < 1) return { ok: false, error: "title" };
   if (input.status === "published" && body.length < COMMUNITY_BODY_MIN) return { ok: false, error: "body" };
   if (input.category === "all") return { ok: false, error: "category" };
+  if (!expectedUpdatedAt.trim()) return { ok: false, error: "conflict" };
 
-  const hashtags = input.hashtags.map((t) => t.replace(/^#/, "").trim()).filter(Boolean).slice(0, COMMUNITY_HASHTAG_MAX);
-
-  const payload: Record<string, unknown> = {
-    title,
-    body,
-    content: body,
-    category: input.category,
-    image_urls: input.imageUrls,
-    hashtags,
-    status: input.status,
-    author_label: input.authorLabel,
-    author_role: input.authorRole,
-  };
-
-  const { data, error } = await supabase
-    .from("community_posts")
-    .update(payload)
-    .eq("id", postId)
-    .eq("author_id", userId)
-    .is("deleted_at", null)
-    .select("id")
-    .maybeSingle();
-
-  // 0행 UPDATE(비존재·비소유·삭제됨)를 성공으로 오판하지 않는다: 반환 행이 있을 때만 성공.
-  if (error) return { ok: false, error: "db" };
-  const id = data && typeof (data as { id: string }).id === "string" ? (data as { id: string }).id : null;
-  if (!id) return { ok: false, error: "db" };
-  return { ok: true, id };
+  const res = await callApiWebV1Rpc(supabase, "community_post_update", {
+    p_post_id: postId,
+    p_title: title,
+    p_body: body,
+    p_category: input.category,
+    p_expected_updated_at: expectedUpdatedAt,
+    p_image_refs: input.imageUrls,
+    p_status: input.status,
+  });
+  // UPDATE_CONFLICT 는 덮어쓰기·자동 재시도 없이 그대로 실패로 반환한다(§7 F5)
+  if (!res.ok) return { ok: false, error: postEnvelopeCodeToSlug(res.code) };
+  const id = typeof res.row.post_id === "string" ? res.row.post_id : postId;
+  const removed = Array.isArray(res.row.removed_image_refs)
+    ? (res.row.removed_image_refs as unknown[]).filter((r): r is string => typeof r === "string")
+    : [];
+  return { ok: true, id, removedImageRefs: removed };
 }
 
 export async function togglePostReaction(

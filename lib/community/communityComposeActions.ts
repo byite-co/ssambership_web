@@ -5,7 +5,8 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
 import { normalizeCommunityPostCategory } from "@/lib/community/communityBoardConstants";
-import { insertMentorBoardPost, insertMentorShortformPost } from "@/lib/community/communityMutations";
+import { insertMentorShortformPost } from "@/lib/community/communityMutations";
+import { insertCommunityBoardPost } from "@/lib/community/communityBoardMutations";
 import { SHORTFORM_CATEGORIES, type ShortformCategorySlug } from "@/lib/community/communityShortformConstants";
 import {
   TRUST_SAFETY_COMMUNITY_ERROR_CODE,
@@ -66,7 +67,18 @@ export async function submitMentorCommunityPost(formData: FormData) {
     redirect(`/community/shortform/${r.id}`);
   }
 
-  const r2 = await insertMentorBoardPost(supabase, user.id, input);
+  // W2(C5): 게시판 분기는 F4 로 통합 — 구 insertMentorBoardPost(5-후보 직접 INSERT 프로빙)는
+  // 현행 community_posts 스키마와 불일치해 사실상 사장 경로였다(source 계열 컬럼 부재).
+  // source 검증은 유지하되 저장 컬럼이 계약에 없어 기록하지 않는다(XW-21/U-14 — S3 정리).
+  const r2 = await insertCommunityBoardPost(supabase, user.id, {
+    title: input.title,
+    body: input.body,
+    category: boardCategory,
+    imageUrls: [],
+    hashtags: [],
+    status: "published",
+    createIdempotencyKey: crypto.randomUUID(),
+  });
   if (!r2.ok) {
     console.error("[submitMentorCommunityPost] board insert failed", r2.error);
     redirect(buildErrorRedirect("board_save"));

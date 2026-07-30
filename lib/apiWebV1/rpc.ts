@@ -20,7 +20,14 @@ export type ApiWebV1Envelope =
 
 export type ApiWebV1RpcResult =
   | { ok: true; row: Record<string, unknown> }
-  | { ok: false; code: string; message: string | null };
+  | {
+      ok: false;
+      code: string;
+      /** 전송·전파 오류 원문(envelope 실패면 null — 확정 거부). */
+      message: string | null;
+      /** envelope 실패의 보조 필드(§8.1 — 예: F8 밴드 tier/min/max). 전송 오류면 null. */
+      detail: Record<string, unknown> | null;
+    };
 
 /** Postgres 오류 메시지에서 raise 코드(대문자_스네이크)만 추출 — 전파 예외용. */
 export function extractRaiseCode(message: string): string {
@@ -37,7 +44,7 @@ export async function callApiWebV1Rpc(
   const { data, error } = await supabase.schema(API_WEB_V1_SCHEMA).rpc(fn, args);
   if (error) {
     // 사전 밖 예외 전파(§8.2) 또는 전송 오류 — 성공으로 승격하지 않는다.
-    return { ok: false, code: extractRaiseCode(error.message), message: error.message };
+    return { ok: false, code: extractRaiseCode(error.message), message: error.message, detail: null };
   }
   const row =
     data && typeof data === "object" && !Array.isArray(data)
@@ -46,7 +53,7 @@ export async function callApiWebV1Rpc(
   if (!row || row.ok !== true) {
     // ok 부재·비성공 — §8.2: ok 없는 응답은 성공이 아니다.
     const code = row && typeof row.code === "string" ? row.code : "";
-    return { ok: false, code, message: null };
+    return { ok: false, code, message: null, detail: row };
   }
   return { ok: true, row };
 }

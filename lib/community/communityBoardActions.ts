@@ -4,10 +4,7 @@ import { redirect } from "next/navigation";
 import { getServerAuthUser } from "@/lib/auth/getCurrentUser";
 import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
 import { authorStoredLabelFromProfile } from "@/lib/community/communityAuthorLabels";
-import {
-  COMMUNITY_IMAGE_MAX,
-  normalizeCommunityPostCategory,
-} from "@/lib/community/communityBoardConstants";
+import { normalizeCommunityPostCategory } from "@/lib/community/communityBoardConstants";
 import {
   insertBoardComment,
   insertCommunityBoardPost,
@@ -19,7 +16,6 @@ import {
 import { communityComposePath } from "@/lib/community/communityComposeTab";
 import { revalidateCommunityPaths } from "@/lib/community/communityRevalidate";
 import { deleteCommunityImageStoredRefs } from "@/lib/community/communityImageStorage";
-import { communityImageRefBelongsToUser } from "@/lib/community/communityImageRef";
 import { createClient } from "@/lib/supabase/server";
 import { assertAccountActive } from "@/lib/auth/accountStatus";
 import {
@@ -52,14 +48,11 @@ function errRedirect(returnPath: string, code: string) {
   return `${returnPath}${sep}error=${encodeURIComponent(code)}`;
 }
 
-async function authorLabelFor(userId: string): Promise<{ label: string; role: string | null }> {
+/** 댓글(레거시 유지 경로) 전용 — 게시글은 F4/F5 가 서버에서 라벨·역할을 도출한다(W2 C5). */
+async function authorLabelFor(userId: string): Promise<{ label: string }> {
   const supabase = await createClient();
   const { data: profile } = await getUserProfileById(supabase, userId);
-  const label = authorStoredLabelFromProfile(profile);
-  // DB CHECK(community_posts_author_role_chk)는 영문 mentor/student/admin/user 만 허용한다.
-  // 한글('멘토'/'학생')을 저장하면 INSERT 가 CHECK 를 위반하므로 영문으로 정규화한다(그 외는 null).
-  const role = profile?.role === "mentor" ? "mentor" : profile?.role === "student" ? "student" : null;
-  return { label, role };
+  return { label: authorStoredLabelFromProfile(profile) };
 }
 
 // 이번 요청에서 새로 업로드했으나 DB write 가 실패한 이미지 객체를 보상 삭제한다.
@@ -103,21 +96,8 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
   const supabase = await createClient();
   const isUpdate = Boolean(draftId) && UUID_RE.test(draftId);
 
-  // 편집 시: 새 업로드 전에 소유권 조건으로 기존 image_urls 를 조회한다(교체 제거분 차집합 삭제용).
-  let oldImageRefs: string[] = [];
-  if (isUpdate) {
-    const { data: existing } = await supabase
-      .from("community_posts")
-      .select("image_urls")
-      .eq("id", draftId)
-      .eq("author_id", user.id)
-      .maybeSingle();
-    const arr =
-      existing && Array.isArray((existing as { image_urls?: unknown }).image_urls)
-        ? (existing as { image_urls: unknown[] }).image_urls
-        : [];
-    oldImageRefs = arr.filter((u): u is string => typeof u === "string" && u.trim().length > 0);
-  }
+  // W2(C5): 구 image_urls 사전 조회(community_posts 직접 읽기)는 제거 — 교체 제거분은
+  // F5 성공 응답의 removed_image_refs 만 후속 Storage 정리 대상으로 삼는다(계약 §7 F5).
 
   // 저장 형식은 `bucket/path` ref. 편집 시 유지되는 기존 이미지는 ref 또는 (레거시) http URL 둘 다 수용.
   const imageRefs: string[] = [];
@@ -134,7 +114,7 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
   }
 
   // [staged upload] 파일은 액션 body 로 받지 않는다(413 회피). 클라가 Storage 로 직접 업로드하고
-  // ref(텍스트)만 imageRefs 로 보낸다. 신규 ref 는 반드시 본인 네임스페이스({userId}/…)여야 신뢰한다.
+  // ref(텍스트)만 imageRefs 로 보낸다. 소유자·버킷·MIME·크기·개수 판정은 F4/F5(B-4)가 정본이다.
   const newUploadedRefs: string[] = [];
   const newImagesRaw = String(formData.get("imageRefs") ?? "").trim();
   if (newImagesRaw) {
@@ -149,23 +129,14 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
       /* ignore */
     }
   }
-  // 소유권 위조 차단: 본인 객체가 아닌 신규 ref 가 하나라도 있으면 거부(검증 통과분은 보상 삭제).
-  const ownedNew = newUploadedRefs.filter((r) => communityImageRefBelongsToUser(r, user.id));
-  if (ownedNew.length !== newUploadedRefs.length) {
-    await compensateNewBoardImages(supabase, ownedNew);
-    redirect(errRedirect(returnPath, "images"));
-  }
-  imageRefs.push(...ownedNew);
-  if (imageRefs.length > COMMUNITY_IMAGE_MAX) {
-    await compensateNewBoardImages(supabase, ownedNew);
-    redirect(errRedirect(returnPath, "images"));
-  }
+  imageRefs.push(...newUploadedRefs);
 
-  // 요청 UUID → 멱등 키(중복 제출 시 동일 글 반환). 없거나 형식 오류면 null(레거시 무검사).
+  // 요청 UUID → F4 멱등키(작성 시도당 1회 생성 — 폼이 생성·재시도 재사용). 없으면 이번
+  // 시도 한정으로 서버에서 1회 발급한다(새 키 재발급 재시도 금지 — 계약 §7 F4).
   const requestId = String(formData.get("requestId") ?? "").trim();
-  const createIdempotencyKey = requestId && UUID_RE.test(requestId) ? requestId : null;
+  const createIdempotencyKey = requestId && UUID_RE.test(requestId) ? requestId : crypto.randomUUID();
+  const expectedUpdatedAt = String(formData.get("expectedUpdatedAt") ?? "").trim();
 
-  const { label, role } = await authorLabelFor(user.id);
   const payload = {
     title: safeTitle,
     body: safeBody,
@@ -173,36 +144,33 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
     imageUrls: imageRefs,
     hashtags: [] as string[],
     status: status as "draft" | "published",
-    authorLabel: label,
-    authorRole: role,
     createIdempotencyKey,
   };
 
   const r = isUpdate
-    ? await updateCommunityBoardPost(supabase, user.id, draftId, payload)
+    ? await updateCommunityBoardPost(supabase, user.id, draftId, payload, expectedUpdatedAt)
     : await insertCommunityBoardPost(supabase, user.id, payload);
 
   if (!r.ok) {
-    // DB 실패(INSERT/UPDATE 오류·UPDATE 0행) → 이번 요청 신규 업로드 이미지 고아 방지 보상 삭제.
-    await compensateNewBoardImages(supabase, ownedNew);
-    redirect(errRedirect(returnPath, r.error));
+    // §14.4 보상 분기: 확정 실패 envelope(미커밋 확정)에서만 이번 요청 신규 업로드분을
+    // 보상 삭제한다. 응답 불명확(전송 오류 — mutation 이 동일 키로 1회 재호출까지 실패)
+    // 이면 삭제하지 않고 같은 멱등키 재시도를 안내한다(선삭제 금지).
+    const definite = !("definite" in r) || r.definite !== false;
+    if (definite) {
+      await compensateNewBoardImages(supabase, newUploadedRefs);
+      redirect(errRedirect(returnPath, r.error));
+    }
+    redirect(errRedirect(returnPath, "network"));
   }
 
-  // 중복 제출 멱등 재생: 기존 글이 반환됐다면 이번 중복 업로드분은 고아 → 보상 삭제 후 기존 글로 이동.
-  if (!isUpdate && "idempotentReplay" in r && r.idempotentReplay) {
-    await compensateNewBoardImages(supabase, ownedNew);
-  }
+  // 멱등 재생 성공(F4 idempotent_replay:true) = 성공 — 객체를 삭제하지 않는다(§14.4 분기 4).
+  // 확정 rollback·미커밋 케이스에서만 보상 삭제가 일어난다(위 분기).
 
-  // DB 성공(UPDATE) → 제거된 구이미지 차집합(old − final) 삭제(post-commit 실패는 구조화 로그).
-  // 썸네일 등 다른 도메인은 미변경. 삭제는 owner-scoped RLS(cpi_auth_delete_own)로 본인 객체만.
-  if (isUpdate && oldImageRefs.length > 0) {
-    const finalSet = new Set(imageRefs);
-    const removed = oldImageRefs.filter((ref) => !finalSet.has(ref));
-    if (removed.length > 0) {
-      const del = await deleteCommunityImageStoredRefs(supabase, removed);
-      if (!del.ok) {
-        console.error("[board] 교체 구이미지 정리 실패", { postId: r.id, removed, error: del.error });
-      }
+  // F5 성공 → 서버가 판정한 removed_image_refs 만 후속 정리(post-commit 실패는 구조화 로그).
+  if (isUpdate && "removedImageRefs" in r && r.removedImageRefs.length > 0) {
+    const del = await deleteCommunityImageStoredRefs(supabase, r.removedImageRefs);
+    if (!del.ok) {
+      console.error("[board] 교체 구이미지 정리 실패", { postId: r.id, removed: r.removedImageRefs, error: del.error });
     }
   }
 

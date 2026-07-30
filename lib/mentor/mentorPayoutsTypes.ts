@@ -47,6 +47,7 @@ export type MentorPayoutSummary = {
   bankDisplay: string;
   bankEditable: boolean;
   bankName: string | null;
+  /** W2(C11): 마스킹 값(끝 4자리 외 *) — 계좌 원문은 서버 밖으로 내보내지 않는다. */
   bankAccountNumber: string | null;
 };
 

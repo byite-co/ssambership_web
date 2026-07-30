@@ -1,18 +1,43 @@
-import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import {
-  amountCentsFromCashKrw,
-  isOutsideMentorPriceGuide,
-  mentorPlanDebitAmountCents,
-  mentorSubscriptionPriceRule,
-  SUBSCRIBE_PLAN_TIERS,
-} from "@/lib/subscribe/mentorPlanPricing";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { amountCentsFromCashKrw, SUBSCRIBE_PLAN_TIERS } from "@/lib/subscribe/mentorPlanPricing";
 import { getSubscribeCatalogPlan } from "@/lib/subscribe/subscribePlanCatalog";
 import type { SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
-import { buildMentorProfilePayloads, splitCsv } from "@/lib/mentor/mentorProfilePayload";
+import { splitCsv } from "@/lib/mentor/mentorProfilePayload";
+import { callApiWebV1Rpc } from "@/lib/apiWebV1/rpc";
 
-function isMissingColumnError(err: PostgrestError | null): boolean {
-  if (!err) return false;
-  return /column|does not exist|schema cache/i.test(err.message);
+/**
+ * S2-2 전환 W2(C6): 멘토 프로필·요금제 저장 정본 — F7
+ * `api_web_v1.mentor_profile_update_self`(허용 9필드 전면 교체) + F8
+ * `api_web_v1.mentor_plan_prices_set_self`(3-tier 원자, 입력 = cash KRW)
+ * (계약 §7 F7/F8 · §17 #10·#11 — XW-02·XW-03 해소).
+ * mentor_profiles·mentor_plans 직접 쓰기(INSERT/UPDATE/upsert)·스키마 프로빙
+ * extras(grade/tags 계열)·비정상 계정 INSERT 폴백은 전부 제거했다 — 특권 컬럼
+ * (verification_status·cap_limit)·인증서류(student_id_image_url)·payout 컬럼은
+ * 어떤 인자로도 전달되지 않는다(F7 allowlist 가 DB 정본).
+ */
+
+/** F7 오류코드 → 사용자 문구. */
+function f7CodeToMessage(code: string): string {
+  switch (code) {
+    case "AUTH_REQUIRED":
+      return "로그인 정보가 만료되었어요. 다시 로그인해 주세요.";
+    case "ROLE_NOT_MENTOR":
+      return "멘토만 프로필을 수정할 수 있어요.";
+    case "MENTOR_PROFILE_NOT_FOUND":
+      return "멘토 프로필을 찾을 수 없어요. 고객센터로 문의해 주세요.";
+    case "UNIVERSITY_NAME_REQUIRED":
+      return "대학명을 입력해 주세요.";
+    case "DEPARTMENT_NAME_REQUIRED":
+      return "학과명을 입력해 주세요.";
+    case "PROFILE_IMAGE_REF_INVALID":
+      return "프로필 사진 참조가 올바르지 않아요. 사진을 다시 업로드해 주세요.";
+    case "ACCOUNT_BANNED":
+    case "ACCOUNT_SUSPENDED":
+    case "ACCOUNT_DELETION_IN_PROGRESS":
+      return "현재 계정 상태에서는 프로필을 수정할 수 없어요.";
+    default:
+      return "프로필을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.";
+  }
 }
 
 export type MentorProfileFormInput = {
@@ -34,81 +59,62 @@ export type MentorProfileFormInput = {
   profileImageUrl?: string | null;
 };
 
-function priceChanged(
-  row: Record<string, unknown> | null,
-  tier: SubscribePlanTier,
-  nextAmountCents: number
-): boolean {
-  if (!row) return true;
-  return mentorPlanDebitAmountCents(row, tier) !== nextAmountCents;
-}
-
 async function updateMentorSubscriptionPrices(
   supabase: SupabaseClient,
-  mentorId: string,
-  pricesKrw: Record<SubscribePlanTier, number | null> | undefined,
-  now: string
+  pricesKrw: Record<SubscribePlanTier, number | null> | undefined
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   if (!pricesKrw) return { ok: true };
-
-  const payloads: Record<string, unknown>[] = [];
-  const { data: existingRows, error: selectError } = await supabase
-    .from("mentor_plans")
-    .select("id, mentor_id, plan_tier, amount_cents")
-    .eq("mentor_id", mentorId);
-
-  if (selectError) {
-    return { ok: false, error: selectError.message };
-  }
-
-  const byTier = new Map<SubscribePlanTier, Record<string, unknown>>();
-  for (const row of (existingRows as Record<string, unknown>[] | null) ?? []) {
-    const tier = row.plan_tier;
-    if (tier === "limited" || tier === "standard" || tier === "premium") {
-      byTier.set(tier, row);
-    }
-  }
 
   for (const tier of SUBSCRIBE_PLAN_TIERS) {
     const cashKrw = pricesKrw[tier];
     if (typeof cashKrw !== "number" || !Number.isFinite(cashKrw) || cashKrw <= 0) {
       return { ok: false, error: "구독 요금은 1캐시 이상 숫자로 입력해 주세요." };
     }
-    // 가격 밴드는 서버에서 강제한다 — UI 경고만으로는 밴드 밖 금액이 저장돼
-    // 구독 화면에 비정상 가격이 그대로 노출·차감되는 사고가 났다.
-    const rule = mentorSubscriptionPriceRule(tier);
-    if (isOutsideMentorPriceGuide(Math.trunc(cashKrw), tier)) {
-      const label = getSubscribeCatalogPlan(tier).label;
-      return {
-        ok: false,
-        error: `${label} 구독 요금은 ${rule.minCashKrw.toLocaleString("ko-KR")}~${rule.maxCashKrw.toLocaleString("ko-KR")}캐시 범위에서 설정할 수 있습니다.`,
-      };
-    }
-    const amountCents = amountCentsFromCashKrw(Math.trunc(cashKrw));
-    const existing = byTier.get(tier) ?? null;
-    if (!priceChanged(existing, tier, amountCents)) continue;
-
-    payloads.push({
-      mentor_id: mentorId,
-      plan_tier: tier,
-      amount_cents: amountCents,
-      updated_at: now,
-      price_updated_at: now,
-    });
   }
 
-  if (payloads.length === 0) return { ok: true };
-
-  const { error: upsertError } = await supabase
-    .from("mentor_plans")
-    .upsert(payloads, { onConflict: "mentor_id,plan_tier" });
-
-  if (upsertError) {
-    return { ok: false, error: upsertError.message };
+  // F8: 3개 tier 를 한 RPC 호출로 원자 처리. 입력 단위는 cash KRW(센트 아님 — DB 가
+  // ×100 저장·cap_weight 강제). 밴드 판정은 DB 정본 — 밖이면 clamp 없이
+  // PLAN_PRICE_OUT_OF_BAND 로 거부된다(계약 §7 F8, T-SEC-06·07).
+  const res = await callApiWebV1Rpc(supabase, "mentor_plan_prices_set_self", {
+    p_limited_cash_krw: Math.trunc(pricesKrw.limited as number),
+    p_standard_cash_krw: Math.trunc(pricesKrw.standard as number),
+    p_premium_cash_krw: Math.trunc(pricesKrw.premium as number),
+  });
+  if (!res.ok) {
+    const d = res.detail ?? {};
+    return {
+      ok: false,
+      error: f8CodeToMessage(res.code, {
+        tier: typeof d.tier === "string" ? d.tier : undefined,
+        min: typeof d.min_cash_krw === "number" ? d.min_cash_krw : undefined,
+        max: typeof d.max_cash_krw === "number" ? d.max_cash_krw : undefined,
+      }),
+    };
   }
-
-  // 활성 구독 학생 알림은 158 트리거(mentor_plans amount_cents 변경 fan-out)가 upsert 트랜잭션과 원자적으로 발행한다.
+  // updated[]·unchanged[] 는 모두 정상 응답이다(§8.3 F8 — 변경 없으면 updated:[]).
   return { ok: true };
+}
+
+/** F8 오류코드 → 사용자 문구(밴드 범위는 envelope 보조 필드가 정본). */
+function f8CodeToMessage(
+  code: string,
+  detail: { tier?: string; min?: number; max?: number } | null
+): string {
+  if (code === "PLAN_PRICE_OUT_OF_BAND") {
+    const tier = detail?.tier;
+    const label = tier === "limited" || tier === "standard" || tier === "premium"
+      ? getSubscribeCatalogPlan(tier).label
+      : "구독";
+    if (detail && typeof detail.min === "number" && typeof detail.max === "number") {
+      return `${label} 구독 요금은 ${detail.min.toLocaleString("ko-KR")}~${detail.max.toLocaleString("ko-KR")}캐시 범위에서 설정할 수 있습니다.`;
+    }
+    return `${label} 요금이 허용 범위를 벗어났습니다. 안내된 범위에서 설정해 주세요.`;
+  }
+  if (code === "PLAN_PRICE_INVALID") return "구독 요금은 1캐시 이상 숫자로 입력해 주세요.";
+  if (code === "ROLE_NOT_MENTOR" || code === "MENTOR_NOT_APPROVED") {
+    return "승인된 멘토만 구독 요금을 설정할 수 있어요.";
+  }
+  return "구독 요금을 저장하지 못했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
 /**
@@ -132,9 +138,6 @@ async function updateMentorIndividualQuestionPrice(
   return { ok: true };
 }
 
-/**
- * 가입·sync 시 사용한 컬럼 + 확장 후보(마이그레이션과 맞춤)
- */
 export async function updateMentorProfile(
   supabase: SupabaseClient,
   input: MentorProfileFormInput
@@ -142,84 +145,40 @@ export async function updateMentorProfile(
   const subjects = splitCsv(input.subjects);
 
   // [과목 필수 게이트] 담당 과목이 0개면 구독 공개를 켤 수 없다(활동 차단).
-  // 가입 시 과목은 이미 필수이므로, 이 가드는 기존 0과목 멘토가 과목 없이 활동하는 것을 막는다.
   if (input.subscribeOpen && subjects.length === 0) {
     return { ok: false, error: "가르치는 과목을 1개 이상 선택해야 구독 공개를 켤 수 있어요." };
   }
 
-  const now = new Date().toISOString();
-  // [avatar·인증서류 분리] payload 는 순수 빌더로 만든다. 빌더는 인증서류 컬럼
-  // (student_id_image_url)을 절대 포함하지 않으며(계약 테스트로 강제), university_name·
-  // department_name(학적 잠금)도 제외한다. avatar 는 imagePatch 로만 별도 갱신한다.
-  const payloads = buildMentorProfilePayloads({
-    userId: input.userId,
-    intro: input.intro,
-    bio: input.bio,
-    grade: input.grade,
-    subjects: input.subjects,
-    highSchool: input.highSchool,
-    tags: input.tags,
-    subscribeOpen: input.subscribeOpen,
-    profileImageUrl: input.profileImageUrl,
-  });
-  const core: Record<string, unknown> = { ...payloads.core, updated_at: now };
-
-  // [안전장치] 정상 계정은 가입(syncAfterSignUpSession)에서 mentor_profiles 행이
-  // 이미 만들어지므로 위 upsert 는 UPDATE 가 되어 university_name·department_name 을 건드리지 않는다(잠금 유지).
-  // 다만 행이 없는 비정상 계정이면 이 upsert 가 INSERT 가 되는데, 두 컬럼이
-  // NOT NULL(기본값 없음)이면 누락 시 저장이 통째로 실패한다. 그 경우에만 한해
-  // 최초 INSERT 를 성립시키기 위해 현재 표시값으로 채운다. 행이 이미 있으면 절대 덮어쓰지 않는다.
-  const { data: existingProfile } = await supabase
+  // F7 은 허용 9필드 전면 교체다 — 편집 폼이 다루지 않는 answer_style 과, 새 업로드가
+  // 없을 때의 profile_image_url 은 현재 값을 그대로 전달해 유지한다(자기 행 읽기).
+  const { data: current, error: curErr } = await supabase
     .from("mentor_profiles")
-    .select("user_id")
+    .select("answer_style, profile_image_url")
     .eq("user_id", input.userId)
     .maybeSingle();
-  if (existingProfile) {
-    // 기존 행: UPDATE만 — university_name·department_name(학적 잠금·NOT NULL)은 건드리지 않는다.
-    // upsert(INSERT ... ON CONFLICT)는 INSERT 튜플에 NOT NULL 컬럼을 요구해 23502로 실패하므로 update 사용.
-    const { error: upErr } = await supabase.from("mentor_profiles").update(core).eq("user_id", input.userId);
-    if (upErr) {
-      return { ok: false, error: upErr.message };
-    }
-  } else {
-    // 신규 행(비정상 계정): NOT NULL 컬럼을 현재 표시값으로 채워 최초 INSERT 성립.
-    core.university_name = input.university?.trim() || "";
-    core.department_name = input.department?.trim() || "";
-    const { error: insErr } = await supabase.from("mentor_profiles").insert(core);
-    if (insErr) {
-      return { ok: false, error: insErr.message };
-    }
+  if (curErr) {
+    return { ok: false, error: "프로필 현재 값을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+  }
+  const cur = (current ?? {}) as { answer_style?: unknown; profile_image_url?: unknown };
+
+  const res = await callApiWebV1Rpc(supabase, "mentor_profile_update_self", {
+    p_university_name: input.university?.trim() || "",
+    p_department_name: input.department?.trim() || "",
+    p_high_school_name: input.highSchool?.trim() || null,
+    p_teaching_subjects: subjects,
+    p_intro_line: input.intro?.trim() || null,
+    p_bio: input.bio?.trim() || null,
+    p_answer_style: typeof cur.answer_style === "string" ? cur.answer_style : null,
+    p_profile_image_url:
+      input.profileImageUrl?.trim() ||
+      (typeof cur.profile_image_url === "string" ? cur.profile_image_url : null),
+    p_is_open_for_subscriptions: input.subscribeOpen,
+  });
+  if (!res.ok) {
+    return { ok: false, error: f7CodeToMessage(res.code) };
   }
 
-  // 프로필 사진(avatar): 새 URL이 있을 때만 자기 컬럼만 갱신. 인증서류(student_id_image_url)는
-  // 절대 건드리지 않는다(imagePatch 는 profile_image_url 단일 키). core upsert와 분리해
-  // 컬럼 부재(SQL 미적용) 환경에서도 다른 필드 저장이 깨지지 않도록 missing-column 오류는 무시한다.
-  if (payloads.imagePatch) {
-    const { error: imgErr } = await supabase
-      .from("mentor_profiles")
-      .update({ ...payloads.imagePatch, updated_at: now })
-      .eq("user_id", input.userId);
-    if (imgErr && !isMissingColumnError(imgErr)) {
-      return { ok: false, error: imgErr.message };
-    }
-  }
-
-  for (const patch of payloads.extras) {
-    const { error } = await supabase.from("mentor_profiles").update({ ...patch, updated_at: now }).eq("user_id", input.userId);
-    if (!error) {
-      break;
-    }
-    if (!isMissingColumnError(error)) {
-      return { ok: false, error: error.message };
-    }
-  }
-
-  const priceUpdate = await updateMentorSubscriptionPrices(
-    supabase,
-    input.userId,
-    input.subscriptionPricesKrw,
-    now
-  );
+  const priceUpdate = await updateMentorSubscriptionPrices(supabase, input.subscriptionPricesKrw);
   if (!priceUpdate.ok) return priceUpdate;
 
   const iqPriceUpdate = await updateMentorIndividualQuestionPrice(

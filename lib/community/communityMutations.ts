@@ -71,29 +71,6 @@ export async function insertMentorShortformPost(
   return toResult(row, error);
 }
 
-/**
- * community_posts — shortform과 분리.
- */
-export async function insertMentorBoardPost(
-  supabase: SupabaseClient,
-  userId: string,
-  input: ComposeInput
-): Promise<MutationResult> {
-  const { title, body, category, source } = input;
-  const t = "community_posts";
-
-  const payloads: Record<string, unknown>[] = [
-    { title, body, category, source, author_id: userId, author_role: "mentor" },
-    { title, body, category, source, author_id: userId, author_role: "mentor", rights_confirmed: true },
-    { title, content: body, category, source_url: source, author_id: userId, author_role: "mentor", rights_confirmed: true },
-    { title, text: body, category, source, user_id: userId, author_role: "mentor", rights_ack: true },
-    { title, content: body, category, source, user_id: userId, author_role: "mentor", legal_use_confirmed: true },
-  ];
-
-  const { row, error } = await insertWithCandidates(supabase, t, payloads);
-  return toResult(row, error);
-}
-
 export type InsertCommunityCommentInput = {
   postType: "board" | "shortform";
   postId: string;

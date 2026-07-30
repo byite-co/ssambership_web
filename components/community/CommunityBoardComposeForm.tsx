@@ -31,7 +31,10 @@ function messageForError(code: string | null): string | null {
   if (code === "title") return "제목을 입력해 주세요.";
   if (code === "body") return "본문은 최소 10자 이상입니다.";
   if (code === "upload") return "이미지 업로드에 실패했습니다.";
-  if (code === "images") return `이미지는 최대 ${COMMUNITY_IMAGE_MAX}장까지입니다.`;
+  if (code === "images") return `이미지 첨부가 올바르지 않습니다(최대 ${COMMUNITY_IMAGE_MAX}장·본인 업로드만).`;
+  if (code === "conflict") return "다른 곳에서 먼저 수정된 글입니다. 새로고침 후 다시 수정해 주세요.";
+  if (code === "role") return "게시글 작성은 승인된 멘토만 할 수 있어요.";
+  if (code === "network") return "네트워크 오류로 저장 여부를 확인하지 못했습니다. 같은 화면에서 다시 시도해 주세요.";
   return "저장에 실패했습니다. 다시 시도해 주세요.";
 }
 
@@ -153,6 +156,7 @@ export function CommunityBoardComposeForm(props: Props) {
           <>
             <input type="hidden" name="draftId" value={props.draft.id} />
             <input type="hidden" name="existingImageUrls" value={JSON.stringify(props.draft.imageUrls)} />
+            <input type="hidden" name="expectedUpdatedAt" value={props.draft.updatedAt} />
           </>
         ) : null}
 
