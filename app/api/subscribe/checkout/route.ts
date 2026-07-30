@@ -43,6 +43,21 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+  // S2-2 W3(C8): amountCents 는 학생이 결제 화면에서 실제로 본 금액(cents) — 불변 동의
+  // 금액의 출발점이라 이제 필수다. 이 값이 intent(payments.amount·metadata 보존)와
+  // F12 `p_expected_amount_cents` 로 그대로 흐른다(§6 — 서버 재계산으로 대체 금지).
+  if (
+    typeof amountCents !== "number" ||
+    !Number.isFinite(amountCents) ||
+    !Number.isInteger(amountCents) ||
+    amountCents <= 0 ||
+    amountCents % 100 !== 0
+  ) {
+    return NextResponse.json(
+      { ok: false, error: "invalid_params", message: "결제 금액 정보가 올바르지 않습니다. 새로고침 후 다시 시도해 주세요." },
+      { status: 400 }
+    );
+  }
 
   const session = await getStudentSupabaseForSubscribe();
   if (!session.ok) {
@@ -65,20 +80,17 @@ export async function POST(req: NextRequest) {
     );
   }
   const { byTier } = assignPlansByTier(plans.rows);
-  const expectedAmountCents = mentorPlanDebitAmountCents(byTier[planTier], planTier);
-  const expectedCashKrw = cashKrwFromAmountCents(expectedAmountCents);
+  // 현재 플랜 가격은 신규 시도 사전 안내(UX)와 잔액 검사에만 쓴다 — F12 인자로는 쓰지
+  // 않는다(확정 판정은 DB 3자 일치가 정본). 표시 금액과 다르면 결제 생성 전에 안내한다.
+  const currentPlanAmountCents = mentorPlanDebitAmountCents(byTier[planTier], planTier);
+  const expectedCashKrw = cashKrwFromAmountCents(amountCents);
 
-  if (
-    typeof amountCents === "number" &&
-    Number.isFinite(amountCents) &&
-    amountCents > 0 &&
-    amountCents !== expectedAmountCents
-  ) {
+  if (currentPlanAmountCents > 0 && amountCents !== currentPlanAmountCents) {
     console.error("[subscribe/checkout] amount_mismatch", {
       mentorId: mentorIdTrim,
       planTier,
       amountCents,
-      expectedCents: expectedAmountCents,
+      currentPlanAmountCents,
       planProbe: plans.probe,
     });
     return NextResponse.json(
@@ -94,7 +106,7 @@ export async function POST(req: NextRequest) {
   const balance = await fetchWalletBalanceByUserId(session.supabase, session.studentId);
   const breakdown = parseWalletBalanceBreakdown(balance.row);
   const balanceCents = breakdown.totalCash * 100;
-  const requiredCents = expectedAmountCents;
+  const requiredCents = amountCents;
 
   if (balanceCents < requiredCents) {
     return NextResponse.json(
@@ -111,6 +123,7 @@ export async function POST(req: NextRequest) {
     studentId: session.studentId,
     mentorId: mentorIdTrim,
     planTier,
+    expectedAmountCents: amountCents,
   });
 
   if (!result.ok) {

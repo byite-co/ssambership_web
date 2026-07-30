@@ -239,25 +239,58 @@ export async function confirmCashTopupCore(
   };
 }
 
-// ── 2. 원장 기록 코어(confirm·webhook 공용 — 기존 계약 그대로 이식) ─────────────
+// ── 2. 원장 기록 코어(confirm·webhook 공용 — S2-2 W3(C7)에서 F11 로 전환) ──────
+//
+// F11 전환 계약(§7 F11 · W3 §4.1):
+//   * `p_order_ref` = Toss orderId 원문. 같은 값이 F11 의 멱등키다(별도 키 생성 금지).
+//   * 사전 SELECT 로 신규·duplicate 를 추정하지 않는다 — 판정은 F11 반환의
+//     `duplicate` 하나뿐이다(구 hasTopupForOrderId 조기 반환 제거).
+//   * `duplicate:true` 는 정상 멱등 성공이며 past_due 복구를 재실행하지 않는다.
+//   * `LEDGER_FIELD_MISMATCH`(동일 orderId·필드 불일치)는 성공으로 바꾸거나
+//     삼키지 않는다 — 코드 그대로 안정 실패로 반환한다.
 
 export type RecordCashTopupCoreResult =
   | { ok: true; duplicate: boolean; amount: number; payAmount: number; userId: string }
   | { ok: false; code: string; message: string };
 
+export type RecordTopupV2PortResult =
+  | { ok: true; duplicate: boolean }
+  | { ok: false; code: string };
+
 export type RecordCashTopupPorts = {
   isAllowedPayKrw: (payKrw: number) => boolean;
   cashKrwForPayKrw: (payKrw: number) => number | null;
-  hasTopupForOrderId: (orderId: string) => Promise<boolean>;
-  /** record_cash_topup RPC — error true 면 실패. */
-  recordTopupRpc: (userId: string, amountCents: number, idempotencyKey: string) => Promise<{ error: boolean }>;
   /**
-   * past_due 복구 포트 — '신규 원장 기록 성공' 직후에만 1회 호출된다.
-   * duplicate 재호출에서는 호출하지 않는다(기존 함수 계약 유지). 실패는 코어가
+   * F11 `api_web_v1.record_cash_topup_v2(p_user_id, p_amount_cents, p_order_ref)` 포트.
+   * envelope 성공이면 duplicate 플래그, 실패면 안정 코드(ORDER_REF_INVALID ·
+   * ORDER_REF_OWNER_MISMATCH · LEDGER_FIELD_MISMATCH · 전송 오류)를 돌려준다.
+   */
+  recordTopupV2: (userId: string, amountCents: number, orderRef: string) => Promise<RecordTopupV2PortResult>;
+  /**
+   * past_due 복구 포트 — 'F11 신규 기록 성공(duplicate:false)' 직후에만 1회 호출된다.
+   * duplicate 재생에서는 호출하지 않는다(기존 함수 계약 유지). 실패는 코어가
    * 삼켜 적립 결과를 되돌리지 않는다(best-effort 계약 유지).
    */
   recoverPastDue: (userId: string) => Promise<void>;
 };
+
+/** F11 envelope 실패 코드 → 기존 안정 실패 결과(코드 은폐·성공 승격 금지). */
+function recordTopupFailureFromF11Code(code: string): RecordCashTopupCoreResult {
+  switch (code) {
+    case "ORDER_REF_INVALID":
+      return { ok: false, code: "invalid_order", message: "주문 번호 형식이 올바르지 않습니다." };
+    case "ORDER_REF_OWNER_MISMATCH":
+      return { ok: false, code: "order_owner_mismatch", message: "본인 주문만 확인할 수 있습니다." };
+    case "LEDGER_FIELD_MISMATCH":
+      return {
+        ok: false,
+        code: "LEDGER_FIELD_MISMATCH",
+        message: "충전 기록이 기존 결제 내역과 일치하지 않습니다. 고객센터로 문의해 주세요.",
+      };
+    default:
+      return { ok: false, code: "ledger_failed", message: "충전 기록에 실패했습니다." };
+  }
+}
 
 export async function recordCashTopupCore(
   orderId: string,
@@ -278,17 +311,17 @@ export async function recordCashTopupCore(
   if (!userId) {
     return { ok: false, code: "invalid_order", message: "주문 번호 형식이 올바르지 않습니다." };
   }
-  const already = await ports.hasTopupForOrderId(orderId);
-  if (already) {
-    return { ok: true, duplicate: true, amount: cashKrw, payAmount: payAmountWon, userId };
-  }
   const amountCents = krwWonToCents(cashKrw);
   if (amountCents <= 0) {
     return { ok: false, code: "invalid_amount", message: "충전 금액이 올바르지 않습니다." };
   }
-  const rpc = await ports.recordTopupRpc(userId, amountCents, orderId);
-  if (rpc.error) {
-    return { ok: false, code: "ledger_failed", message: "충전 기록에 실패했습니다." };
+  // 신규/duplicate 판정은 F11 단일 호출이 정본이다(사전 SELECT 추정 금지 — W3 §4.1).
+  const rpc = await ports.recordTopupV2(userId, amountCents, orderId);
+  if (!rpc.ok) {
+    return recordTopupFailureFromF11Code(rpc.code);
+  }
+  if (rpc.duplicate) {
+    return { ok: true, duplicate: true, amount: cashKrw, payAmount: payAmountWon, userId };
   }
   // 신규 적립 성공 → past_due 복구 1회(best-effort — 실패해도 적립 결과 유지).
   try {

@@ -47,3 +47,19 @@ test("원장 정본 배선: recordCashTopupFromTossOrder 가 순수 코어에 �
   assert.ok(core.includes(regex), "코어의 orderId regex 가 변경됨");
   assert.ok(!lib.includes(regex), "lib 에 orderId regex 사본이 부활함");
 });
+
+test("W3(C7): 운영 Toss 원장은 F11 record_cash_topup_v2 — 레거시 직접 호출·사전 SELECT 0", () => {
+  const lib = read("lib/toss/cashTopupFromPayment.ts");
+  assert.ok(lib.includes('"record_cash_topup_v2"'), "F11 record_cash_topup_v2 호출이 없음");
+  assert.ok(lib.includes("callApiWebV1Rpc"), "공용 envelope helper 미사용(임의 parser 중복 금지 — W3 §9)");
+  assert.ok(lib.includes("p_order_ref"), "p_order_ref 인자가 없음(orderId 원문 = 멱등키)");
+  assert.ok(!lib.includes('rpc("record_cash_topup"'), "레거시 record_cash_topup 직접 호출이 부활함");
+  assert.ok(!lib.includes("ref_id:"), "ref_id 전달이 생김(주문 정본 참조는 idempotency_key — rev 8 A-6)");
+  assert.ok(!lib.includes('from("cash_ledger")'), "cash_ledger 사전 SELECT(신규/duplicate 추정)가 부활함");
+  assert.ok(!lib.includes("hasCashTopupForOrderId"), "사전 SELECT helper 가 부활함");
+  // 테스트 충전은 의도적으로 레거시 유지(rev 8 A-6 정정 2) — F11 로 바꾸면 계약 위반.
+  const wallet = read("lib/cash/walletTopupActions.ts");
+  assert.ok(wallet.includes('rpc("record_cash_topup"'), "테스트 충전의 레거시 record_cash_topup 이 사라짐");
+  assert.ok(!wallet.includes("record_cash_topup_v2"), "테스트 충전이 F11 로 전환됨(금지 — W3 §4.3)");
+  assert.ok(wallet.includes("cash_topup_"), "테스트 충전 키 형식(cash_topup_...)이 변경됨");
+});
