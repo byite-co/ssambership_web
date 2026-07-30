@@ -201,7 +201,7 @@
 - **적용 전 확인:** 적용 직전 동일 ledger name 존재 여부를 확인하고, 이미 존재하면 자동 재적용하지 않고 중단한다. migration repair·원장 PATCH·수동 원장 행 삽입·삭제 금지, 운영 DB 임의 `execute_sql` DDL 금지. 위반·불일치 발생 시 `MIGRATION_HISTORY_DRIFT` 즉시 재활성(조건 8종 = 정책 문서 §4).
 - **rollback 정본 경로:** `supabase/rollback/<FORWARD_FILE_TS>_<STEM>_rollback.sql` — forward clean-install과 구조적으로 분리하며 **정규 clean-install 파일 수에 포함하지 않는다**(`supabase/sql/*.sql`·미래 재귀 glob에 포함 금지). 실행은 장애 시 오너 승인 후 파일 1건을 명시적으로 골라 `apply_migration`으로 수행하고, 원장에는 **새 행으로 append**한다(forward 원장 행 삭제·수정·reverted 처리 금지, Management API의 선택적 `rollback` 필드 미사용). M10은 상태 0 checkpoint — rollback 파일 없음.
 - **정규 산식(S2 완료 시):** 기존 baseline **175** + S2 forward **16**(M0·M1·M4~M17, M2·M3 retired) = **191**. S2 rollback **15**개·D-API-W·D-API-A·C1~C11은 SQL 적용 파일 수에 불포함. 기존 175개 순서·제외 15개·후보 C 판정(§7)은 변경하지 않는다.
-- **편입 시점:** Batch별 로컬 PG17 검증 PASS 후 해당 forward만 본 문서에 편입한다. 나머지 미생성 S2 forward(**M10~M12·M16, 총 4개**)는 **미생성** 상태이며, M0·M15는 Batch A `LOCAL_PASS`로 §9.1에, M1·M13·M4는 Batch B `LOCAL_PASS`로 §9.2에, M5·M6·M7은 Batch C `LOCAL_PASS`로 §9.3에, M17·M8·M14는 Batch D `LOCAL_PASS`로 §9.4에, M9는 Batch E `LOCAL_PASS`로 §9.5에 편입 완료됐다. M2·M3는 retired다. 실제 timestamp·SHA-256·ledger version은 생성·적용 후에만 기록한다(invent 금지).
+- **편입 시점:** Batch별 로컬 PG17 검증 PASS 후 해당 forward만 본 문서에 편입한다. **S2 forward 16개 전건 편입 완료** — M0·M15는 Batch A `LOCAL_PASS`로 §9.1에, M1·M13·M4는 Batch B `LOCAL_PASS`로 §9.2에, M5·M6·M7은 Batch C `LOCAL_PASS`로 §9.3에, M17·M8·M14는 Batch D `LOCAL_PASS`로 §9.4에, M9는 Batch E `LOCAL_PASS`로 §9.5에, M11·M12·M16·M10은 Batch F `LOCAL_PASS`로 §9.6에 편입 완료됐다. M2·M3는 retired다. ledger version 은 원격 적용 후에만 기록한다(invent 금지).
 
 ### 9.1 Batch A 편입 (2026-07-30 KST — 로컬 PG17 검증 PASS, 원격 미적용)
 
@@ -271,3 +271,18 @@
 - **현재 정규 clean-install: 기존 baseline 175 + Batch A 2 + Batch B 3 + Batch C 3 + Batch D 3 + Batch E 1 = 187** (2026-07-30 로컬 재현: fresh PG17.6 에서 177/177 + Batch A 검증기 38/38 + Batch B·C·D 9건 = 186 위에 M9 = **187/187**, Batch E 검증기 `scripts/verify/s2_2_batch_e_verify.sql` forward **17/17 PASS**(T-TOP-01~06 · T-FIN-01~04 · T-REP-A~H · T-CONC-09 등가) + 2세션 동시성 **T-CONC-02·03·04·08 + T-TOP-04 병행분 PASS**(T-CONC-04 잠금 대기 1,477ms·확정 금액 = 잠금 시점 값 / T-CONC-08 교착 40P01 0건) → rollback 후 **@186 카탈로그·데이터 완전 일치(forward-only 예외 0)** + post_rollback 3/3(레거시 020 구 본문 md5 복원 실측) → 재적용 17/17 + lint 오류 0 + fixture 잔여 0).
 - rollback 1건(`supabase/rollback/20260730120103_money_rpc_rollback.sql` — **레거시 `record_cash_topup` 020 구 본문 문자 그대로 복원 포함**, §22 #3)은 **정규 적용 수에서 제외**(§9 규칙).
 - 본 편입은 **로컬 검증 실적**(`LOCAL_PASS`) — staging·production 원장 **미적용**, 운영 적용 **미실행**. 웹 callsite 전환 **C7·C8 은 M9 이후 코드 단계로 미실행**(C7 은 `lib/toss/cashTopupFromPayment.ts` 만 — `walletTopupActions.ts` 테스트 충전은 레거시 유지, rev 8 A-6 정정 2). 상세 역기입: 물리 정책 §9.6.
+
+### 9.6 Batch F 편입 (2026-07-30 UTC — 로컬 PG17 검증 PASS, 원격 미적용)
+
+정규 clean-install 순서: §9.5의 187개(마지막 `20260730120103_money_rpc.sql`) 뒤에 아래 S2 forward 4건을 timestamp 순으로 이어 적용한다.
+
+| 순서 | 파일 | SHA-256 | 로컬 검증 |
+|---:|---|---|---|
+| 188 | `supabase/sql/20260730195147_revoke_mentor_profiles_write.sql` (M11) | `53dac5bf5ad382898697b976387f5a61123367fef9a3e035dc863fa68dc356e0` | PG17.6 forward·rollback·reapply PASS |
+| 189 | `supabase/sql/20260730195150_revoke_mentor_plans_write.sql` (M12) | `480585e4c53a16b63ba845aa08b9ff26ef226dc4bc786ca7538ab2bd1e6e844a` | PG17.6 forward·rollback·reapply PASS |
+| 190 | `supabase/sql/20260730195153_community_direct_write_lockdown.sql` (M16) | `fe35212aef96bca15e84a21c16f6a370215174ac5f70ff13348aca9e0c2bce0c` | PG17.6 forward·rollback·reapply PASS |
+| 191 | `supabase/sql/20260730195156_contract_permission_assertions.sql` (M10) | `435ad2527ee3320b55b6660542c082d8bf7f3bc91d197eadd0b76cebd5fb97ac` | PG17.6 읽기 전용 assertion PASS(재실행 가능 — rollback 없음) |
+
+- **현재 정규 clean-install: 기존 baseline 175 + S2 forward 16 = 191 (최종 산식 도달)** (2026-07-30 로컬 재현: fresh PG17.6 에서 baseline C 175/175 + Batch A~E 12건 = 187/187 + 기존 배치 검증기 회귀(A·E ALL PASS, B/C/D 는 자기 배치 시점 census 고정 4건만 설계상 실패·기능 회귀 0) + 운영 baseline 재현(로컬 auto-expose OFF 보정 — 물리 정책 §9.7) 위에 M11→M12→M16→M10 = **191/191**, Batch F 검증기 `scripts/verify/s2_2_batch_f_verify.sql` forward **23/23 PASS**(T-PERM-09·10·11·12·13·14·15 + T-SEC-02/03/06/07/14 + F7/F8/F12/F13 기능 + F4 replay-first + service_role moderation) → rollback M16→M12→M11 후 **@187 기준선 완전 대조**(정책·함수·트리거·데이터 diff 0 · ACL 실효 동일 — aclitem 순서 정규화 대조 diff 0) + post_rollback 4/4 → 재적용 + M10 재실행 + 23/23 재검증 PASS + D-API-W/A 로컬 PostgREST 실측 PASS(core_private PGRST106 거부·정상 요청 PGRST106/PGRST002 0) + `supabase db lint --local --level error` 오류 0 + fixture 잔여 0).
+- rollback 3건(`supabase/rollback/20260730195147_..._rollback.sql`·`20260730195150_..._rollback.sql`·`20260730195153_..._rollback.sql` — §22 #6 대칭 복원·M16 은 정책 6종 원문 재생성 포함)은 **정규 적용 수에서 제외**(§9 규칙). **M10 은 상태 0 checkpoint — rollback 파일이 없다.** rollback 총수는 **15**로 확정된다.
+- **운영 M16 적용 승인 아님** — 본 편입은 **로컬 검증 실적**(`LOCAL_PASS`)이다. staging·production 원장 **미적용**(ledger 미채번), 원격 Data API(Exposed schemas)·운영 rollout **미실행**(`D_API_W_REMOTE`·`D_API_A_REMOTE` = NOT_STARTED). 운영 적용 순서는 §20.2.1(… → M11 → M12 → M16 → M10) + 운영 게이트(직접 쓰기 0건 재실측·앱 Gate 4·D-API-A) 재확인 후 별도 승인으로 진행한다. 상세 역기입: 물리 정책 §9.7.
