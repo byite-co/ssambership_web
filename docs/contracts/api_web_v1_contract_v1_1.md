@@ -692,7 +692,11 @@ created_at    timestamptz
 - 노출 조건: `is_deleted = false` — 기반 정책 `comments_select_visible`(`is_deleted=false`, `{anon,authenticated}`)과 동일하므로 `security_invoker=true`로 성립한다.
 - `author_label` / `author_role` = **`comments.author_label` / `comments.author_role` 비정규화 컬럼**(rev 8 A-9 — v1.1 확정, M13).
   - **왜 join도 함수도 아닌 비정규화인가(측정 근거):** `users`의 SELECT 정책은 `users_select_own`(`id = auth.uid()`)과 `users_admin_select_all`(admin)뿐이라 일반 사용자는 `security_invoker` view에서 **다른 사용자 행을 읽을 수 없다**(테이블 정책은 총 4종: select_own, admin_select_all, insert_own, update_own). v1.0은 이를 좁은 SECDEF 라벨 함수(F0)로 풀었으나, **임의 uuid → nickname 조회가 열리는 트레이드오프**가 있었고 rev 8 A-9가 공개 라벨 함수를 폐기했다. `community_posts`는 이미 `author_label`·`author_role`을 비정규화해 갖고 있다(실측 선례) — `comments`에 같은 패턴을 적용한다.
-  - **비정규화 계약(M13):** ① `public.comments`에 `author_label text`·`author_role text` 컬럼 추가 ② BEFORE INSERT 트리거(`public.comments_set_author_label()`)가 `public.users`에서 `nickname`·`role`을 복사 — `nickname`이 비었으면 `'쌤버십 사용자'` 고정 문구, `role='admin'`이면 `author_role`에 **NULL** 기록(관리자 신원 비노출 — 구 F0 규칙 승계) ③ 기존 행 백필 1회.
+  - **비정규화 계약(M13 — baseline 정합 보정 2026-07-30, 오너 승인):** Batch B 사전 게이트 실측으로 `comments.author_label`이 **037 기원 선재 컬럼**(`text NOT NULL DEFAULT '쌤버십 회원'`, `community_comments.author_label`도 동일 — 016 기원)임이 확정됐다. 이에 따라:
+    - ① **컬럼 소유권**: `author_label`은 **선재 컬럼 재사용** — DROP 금지·NOT NULL 유지·default만 `'쌤버십 사용자'`로 정정. `author_role text NULL`이 **M13이 새로 추가하는 유일한 컬럼**이다(구 "nullable 컬럼 2개 신규 추가"·"rollback에서 author_label DROP" 해석은 폐기).
+    - ② **INSERT 권위(트리거 함수 2종)**: `public.comments_set_author_label()`(canonical `comments` BEFORE INSERT — `author_label`·`author_role`을 서버 규칙으로 **무조건 덮어씀**) + `public.community_comments_set_author_label()`(legacy `community_comments`의 `post_type='board'` BEFORE INSERT 한정 — `author_label` 덮어씀, **shortform 무영향**). 클라이언트·163/164 브리지 입력을 신뢰하지 않는다. 최종 권위: **DB BEFORE INSERT trigger > 163/164 bridge 입력 > 웹·앱 클라이언트 입력 > 컬럼 default.** 163/164 함수 본문은 교체하지 않는다 — 브리지의 양방향 INSERT가 각 대상 테이블의 BEFORE INSERT 트리거를 통과하는 것이 정본 우선순위다. 라벨 규칙: `public.users`에서 `author_id`로 조회, `nickname`만 사용(NULL·trim 공백·사용자 조회 실패 전부 정확히 `'쌤버십 사용자'`), `author_role`은 canonical `comments`에만 기록하고 `student`/`mentor`만 보존(admin·기타·사용자 없음 → **NULL**).
+    - ③ **snapshot UPDATE 보호**: `comments`의 `UPDATE OF author_label, author_role`·`community_comments` board 행의 `UPDATE OF author_label`을 **명시적 오류로 거부**(성공 no-op 위장 금지). 163/164의 `body`·`content`·`status`·`is_deleted`·`canonical_comment_id`·`legacy_comment_id` 동기화는 계속 허용된다.
+    - ④ **백필 1회(보안 데이터 교정 — forward-only)**: `comments.author_label`·`author_role` 전행 + `community_comments` `post_type='board'` 행의 `author_label`을 migration 시점 `users.nickname`/`role` 기준으로 정규화. shortform 행은 바이트 단위 불변. 양 테이블 행 수·비대상 컬럼 불변, board 양방향 매핑 행은 같은 라벨로 수렴. **rollback은 과거 클라이언트 제공 라벨을 복원하지 않는다**(§22).
 - `WITH (security_invoker = true)`.
 - DML 금지.
 
@@ -871,7 +875,7 @@ api_web_v1.mentor_settlement_self() RETURNS TABLE (
 v1.0의 공개 라벨 함수 2종(`api_web_v1.user_display_label(uuid)` / `user_display_role(uuid)`)은 **만들지 않는다.** 임의 UUID를 받는 라벨 함수는 uuid → nickname 조회를 아무 관계 검증 없이 여는 표면이었다(v1.0 §10.3이 스스로 기록한 트레이드오프).
 
 - **대체 계약(객체별 — §6 확정표):**
-  - **V2**: `comments.author_label`·`author_role` **비정규화 컬럼**(M13). 라벨 도출 규칙(nickname → 비었으면 `'쌤버십 사용자'`, admin → `author_role` NULL)은 비정규화 트리거가 승계한다.
+  - **V2**: `comments.author_label`·`author_role` **비정규화 컬럼**(M13 — 정합 보정: `author_label`은 037 선재 컬럼 재사용·default 정정, 신규는 `author_role` 1개뿐). 라벨 도출 규칙(nickname → 비었으면 `'쌤버십 사용자'`, admin → `author_role` NULL)은 비정규화 트리거 2종(canonical + legacy board)이 승계한다.
   - **V6·V7**: 범위 제한 SECDEF RPC가 **함수 내부에서** `public.users.nickname`을 도출한다. 라벨은 당사자·소유 관계가 검증된 행에 결합된 형태로만 반환된다.
   - **V1·V3**: 변경 없음 — V1은 `community_posts`의 기존 비정규화 컬럼을, V3은 SECDEF 뷰 정의 내부 join을 이미 사용한다(F0 의존 없음).
 - **승계되는 라벨 공통 규칙(구 F0 규칙 — 모든 라벨 도출 지점에 동일 적용):** `public.users.nickname`만 사용, 비었으면 `'쌤버십 사용자'` 고정 문구, **`full_name`·`email`·`birth_date`·`grade_level`은 절대 반환하지 않는다.** 표시 역할은 `'student'|'mentor'`만, `admin`이면 `'mentor'`로 강등 표기하지 않고 **NULL**(관리자 신원 노출 금지). 존재하지 않는 uid → 고정 문구 / NULL.
@@ -1626,10 +1630,10 @@ GRANT EXECUTE ON FUNCTION api_web_v1.subscription_checkout_confirm_v2(uuid,uuid,
 
 | 대상 | 변경 | 권한 |
 |---|---|---|
-| `public.comments.author_label text NULL` | **추가**(M13 — rev 8 A-9, V2 비정규화) | 기존 테이블 GRANT·RLS를 따른다. 값 기록은 BEFORE INSERT 트리거 전용 |
-| `public.comments.author_role text NULL` | **추가**(M13 — 동일) | 동일 |
-| 트리거 `public.comments_set_author_label()` + `trg_comments_set_author_label` | BEFORE INSERT — `users.nickname`/`role` 복사(라벨 규칙은 §6 V2·§7 F0 승계 규칙) | 함수는 SECDEF + `SET search_path = ''` + PUBLIC EXECUTE 회수 |
-| 백필 | 기존 `comments` 행 1회 백필(M13 내) | — |
+| `public.comments.author_role text NULL` | **추가**(M13 — rev 8 A-9·정합 보정 2026-07-30: **M13 신규 컬럼은 이 1개뿐**) | 기존 테이블 GRANT·RLS를 따른다. 값 기록은 BEFORE INSERT 트리거 전용 |
+| `public.comments.author_label` | **선재 컬럼(037) 재사용**(M13 — 신규 아님): `text NOT NULL` 유지, default만 `'쌤버십 회원'` → `'쌤버십 사용자'` 정정, DROP 금지. `community_comments.author_label`(016 선재)도 board 행 한정 백필 대상 | 동일. 값 기록은 BEFORE INSERT 트리거 전용 |
+| 트리거 함수 2종 `public.comments_set_author_label()` · `public.community_comments_set_author_label()` + 트리거 4종(canonical INSERT 설정 · canonical `UPDATE OF author_label, author_role` snapshot 보호 · legacy board INSERT 설정 · legacy board `UPDATE OF author_label` snapshot 보호) | BEFORE INSERT — `users.nickname`/`role` 서버 덮어쓰기(라벨 규칙은 §6 V2·§7 F0 승계 규칙) / BEFORE UPDATE — snapshot 변경 명시 거부. legacy 쪽은 `post_type='board'` 한정(shortform 무영향). 163/164 본문 불변 | 함수는 SECDEF + `SET search_path = ''` + 완전 수식 + PUBLIC EXECUTE 회수(같은 트랜잭션) |
+| 백필 | `comments` 전행(`author_label`·`author_role`) + `community_comments` board 행(`author_label`) 1회 정규화(M13 내 — shortform 불변·행 수 불변·**forward-only**, §22) | — |
 
 ### 10.5 레거시 표면 회수 — **S2에서 하지 않는 것**
 
@@ -1720,7 +1724,7 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
 |---|---|---|
 | `mentor_directory_v1` (SECDEF view) | 타인 `users`·`mentor_profiles` 읽기 | 노출 조건이 view 정의에 하드코딩, 읽기 전용, 컬럼 최소화 |
 | `api_web_v1.my_subscriptions_self()`/`mentor_settlement_self()` (V6·V7 RPC) | 타인 `users.nickname` 라벨 결합·당사자 행 조회 | 함수 내부 당사자 판정(`auth.uid()` = 정본 정책 판정식), 라벨은 검증된 행에 결합된 형태로만, PII 컬럼 미반환 |
-| `public.comments_set_author_label()` (M13 트리거 함수) | INSERT 시 타인 아닌 **본인** `users` 행 읽기 | BEFORE INSERT 전용, 라벨 규칙 고정(admin → NULL), PUBLIC EXECUTE 회수 |
+| `public.comments_set_author_label()` · `public.community_comments_set_author_label()` (M13 트리거 함수 2종 — 정합 보정) | INSERT 시 작성자 `users` 행 읽기(라벨 스냅샷) | BEFORE INSERT 라벨 서버 덮어쓰기 + BEFORE UPDATE snapshot 변경 명시 거부(`TG_OP` 분기 허용), 라벨 규칙 고정(admin → NULL), legacy 쪽은 `post_type='board'` 한정(shortform 무영향), PUBLIC EXECUTE 회수 |
 | F1~F9, F13 (SECDEF wrapper) | 정본 RPC 호출·타인 행 검증 | `auth.uid()` 도출 + 상태·역할·소유권 검증 |
 | F11·F12 (`api_web_v1`, SECDEF) | 자금·상태 확정 | `service_role` EXECUTE 전용 |
 | F10·내부 구현부 5종 (`core_private`) | 공용 구현부(자금 원장·방 확보·커뮤니티 검증) | **외부 EXECUTE 0** — SECDEF wrapper의 소유자 권한 문맥에서만 호출(§10.3) |
@@ -2281,7 +2285,7 @@ GRANT SELECT ON public.mentor_plans TO anon, authenticated;
 | — | *(웹 코드 전환 — migration 아님)* | 호출점을 신규 객체로 이동(§17), 프로빙 제거 | — |
 | **M11** | `..._revoke_mentor_profiles_write.sql` | §10.6 `mentor_profiles` **테이블 단위 `REVOKE ALL` + `GRANT SELECT`**(rev 8 A-3) | ✅ GRANT 복원 migration |
 | **M12** | `..._revoke_mentor_plans_write.sql` | §10.6 `mentor_plans` **테이블 단위 `REVOKE ALL` + `GRANT SELECT`**(rev 8 A-3) | ✅ GRANT 복원 migration |
-| **M13** | `..._comments_author_label_denormalize.sql` | **V2 선행 비정규화**(rev 8 A-9 — §10.4): `comments.author_label`·`author_role` 컬럼 + BEFORE INSERT 트리거 + 백필 | ✅ 트리거 DROP·컬럼 DROP(백필 값 소실 주의) |
+| **M13** | `..._comments_author_label_denormalize.sql` | **V2 선행 비정규화**(rev 8 A-9 — §10.4·정합 보정 2026-07-30): `comments.author_role` 컬럼 1(신규) + **선재 `comments.author_label`(037) 재사용**·default `'쌤버십 사용자'` 정정 + 라벨 트리거 함수 2종·트리거 4종(canonical/legacy board INSERT 서버 덮어쓰기 + snapshot UPDATE 보호) + 백필(`comments` 전행·`community_comments` board 행 — shortform 불변, forward-only) | ✅ 트리거 4종·함수 2종 DROP + `author_role` DROP + `author_label` default `'쌤버십 회원'` 복원(**`author_label` 컬럼·정규화 라벨값 보존** — §22 forward-only 예외) |
 | **M14** | `..._api_web_v1_payout_account_rpc.sql` | **F13** `mentor_payout_account_update_self` + GRANT (rev 8 A-4) — **M11 게이트 ②의 선행 조건** | ✅ DROP FUNCTION |
 | **M15** | `..._weekly_usage_pair_party_guard.sql` | 레거시 `public.get_weekly_question_usage`에 **NULL-safe pair-party 가드** 추가(rev 8 A-8 — §7 F1). M0처럼 독립·조기 적용 가능 | ✅ 가드 없는 구 본문 복원 migration |
 | **M16** | `..._community_direct_write_lockdown.sql` | **HD-1**(rev 8 C — §14.7): `community_posts` `REVOKE ALL` + `GRANT SELECT` + 쓰기 정책 6종 제거 | ✅ GRANT·정책 복원 migration |
@@ -2338,6 +2342,8 @@ M0(M15 병행 가능) → M1 → M13 → M4 → [D-API-W: api_web_v1 Exposed sch
 
 | 게이트 | 조건 |
 |---|---|
+| **M13 이전** | ① `comments.author_label` 존재·`text`·NOT NULL·default `'쌤버십 회원'` ② `comments.author_role` **부재** ③ `community_comments.author_label` 존재·`text`·NOT NULL·default `'쌤버십 회원'` ④ 163/164 브리지 정본 함수·트리거·매핑 컬럼(`canonical_comment_id`·`legacy_comment_id`) 존재. 다른 상태면 `UNEXPECTED_EXISTING_CONTRACT_OBJECT` 또는 `BATCH_B_BASELINE_OBJECT_MISMATCH`로 중단 |
+| **M13 적용 직후** | ① `comments.author_label` `text NOT NULL`·default `'쌤버십 사용자'` ② `comments.author_role` `text NULL` ③ 트리거 함수 정확히 2종(SECDEF·`search_path=''`·PUBLIC EXECUTE 0) ④ 계약된 트리거 역할 4개 존재(canonical INSERT/UPDATE 보호·legacy board INSERT/UPDATE 보호) ⑤ 백필: `comments` 라벨·역할 정규화 + `community_comments` board 라벨 정규화 + shortform 불변 + 행 수 불변 |
 | M4 이전 | M1·M13 적용(M2·M3는 retired) + `api_web_v1`·`core_private`에 `PUBLIC` 권한 0건 실측 |
 | M6 이전 | M5의 F10이 동시성 테스트(T-CONC-01) 통과 |
 | M9 이전 | F11 3층 계약 테스트(§21.9 T-TOP) + F12 재생 계약 테스트(§21.8 T-REP) 설계 확정. **F12 배포 전 사전 검사(rev 8 A-2 §3):** "기존 succeeded 구독 결제 중 `mentor_student_rooms` 행이 없는 건"을 탐지·보정하는 점검 절차 수행 |
@@ -2595,6 +2601,27 @@ core_private : never exposed
 | T-REG-06 | `public` 함수 **개수·identity argument**는 S2 전후 동일(기존 `public` 함수의 **계약된 본문 교체는 허용**하되 — M15 `get_weekly_question_usage` pair-party 가드·M9 `record_cash_topup` 내부 구현 교체 — **신규 `public` 함수 추가 0**). 신규 함수는 **`api_web_v1`·`api_app_v1`·`core_private`에만** 생성한다(M17의 `api_app_v1` wrapper 5종 포함) |
 | T-REG-07 | 웹 로그인·가입 플로 정상(세션 쿠키 회귀 없음) |
 
+### 21.7 M13 라벨 비정규화 테스트 (T-M13 — 정합 보정 2026-07-30, 필수 16건)
+
+| id | 검증 |
+|---|---|
+| T-M13-01 | **선재 `author_label` 구조 확인**(M13 이전 게이트 상당): `comments`·`community_comments` 양쪽 `text NOT NULL DEFAULT '쌤버십 회원'`, `comments.author_role` 부재 |
+| T-M13-02 | `comments` 신규 INSERT에서 클라이언트 spoof `author_label` **서버 덮어쓰기**(payload 값 무시, `users.nickname` 기준) |
+| T-M13-03 | `comments` 신규 INSERT에서 `student`/`mentor` role이 `author_role`에 기록 |
+| T-M13-04 | `admin`·기타 role·사용자 없음 → `author_role` **NULL**(관리자 신원 비노출) |
+| T-M13-05 | blank/missing `nickname`·사용자 조회 실패 → 정확히 `'쌤버십 사용자'` |
+| T-M13-06 | `community_comments` board 신규 INSERT에서 spoof `author_label` 덮어쓰기(shortform 행은 트리거 미발화) |
+| T-M13-07 | legacy → canonical 브리지(163/164) 경유 INSERT에서 **양쪽 테이블 라벨 동일**(서버 규칙값) |
+| T-M13-08 | canonical → legacy 브리지 경유 INSERT에서 양쪽 라벨 동일 |
+| T-M13-09 | `comments`의 `author_label`/`author_role` UPDATE → **명시적 거부**(성공 no-op 위장 금지) |
+| T-M13-10 | `community_comments` board 행의 `author_label` UPDATE → 명시적 거부 |
+| T-M13-11 | `body`/`content`/`status`/`is_deleted`/매핑 포인터의 163/164 동기화 **회귀 없음**(라벨 보호가 정상 동기화를 막지 않음) |
+| T-M13-12 | 기존 `comments` 백필: 라벨·역할 정규화 + 행 수·비대상 컬럼 불변 |
+| T-M13-13 | 기존 `community_comments` board 백필 + **shortform 바이트 단위 불변** |
+| T-M13-14 | 트리거 함수 2종의 PUBLIC EXECUTE 0·SECDEF·고정 `search_path=''` |
+| T-M13-15 | rollback 후: 선재 `author_label` 컬럼 유지·`author_role` 제거·default `'쌤버십 회원'` 복원·트리거/함수 부재 |
+| T-M13-16 | rollback 후: **정규화된 라벨값은 유지**되고 과거 클라이언트 제공 라벨은 복원되지 않음(forward-only — §22) |
+
 ### 21.8 F12 재생 회귀 테스트 (T-REP — rev 8 A-5 필수 8건)
 
 > **fixture 명시:** 현재 라이브 DB에는 pair당 succeeded 결제가 최대 1건이므로 P1→P2 시나리오는 실데이터 검증 주장이 아니라, **재구독·늦은 재생을 검증하는 테스트 fixture 기반 회귀 계약**이다(테스트 주석에 명시할 것). 기호 P·C는 §7 F12 재생 계약을 따른다.
@@ -2683,7 +2710,7 @@ migration별 테스트 소유를 아래와 같이 고정한다. 같은 시나리
    ```
    회수한 권한 목록(비SELECT 6종·역할 2종)을 migration에 **문자 그대로 보존**해 대칭성을 보장한다. M16(HD-1) 롤백도 동일 원칙 — `community_posts` GRANT 복원 + 제거한 정책 6종 재생성 migration.
 7. **부분 실패 시**: migration은 단일 트랜잭션으로 적용한다. 실패하면 그 migration 전체가 롤백되며, 다음 단계로 진행하지 않는다.
-8. **데이터 롤백은 없다.** F4~F8이 만든 행(글·프로필·요금제)은 정상 업무 데이터이므로 되돌리지 않는다.
+8. **데이터 롤백은 없다.** F4~F8이 만든 행(글·프로필·요금제)은 정상 업무 데이터이므로 되돌리지 않는다. **M13 라벨 backfill은 forward-only 보안 정규화다(오너 확정 2026-07-30 — 과거 클라이언트 제공 라벨은 신뢰 불가 값이므로 복원하지 않는다).** M13 rollback의 범위·순서는: ① snapshot 보호 트리거 제거 ② INSERT 트리거 2종 제거 ③ 트리거 함수 2종 제거 ④ `comments.author_role` 제거 ⑤ `comments.author_label` default를 baseline `'쌤버십 회원'`으로 복원 — 까지만이며, **선재 `comments.author_label`·`community_comments.author_label` 컬럼 DROP·163/164 함수·트리거 DROP·CASCADE·행 삭제·backfill 이전 라벨 복원은 금지**한다. "모든 데이터 원복" 요구에서 M13 라벨 backfill만 명시적 예외다(행 수·비대상 컬럼은 반드시 동일).
 9. 롤백 실행도 **운영 DB 임의 `execute_sql` 금지** — 동일한 단일 배포 경로를 쓴다.
 
 ## 23. 미확정 사항과 정확한 blocker `[TO-BE]`
@@ -2742,7 +2769,7 @@ migration별 테스트 소유를 아래와 같이 고정한다. 같은 시나리
 |---|---|---|---|
 | 1 | 최신 웹 HEAD와 라이브 DB 기준선 재측정 완료 | ✅ | §2.1 — 웹 `ad076d29`, 앱 `b0ea4051`, DB 03:19:04 UTC |
 | 2 | 웹 호출점 전수 목록 완료 | ✅ | §3.3 RPC 51종(파일:행) · §3.4 테이블 51종 · §3.5 버킷 11종. **영역별 전수 추적 15/15 완료** → §3.8에 추가 실측 6건 반영 |
-| 3 | 신규 view·function 이름과 정확한 시그니처 확정 (**공용 구현부 + M17 앱 표면 포함 — rev 8 B로 게이트 재정의, v1.1 canon 보정으로 M17 추가**) | ✅ | §6 조회 계약 7개(뷰 5 + RPC 2, 필드 전체) · §7 function **20개**(인자 타입 전체 — `api_web_v1` 14 + `core_private` 내부 구현부 6, 보안 속성·GRANT 전건 명세) · **§20.2 M17의 `api_app_v1` 표면 7객체**(schema 1 + view 1 `community_posts_v1` + function 5, identity argument는 앱 계약 §3.3과 완전 동일 — 부록 A) → **총계 view 6 · function 25 · schema 3 · column 2** |
+| 3 | 신규 view·function 이름과 정확한 시그니처 확정 (**공용 구현부 + M17 앱 표면 포함 — rev 8 B로 게이트 재정의, v1.1 canon 보정으로 M17 추가**) | ✅ | §6 조회 계약 7개(뷰 5 + RPC 2, 필드 전체) · §7 function **20개**(인자 타입 전체 — `api_web_v1` 14 + `core_private` 내부 구현부 6, 보안 속성·GRANT 전건 명세) · **§20.2 M17의 `api_app_v1` 표면 7객체**(schema 1 + view 1 `community_posts_v1` + function 5, identity argument는 앱 계약 §3.3과 완전 동일 — 부록 A) → **총계 view 6 · function 25 · schema 3 · column 1**(M13 정합 보정 2026-07-30: `comments.author_role`만 신규 — `author_label`은 037 선재 컬럼 재사용) |
 | 4 | 모든 객체의 호출자·GRANT·REVOKE 확정 | ✅ | §4.1 계층 6종 · §10.1~10.4 DDL |
 | 5 | 안정 오류코드와 반환 envelope 확정 | ✅ | §8 envelope · §9 사전 + 레거시 매핑표 |
 | 6 | 결제·환불·원장·정산의 멱등·동시성·트랜잭션 규약 확정 | ✅ | §12.1~12.5 (lock 순서·멱등키 총람·재시도 전제) |
@@ -2752,7 +2779,7 @@ migration별 테스트 소유를 아래와 같이 고정한다. 같은 시나리
 | 10 | 현재 호출점 → 신규 객체 → 레거시 호환표 완료 | ✅ | §17 (30행) · §18 |
 | 11 | `api_app_v1`과 제품 경계 대조 완료 | ✅ | §19 + **§19.4 앱 저장소 실측**(RPC 27/27, 테이블 24/24) |
 | 12 | 삭제 없는 migration 분해안과 적용 순서 완료 | ✅ | §20 (**활성 16개 = M0·M1·M4~M17**, M2·M3 retired + 게이트 + callsite 전환 C1~C11 + 플랫폼 단계 D-API-W·D-API-A §20.6). **M17은 v1.1 canon 보정 신설**(`api_app_v1` 표면 소유 migration 누락 해소 — §19.5 #9·부록 C) |
-| 13 | 구현 검수용 test matrix 완료 | ✅ | §21 (T-CON 8 · T-PERM 15 · T-CONC 10 · T-FIN 7 · T-SEC 14 · T-REG 7 · **T-REP 8 · T-TOP 6** = **75건**) + **§21.11 migration별 테스트 소유권**(M7 = T-CONC-10 canonical · M17 = 앱 Gate 4·앱 wrapper 시그니처/GRANT/envelope·`community_posts_v1`·앱 표면 응답 유실 재검증 · M9는 T-CONC-10 미소유) |
+| 13 | 구현 검수용 test matrix 완료 | ✅ | §21 (T-CON 8 · T-PERM 15 · T-CONC 10 · T-FIN 7 · T-SEC 14 · T-REG 7 · **T-REP 8 · T-TOP 6 · T-M13 16(§21.7 — 정합 보정)** = **91건**) + **§21.11 migration별 테스트 소유권**(M7 = T-CONC-10 canonical · M17 = 앱 Gate 4·앱 wrapper 시그니처/GRANT/envelope·`community_posts_v1`·앱 표면 응답 유실 재검증 · M9는 T-CONC-10 미소유) |
 | 14 | AS-IS와 TO-BE가 명확히 분리됨 | ✅ | 절마다 `[AS-IS]`/`[TO-BE]` 표시, 문서 상단 "읽는 법" |
 | 15 | 미검증 사실을 추정으로 채운 항목 0건 | ✅ | §23.2에 U-01~U-16으로 전부 명시(U-09·U-10 해소). §16.2의 TOSS env 2종은 **미검증**으로 표기(추정 아님) |
 | 16 | DB·GitHub·코드·Vercel 변경 0건 | ✅ | §24.3 |
@@ -2772,6 +2799,8 @@ S2-2: BLOCKED
 ```
 
 > **보정 판정 주석(v1.1 canon 보정):** 이 보정은 **구현 승인이 아니다.** `api_app_v1` 표면 소유 migration 누락이라는 계약 결함을 M17·D-API-A로 해소한 문서 보정이며, S2-2는 안전 테스트 환경 미확보(`SAFE_TEST_ENV_UNAVAILABLE`)와 Data API 현재 노출 목록 미확인으로 **BLOCKED를 유지**한다.
+>
+> **M13 정합 보정 주석(2026-07-30 — 오너 승인):** Batch B 사전 게이트가 검출한 `BATCH_B_BASELINE_OBJECT_MISMATCH`(`comments.author_label` 선재 — 037 기원, `text NOT NULL DEFAULT '쌤버십 회원'`)를 오너 승인 권고안으로 계약에 반영했다(§6 V2·§10.4·§20.2 M13·§20.3 게이트·§21.7·§22 #8·부록 A·부록 C-2). 이 보정 역시 **구현 승인이 아니며**, 이 보정 커밋의 새 웹 계약 정본 SHA-256 기준으로 **앱 계약 재동기화(§19.5)가 완료될 때까지 S2-2 Batch B는 BLOCKED를 유지**한다. (Batch A M0·M15 `LOCAL_PASS` 실적은 이 보정과 무관하게 유효 — 물리 정책 §9.1.)
 
 - 이 문서 단독으로는 **전체 S2-1 PASS를 선언하지 않는다.** `api_app_v1` 계약 v1.1이 작성되어 두 계약의 **공용 함수·시그니처·오류코드·GRANT·테스트 대조**(§19.5)가 통과한 뒤에만 S2-1 PASS / S2-2 GO 재선언 심사가 가능하다(rev 8 G-7).
 - **SQL 작성·적용은 계속 금지**다 — 두 계약 문서의 대조 통과 전까지 S2-2는 임시 NO-GO를 유지한다.
@@ -2857,16 +2886,19 @@ SQL 파일 작성, Vercel 설정 변경, PR 생성·머지는 0건이다.
 | `api_app_v1.community_post_create(text,text,text,uuid,text[],text)` | fn — **M17** 앱 wrapper (A-1 재배열) | T2(앱) | — | E | — |
 | `api_app_v1.community_post_update(uuid,text,text,text,timestamptz,text[],text)` | fn — **M17** 앱 wrapper (A-1 재배열) | T2(앱) | — | E | — |
 | `api_app_v1.community_post_soft_delete(uuid)` | fn — **M17** 앱 wrapper | T2(앱) | — | E | — |
-| `public.comments.author_label` / `public.comments.author_role` | column ×2 (M13 — A-9) | — | (기존 정책 상속) | | |
-| `public.comments_set_author_label()` + 트리거 | trigger fn (M13) | — | (PUBLIC EXECUTE 회수) | | |
+| `public.comments.author_role` | column ×1 (M13 — A-9·정합 보정: **신규 컬럼은 이 1개뿐**) | — | (기존 정책 상속) | | |
+| `public.comments.author_label` | **선재 컬럼(037) 재사용**(M13 — 신규 아님): default `'쌤버십 사용자'` 정정 + 백필. `community_comments.author_label`(016 선재)은 board 행 백필 대상 | — | (기존 정책 상속) | | |
+| `public.comments_set_author_label()` · `public.community_comments_set_author_label()` + 트리거 4종 | trigger fn ×2 (M13 — INSERT 서버 덮어쓰기·UPDATE snapshot 보호, legacy 쪽 board 한정) | — | (PUBLIC EXECUTE 회수) | | |
 
 > **`api_app_v1` 권한 표기(앱 계약 §3.1·§3.2·§3.3과 동일):** 스키마 = `REVOKE ALL … FROM PUBLIC, anon` + `GRANT USAGE … TO authenticated`. View = `REVOKE ALL … FROM PUBLIC, anon` + `GRANT SELECT … TO authenticated`(DML 금지). 함수 5종 = `REVOKE ALL ON ALL FUNCTIONS IN SCHEMA api_app_v1 FROM PUBLIC, anon` + 각 함수 `GRANT EXECUTE … TO authenticated`. **`service_role`은 앱 공개 계약의 호출자에 포함하지 않는다**(웹 `api_web_v1` T2가 service_role EXECUTE를 함께 갖는 것과의 의도적 차이 — 앱 계약 §3.3). 스키마 1 + view 1 + function 5 = **M17 소유 객체 정확히 7개**이며, GRANT·REVOKE·default privilege 설정은 객체 수에 포함하지 않는다.
 
-**합계: view 6 · function 25 (`api_web_v1` 14 + `core_private` 6 + `api_app_v1` 5) · schema 3 (`api_web_v1`·`api_app_v1`·`core_private`) · column 2(`comments`)** (+ **필수** M0의 트리거·함수 1쌍, M13 트리거 함수 1, M15의 레거시 함수 가드 재정의 1 — 이 부수 객체는 위 총계와 **중복 계산하지 않는다**)
+**합계: view 6 · function 25 (`api_web_v1` 14 + `core_private` 6 + `api_app_v1` 5) · schema 3 (`api_web_v1`·`api_app_v1`·`core_private`) · column 1(`comments.author_role` — M13 정합 보정)** (+ **필수** M0의 트리거·함수 1쌍, M13 트리거 함수 2·트리거 4, M15의 레거시 함수 가드 재정의 1 — 이 부수 객체는 위 총계와 **중복 계산하지 않는다**)
 
-> **정정(rev 8 A-6):** v1.0 합계의 `cash_ledger.ref_text` **column 1 → column 0**으로 정정한다(`ref_text` 폐기). 위 column 2는 rev 8 A-9의 `comments` 비정규화 신설분이다. F11은 위치·시그니처만 바뀌므로 함수 수에 계속 포함된다. F0 폐기(−2)·F13(+1)·V6/V7 RPC(+2)·내부 구현부(+5)로 `api_web_v1`+`core_private` 함수는 **20**이다.
+> **정정(rev 8 A-6):** v1.0 합계의 `cash_ledger.ref_text` **column 1 → column 0**으로 정정한다(`ref_text` 폐기). F11은 위치·시그니처만 바뀌므로 함수 수에 계속 포함된다. F0 폐기(−2)·F13(+1)·V6/V7 RPC(+2)·내부 구현부(+5)로 `api_web_v1`+`core_private` 함수는 **20**이다.
 >
-> **정정(v1.1 canon 보정 — M17):** `api_app_v1` 표면(스키마 1·view 1·function 5)이 M17로 신설되면서 총계가 **view 5→6 · function 20→25 · schema 2→3**으로 갱신됐다. column 2는 불변이다.
+> **정정(v1.1 canon 보정 — M17):** `api_app_v1` 표면(스키마 1·view 1·function 5)이 M17로 신설되면서 총계가 **view 5→6 · function 20→25 · schema 2→3**으로 갱신됐다.
+>
+> **정정(M13 정합 보정 — 2026-07-30 오너 승인):** rev 8 A-9가 "column 2 신설"로 집계했던 `comments` 비정규화는 Batch B 사전 게이트 실측으로 **column 1(`author_role`)로 정정**됐다 — `author_label`은 037 선재 컬럼 재사용(신규 객체 아님, default 정정·백필만). M13 부수 trigger function은 1→**2**(canonical + legacy board), trigger는 **4**다. 상세는 부록 C-2.
 
 ## 부록 B. AS-IS 결함 → TO-BE 해소 대조
 
@@ -2943,9 +2975,20 @@ SQL 파일 작성, Vercel 설정 변경, PR 생성·머지는 0건이다.
 | **해소** | **M17 신설**(`..._api_app_v1_surface.sql` — 스키마·REVOKE/GRANT·뷰·wrapper 5종·최소 GRANT·default privilege 방어, 시그니처는 앱 §3.3·§10과 완전 동일, `core_private` 구현부는 M7·M5 객체 공유·복제 금지) + **rollback `..._api_app_v1_surface_rollback.sql`** + **D-API-W·D-API-A 플랫폼 단계 분리**(§20.6) |
 | **선행조건** | **`M17 : M5 + M7`** (M1은 M5·M7의 선행이라 간접 충족. **M13 의존 없음** — M13은 `public.comments` 라벨 컬럼용이고 `api_app_v1.community_posts_v1`은 `public.community_posts`만 읽는다). `M16 : M7 + M17 + D-API-A + 웹·앱 전환 + 앱 Gate 4 + 직접 쓰기 0건 + §14.7 Gate 7단계`, **`M10 : M11 + M12 + M15 + M16 + M17`**(= M10 자신 제외 활성 predecessor 15개 전건 완료 — 3차 보정) |
 | **반영 절** | §5.4(D-API-W·D-API-A 연결) · §17 전환 요약(신규 객체 총계) · §19.5 #9(앱 동기화 의무 신규 항목) · §20.2 M17 행(**객체 7개 명시**)·논리 ID 서문 · §20.2.1 그래프 간선·M16·M10·권고 직렬화 · §20.3 게이트(**M17 이전 / M17 적용 직후 / D-API-A 이전 3분할**·M16 이전·전 단계 공통) · §20.5(M1~M17) · **§20.6 신설**(Data API 플랫폼 단계) + **§20.6.1 reload 의미 구분** + **§20.6.2 D-API 검증** · §21.2 T-PERM-03(플랫폼 단계 증거로 이동) · §21.3 T-CONC-10(M7 canonical 표시) · §21.10(M10 SQL 판정 가능/불가 분리) · **§21.11 신설**(migration별 테스트 소유권) · §22 #2(역순에 M17·**M13 역의존 없음**·rollback 6단계) · §23.1(M0~M17) · **부록 A**(`api_app_v1` 7객체 행·권한·총계) · §24.1 #3·#12·#13 · §24.2 판정 |
-| **객체 수** | **M17 소유 = 정확히 7개**(schema 1 + view 1 + function 5). GRANT·REVOKE·default privilege는 객체 수에 미포함. **전체 신규 총계: view 6 · function 25(`api_web_v1` 14 + `core_private` 6 + `api_app_v1` 5) · schema 3 · column 2**. M0·M13 트리거 함수 등 부수 객체는 총계와 중복 계산하지 않음 |
+| **객체 수** | **M17 소유 = 정확히 7개**(schema 1 + view 1 + function 5). GRANT·REVOKE·default privilege는 객체 수에 미포함. **전체 신규 총계: view 6 · function 25(`api_web_v1` 14 + `core_private` 6 + `api_app_v1` 5) · schema 3 · column 1**(M13 정합 보정 2026-07-30 — 부록 C-2: 구 column 2 집계를 `author_role` 1개로 정정, `author_label`은 선재 재사용). M0·M13 트리거 함수 등 부수 객체는 총계와 중복 계산하지 않음 |
 | **개수 정합** | 활성 forward migration **16개**(M0·M1·M4~M17) · retired **M2·M3** · rollback 없는 상태 0 checkpoint **M10** · **forward+rollback 쌍 15개** |
 | **테스트 소유권** | M7 = 공용 B-1~B-4·웹 F4/F5/F6·**T-CONC-10 canonical** / M17 = 앱 Gate 4·앱 wrapper 시그니처·GRANT·envelope·`community_posts_v1`·앱 표면 응답 유실 재검증 / **M9는 T-CONC-10 미소유**(T-CONC-02·03·04·08·09·T-FIN·T-REP A~H·T-TOP 1~6) |
 | **2차 보정(오너 지시 8건)** | ① M17 선행조건 `M5+M7+M13` → **`M5+M7`**(M13 의존 전건 제거) ② **존재 전 권한 검사 오류 정정** — M17 이전 게이트에서 `api_app_v1` 권한 실측 요구를 제거하고 "M17 적용 직후" 게이트로 이동, M17 이전에는 기반 컬럼 존재·identity argument·부분 객체 부재만 검사 ③ M17 객체 7개·전체 총계 정합화 + 부록 A 행 추가 ④ **운영 M10의 Exposed schemas 직접 판정 문구 제거** → D-API 플랫폼 단계 증거로 이동 ⑤ **reload 의미 구분**(설정 config reload ↔ DB schema cache reload) + D-API-A 검증에 `PGRST106`/`PGRST002` 부재·`core_private` 거부 확인 명시 ⑥ 현재 범위를 뜻하는 stale `M0~M16`·`M1~M16` → `M0~M17`·`M1~M17`(역사적 누락 설명 2건은 의도적 보존) ⑦ 실행 그래프·rollback 최종형 반영 ⑧ 전건 검증 |
 | **3차 보정(오너 지시 2건)** | ① **M10에 M15 실간선 추가** — `M10 : M11 + M12 + M16 + M17` → **`M11 + M12 + M15 + M16 + M17`**. M15가 미적용인 상태에서 최종 checkpoint가 통과되던 그래프 결함 해소. 의미를 "**M10 자신을 제외한 활성 predecessor 15개 전건 적용 후 실행**"으로 정합화하고 검사 대상을 중복 없는 명시 목록(M0·M1·M4~M9·M11~M17)으로 고정(§20.2 M10 행·§20.2.1·§21.10·부록 C-1). **M15의 M0 독립·병행·조기 적용 가능성과 rollback 독립성은 유지**(권고 순서의 `M0(M15 병행 가능)` 불변) ② **T-REG-06 stale 스키마 목록 정정** — `public` 함수 개수·**identity argument** 동일 + 계약된 본문 교체 허용(M15·M9) + 신규 `public` 함수 추가 0, 신규 함수는 **`api_web_v1`·`api_app_v1`·`core_private`**에만(M17 wrapper 5종 누락 해소) |
 | **판정** | 구현 승인 아님 — S2-1은 앱 재동기화 대기, S2-2는 `BLOCKED`(`SAFE_TEST_ENV_UNAVAILABLE` 유지 · Data API 현재 목록 확인 대기) |
+
+### 부록 C-2. M13 baseline 정합 보정 추적표 (오너 승인 2026-07-30 역기입)
+
+| 항목 | 내용 |
+|---|---|
+| **결함** | `BATCH_B_BASELINE_OBJECT_MISMATCH` — Batch B 사전 게이트(후보 C 175 + Batch A M0·M15 적용 후 PG17.6 실측)에서 `public.comments.author_label`이 **037 기원 선재 컬럼**(`text NOT NULL DEFAULT '쌤버십 회원'`)으로 확인됐다. `public.community_comments.author_label`(016 기원)도 동일 속성으로 선재하며 board+shortform 공용이다. 구 계약(§10.4)의 "`author_label text NULL` 신규 추가"·"M13 rollback에서 `author_label` DROP"·"M13 신규 column 2" 해석은 실측과 불일치 — DROP 시 레거시 데이터 파괴 |
+| **추가 실측** | 163/164 `cc_sync_board_to_canonical()`·`comments_mirror_to_legacy()`는 INSERT에서 `author_label`을 넘기지 않아 각 테이블 default에 의존한다. `comments_write_guard()`(163)·`cc_write_guard()`(164) 비교식에 `author_label`이 없어 클라이언트 UPDATE를 막지 못한다. 웹 `insertBoardComment()`는 `comments.author_label`을 클라이언트 payload로 직접 전달한다 |
+| **해소(오너 권고안 승인)** | ① `author_label` **선재 컬럼 재사용**(DROP 금지·NOT NULL 유지·default `'쌤버십 사용자'` 정정) ② M13 신규 컬럼 = `comments.author_role text NULL` **정확히 1개** ③ 트리거 함수 2종(`comments_set_author_label`·`community_comments_set_author_label`, SECDEF·`search_path=''`·PUBLIC EXECUTE 회수)·트리거 4종(canonical INSERT/UPDATE 보호 + legacy board INSERT/UPDATE 보호 — shortform 무영향) ④ 서버 덮어쓰기 권위: DB BEFORE INSERT trigger > 163/164 bridge > 클라이언트 > default(163/164 본문 불변) ⑤ 백필: `comments` 전행 + `community_comments` board 행 1회 정규화 — **forward-only 보안 데이터 교정**, rollback은 과거 클라이언트 라벨을 복원하지 않음(§22 #8) |
+| **반영 절** | §6 V2(비정규화 계약 재정의) · §7 F0 승계 규칙 · §10.4 표 · §11.6 화이트리스트 · §20.2 M13 행 · §20.3 「M13 이전」·「M13 적용 직후」 게이트 신설 · **§21.7 T-M13-01~16 신설** · §22 #8(forward-only 예외·rollback 5단계·금지 목록) · §24.1 #3(column 2→1)·#13(테스트 75→91) · §24.2 판정 주석 · 부록 A(행·합계·정정 주석) · 본 추적표 |
+| **집계 정정** | M13 신규 column **2→1** · M13 부수 trigger function **1→2** · trigger **4** · 테스트 매트릭스 **75→91**(T-M13 16 추가). view 6 · function 25 · schema 3 총계는 불변 — trigger function 2종은 주 객체 function 총계와 중복 계산하지 않음 |
+| **판정** | 구현 승인 아님 — `BATCH_B_BASELINE_OBJECT_MISMATCH: RESOLVED_IN_CONTRACT`. 이 보정 커밋의 새 웹 계약 정본 SHA-256 기준 **앱 계약 재동기화(§19.5) 필요** — 완료 전까지 S2-2 Batch B는 BLOCKED 유지. Batch A(M0·M15) `LOCAL_PASS` 실적·파일 해시는 불변 |

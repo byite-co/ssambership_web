@@ -24,11 +24,12 @@ READY_FOR_S2_2_BATCH_A: YES
 | repository | `byite-co/ssambership_web` |
 | base branch | `claude/s2-2-manifest-canon-20260730-te2s4b` |
 | base commit | `ebcacedce76d97c94ec895841831d0e5b876c637` |
-| 웹 계약 (불변) | `docs/contracts/api_web_v1_contract_v1_1.md` — SHA-256 `0c444434bf9ca4e275a21f656a9f98dae2808b6c1c7fbc832a01de59b6d5ae94` |
+| 웹 계약 (본 정책 정본화 시점 스냅샷 — 역사 기록) | `docs/contracts/api_web_v1_contract_v1_1.md` — 2,951행 / 317,396B / SHA-256 `0c444434bf9ca4e275a21f656a9f98dae2808b6c1c7fbc832a01de59b6d5ae94` |
+| 웹 계약 (**현행 정본** — M13 정합 보정 2026-07-30, §9.2) | `docs/contracts/api_web_v1_contract_v1_1.md` — **2,994행 / 329,690B / SHA-256 `bd9fc0dd2802c8358bb09f2938e0de7248d8b60703794895708e300f8ef32fa6`** — 이 SHA가 앱 계약 재동기화(계약 §19.5) 인수인계 기준값이다 |
 | 운영 manifest (본 정책 반영 직전 스냅샷) | `docs/audit/apply_manifest_prod.md` — 193행 / 25,926B / SHA-256 `a4cba0a124f422542e2605cf1209806ddcdc729bfa0f5a798d9ba11229daf62f` |
 | 상세 manifest (본 정책 반영 직전 스냅샷) | `docs/audit/sql_apply_manifest.md` — 241행 / 67,008B / SHA-256 `0c65d7109bb07d9509ad3a747aa2c2d3802af734ddf02fcc962e7cca01bf57a9` |
 
-- 두 manifest는 본 정책을 반영하는 커밋에서 S2 절이 추가되므로, 위 SHA는 **반영 직전(base commit) 스냅샷**이다. 계약서는 본 커밋에서 무변경이며 위 SHA가 계속 유효하다(앱 계약 재동기화 불발생).
+- 두 manifest는 본 정책을 반영하는 커밋에서 S2 절이 추가되므로, 위 SHA는 **반영 직전(base commit) 스냅샷**이다. "계약서는 본 커밋에서 무변경이며 위 SHA가 계속 유효하다(앱 계약 재동기화 불발생)"는 **정책 정본화 시점(2026-07-30 초기)의 역사 기록**이다 — 이후 **M13 정합 보정(오너 승인 2026-07-30, §9.2)으로 계약서가 수정**되어 현행 정본 SHA는 위 표의 `bd9fc0dd…`이며, **앱 계약 재동기화가 필요한 상태**다(`APP_CONTRACT_RESYNC_REQUIRED: YES`).
 - 프리플라이트 실측 근거(2026-07-30): ① Supabase MCP `apply_migration` 입력은 `project_id`·`name`·`query` 3종뿐 — **version 지정 입력 없음**(도구 스키마 + MCP 서버 소스 `api-platform.ts`의 body `{name, query}` 실측). ② 원장 `version`은 서버가 적용 시점에 채번(staging 선례 `20260704135803 / 115_account_deletion`). ③ Supabase CLI 2.110.0 — `supabase migration new`는 `supabase/migrations/<timestamp>_<name>.sql`만 생성. ④ 저장소에 `supabase/migrations/`·`supabase/rollback/` 부재, rollback 파일 관행 0건.
 
 ## 2. P-2 — stable migration identity 1:1 (오너 결정: 수정 가안 채택)
@@ -193,7 +194,7 @@ S2 rollback: 15개 — clean-install 불포함
 | M0 | mentor_profile_privileged_column_guard | 없음 | 1 | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` (**실채번 TS1=20260729211929** — §9.1) | `supabase/rollback/20260729211929_mentor_profile_privileged_column_guard_rollback.sql` | 있음 | A |
 | M15 | weekly_usage_pair_party_guard | 없음 | 2 | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` (**실채번 TS2=20260729211941** — §9.1) | `supabase/rollback/20260729211941_weekly_usage_pair_party_guard_rollback.sql` | 있음 | A |
 | M1 | api_web_v1_schemas | M0 | 3 | `supabase/sql/<TS3>_api_web_v1_schemas.sql` | `supabase/rollback/<TS3>_api_web_v1_schemas_rollback.sql` | 있음 | B |
-| M13 | comments_author_label_denormalize | M0 | 4 | `supabase/sql/<TS4>_comments_author_label_denormalize.sql` | `supabase/rollback/<TS4>_comments_author_label_denormalize_rollback.sql` | 있음 | B |
+| M13 | comments_author_label_denormalize (**정본 재정의 — §9.2**) | M0 | 4 | `supabase/sql/<TS4>_comments_author_label_denormalize.sql` | `supabase/rollback/<TS4>_comments_author_label_denormalize_rollback.sql` | 있음(단, `author_label` 컬럼·정규화 라벨 보존 — forward-only 예외 §9.2) | B |
 | M4 | api_web_v1_read_views | M1+M13 | 5 | `supabase/sql/<TS5>_api_web_v1_read_views.sql` | `supabase/rollback/<TS5>_api_web_v1_read_views_rollback.sql` | 있음 | B |
 | M5 | core_private_room_ensure | M1 | 6 | `supabase/sql/<TS6>_core_private_room_ensure.sql` | `supabase/rollback/<TS6>_core_private_room_ensure_rollback.sql` | 있음 | C |
 | M6 | api_web_v1_self_rpc | M5 | 7 | `supabase/sql/<TS7>_api_web_v1_self_rpc.sql` | `supabase/rollback/<TS7>_api_web_v1_self_rpc_rollback.sql` | 있음 | C |
@@ -229,6 +230,29 @@ functiondef md5 `d0d31620671c6f9707a7b9d324d1ed35`·prosrc SHA-256
 - 미생성 잔여 S2 forward는 **M1·M4~M14·M16·M17, 총 14개**다(invent 금지 — 위 §9 계획표의 `<TSn>` 형식 유지). M0·M15는 Batch A에서 생성·`LOCAL_PASS` 완료됐고 M2·M3는 retired다.
 - 상세 ledger mapping·rollback 인벤토리 실체는 `sql_apply_manifest.md` 「S2 환경별 적용 대조표·rollback 인벤토리」에 기록.
 
+### 9.2 M13 정본 재정의 역기입 (baseline 정합 보정 — 오너 승인 2026-07-30)
+
+**Batch B 사전 게이트 실패·해소 근거:** Batch B 착수 세션의 read-only 실측(후보 C 175 + Batch A M0·M15 적용 후 PG17.6)에서
+`public.comments.author_label`이 **037 기원 선재 컬럼**(`text NOT NULL DEFAULT '쌤버십 회원'`)으로 확인되어
+`BATCH_B_BASELINE_OBJECT_MISMATCH`로 중단(수정 0건 보고)됐고, 오너가 권고안을 승인해 웹 계약을 보정했다
+(`BATCH_B_BASELINE_OBJECT_MISMATCH: RESOLVED_IN_CONTRACT`). M13의 물리 역할은 다음으로 확정된다.
+
+- **선재 재사용:** `comments.author_label`(037)·`community_comments.author_label`(016)은 선재 컬럼 — M13은 DROP하지 않고
+  `comments.author_label`의 default만 `'쌤버십 사용자'`로 정정한다(NOT NULL 유지).
+- **신규 컬럼:** `comments.author_role text NULL` **정확히 1개**(구 "신규 column 2" 집계 폐기).
+- **트리거:** 함수 2종(`public.comments_set_author_label()`·`public.community_comments_set_author_label()` — SECDEF·
+  `search_path=''`·PUBLIC EXECUTE 회수) + 트리거 4종(canonical INSERT 설정·canonical snapshot UPDATE 보호·
+  legacy board INSERT 설정·legacy board snapshot UPDATE 보호). legacy 쪽은 `post_type='board'` 한정 — shortform 무영향.
+- **브리지 불변:** 163/164 함수 본문은 교체하지 않는다 — 권위는 DB BEFORE INSERT trigger > 브리지 입력 > 클라이언트 입력 > default.
+- **백필:** `comments` 전행 + `community_comments` board 행 1회 정규화(양 테이블 라벨 backfill). shortform·행 수·비대상 컬럼 불변.
+- **rollback:** 트리거 4종·함수 2종·`author_role` 제거 + `author_label` default `'쌤버십 회원'` 복원까지만.
+  **`author_label` 컬럼은 보존**하고, backfill된 라벨은 **forward-only 보안 정규화**로 유지한다(과거 클라이언트 라벨 미복원 —
+  "전 데이터 원복" 요구의 명시적 예외, 계약 §22 #8).
+- **계약 정본:** 상세는 웹 계약 §6 V2·§10.4·§20.2 M13·§20.3 게이트·§21.7 T-M13-01~16·부록 C-2. 본 보정으로 웹 계약이 수정되어
+  **현행 정본 = 2,994행 / 329,690B / SHA-256 `bd9fc0dd2802c8358bb09f2938e0de7248d8b60703794895708e300f8ef32fa6`**(본 보정 커밋) —
+  **앱 계약 재동기화 필요 상태**(`APP_CONTRACT_RESYNC_REQUIRED: YES`, 완료 전 S2-2 Batch B는 BLOCKED 유지).
+- Batch A(M0·M15)의 `LOCAL_PASS` 실적·파일 SHA-256(§9.1)은 본 보정과 무관하게 불변이다.
+
 ## 10. Batch A~F 계획표
 
 | batch | 논리 ID | 선행조건 | 생성 파일 | rollback | 검증 | 다음 batch 진입 조건 | 끼는 비-SQL 단계 |
@@ -251,4 +275,4 @@ functiondef md5 `d0d31620671c6f9707a7b9d324d1ed35`·prosrc SHA-256
 - 운영 DB 임의 `execute_sql` DDL 금지 — 배포는 검토된 단일 경로(`apply_migration`)만.
 - rollback을 forward clean-install glob·파일 수에 포함하는 해석 금지.
 - `supabase/migrations/`·`supabase/sql/` 이중 보존 금지.
-- 계약서(`api_web_v1_contract_v1_1.md`)는 본 정책으로 수정되지 않았다 — 앱 계약 재동기화 불발생.
+- 계약서(`api_web_v1_contract_v1_1.md`)는 **본 정책 문서 자체로는** 수정되지 않았다(역사 기록). 단, **M13 정합 보정(2026-07-30 오너 승인, §9.2)으로 계약서가 수정**되어 현행 정본 SHA는 `bd9fc0dd…`(§1 표)이며 **앱 계약 재동기화가 필요**하다.
