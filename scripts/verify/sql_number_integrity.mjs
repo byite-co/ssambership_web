@@ -7,7 +7,7 @@
 //   - 레거시 다음 번호는 3자리 체계 전용이며 S2 M0~M17 에는 적용하지 않는다.
 //   [S2 UTC timestamp 체계 — 물리 정책 정본]
 //   - S2 신규 migration 은 정확한 14자리 UTC timestamp(YYYYMMDDHHMMSS) 파일명만 허용.
-//   - S2 timestamp 중복 0 · Batch A: M0 < M15 · Batch B: M1 < M13 < M4 ·
+//   - S2 timestamp 중복 0 · Batch A: M0 < M15 · Batch B: M1 < MC < M13 < M4 ·
 //     Batch C: M5 < M6 < M7 · Batch D: M17 < M8 < M14 · Batch E: M9 단독 ·
 //     Batch F: M11 < M12 < M16 < M10 ·
 //     Batch 간 전건 순서 A < B < C < D < E < F (물리 계획표 §9 생성 순서).
@@ -15,8 +15,12 @@
 //   - S2 forward 각각에 supabase/rollback/<TS>_<STEM>_rollback.sql 정확히 1개 —
 //     단 M10(contract_permission_assertions)은 상태 0 checkpoint 로 rollback 없음(정확히 0개).
 //   - rollback 은 supabase/sql/ 아래 금지·clean-install 수에 불포함.
-//   - 레거시 190개·제외 15개 불변 / Batch F 후 supabase/sql/*.sql 총 206개(190+16) /
-//     정규 clean-install 175+16=191 · rollback 15개(M10 없음·M2/M3 retired).
+//   - 레거시 190개·제외 15개 불변 / MC(S2-4 baseline convergence) 편입 후
+//     supabase/sql/*.sql 총 207개(190+17) / 정규 clean-install 175+17=192 ·
+//     rollback 16개(M10 없음·M2/M3 retired).
+//   - MC(20260730095436_comments_author_label_baseline_convergence)는 S2-3 P0 D-1
+//     해소 계약이 지정한 과거 삽입 슬롯(M1<MC<M13)의 일회성 고정 timestamp 예외다
+//     — timestamp 정책 일반 변경이 아니다(S2-4 감사 문서 참조).
 // 사용: node scripts/verify/sql_number_integrity.mjs
 
 import { readdirSync, existsSync } from "node:fs";
@@ -109,6 +113,7 @@ const S2_BATCH_A = [
 ];
 const S2_BATCH_B = [
   { id: "M1", stem: "api_web_v1_schemas" },
+  { id: "MC", stem: "comments_author_label_baseline_convergence" }, // S2-4 P0 D-1 수렴 — M13 직전 고정 슬롯
   { id: "M13", stem: "comments_author_label_denormalize" },
   { id: "M4", stem: "api_web_v1_read_views" },
 ];
@@ -243,13 +248,13 @@ if (legacyFiles.length !== LEGACY_TOTAL) {
 for (const ex of LEGACY_EXCLUDED) {
   if (!legacyFiles.includes(ex)) fail(`제외 15 목록 파일 부재(불변 위반): ${ex}`);
 }
-const EXPECTED_TOTAL = LEGACY_TOTAL + S2_EXPECTED.length; // 206 (Batch F 후 — 190+16)
+const EXPECTED_TOTAL = LEGACY_TOTAL + S2_EXPECTED.length; // 207 (MC 편입 후 — 190+17)
 if (files.length !== EXPECTED_TOTAL) {
   fail(`supabase/sql/*.sql 총수 ${EXPECTED_TOTAL}개 기대, 현재 ${files.length}개`);
 }
 const cleanInstallNow = LEGACY_TOTAL - LEGACY_EXCLUDED.length + s2Parsed.length; // 175 + S2 forward
-const CLEAN_INSTALL_EXPECTED_NOW = 191; // Batch F 완료 — S2 forward 16 전건(175+16)
-const EXPECTED_ROLLBACK_TOTAL = 15; // S2 forward 16 − M10(rollback 없음). M2·M3 retired — 파일 자체 없음
+const CLEAN_INSTALL_EXPECTED_NOW = 192; // MC 편입 — S2 forward 17 전건(175+17 = 190-15+17)
+const EXPECTED_ROLLBACK_TOTAL = 16; // S2 forward 17 − M10(rollback 없음). M2·M3 retired — 파일 자체 없음
 if (cleanInstallNow !== CLEAN_INSTALL_EXPECTED_NOW) {
   fail(`정규 clean-install 수 ${CLEAN_INSTALL_EXPECTED_NOW} 기대, 계산값 ${cleanInstallNow} (rollback 은 불포함)`);
 }
@@ -259,8 +264,8 @@ if (rollbackFiles.length !== EXPECTED_ROLLBACK_TOTAL) {
 
 console.log(`\n[S2] forward files: ${s2Parsed.length} (${s2Parsed.map((s) => s.file).join(", ")})`);
 console.log(`[S2] rollback files: ${rollbackFiles.length} (${rollbackFiles.join(", ")})`);
-console.log(`[S2] legacy ${legacyFiles.length} (제외 ${LEGACY_EXCLUDED.length}) + S2 forward ${s2Parsed.length} → 정규 clean-install ${cleanInstallNow} (최종 — S2 forward 16 전건 완료)`);
-console.log(`[S2] rollback ${rollbackFiles.length}/15 (M10 은 상태 0 checkpoint — rollback 없음 · M2/M3 retired)`);
+console.log(`[S2] legacy ${legacyFiles.length} (제외 ${LEGACY_EXCLUDED.length}) + S2 forward ${s2Parsed.length} → 정규 clean-install ${cleanInstallNow} (최종 — S2 forward 17 전건 = 기존 16 + MC)`);
+console.log(`[S2] rollback ${rollbackFiles.length}/${EXPECTED_ROLLBACK_TOTAL} (M10 은 상태 0 checkpoint — rollback 없음 · M2/M3 retired)`);
 
 if (failed) {
   console.error(`\nFAILED: S2/물리 정책 무결성 위반이 있다.`);
