@@ -201,7 +201,7 @@
 - **적용 전 확인:** 적용 직전 동일 ledger name 존재 여부를 확인하고, 이미 존재하면 자동 재적용하지 않고 중단한다. migration repair·원장 PATCH·수동 원장 행 삽입·삭제 금지, 운영 DB 임의 `execute_sql` DDL 금지. 위반·불일치 발생 시 `MIGRATION_HISTORY_DRIFT` 즉시 재활성(조건 8종 = 정책 문서 §4).
 - **rollback 정본 경로:** `supabase/rollback/<FORWARD_FILE_TS>_<STEM>_rollback.sql` — forward clean-install과 구조적으로 분리하며 **정규 clean-install 파일 수에 포함하지 않는다**(`supabase/sql/*.sql`·미래 재귀 glob에 포함 금지). 실행은 장애 시 오너 승인 후 파일 1건을 명시적으로 골라 `apply_migration`으로 수행하고, 원장에는 **새 행으로 append**한다(forward 원장 행 삭제·수정·reverted 처리 금지, Management API의 선택적 `rollback` 필드 미사용). M10은 상태 0 checkpoint — rollback 파일 없음.
 - **정규 산식(S2 완료 시):** 기존 baseline **175** + S2 forward **16**(M0·M1·M4~M17, M2·M3 retired) = **191**. S2 rollback **15**개·D-API-W·D-API-A·C1~C11은 SQL 적용 파일 수에 불포함. 기존 175개 순서·제외 15개·후보 C 판정(§7)은 변경하지 않는다.
-- **편입 시점:** Batch별 로컬 PG17 검증 PASS 후 해당 forward만 본 문서에 편입한다. Batch A(M0·M15)는 아래 §9.1로 편입 완료. 나머지 S2 파일(M1·M4~M17)은 **미생성**이며, 실제 timestamp·SHA-256·ledger version은 생성·적용 후에만 기록한다(invent 금지).
+- **편입 시점:** Batch별 로컬 PG17 검증 PASS 후 해당 forward만 본 문서에 편입한다. 나머지 미생성 S2 forward(**M1·M4~M14·M16·M17, 총 14개**)는 **미생성** 상태이며, M0·M15는 Batch A `LOCAL_PASS`로 아래 §9.1에 편입 완료됐다. M2·M3는 retired다. 실제 timestamp·SHA-256·ledger version은 생성·적용 후에만 기록한다(invent 금지).
 
 ### 9.1 Batch A 편입 (2026-07-30 KST — 로컬 PG17 검증 PASS, 원격 미적용)
 

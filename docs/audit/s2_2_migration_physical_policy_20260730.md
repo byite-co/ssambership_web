@@ -186,7 +186,7 @@ S2 rollback: 15개 — clean-install 불포함
 
 ## 9. M0~M17 물리 계획표
 
-> **M0~M17은 논리 ID이며 물리 timestamp가 아니다.** `<TSn>` = 권고 생성 순서 n번째에 §5 절차로 채번되는 UTC `YYYYMMDDHHMMSS`. **Batch A(M0·M15)는 2026-07-30(KST) 세션에서 §5 절차로 실채번·구현·로컬 검증 완료됐다(§9.1 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** 나머지 M1~M17의 timestamp·SHA-256·ledger version은 현재 **미생성**이다(invent 금지). M2·M3는 retired 슬롯 — 파일을 만들지 않는다. D-API-W·D-API-A·C1~C11은 SQL 파일이 아니다.
+> **M0~M17은 논리 ID이며 물리 timestamp가 아니다.** `<TSn>` = 권고 생성 순서 n번째에 §5 절차로 채번되는 UTC `YYYYMMDDHHMMSS`. **Batch A(M0·M15)는 2026-07-30(KST) 세션에서 §5 절차로 실채번·구현·로컬 검증 완료됐다(§9.1 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** 나머지 미생성 S2 forward는 **M1·M4~M14·M16·M17, 총 14개**이며 timestamp·SHA-256·ledger version은 현재 **미생성**이다(invent 금지). M0·M15는 Batch A `LOCAL_PASS`이고, M2·M3는 retired 슬롯 — 파일을 만들지 않는다. D-API-W·D-API-A·C1~C11은 SQL 파일이 아니다.
 
 | 논리 ID | 계약 filename stem | 직접 선행조건 | 권고 생성 순서 | forward 물리 경로 형식 | rollback 경로 형식 | rollback 여부 | 구현 batch |
 |---|---|---|---:|---|---|---|---|
@@ -226,7 +226,7 @@ functiondef md5 `d0d31620671c6f9707a7b9d324d1ed35`·prosrc SHA-256
 | M15 | `20260729211941` | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | `supabase/rollback/20260729211941_weekly_usage_pair_party_guard_rollback.sql` | `42f5266d270b71b4caa6730e505665423342d0a2588199330781d4d3e0eb6363` | `LOCAL_PASS` |
 
 - timestamp 는 UTC `YYYYMMDDHHMMSS`(2026-07-29T21:19Z대 = KST 2026-07-30 06:19대 채번). `TS1(M0) < TS2(M15)` 충족.
-- M1~M17 나머지는 계속 **미생성**(invent 금지) — 위 §9 계획표의 `<TSn>` 형식 유지.
+- 미생성 잔여 S2 forward는 **M1·M4~M14·M16·M17, 총 14개**다(invent 금지 — 위 §9 계획표의 `<TSn>` 형식 유지). M0·M15는 Batch A에서 생성·`LOCAL_PASS` 완료됐고 M2·M3는 retired다.
 - 상세 ledger mapping·rollback 인벤토리 실체는 `sql_apply_manifest.md` 「S2 환경별 적용 대조표·rollback 인벤토리」에 기록.
 
 ## 10. Batch A~F 계획표
