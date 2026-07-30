@@ -86,12 +86,19 @@ export type RpcThreadResult =
   | { ok: true; threadId: string | null; messageId: string | null; path: "free" | "subscription" | null }
   | { ok: false; code: string; userMessage: string };
 
-/** 질문 스레드 원자 생성(무료/구독 서버 분기). 학생 전용. */
+/**
+ * 질문 스레드 원자 생성(무료/구독 서버 분기). 학생 전용.
+ *
+ * S2-2 전환 W1(C4): F3 `api_web_v1.qna_create_question_thread` 사용(계약 §7 F3).
+ * F3 는 정본 raise 14종을 안정 코드 envelope 로 변환하고, 트리거의
+ * `FREE_QUESTION_*` 를 `FREE_QUOTA_*` 로 수렴시킨다(XW-07/XW-08). 사전 밖 예외는
+ * 전파되므로(§8.2) error 경로의 코드 추출은 유지한다 — 임의 성공 승격 금지.
+ */
 export async function createQuestionThreadViaRpc(
   supabase: SupabaseClient,
   params: { roomId: string; title: string; subject?: string | null; topic?: string | null; firstMessageBody?: string | null }
 ): Promise<RpcThreadResult> {
-  const { data, error } = await supabase.rpc("qna_create_question_thread", {
+  const { data, error } = await supabase.schema("api_web_v1").rpc("qna_create_question_thread", {
     p_room_id: params.roomId,
     p_title: params.title,
     p_subject: params.subject ?? null,
@@ -103,7 +110,13 @@ export async function createQuestionThreadViaRpc(
     console.error("[createQuestionThreadViaRpc]", { code, message: error.message });
     return { ok: false, code, userMessage: qnaRpcErrorToUserMessage(code, "thread") };
   }
-  const row = (data ?? {}) as Record<string, unknown>;
+  const row =
+    data && typeof data === "object" && !Array.isArray(data) ? (data as Record<string, unknown>) : {};
+  if (row.ok !== true) {
+    // §8.2: ok 없는 응답을 성공으로 간주하지 않는다. 도메인 거부는 envelope code.
+    const code = typeof row.code === "string" ? row.code : "";
+    return { ok: false, code, userMessage: qnaRpcErrorToUserMessage(code, "thread") };
+  }
   const path = row.path === "free" || row.path === "subscription" ? row.path : null;
   return {
     ok: true,

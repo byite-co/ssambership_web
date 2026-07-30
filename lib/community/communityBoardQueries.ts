@@ -15,8 +15,21 @@ import { pickAuthorRoleSummary, pickExcerpt, pickTitle } from "@/lib/community/c
 import {
   resolveCommunityImageUrls,
 } from "@/lib/community/communityImageStorage";
+import { API_WEB_V1_SCHEMA } from "@/lib/apiWebV1/rpc";
 
 type Row = Record<string, unknown>;
+
+/**
+ * S2-2 전환 W1(C1): 게시판 글 읽기 정본 — V1 `api_web_v1.community_posts_v1`
+ * (계약 §6 V1 · §17 #6, 글 목록·상세 한정). invoker view 라 기반 RLS 가 그대로
+ * 적용되고, 노출 조건(`deleted_at IS NULL` AND (`published` OR 본인 글))은 view 가
+ * 정의 안에서 건다(XW-09·XW-14 해소 — JS deleted 필터·레거시 폴백 제거).
+ * `body = coalesce(content, body)` · `image_refs` 는 view 가 한 번만 수렴한다.
+ * 해시태그(`community_hashtags`)·리액션·숏폼은 V1 범위 밖이다(§17 #6 — U-12).
+ */
+function boardPostsView(supabase: SupabaseClient) {
+  return supabase.schema(API_WEB_V1_SCHEMA).from("community_posts_v1");
+}
 
 /**
  * 카드 배열의 imageUrls(현재 ref)를 표시용 서명 URL 로 일괄 변환(BUG-B).
@@ -95,7 +108,8 @@ async function boardAuthorNameMap(supabase: SupabaseClient, rows: Row[]): Promis
  * 표시용 서명 URL 변환은 로더가 resolveCommunityImageUrls 로 후처리한다.
  */
 function pickImageRefs(row: Row): string[] {
-  const v = row.image_urls;
+  // W1(C1): V1 정본 필드는 `image_refs` — 구 키(image_urls 등)는 비-V1 행 호환용
+  const v = row.image_refs ?? row.image_urls;
   if (Array.isArray(v)) {
     return v.filter((u): u is string => typeof u === "string" && u.trim().length > 0).slice(0, 5);
   }
@@ -202,11 +216,9 @@ export async function listCommunityBoardPosts(
   }
 
   let q = applyBoardFeedSort(
-    supabase
-      .from("community_posts")
+    boardPostsView(supabase)
       .select("*")
-      .eq("status", opts.status ?? "published")
-      .is("deleted_at", null),
+      .eq("status", opts.status ?? "published"),
     sort
   );
 
@@ -228,9 +240,6 @@ export async function listCommunityBoardPosts(
 
   const { data, error } = await q;
   if (error) {
-    if (/relation|does not exist|column|status/i.test(error.message)) {
-      return listCommunityBoardPostsLegacy(supabase, opts);
-    }
     return { posts: [], nextCursor: null, error: error.message };
   }
 
@@ -249,31 +258,6 @@ export async function listCommunityBoardPosts(
   return { posts, nextCursor: nextCursor || null, error: null };
 }
 
-async function listCommunityBoardPostsLegacy(
-  supabase: SupabaseClient,
-  opts: {
-    category?: CommunityPostCategorySlug;
-    cursor?: string | null;
-    limit?: number;
-    authorId?: string | null;
-  }
-): Promise<{ posts: CommunityBoardPostCard[]; nextCursor: string | null; error: string | null }> {
-  const limit = opts.limit ?? COMMUNITY_POST_PAGE_SIZE;
-  let q = supabase.from("community_posts").select("*").order("created_at", { ascending: false }).limit(limit + 1);
-  if (opts.category && opts.category !== "all") q = applyBoardCategoryFilter(q, opts.category);
-  if (opts.authorId) q = q.eq("author_id", opts.authorId);
-  if (opts.cursor) q = q.lt("created_at", opts.cursor);
-  const { data, error } = await q;
-  if (error) return { posts: [], nextCursor: null, error: error.message };
-  const rows = (data as Row[]) ?? [];
-  const hasMore = rows.length > limit;
-  const slice = hasMore ? rows.slice(0, limit) : rows;
-  const userMap = await boardAuthorNameMap(supabase, slice);
-  const posts = await signBoardCardImages(supabase, slice.map((r) => mapRowToBoardCard(r, userMap)));
-  const nextCursor = hasMore && slice.length ? String(slice[slice.length - 1].created_at ?? "") : null;
-  return { posts, nextCursor: nextCursor || null, error: null };
-}
-
 /**
  * G4.1 홈 "인기 게시글" 결정적 선정: 좋아요(like_count) 상위, 동률 시 created_at 최신, limit개.
  * 표시용 정렬·limit일 뿐 escrow/결제/한도와 무관. 게시판 피드의 popular 정렬(view·comment tiebreak 포함)과는
@@ -283,27 +267,13 @@ export async function listCommunityPopularPostsForHome(
   supabase: SupabaseClient,
   limit: number
 ): Promise<{ posts: CommunityBoardPostCard[]; error: string | null }> {
-  const { data, error } = await supabase
-    .from("community_posts")
+  const { data, error } = await boardPostsView(supabase)
     .select("*")
     .eq("status", "published")
-    .is("deleted_at", null)
     .order("like_count", { ascending: false })
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) {
-    // 레거시 스키마(status/like_count 미배포) 폴백: 최신순 limit개.
-    if (/relation|does not exist|column|status|like_count/i.test(error.message)) {
-      const fb = await supabase
-        .from("community_posts")
-        .select("*")
-        .order("created_at", { ascending: false })
-        .limit(limit);
-      if (fb.error) return { posts: [], error: fb.error.message };
-      const rows = (fb.data as Row[]) ?? [];
-      const userMap = await boardAuthorNameMap(supabase, rows);
-      return { posts: await signBoardCardImages(supabase, rows.map((r) => mapRowToBoardCard(r, userMap))), error: null };
-    }
     return { posts: [], error: error.message };
   }
   const rows = (data as Row[]) ?? [];
@@ -317,14 +287,11 @@ export async function getCommunityBoardPost(
   /** 로그인 사용자 id. 작성자 본인이면 숨김 글도 배지와 함께 열람할 수 있다. */
   viewerId?: string | null
 ): Promise<{ post: CommunityBoardPostCard | null; row: Row | null; error: string | null }> {
-  const { data, error } = await supabase.from("community_posts").select("*").eq("id", id).maybeSingle();
+  const { data, error } = await boardPostsView(supabase).select("*").eq("id", id).maybeSingle();
   if (error) return { post: null, row: null, error: error.message };
   if (!data) return { post: null, row: null, error: null };
   const row = data as Row;
-  // soft-delete: 삭제된 글은 일반 상세에서 not-found 처리(행은 보존 — 관리자 감사).
-  if ((row as { deleted_at?: unknown }).deleted_at) {
-    return { post: null, row, error: null };
-  }
+  // soft-delete 글은 V1 노출 조건이 이미 숨긴다(§6 V1 — XW-09) → 여기 도달하면 미삭제.
   const status = typeof row.status === "string" ? row.status : "published";
   if (status === "hidden" && !canAuthorViewHiddenDetail(row, viewerId)) {
     // 타인·비로그인에게는 기존 not-found 그대로. 작성자 본인만 행이 유지된다.
@@ -351,23 +318,18 @@ export async function getCommunityBoardDraft(
   userId: string,
   draftId: string
 ): Promise<{ draft: CommunityBoardDraftRow | null; error: string | null }> {
-  const { data, error } = await supabase
-    .from("community_posts")
-    .select("id, title, body, content, category, image_urls, status, author_id")
+  const { data, error } = await boardPostsView(supabase)
+    .select("id, title, body, category, image_refs, status, author_id")
     .eq("id", draftId)
     .eq("author_id", userId)
     .eq("status", "draft")
-    .is("deleted_at", null)
     .maybeSingle();
   if (error) return { draft: null, error: error.message };
   if (!data) return { draft: null, error: null };
   const row = data as Row;
-  const body =
-    (typeof row.body === "string" && row.body) ||
-    (typeof row.content === "string" && row.content) ||
-    "";
-  const imageUrls = Array.isArray(row.image_urls)
-    ? (row.image_urls as unknown[]).filter((u): u is string => typeof u === "string")
+  const body = typeof row.body === "string" ? row.body : "";
+  const imageUrls = Array.isArray(row.image_refs)
+    ? (row.image_refs as unknown[]).filter((u): u is string => typeof u === "string")
     : [];
   return {
     draft: {
@@ -390,22 +352,17 @@ export async function getCommunityBoardPostForEdit(
   userId: string,
   postId: string
 ): Promise<{ draft: CommunityBoardDraftRow | null; error: string | null }> {
-  const { data, error } = await supabase
-    .from("community_posts")
-    .select("id, title, body, content, category, image_urls, status, author_id")
+  const { data, error } = await boardPostsView(supabase)
+    .select("id, title, body, category, image_refs, status, author_id")
     .eq("id", postId)
     .eq("author_id", userId)
-    .is("deleted_at", null)
     .maybeSingle();
   if (error) return { draft: null, error: error.message };
   if (!data) return { draft: null, error: null };
   const row = data as Row;
-  const body =
-    (typeof row.body === "string" && row.body) ||
-    (typeof row.content === "string" && row.content) ||
-    "";
-  const imageUrls = Array.isArray(row.image_urls)
-    ? (row.image_urls as unknown[]).filter((u): u is string => typeof u === "string")
+  const body = typeof row.body === "string" ? row.body : "";
+  const imageUrls = Array.isArray(row.image_refs)
+    ? (row.image_refs as unknown[]).filter((u): u is string => typeof u === "string")
     : [];
   return {
     draft: {
@@ -446,23 +403,21 @@ export async function loadBoardComments(
   postId: string,
   viewerId: string | null
 ): Promise<{ nodes: CommunityBoardCommentNode[]; error: string | null }> {
+  // W1(C1): V2 `api_web_v1.community_comments_v1` — 정본 `comments` 만 노출(§6 V2 —
+  // 레거시 `community_comments` 이중 읽기 종료). `body = comments.content` 는 view 가
+  // 수렴하고, `author_label` 은 M13 비정규화 컬럼이라 users 보강 조회가 불필요하다.
   const { data, error } = await supabase
-    .from("comments")
-    .select("id, post_id, parent_id, content, like_count, author_id, author_label, created_at, is_deleted")
+    .schema(API_WEB_V1_SCHEMA)
+    .from("community_comments_v1")
+    .select("id, post_id, parent_id, body, like_count, author_id, author_label, author_role, created_at")
     .eq("post_id", postId)
-    .eq("is_deleted", false)
     .order("created_at", { ascending: true });
 
   if (error) {
-    if (/relation|does not exist/i.test(error.message)) return { nodes: [], error: null };
     return { nodes: [], error: "\uB313\uAE00\uC744 \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4." };
   }
 
   const commentRows = (data as Record<string, unknown>[]) ?? [];
-  const commentUserMap = await fetchCommunityAuthorNamesByIds(
-    supabase,
-    collectAuthorIdsNeedingLookup(commentRows)
-  );
 
   const flat = commentRows.map((r) => {
     const createdAt = typeof r.created_at === "string" ? r.created_at : new Date().toISOString();
@@ -471,10 +426,10 @@ export async function loadBoardComments(
       id: String(r.id ?? ""),
       postId: String(r.post_id ?? ""),
       parentId: typeof r.parent_id === "string" ? r.parent_id : null,
-      content: String(r.content ?? ""),
+      content: String(r.body ?? ""),
       likeCount: typeof r.like_count === "number" ? r.like_count : 0,
       authorId,
-      authorLabel: resolveCommunityAuthorLabel(r, commentUserMap.get(authorId)),
+      authorLabel: resolveCommunityAuthorLabel(r, undefined),
       createdAt,
       createdAtLabel: formatRelativeTime(createdAt),
       isOwn: viewerId != null && authorId === viewerId,
@@ -533,11 +488,9 @@ export async function listUserScrapPosts(
   }
   const ids = ((data as { post_id: string }[]) ?? []).map((r) => r.post_id).filter(Boolean);
   if (!ids.length) return { posts: [], error: null };
-  const { data: posts, error: pErr } = await supabase
-    .from("community_posts")
+  const { data: posts, error: pErr } = await boardPostsView(supabase)
     .select("*")
-    .in("id", ids)
-    .is("deleted_at", null);
+    .in("id", ids);
   if (pErr) return { posts: [], error: pErr.message };
   const byId = new Map(((posts as Row[]) ?? []).map((r) => [String(r.id), r]));
   const ordered = ids.map((id) => byId.get(id)).filter((r): r is Row => Boolean(r));

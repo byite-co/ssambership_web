@@ -8,12 +8,7 @@ import { mentorPlanCashKrw } from "@/lib/subscribe/mentorPlanPricing";
 import { getMentorUserPublic, fetchMentorProfileForPublicMentor } from "@/lib/auth/mentorPublicRead";
 import { buildMentorProfileDisplay, type MentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
 import { fetchPlansForMentor, type MentorPlansLoad } from "@/lib/mentor/publicMentorBundle";
-import { getStringField, pickExistingColumn } from "@/lib/qna/safeSelect";
-import {
-  SUBSCRIPTIONS_ORDER_COLUMN,
-  SUBSCRIPTIONS_SELECT,
-  SUBSCRIPTIONS_TABLE,
-} from "@/lib/subscribe/subscriptionsTable";
+import { getStringField } from "@/lib/qna/safeSelect";
 import type { UserRow } from "@/lib/types/user";
 
 type Row = Record<string, unknown>;
@@ -28,20 +23,6 @@ export type PlansByTier = Record<SubscribePlanTier, Row | null>;
 
 export type PromotionsLoad = {
   rows: Row[];
-  table: string | null;
-  probe: string;
-  error: string | null;
-};
-
-export type SubscriptionContextLoad = {
-  row: Row | null;
-  table: string | null;
-  probe: string;
-  error: string | null;
-};
-
-export type PaymentsProbeLoad = {
-  row: Row | null;
   table: string | null;
   probe: string;
   error: string | null;
@@ -148,114 +129,11 @@ async function fetchPromotionsProbe(supabase: SupabaseClient): Promise<Promotion
   return { rows: [], table: null, probe: "promotions / notices 테이블 없음 또는 RLS", error: null };
 }
 
-const SUB_TABLES = ["subscriptions", "mentor_subscriptions", "user_subscriptions"] as const;
-const STU_FK = ["student_id", "user_id", "student_user_id", "subscriber_id"] as const;
-const MEN_FK = ["mentor_id", "mentor_user_id", "creator_id", "host_id"] as const;
-
-async function fetchSubscriptionForPair(
-  supabase: SupabaseClient,
-  studentId: string,
-  mentorId: string
-): Promise<SubscriptionContextLoad> {
-  for (const table of SUB_TABLES) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) continue;
-
-    if (table === SUBSCRIPTIONS_TABLE) {
-      const { data, error } = await supabase
-        .from(SUBSCRIPTIONS_TABLE)
-        .select(SUBSCRIPTIONS_SELECT)
-        .eq("student_id", studentId)
-        .eq("mentor_id", mentorId)
-        .order(SUBSCRIPTIONS_ORDER_COLUMN, { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (error) {
-        return {
-          row: null,
-          table: SUBSCRIPTIONS_TABLE,
-          probe: `${SUBSCRIPTIONS_TABLE}: ${error.message}`,
-          error: error.message,
-        };
-      }
-      return {
-        row: data ? ((data as unknown) as Row) : null,
-        table: SUBSCRIPTIONS_TABLE,
-        probe: `${SUBSCRIPTIONS_TABLE} · student_id+mentor_id · 최신 1건(created_at)`,
-        error: null,
-      };
-    }
-
-    const { column: sc } = await pickExistingColumn(supabase, table, STU_FK);
-    const { column: mc } = await pickExistingColumn(supabase, table, MEN_FK);
-    if (!sc || !mc) {
-      const { data, error } = await supabase.from(table).select("*").limit(1);
-      if (error) return { row: null, table, probe: `${table}: 학생/멘토 FK 없음 · ${error.message}`, error: error.message };
-      return {
-        row: (data as Row[] | null)?.[0] ?? null,
-        table,
-        probe: `${table}: 단일 샘플만(필터 불가)`,
-        error: null,
-      };
-    }
-    const { data, error } = await supabase
-      .from(table)
-      .select("*")
-      .eq(sc, studentId)
-      .eq(mc, mentorId)
-      .maybeSingle();
-    if (error) return { row: null, table, probe: `${table}.${sc}.${mc}: ${error.message}`, error: error.message };
-    return {
-      row: (data as Row) ?? null,
-      table,
-      probe: `${table} · ${sc}+${mc}`,
-      error: null,
-    };
-  }
-  return { row: null, table: null, probe: "subscriptions 계열 없음", error: null };
-}
-
-const PAY_TABLES = ["payments", "payment_intents", "order_payments"] as const;
-
-async function fetchLatestPaymentProbe(
-  supabase: SupabaseClient,
-  studentId: string,
-  mentorId: string
-): Promise<PaymentsProbeLoad> {
-  for (const table of PAY_TABLES) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) continue;
-    const { column: sc } = await pickExistingColumn(supabase, table, STU_FK);
-    const { column: mc } = await pickExistingColumn(supabase, table, MEN_FK);
-    if (!sc) continue;
-    const { column: createdCol } = await pickExistingColumn(supabase, table, [
-      "created_at",
-      "inserted_at",
-      "updated_at",
-    ]);
-    const two = mc
-      ? supabase.from(table).select("*").eq(sc, studentId).eq(mc, mentorId)
-      : supabase.from(table).select("*").eq(sc, studentId);
-    const ordered = createdCol
-      ? two.order(createdCol, { ascending: false }).limit(1)
-      : two.limit(1);
-    const { data, error } = await ordered.maybeSingle();
-    if (error)
-      return {
-        row: null,
-        table,
-        probe: `${table}: ${error.message}`,
-        error: error.message,
-      };
-    return {
-      row: (data as Row) ?? null,
-      table,
-      probe: `${table} · ${sc}${mc ? `+${mc}` : ""} · 최신 1건`,
-      error: null,
-    };
-  }
-  return { row: null, table: null, probe: "payments 계열 probe 실패", error: null };
-}
+// S2-2 전환 W1(C1 — 계약 §17 #15): 구 SUB_TABLES/PAY_TABLES 페어 프로빙
+// (`fetchSubscriptionForPair`·`fetchLatestPaymentProbe`)은 결과 필드가 모든 호출부에서
+// 미사용(사장)임이 실측돼 제거했다. 구독 조회 정본은 V6 RPC `my_subscriptions_self()`
+// (lib/mypage/studentActiveSubscriptions.ts) — mentor_subscriptions·user_subscriptions 는
+// 실측 부재 테이블이다(XW-10).
 
 export type StudentSubscribePageData =
   | { kind: "no_mentor" }
@@ -270,8 +148,6 @@ export type StudentSubscribePageData =
       byTier: PlansByTier;
       fillProbe: string;
       promotions: PromotionsLoad;
-      subscription: SubscriptionContextLoad;
-      payment: PaymentsProbeLoad;
     };
 
 export async function loadStudentSubscribePage(
@@ -290,12 +166,10 @@ export async function loadStudentSubscribePage(
     return { kind: "mentor_error", message: "멘토에 대해서만 구독할 수 있습니다." };
   }
 
-  const [{ row: profileRow, error: profileError }, plans, promotions, subscription, payment] = await Promise.all([
+  const [{ row: profileRow, error: profileError }, plans, promotions] = await Promise.all([
     fetchMentorProfileForPublicMentor(supabase, mentorId),
     fetchPlansForMentor(supabase, mentorId),
     fetchPromotionsProbe(supabase),
-    fetchSubscriptionForPair(supabase, args.studentId, mentorId),
-    fetchLatestPaymentProbe(supabase, args.studentId, mentorId),
   ]);
 
   const { byTier, fillProbe } = assignPlansByTier((plans.rows as Row[]) ?? []);
@@ -311,7 +185,5 @@ export async function loadStudentSubscribePage(
     byTier,
     fillProbe,
     promotions,
-    subscription,
-    payment,
   };
 }

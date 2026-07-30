@@ -21,13 +21,26 @@ import {
   type SubscriptionStatusTone,
 } from "@/lib/subscribe/subscriptionDisplay";
 import { formatCashFromCents } from "@/lib/subscribe/subscriptionRefundProration";
-import {
-  SUBSCRIPTIONS_ORDER_COLUMN,
-  SUBSCRIPTIONS_SELECT,
-  SUBSCRIPTIONS_TABLE,
-} from "@/lib/subscribe/subscriptionsTable";
+import { API_WEB_V1_SCHEMA } from "@/lib/apiWebV1/rpc";
 
 type Row = Record<string, unknown>;
+
+/**
+ * S2-2 전환 W1(C1): 구독 조회 — V6 RPC `api_web_v1.my_subscriptions_self()`
+ * (계약 §6 V6 · §17 #15). 당사자 판정은 함수 내부(`auth.uid()`)가 수행하므로
+ * 세션 클라이언트 전제이며, 구 `subscriptions` 직접 SELECT 는 제거했다.
+ * V6 행을 기존 소비 형상(id 키)으로 정규화한다(adapter — 필드 추정 금지).
+ */
+async function fetchMySubscriptionsSelf(
+  supabase: SupabaseClient
+): Promise<{ rows: Row[]; error: string | null }> {
+  const { data, error } = await supabase.schema(API_WEB_V1_SCHEMA).rpc("my_subscriptions_self");
+  if (error) return { rows: [], error: error.message };
+  const rows = (rowsFromSupabaseData(data) as Row[])
+    .map((r): Row => ({ ...r, id: r.subscription_id }))
+    .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
+  return { rows, error: null };
+}
 
 const USAGE_COUNTERS_TABLE = "subscription_usage_counters";
 
@@ -165,18 +178,13 @@ export async function loadActiveSubscriptionsForStudent(
   supabase: SupabaseClient,
   studentId: string
 ): Promise<{ items: ActiveSubscriptionCard[]; error: string | null }> {
-  const { data, error } = await supabase
-    .from(SUBSCRIPTIONS_TABLE)
-    .select(SUBSCRIPTIONS_SELECT)
-    .eq("student_id", studentId)
-    .eq("status", "active")
-    .order(SUBSCRIPTIONS_ORDER_COLUMN, { ascending: false });
-
-  if (error) {
-    return { items: [], error: error.message };
+  void studentId; // V6 이 auth.uid() 로 본인 당사자 행만 반환한다(세션 클라이언트 전제)
+  const loaded = await fetchMySubscriptionsSelf(supabase);
+  if (loaded.error) {
+    return { items: [], error: loaded.error };
   }
 
-  const rows = rowsFromSupabaseData(data) as Row[];
+  const rows = loaded.rows.filter((r) => String(r.status ?? "").toLowerCase() === "active");
   const mentorIds = [...new Set(rows.map((r) => String(r.mentor_id ?? "").trim()).filter(Boolean))];
   const subscriptionIds = rows.map((r) => String(r.id ?? "").trim()).filter(Boolean);
 
@@ -251,12 +259,11 @@ export async function countActiveSubscriptionsForStudent(
   supabase: SupabaseClient,
   studentId: string
 ): Promise<{ count: number; error: string | null }> {
-  const { count, error } = await supabase
-    .from(SUBSCRIPTIONS_TABLE)
-    .select("id", { count: "exact", head: true })
-    .eq("student_id", studentId)
-    .eq("status", "active");
-
-  if (error) return { count: 0, error: error.message };
-  return { count: count ?? 0, error: null };
+  void studentId; // V6 이 auth.uid() 당사자 행만 반환(세션 클라이언트 전제)
+  const loaded = await fetchMySubscriptionsSelf(supabase);
+  if (loaded.error) return { count: 0, error: loaded.error };
+  return {
+    count: loaded.rows.filter((r) => String(r.status ?? "").toLowerCase() === "active").length,
+    error: null,
+  };
 }
