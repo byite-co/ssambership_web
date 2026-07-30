@@ -187,7 +187,7 @@ S2 rollback: 15개 — clean-install 불포함
 
 ## 9. M0~M17 물리 계획표
 
-> **M0~M17은 논리 ID이며 물리 timestamp가 아니다.** `<TSn>` = 권고 생성 순서 n번째에 §5 절차로 채번되는 UTC `YYYYMMDDHHMMSS`. **Batch A(M0·M15)는 2026-07-30(KST) 세션에서 §5 절차로 실채번·구현·로컬 검증 완료됐다(§9.1 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** **Batch B(M1·M13·M4)도 2026-07-30(KST) 재개 세션에서 §5 절차로 실채번·구현·로컬 왕복 검증 완료됐다(§9.3 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** 나머지 미생성 S2 forward는 **M5~M12·M14·M16·M17, 총 11개**이며 timestamp·SHA-256·ledger version은 현재 **미생성**이다(invent 금지). M2·M3는 retired 슬롯 — 파일을 만들지 않는다. D-API-W·D-API-A·C1~C11은 SQL 파일이 아니다.
+> **M0~M17은 논리 ID이며 물리 timestamp가 아니다.** `<TSn>` = 권고 생성 순서 n번째에 §5 절차로 채번되는 UTC `YYYYMMDDHHMMSS`. **Batch A(M0·M15)는 2026-07-30(KST) 세션에서 §5 절차로 실채번·구현·로컬 검증 완료됐다(§9.1 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** **Batch B(M1·M13·M4)도 2026-07-30(KST) 재개 세션에서 §5 절차로 실채번·구현·로컬 왕복 검증 완료됐다(§9.3 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** **Batch C(M5·M6·M7)도 같은 세션 연속 지시로 §5 절차 실채번·구현·로컬 왕복 검증 완료됐다(§9.4 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** 나머지 미생성 S2 forward는 **M8~M12·M14·M16·M17, 총 8개**이며 timestamp·SHA-256·ledger version은 현재 **미생성**이다(invent 금지). M2·M3는 retired 슬롯 — 파일을 만들지 않는다. D-API-W·D-API-A·C1~C11은 SQL 파일이 아니다.
 
 | 논리 ID | 계약 filename stem | 직접 선행조건 | 권고 생성 순서 | forward 물리 경로 형식 | rollback 경로 형식 | rollback 여부 | 구현 batch |
 |---|---|---|---:|---|---|---|---|
@@ -196,9 +196,9 @@ S2 rollback: 15개 — clean-install 불포함
 | M1 | api_web_v1_schemas | M0 | 3 | `supabase/sql/20260730095435_api_web_v1_schemas.sql` (**실채번 TS3=20260730095435** — §9.3) | `supabase/rollback/20260730095435_api_web_v1_schemas_rollback.sql` | 있음 | B |
 | M13 | comments_author_label_denormalize (**정본 재정의 — §9.2**) | M0 | 4 | `supabase/sql/20260730095438_comments_author_label_denormalize.sql` (**실채번 TS4=20260730095438** — §9.3) | `supabase/rollback/20260730095438_comments_author_label_denormalize_rollback.sql` | 있음(단, `author_label` 컬럼·정규화 라벨 보존 — forward-only 예외 §9.2) | B |
 | M4 | api_web_v1_read_views | M1+M13 | 5 | `supabase/sql/20260730095441_api_web_v1_read_views.sql` (**실채번 TS5=20260730095441** — §9.3) | `supabase/rollback/20260730095441_api_web_v1_read_views_rollback.sql` | 있음 | B |
-| M5 | core_private_room_ensure | M1 | 6 | `supabase/sql/<TS6>_core_private_room_ensure.sql` | `supabase/rollback/<TS6>_core_private_room_ensure_rollback.sql` | 있음 | C |
-| M6 | api_web_v1_self_rpc | M5 | 7 | `supabase/sql/<TS7>_api_web_v1_self_rpc.sql` | `supabase/rollback/<TS7>_api_web_v1_self_rpc_rollback.sql` | 있음 | C |
-| M7 | api_web_v1_community_rpc | M1 | 8 | `supabase/sql/<TS8>_api_web_v1_community_rpc.sql` | `supabase/rollback/<TS8>_api_web_v1_community_rpc_rollback.sql` | 있음 | C |
+| M5 | core_private_room_ensure | M1 | 6 | `supabase/sql/20260730105244_core_private_room_ensure.sql` (**실채번 TS6=20260730105244** — §9.4) | `supabase/rollback/20260730105244_core_private_room_ensure_rollback.sql` | 있음 | C |
+| M6 | api_web_v1_self_rpc | M5 | 7 | `supabase/sql/20260730105248_api_web_v1_self_rpc.sql` (**실채번 TS7=20260730105248** — §9.4) | `supabase/rollback/20260730105248_api_web_v1_self_rpc_rollback.sql` | 있음 | C |
+| M7 | api_web_v1_community_rpc | M1 | 8 | `supabase/sql/20260730105252_api_web_v1_community_rpc.sql` (**실채번 TS8=20260730105252** — §9.4) | `supabase/rollback/20260730105252_api_web_v1_community_rpc_rollback.sql` | 있음 | C |
 | M17 | api_app_v1_surface | M5+M7 | 9 | `supabase/sql/<TS9>_api_app_v1_surface.sql` | `supabase/rollback/<TS9>_api_app_v1_surface_rollback.sql` (§22 순서: 노출 제거→config 반영→DROP) | 있음 | D |
 | M8 | api_web_v1_mentor_rpc | M1 | 10 | `supabase/sql/<TS10>_api_web_v1_mentor_rpc.sql` | `supabase/rollback/<TS10>_api_web_v1_mentor_rpc_rollback.sql` | 있음 | D |
 | M14 | api_web_v1_payout_account_rpc | M1 | 11 | `supabase/sql/<TS11>_api_web_v1_payout_account_rpc.sql` | `supabase/rollback/<TS11>_api_web_v1_payout_account_rpc_rollback.sql` | 있음 | D |
@@ -227,7 +227,7 @@ functiondef md5 `d0d31620671c6f9707a7b9d324d1ed35`·prosrc SHA-256
 | M15 | `20260729211941` | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | `supabase/rollback/20260729211941_weekly_usage_pair_party_guard_rollback.sql` | `42f5266d270b71b4caa6730e505665423342d0a2588199330781d4d3e0eb6363` | `LOCAL_PASS` |
 
 - timestamp 는 UTC `YYYYMMDDHHMMSS`(2026-07-29T21:19Z대 = KST 2026-07-30 06:19대 채번). `TS1(M0) < TS2(M15)` 충족.
-- 미생성 잔여 S2 forward는 **M5~M12·M14·M16·M17, 총 11개**다(invent 금지 — 위 §9 계획표의 `<TSn>` 형식 유지). M0·M15는 Batch A에서, M1·M13·M4는 Batch B(§9.3)에서 생성·`LOCAL_PASS` 완료됐고 M2·M3는 retired다.
+- 미생성 잔여 S2 forward는 **M8~M12·M14·M16·M17, 총 8개**다(invent 금지 — 위 §9 계획표의 `<TSn>` 형식 유지). M0·M15는 Batch A에서, M1·M13·M4는 Batch B(§9.3)에서, M5·M6·M7은 Batch C(§9.4)에서 생성·`LOCAL_PASS` 완료됐고 M2·M3는 retired다.
 - 상세 ledger mapping·rollback 인벤토리 실체는 `sql_apply_manifest.md` 「S2 환경별 적용 대조표·rollback 인벤토리」에 기록.
 
 ### 9.2 M13 정본 재정의 역기입 (baseline 정합 보정 — 오너 승인 2026-07-30)
@@ -310,6 +310,74 @@ forward 3건을 M1 → M13 → M4 순차 적용해 **clean-install 180/180 PASS*
 상태 = **`LOCAL_PASS`** — staging·production 원장에는 **미적용**(ledger version/name 기록은 원격 적용
 시점에만 한다 — §3), **운영 적용·Data API(Exposed schemas) 변경 미실행**(D-API-W 는 Batch B 이후
 별도 플랫폼 단계 — 계약 §20.6). Batch A(M0·M15)의 `LOCAL_PASS` 실적·파일 SHA-256(§9.1)은 불변이다.
+
+### 9.4 Batch C 실체 역기입 (2026-07-30 KST — `LOCAL_PASS`)
+
+Batch C(M5·M6·M7)는 오너 연속 지시(base commit `b80e04f0fc441997f265569281ece717e712586b`,
+branch `claude/s2-2-batch-c-20260730`)로 §5 절차대로 `supabase migration new` 순차 실채번
+(core_private_room_ensure → api_web_v1_self_rpc → api_web_v1_community_rpc,
+`TS6(M5) < TS7(M6) < TS8(M7)` 충족, `supabase/migrations/` 잔존 0) 후 구현했고,
+격리 로컬 스택(Supabase CLI 2.110.0 / PostgreSQL 17.6 fresh 재구축, 운영·staging 반입 0)에서
+baseline 후보 C 175 + Batch A 2(177/177, Batch A 검증기 38/38 게이트) + Batch B 3(=180) 위에
+M5 → M6 → M7 순차 적용해 **clean-install 183/183 PASS** 를 확인했다.
+
+| 논리 ID | timestamp | forward 파일 | forward SHA-256 | rollback 파일 | rollback SHA-256 | 상태 |
+|---|---|---|---|---|---|---|
+| M5 | `20260730105244` | `supabase/sql/20260730105244_core_private_room_ensure.sql` | `47dd392b3b14f8c4cc9a62edb5ab257f61feeb0a766a2839f2f1d044e8da5e62` | `supabase/rollback/20260730105244_core_private_room_ensure_rollback.sql` | `959fa1202957be49bf106f018d7cd32ba95a6bcfa056ea1fdede997f6079a55d` | `LOCAL_PASS` |
+| M6 | `20260730105248` | `supabase/sql/20260730105248_api_web_v1_self_rpc.sql` | `0066357d68dcb3ffcf2fb386ddd5ae1d05db88870146f71a780f0169ceb85a98` | `supabase/rollback/20260730105248_api_web_v1_self_rpc_rollback.sql` | `4d33e8b8768000402900231b5acf5a73a35d4054105702fd037e73696e0f3011` | `LOCAL_PASS` |
+| M7 | `20260730105252` | `supabase/sql/20260730105252_api_web_v1_community_rpc.sql` | `504dea03f6af15fc86a041a29fb4f0945b8245734204896dc059ed433770c80c` | `supabase/rollback/20260730105252_api_web_v1_community_rpc_rollback.sql` | `209cae74feb545992f6731356d7c4ebb9a1f6ed52fa59ee7232ccd853559c8bd` | `LOCAL_PASS` |
+
+신규 객체 13종: F10(`core_private.ensure_student_mentor_room` — SECDEF·`search_path=''`·
+외부 EXECUTE 0, service_role 포함) · M6 6종(F1 `weekly_question_usage_self`·F2
+`ensure_free_question_room`(F10 얇은 wrapper)·F3 `qna_create_question_thread`(정본 호출 +
+raise 14종 envelope 변환 + `FREE_QUESTION_*`→`FREE_QUOTA_*` 4쌍 수렴·사전 밖 예외 전파)·
+F9 `account_deletion_status_self`·V6 `my_subscriptions_self()`·V7 `mentor_settlement_self()` —
+전부 SECDEF·EXECUTE {authenticated, service_role}) · M7 7종(공용 구현부 B-1~B-4
+(`core_private.community_post_create_impl`/`community_post_update_impl`/
+`community_post_soft_delete_impl`/`community_image_refs_validate`) — SECURITY INVOKER·
+외부 EXECUTE 0 + wrapper F4/F5/F6 — SECDEF·승인 멘토 전용·replay-first 멱등·연락처 마스킹
+(`lib/customRequest/contactMasking.ts` 정본 이식)·이미지 5종 검증(§14.3)). `public` 신규 함수 0
+(T-REG-06 준수 — 신규는 `api_web_v1`·`core_private`에만).
+
+검증 실적(반복 검증기 `scripts/verify/s2_2_batch_c_verify.sql` — phase 스위치형, SHA-256
+`0ee95299af460106d24bd1ebcc14886a1e64abc73970a67d4a49d7f51343672a`):
+
+- **1차 forward**: 183/183 적용 + forward phase **23/23 PASS** — 카탈로그(M5-01·M6-02·
+  M7-03a/b/c·PERM-04 = T-PERM-01/02/06 상당) · T-CON-03(V6·V7 반환 시그니처 §6 원문,
+  `current_plan_amount_cents` 확인·V7 내부참조 비노출) · T-CON-05·06(F3 raise 14종 매핑 전수 +
+  트리거 수렴 4쌍 + 사전 밖 RAISE 전파 — prosrc 전수 + 대표 오류 라이브) · T-CON-07·08
+  (V1 필드·F4/F5/F6 identity argument = 앱 계약 §3.2·§3.3 원문 — `api_app_v1` 객체는 M17
+  (Batch D) 소유로 미생성이라 계약 원문 리터럴과 대조) · 기능(F2 방 확보·멱등 재사용·오류 4종 ·
+  F2 멘토별 3회 소진 · F3 free 소비·대표 오류 4종 · F1 envelope · F4 생성·마스킹(전화/카톡/이메일)·
+  author_label/role 서버 도출 · F4 자격·검증 오류 6종 · B-4 이미지 6경로(T-SEC-11 포함) ·
+  F5 낙관 충돌·removed_image_refs · F6 soft delete·already_deleted·소유 코드 · V6/V7 당사자
+  판정·라벨·비당사자 0 · anon EXECUTE 거부·무세션 AUTH_REQUIRED 42501).
+- **T-CONC-10(canonical — M7 소유) DB 측 replay-first**: F4 커밋 후 응답 유실 모사 → 재호출 전
+  Storage DELETE 0(구현부 4종에 storage 삭제 경로 0 — prosrc 검증) → 동일 멱등키 재호출 =
+  동일 `post_id` + `idempotent_replay:true` · 글 1건 · `image_refs` 불변 · 참조 객체 전부 잔존.
+  확정 실패(도메인 거부 envelope) 분기에서만 행 0 + 객체 잔존(보상 삭제는 클라이언트 소유 —
+  §14.4 재호출 선행·보상 삭제 후행).
+- **2세션 동시성(독립 psql 세션 러너 — 결과 로그 보존)**: **T-CONC-01** F2 동시 6회 →
+  `ok` 6/6 · `created:true` 정확히 1회 · `mentor_student_rooms` 정확히 1행. **T-CONC-06**
+  동일 `create_idempotency_key` F4 동시 2회 → 글 1건 · `idempotent_replay` false 1/true 1 ·
+  동일 post_id. 종료 후 동시성 fixture 정리·잔여 0.
+- **rollback 왕복**: M7 → M6 → M5 역순 적용 후 **@180 카탈로그 스냅샷 완전 일치**(schema·
+  컬럼·default·트리거·함수·정책·ACL·default ACL — **forward-only 예외 0**, 데이터 카운트 동일) +
+  post_rollback phase **3/3 PASS**(Batch C 13객체 부재·Batch B 상태 불변·정본 public 함수·
+  Batch A 객체 잔존).
+- **2차 forward**: 재적용(사전 게이트 재통과) → forward phase 재검증 **23/23 PASS**.
+- **lint**: `supabase db lint --local --schema public --level error` → **오류 0**.
+- **fixture 잔여 0**: 검증기 자체 fixture(`s2c-vf-*`) rollback + 잔여 0 재확인 · 동시성
+  fixture(`s2c-cc-*`) 정리 후 잔여 0.
+- **정합 검사**: `node scripts/verify/sql_number_integrity.mjs` PASS(레거시 190·제외 15 불변 ·
+  supabase/sql 총 198 · 현재 정규 clean-install 183 · rollback 8 ·
+  `TS(M0)<TS(M15)<TS(M1)<TS(M13)<TS(M4)<TS(M5)<TS(M6)<TS(M7)`) · `git diff --check` 통과.
+
+상태 = **`LOCAL_PASS`** — staging·production 원장에는 **미적용**(ledger version/name 기록은
+원격 적용 시점에만 — §3), **운영 적용·Data API(Exposed schemas) 변경 미실행**. Batch A(§9.1)·
+Batch B(§9.3)의 `LOCAL_PASS` 실적·파일 SHA-256 은 불변이다. 다음 batch 진입 조건(§10 —
+Batch D: M17·M8·M14)은 Batch C 완료로 충족되나, 사이에 끼는 비-SQL 단계(C2·C3·C4·C5 웹
+callsite 전환)는 별도 코드 작업이다.
 
 ## 10. Batch A~F 계획표
 
