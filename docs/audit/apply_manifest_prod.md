@@ -201,7 +201,7 @@
 - **적용 전 확인:** 적용 직전 동일 ledger name 존재 여부를 확인하고, 이미 존재하면 자동 재적용하지 않고 중단한다. migration repair·원장 PATCH·수동 원장 행 삽입·삭제 금지, 운영 DB 임의 `execute_sql` DDL 금지. 위반·불일치 발생 시 `MIGRATION_HISTORY_DRIFT` 즉시 재활성(조건 8종 = 정책 문서 §4).
 - **rollback 정본 경로:** `supabase/rollback/<FORWARD_FILE_TS>_<STEM>_rollback.sql` — forward clean-install과 구조적으로 분리하며 **정규 clean-install 파일 수에 포함하지 않는다**(`supabase/sql/*.sql`·미래 재귀 glob에 포함 금지). 실행은 장애 시 오너 승인 후 파일 1건을 명시적으로 골라 `apply_migration`으로 수행하고, 원장에는 **새 행으로 append**한다(forward 원장 행 삭제·수정·reverted 처리 금지, Management API의 선택적 `rollback` 필드 미사용). M10은 상태 0 checkpoint — rollback 파일 없음.
 - **정규 산식(S2 완료 시):** 기존 baseline **175** + S2 forward **16**(M0·M1·M4~M17, M2·M3 retired) = **191**. S2 rollback **15**개·D-API-W·D-API-A·C1~C11은 SQL 적용 파일 수에 불포함. 기존 175개 순서·제외 15개·후보 C 판정(§7)은 변경하지 않는다.
-- **편입 시점:** Batch별 로컬 PG17 검증 PASS 후 해당 forward만 본 문서에 편입한다. 나머지 미생성 S2 forward(**M8~M12·M14·M16·M17, 총 8개**)는 **미생성** 상태이며, M0·M15는 Batch A `LOCAL_PASS`로 §9.1에, M1·M13·M4는 Batch B `LOCAL_PASS`로 §9.2에, M5·M6·M7은 Batch C `LOCAL_PASS`로 §9.3에 편입 완료됐다. M2·M3는 retired다. 실제 timestamp·SHA-256·ledger version은 생성·적용 후에만 기록한다(invent 금지).
+- **편입 시점:** Batch별 로컬 PG17 검증 PASS 후 해당 forward만 본 문서에 편입한다. 나머지 미생성 S2 forward(**M9~M12·M16, 총 5개**)는 **미생성** 상태이며, M0·M15는 Batch A `LOCAL_PASS`로 §9.1에, M1·M13·M4는 Batch B `LOCAL_PASS`로 §9.2에, M5·M6·M7은 Batch C `LOCAL_PASS`로 §9.3에, M17·M8·M14는 Batch D `LOCAL_PASS`로 §9.4에 편입 완료됐다. M2·M3는 retired다. 실제 timestamp·SHA-256·ledger version은 생성·적용 후에만 기록한다(invent 금지).
 
 ### 9.1 Batch A 편입 (2026-07-30 KST — 로컬 PG17 검증 PASS, 원격 미적용)
 
@@ -242,6 +242,20 @@
 | 182 | `supabase/sql/20260730105248_api_web_v1_self_rpc.sql` (M6) | `0066357d68dcb3ffcf2fb386ddd5ae1d05db88870146f71a780f0169ceb85a98` | PG17.6 forward·rollback·reapply PASS |
 | 183 | `supabase/sql/20260730105252_api_web_v1_community_rpc.sql` (M7) | `504dea03f6af15fc86a041a29fb4f0945b8245734204896dc059ed433770c80c` | PG17.6 forward·rollback·reapply PASS |
 
-- **현재 정규 clean-install: 기존 baseline 175 + Batch A 2 + Batch B 3 + Batch C 3 = 183** (2026-07-30 로컬 재현: fresh PG17.6 에서 177/177 + Batch A 검증기 38/38 + Batch B 3건 적용 후 M5→M6→M7 = **183/183**, Batch C 검증기 `scripts/verify/s2_2_batch_c_verify.sql` forward **23/23 PASS** + 2세션 동시성 **T-CONC-01·T-CONC-06 PASS** → rollback M7→M6→M5 후 **@180 카탈로그·데이터 카운트 완전 일치(forward-only 예외 0)** + post_rollback 3/3 PASS → 재적용 후 23/23 재검증 PASS + `supabase db lint --local --schema public --level error` 오류 0 + fixture 잔여 0).
+- Batch C 편입 시점의 정규 clean-install: 기존 baseline 175 + Batch A 2 + Batch B 3 + Batch C 3 = 183 — **현행 정규 clean-install 은 Batch D 편입(§9.4)의 186 이다.** 당시 검증 실적: (2026-07-30 로컬 재현: fresh PG17.6 에서 177/177 + Batch A 검증기 38/38 + Batch B 3건 적용 후 M5→M6→M7 = **183/183**, Batch C 검증기 `scripts/verify/s2_2_batch_c_verify.sql` forward **23/23 PASS** + 2세션 동시성 **T-CONC-01·T-CONC-06 PASS** → rollback M7→M6→M5 후 **@180 카탈로그·데이터 카운트 완전 일치(forward-only 예외 0)** + post_rollback 3/3 PASS → 재적용 후 23/23 재검증 PASS + `supabase db lint --local --schema public --level error` 오류 0 + fixture 잔여 0).
 - rollback 3건(`supabase/rollback/20260730105244_..._rollback.sql`·`20260730105248_..._rollback.sql`·`20260730105252_..._rollback.sql`)은 **정규 적용 수에서 제외**한다(§9 rollback 정본 경로 규칙).
 - 본 편입은 **로컬 검증 실적**(`LOCAL_PASS`)이다 — staging·production 원장 **미적용**(ledger version 미채번), 운영 적용·Data API 변경 **미실행**. 상세 역기입: 물리 정책 §9.4.
+
+### 9.4 Batch D 편입 (2026-07-30 KST — 로컬 PG17 검증 PASS, 원격 미적용)
+
+정규 clean-install 순서: §9.3의 183개(마지막 `20260730105252_api_web_v1_community_rpc.sql`) 뒤에 아래 S2 forward 3건을 timestamp 순으로 이어 적용한다.
+
+| 순서 | 파일 | SHA-256 | 로컬 검증 |
+|---:|---|---|---|
+| 184 | `supabase/sql/20260730112525_api_app_v1_surface.sql` (M17) | `6b6134df59430e14dbb88a0160740bc846523fe3273ccdb4b262b51efb142637` | PG17.6 forward·rollback·reapply PASS |
+| 185 | `supabase/sql/20260730112528_api_web_v1_mentor_rpc.sql` (M8) | `bd2c2ce5b23edb4ca5247ff63a694323f7ba2912d778d628336546490ffb0ca2` | PG17.6 forward·rollback·reapply PASS |
+| 186 | `supabase/sql/20260730112531_api_web_v1_payout_account_rpc.sql` (M14) | `b78ae36e58f90e26e2d795f687c93d06f0ee873f9b901919a3a99783780bfd07` | PG17.6 forward·rollback·reapply PASS |
+
+- **현재 정규 clean-install: 기존 baseline 175 + Batch A 2 + Batch B 3 + Batch C 3 + Batch D 3 = 186** (2026-07-30 로컬 재현: fresh PG17.6 에서 177/177 + Batch A 검증기 38/38 + Batch B·C 6건 = 183 위에 M17→M8→M14 = **186/186**, Batch D 검증기 `scripts/verify/s2_2_batch_d_verify.sql` forward **13/13 PASS**(T-CON-07·08 웹·앱 실객체 대조 포함) → rollback M14→M8→M17 후 **@183 카탈로그·데이터 완전 일치(forward-only 예외 0)** + post_rollback 3/3 → 재적용 13/13 + lint 오류 0 + fixture 잔여 0).
+- rollback 3건은 **정규 적용 수에서 제외**(§9 규칙). **D-API-A(Exposed schemas 추가)는 플랫폼 단계로 미실행** — 앱 계약 §3.1 순서(M17 → 적용 직후 게이트 → D-API-A → 앱 전환 → Gate 4 → M16)의 SQL 구간까지만 완료다.
+- 본 편입은 **로컬 검증 실적**(`LOCAL_PASS`) — staging·production 원장 **미적용**, 운영 적용·Data API 변경 **미실행**. 상세 역기입: 물리 정책 §9.5.

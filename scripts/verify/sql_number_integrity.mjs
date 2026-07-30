@@ -8,12 +8,13 @@
 //   [S2 UTC timestamp 체계 — 물리 정책 정본]
 //   - S2 신규 migration 은 정확한 14자리 UTC timestamp(YYYYMMDDHHMMSS) 파일명만 허용.
 //   - S2 timestamp 중복 0 · Batch A: M0 < M15 · Batch B: M1 < M13 < M4 ·
-//     Batch C: M5 < M6 < M7 · Batch 간 전건 순서 A < B < C (물리 계획표 §9 생성 순서).
+//     Batch C: M5 < M6 < M7 · Batch D: M17 < M8 < M14 · Batch 간 전건 순서
+//     A < B < C < D (물리 계획표 §9 생성 순서).
 //   - supabase/migrations/ 잔존 SQL 0 (CLI 는 timestamp 채번에만 사용).
 //   - S2 forward 각각에 supabase/rollback/<TS>_<STEM>_rollback.sql 정확히 1개.
 //   - rollback 은 supabase/sql/ 아래 금지·clean-install 수에 불포함.
-//   - 레거시 190개·제외 15개 불변 / Batch C 후 supabase/sql/*.sql 총 198개 /
-//     현재 정규 clean-install 175+8=183 (최종 목표 175+16=191 과 혼동 금지).
+//   - 레거시 190개·제외 15개 불변 / Batch D 후 supabase/sql/*.sql 총 201개 /
+//     현재 정규 clean-install 175+11=186 (최종 목표 175+16=191 과 혼동 금지).
 // 사용: node scripts/verify/sql_number_integrity.mjs
 
 import { readdirSync, existsSync } from "node:fs";
@@ -114,7 +115,12 @@ const S2_BATCH_C = [
   { id: "M6", stem: "api_web_v1_self_rpc" },
   { id: "M7", stem: "api_web_v1_community_rpc" },
 ];
-const S2_EXPECTED = [...S2_BATCH_A, ...S2_BATCH_B, ...S2_BATCH_C];
+const S2_BATCH_D = [
+  { id: "M17", stem: "api_app_v1_surface" },
+  { id: "M8", stem: "api_web_v1_mentor_rpc" },
+  { id: "M14", stem: "api_web_v1_payout_account_rpc" },
+];
+const S2_EXPECTED = [...S2_BATCH_A, ...S2_BATCH_B, ...S2_BATCH_C, ...S2_BATCH_D];
 
 const legacyFiles = files.filter((f) => /^\d{3}[a-z]?_/.test(f));
 const s2Files = files.filter((f) => !/^\d{3}[a-z]?_/.test(f));
@@ -153,7 +159,7 @@ const byStem = new Map(s2Parsed.map((s) => [s.stem, s]));
 for (const { id, stem } of S2_EXPECTED) {
   if (!byStem.has(stem)) fail(`S2 forward 부재: ${id} (${stem})`);
 }
-for (const batch of [S2_BATCH_A, S2_BATCH_B, S2_BATCH_C]) {
+for (const batch of [S2_BATCH_A, S2_BATCH_B, S2_BATCH_C, S2_BATCH_D]) {
   for (let i = 1; i < batch.length; i++) {
     const prev = byStem.get(batch[i - 1].stem);
     const cur = byStem.get(batch[i].stem);
@@ -163,7 +169,7 @@ for (const batch of [S2_BATCH_A, S2_BATCH_B, S2_BATCH_C]) {
   }
 }
 {
-  const batches = [["A", S2_BATCH_A], ["B", S2_BATCH_B], ["C", S2_BATCH_C]];
+  const batches = [["A", S2_BATCH_A], ["B", S2_BATCH_B], ["C", S2_BATCH_C], ["D", S2_BATCH_D]];
   for (let i = 1; i < batches.length; i++) {
     const [prevName, prev] = batches[i - 1];
     const [curName, cur] = batches[i];
@@ -177,7 +183,7 @@ for (const batch of [S2_BATCH_A, S2_BATCH_B, S2_BATCH_C]) {
 const knownStems = new Set(S2_EXPECTED.map((x) => x.stem));
 for (const s of s2Parsed) {
   if (!knownStems.has(s.stem)) {
-    fail(`허용되지 않은 S2 파일(Batch A·B·C 범위 밖): ${s.file} — 물리 정책 §9 계획표에 따라 배치별로만 추가한다`);
+    fail(`허용되지 않은 S2 파일(Batch A~D 범위 밖): ${s.file} — 물리 정책 §9 계획표에 따라 배치별로만 추가한다`);
   }
 }
 
@@ -220,12 +226,12 @@ if (legacyFiles.length !== LEGACY_TOTAL) {
 for (const ex of LEGACY_EXCLUDED) {
   if (!legacyFiles.includes(ex)) fail(`제외 15 목록 파일 부재(불변 위반): ${ex}`);
 }
-const EXPECTED_TOTAL = LEGACY_TOTAL + S2_EXPECTED.length; // 198 (Batch C 후)
+const EXPECTED_TOTAL = LEGACY_TOTAL + S2_EXPECTED.length; // 201 (Batch D 후)
 if (files.length !== EXPECTED_TOTAL) {
   fail(`supabase/sql/*.sql 총수 ${EXPECTED_TOTAL}개 기대, 현재 ${files.length}개`);
 }
 const cleanInstallNow = LEGACY_TOTAL - LEGACY_EXCLUDED.length + s2Parsed.length; // 175 + S2 forward
-const CLEAN_INSTALL_EXPECTED_NOW = 183; // 현재(Batch C) 정규 clean-install 대상
+const CLEAN_INSTALL_EXPECTED_NOW = 186; // 현재(Batch D) 정규 clean-install 대상
 const CLEAN_INSTALL_FINAL_TARGET = 191; // S2 완주 시(175+16) — 현재값과 혼동 금지
 if (cleanInstallNow !== CLEAN_INSTALL_EXPECTED_NOW) {
   fail(`현재 정규 clean-install 수 ${CLEAN_INSTALL_EXPECTED_NOW} 기대, 계산값 ${cleanInstallNow} (rollback 은 불포함)`);
