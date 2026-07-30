@@ -253,9 +253,9 @@
 |---|---|---|---|---|---|---|---|---|
 | M0 | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` | `20260729211929_mentor_profile_privileged_column_guard.sql` | `3bb2edd97b921900f93d460f206add873c80b6cbcf1782844b6c5e835184d94c` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: baseline 175 + forward 177/177 PASS · 검증기 38/38 PASS · rollback 후 기준선 복원 · reapply 재검증 PASS (원격 미적용 — ledger 채번 없음) |
 | M15 | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` | `20260729211941_weekly_usage_pair_party_guard.sql` | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: forward 177/177 PASS · pair-party 가드 허용 3종/거부 2종/NULL 우회 0 · 함수 identity·ACL 불변 · rollback 후 functiondef md5 `d0d31620671c6f9707a7b9d324d1ed35` 기준선 복원 · reapply 재검증 PASS (원격 미적용) |
-| M1 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
-| M13 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
-| M4 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
+| M1 | `supabase/sql/20260730090043_api_web_v1_schemas.sql` | `20260730090043_api_web_v1_schemas.sql` | `9587c4a54dc1c851672bd0dca3767953955450684d1fd559007f9b128e6905fb` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: baseline 177 위 forward 178/180 PASS · schema 2종·PUBLIC 0·`core_private` 외부 USAGE 0·default privilege 방어 확인 · rollback(RESTRICT DROP) 후 기준선 복원 · reapply 재검증 PASS (원격 미적용 — ledger 채번 없음) |
+| M13 | `supabase/sql/20260730090046_comments_author_label_denormalize.sql` | `20260730090046_comments_author_label_denormalize.sql` | `843051b85ba9f475b813fdb050fb45d71b188fce79b9ada5664cd9c38730fd4e` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: forward 179/180 PASS · T-M13-01~16 전건(검증기 baseline 8/8·forward 78/78·rollback 10/10 내) · 백필 명시 7/7 + 행 수·shortform 바이트·비대상 컬럼 불변 · rollback 후 default 복원·`author_role` 제거·**정규화 라벨 forward-only 유지**(계약 §22 #8) · reapply 재검증 PASS (원격 미적용) |
+| M4 | `supabase/sql/20260730090049_api_web_v1_read_views.sql` | `20260730090049_api_web_v1_read_views.sql` | `23dce61aac4a1452f9abcd411105f77b3ec2dc58e56ab3a1e02c92ad0510b167` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: forward 180/180 PASS · V1~V5 필드·타입·옵션·필터·GRANT·행동(invoker RLS·V3 SECDEF 의도적 예외·PII 0·DML 0·V4/V5 anon 거부) · rollback(DROP VIEW 역순) 후 기준선 복원 · reapply 재검증 PASS (원격 미적용) |
 | M5 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
 | M6 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
 | M7 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
@@ -286,8 +286,8 @@
 | M7 | 미생성 | 미생성 | 미생성 | 미생성 | M16·M17 rollback 완료 후 | 8 | 동일 |
 | M6 | 미생성 | 미생성 | 미생성 | 미생성 | C2·C3·C4 호출부 선복원, M5보다 선행 | 9 | 동일 |
 | M5 | 미생성 | 미생성 | 미생성 | 미생성 | M6·M9·M17 rollback 완료 후 | 10 | 동일 |
-| M4 | 미생성 | 미생성 | 미생성 | 미생성 | C1 호출부 선복원, M13·M1보다 선행 | 11 | 동일 |
-| M13 | 미생성 | 미생성 | 미생성 | 미생성 | M4 rollback 완료 후(백필 값 소실 주의 — 계약 §20.2) | 12 | 동일 |
-| M1 | 미생성 | 미생성 | 미생성 | 미생성 | 스키마 내 객체(M4~M9·M14) rollback 완료 후 — 빈 스키마만 DROP | 13 | 동일 |
+| M4 | `supabase/sql/20260730090049_api_web_v1_read_views.sql` | `supabase/rollback/20260730090049_api_web_v1_read_views_rollback.sql` | `23dce61aac4a1452f9abcd411105f77b3ec2dc58e56ab3a1e02c92ad0510b167` | `738af51fa311ad6339ef644cfeb0c274ebde30fc91ef66edbc4e848f83d3689c` | C1 호출부 선복원, M13·M1보다 선행(View 5종 역순 DROP·CASCADE 금지 — 로컬 PG17 왕복 검증 PASS) | 11 | 동일 |
+| M13 | `supabase/sql/20260730090046_comments_author_label_denormalize.sql` | `supabase/rollback/20260730090046_comments_author_label_denormalize_rollback.sql` | `843051b85ba9f475b813fdb050fb45d71b188fce79b9ada5664cd9c38730fd4e` | `176dc280d39b406c2df68a648ba9af44b4762bccace4600c54d600d97b4c8838` | M4 rollback 완료 후. §22 #8 5단계(가드→INSERT 트리거→함수→`author_role`→default 복원)·`author_label` 컬럼 보존·**정규화 라벨은 forward-only 유지**(로컬 PG17 왕복 검증 PASS) | 12 | 동일 |
+| M1 | `supabase/sql/20260730090043_api_web_v1_schemas.sql` | `supabase/rollback/20260730090043_api_web_v1_schemas_rollback.sql` | `9587c4a54dc1c851672bd0dca3767953955450684d1fd559007f9b128e6905fb` | `5dbfb606ac753edabf28ff5176dca23c6b364987e92789340d18ca30a6f13765` | 스키마 내 객체(M4~M9·M14) rollback 완료 후 — 빈 스키마만 RESTRICT DROP(CASCADE 금지 — 로컬 PG17 왕복 검증 PASS) | 13 | 동일 |
 | M15 | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` | `supabase/rollback/20260729211941_weekly_usage_pair_party_guard_rollback.sql` | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | `42f5266d270b71b4caa6730e505665423342d0a2588199330781d4d3e0eb6363` | 독립 — 위치 제약 없음(가드 없는 구 본문 복원 — 098 정본 전체 정의 명시 복원, 로컬 PG17 왕복 검증 PASS) | 14 | 동일 |
 | M0 | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` | `supabase/rollback/20260729211929_mentor_profile_privileged_column_guard_rollback.sql` | `3bb2edd97b921900f93d460f206add873c80b6cbcf1782844b6c5e835184d94c` | `a6fbea2a93360eebfaea61f8e4d1c27d2beac7e32d50fe2a36ba9184d887d35e` | 최후미 — 되도록 남긴다(§20.5 심층 방어). 트리거 2종+함수만 명시 DROP(로컬 PG17 왕복 검증 PASS) | 15 | 동일 |

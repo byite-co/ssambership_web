@@ -201,7 +201,7 @@
 - **적용 전 확인:** 적용 직전 동일 ledger name 존재 여부를 확인하고, 이미 존재하면 자동 재적용하지 않고 중단한다. migration repair·원장 PATCH·수동 원장 행 삽입·삭제 금지, 운영 DB 임의 `execute_sql` DDL 금지. 위반·불일치 발생 시 `MIGRATION_HISTORY_DRIFT` 즉시 재활성(조건 8종 = 정책 문서 §4).
 - **rollback 정본 경로:** `supabase/rollback/<FORWARD_FILE_TS>_<STEM>_rollback.sql` — forward clean-install과 구조적으로 분리하며 **정규 clean-install 파일 수에 포함하지 않는다**(`supabase/sql/*.sql`·미래 재귀 glob에 포함 금지). 실행은 장애 시 오너 승인 후 파일 1건을 명시적으로 골라 `apply_migration`으로 수행하고, 원장에는 **새 행으로 append**한다(forward 원장 행 삭제·수정·reverted 처리 금지, Management API의 선택적 `rollback` 필드 미사용). M10은 상태 0 checkpoint — rollback 파일 없음.
 - **정규 산식(S2 완료 시):** 기존 baseline **175** + S2 forward **16**(M0·M1·M4~M17, M2·M3 retired) = **191**. S2 rollback **15**개·D-API-W·D-API-A·C1~C11은 SQL 적용 파일 수에 불포함. 기존 175개 순서·제외 15개·후보 C 판정(§7)은 변경하지 않는다.
-- **편입 시점:** Batch별 로컬 PG17 검증 PASS 후 해당 forward만 본 문서에 편입한다. 나머지 미생성 S2 forward(**M1·M4~M14·M16·M17, 총 14개**)는 **미생성** 상태이며, M0·M15는 Batch A `LOCAL_PASS`로 아래 §9.1에 편입 완료됐다. M2·M3는 retired다. 실제 timestamp·SHA-256·ledger version은 생성·적용 후에만 기록한다(invent 금지).
+- **편입 시점:** Batch별 로컬 PG17 검증 PASS 후 해당 forward만 본 문서에 편입한다. 나머지 미생성 S2 forward(**M5~M12·M14·M16·M17, 총 11개**)는 **미생성** 상태이며, M0·M15는 Batch A `LOCAL_PASS`로 아래 §9.1에, M1·M13·M4는 Batch B `LOCAL_PASS`로 아래 §9.2에 편입 완료됐다. M2·M3는 retired다. 실제 timestamp·SHA-256·ledger version은 생성·적용 후에만 기록한다(invent 금지).
 
 ### 9.1 Batch A 편입 (2026-07-30 KST — 로컬 PG17 검증 PASS, 원격 미적용)
 
@@ -212,7 +212,22 @@
 | 176 | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` (M0) | `3bb2edd97b921900f93d460f206add873c80b6cbcf1782844b6c5e835184d94c` | PG17.6 forward·rollback·reapply PASS |
 | 177 | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` (M15) | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | PG17.6 forward·rollback·reapply PASS |
 
-- **현재 정규 clean-install: 기존 baseline 175 + Batch A forward 2 = 177** (2026-07-30 로컬 재현: 177/177 적용 성공 + Batch A 검증기 38/38 PASS + rollback 왕복·재적용 재검증 PASS).
+- **Batch A 편입 시점 정규 clean-install: 기존 baseline 175 + Batch A forward 2 = 177** (2026-07-30 로컬 재현: 177/177 적용 성공 + Batch A 검증기 38/38 PASS + rollback 왕복·재적용 재검증 PASS). **Batch B 편입 후 현행 산식은 §9.2(= 180)** 를 따른다.
 - **최종 목표(S2 완주 시): 기존 baseline 175 + S2 forward 16 = 191.** 현재 177과 혼동하지 않는다.
 - rollback 2건(`supabase/rollback/20260729211929_..._rollback.sql`·`20260729211941_..._rollback.sql`)은 **정규 적용 수에서 제외**한다(§9 rollback 정본 경로 규칙).
 - 본 편입은 **로컬 검증 실적**이다 — staging·production 원장 적용 실적이 아니며, 원격 적용·ledger 기록은 오너 승인 후 `sql_apply_manifest.md` 대조표에 환경별로 기록한다.
+
+### 9.2 Batch B 편입 (2026-07-30 KST — 로컬 PG17 검증 PASS, 원격 미적용)
+
+정규 clean-install 순서: §9.1의 177개(마지막 `20260729211941_weekly_usage_pair_party_guard.sql`) 뒤에 아래 S2 forward 3건을 timestamp 순으로 이어 적용한다. 적용 순서 = M1 → M13 → M4(계약 §20.2.1), rollback 역순 = M4 → M13 → M1(계약 §22).
+
+| 순서 | 파일 | SHA-256 | 로컬 검증 |
+|---:|---|---|---|
+| 178 | `supabase/sql/20260730090043_api_web_v1_schemas.sql` (M1) | `9587c4a54dc1c851672bd0dca3767953955450684d1fd559007f9b128e6905fb` | PG17.6 forward·rollback·reapply PASS |
+| 179 | `supabase/sql/20260730090046_comments_author_label_denormalize.sql` (M13) | `843051b85ba9f475b813fdb050fb45d71b188fce79b9ada5664cd9c38730fd4e` | PG17.6 forward·rollback·reapply PASS (라벨 backfill 은 forward-only — 물리 정책 §9.2·계약 §22 #8) |
+| 180 | `supabase/sql/20260730090049_api_web_v1_read_views.sql` (M4) | `23dce61aac4a1452f9abcd411105f77b3ec2dc58e56ab3a1e02c92ad0510b167` | PG17.6 forward·rollback·reapply PASS |
+
+- **현재 정규 clean-install: 기존 baseline 175 + Batch A 2 + Batch B 3 = 180** (2026-07-30 로컬 재현: 후보 C 175/175 → 177/177 → **180/180 적용 성공** + Batch B 검증기 baseline 8/8 · forward 78/78 · rollback 10/10(T-M13-01~16 전건) + 백필 명시 7/7·불변 대조 PASS + rollback 왕복(M4→M13→M1) 기준선 복원 — 유일 차이는 M13 forward-only 라벨 backfill 유지 — + 동일 파일 재적용·재검증 PASS + `supabase db lint`(public, error) 0건).
+- **최종 목표(S2 완주 시): 175 + 16 = 191.** 현재 180과 혼동하지 않는다.
+- rollback 3건(`supabase/rollback/20260730090043_..._rollback.sql`·`20260730090046_..._rollback.sql`·`20260730090049_..._rollback.sql`)은 **정규 적용 수에서 제외**한다(§9 rollback 정본 경로 규칙 — rollback 인벤토리 총 5건).
+- ledger version = **미적용**. 본 편입은 **로컬 검증 실적**이다 — staging·production 원장 적용·Data API(Exposed schemas) 변경(D-API-W)은 **미실행**이며, 원격 적용·ledger 기록은 오너 승인 후 `sql_apply_manifest.md` 대조표에 환경별로 기록한다.

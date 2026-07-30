@@ -187,15 +187,15 @@ S2 rollback: 15개 — clean-install 불포함
 
 ## 9. M0~M17 물리 계획표
 
-> **M0~M17은 논리 ID이며 물리 timestamp가 아니다.** `<TSn>` = 권고 생성 순서 n번째에 §5 절차로 채번되는 UTC `YYYYMMDDHHMMSS`. **Batch A(M0·M15)는 2026-07-30(KST) 세션에서 §5 절차로 실채번·구현·로컬 검증 완료됐다(§9.1 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** 나머지 미생성 S2 forward는 **M1·M4~M14·M16·M17, 총 14개**이며 timestamp·SHA-256·ledger version은 현재 **미생성**이다(invent 금지). M0·M15는 Batch A `LOCAL_PASS`이고, M2·M3는 retired 슬롯 — 파일을 만들지 않는다. D-API-W·D-API-A·C1~C11은 SQL 파일이 아니다.
+> **M0~M17은 논리 ID이며 물리 timestamp가 아니다.** `<TSn>` = 권고 생성 순서 n번째에 §5 절차로 채번되는 UTC `YYYYMMDDHHMMSS`. **Batch A(M0·M15)는 2026-07-30(KST) 세션에서 §5 절차로 실채번·구현·로컬 검증 완료됐다(§9.1 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** **Batch B(M1·M13·M4)도 2026-07-30(KST) 세션에서 §5 절차로 실채번·구현·로컬 검증 완료됐다(§9.3 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** 나머지 미생성 S2 forward는 **M5~M12·M14·M16·M17, 총 11개**이며 timestamp·SHA-256·ledger version은 현재 **미생성**이다(invent 금지). M2·M3는 retired 슬롯 — 파일을 만들지 않는다. D-API-W·D-API-A·C1~C11은 SQL 파일이 아니다.
 
 | 논리 ID | 계약 filename stem | 직접 선행조건 | 권고 생성 순서 | forward 물리 경로 형식 | rollback 경로 형식 | rollback 여부 | 구현 batch |
 |---|---|---|---:|---|---|---|---|
 | M0 | mentor_profile_privileged_column_guard | 없음 | 1 | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` (**실채번 TS1=20260729211929** — §9.1) | `supabase/rollback/20260729211929_mentor_profile_privileged_column_guard_rollback.sql` | 있음 | A |
 | M15 | weekly_usage_pair_party_guard | 없음 | 2 | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` (**실채번 TS2=20260729211941** — §9.1) | `supabase/rollback/20260729211941_weekly_usage_pair_party_guard_rollback.sql` | 있음 | A |
-| M1 | api_web_v1_schemas | M0 | 3 | `supabase/sql/<TS3>_api_web_v1_schemas.sql` | `supabase/rollback/<TS3>_api_web_v1_schemas_rollback.sql` | 있음 | B |
-| M13 | comments_author_label_denormalize (**정본 재정의 — §9.2**) | M0 | 4 | `supabase/sql/<TS4>_comments_author_label_denormalize.sql` | `supabase/rollback/<TS4>_comments_author_label_denormalize_rollback.sql` | 있음(단, `author_label` 컬럼·정규화 라벨 보존 — forward-only 예외 §9.2) | B |
-| M4 | api_web_v1_read_views | M1+M13 | 5 | `supabase/sql/<TS5>_api_web_v1_read_views.sql` | `supabase/rollback/<TS5>_api_web_v1_read_views_rollback.sql` | 있음 | B |
+| M1 | api_web_v1_schemas | M0 | 3 | `supabase/sql/20260730090043_api_web_v1_schemas.sql` (**실채번 TS3=20260730090043** — §9.3) | `supabase/rollback/20260730090043_api_web_v1_schemas_rollback.sql` | 있음 | B |
+| M13 | comments_author_label_denormalize (**정본 재정의 — §9.2**) | M0 | 4 | `supabase/sql/20260730090046_comments_author_label_denormalize.sql` (**실채번 TS4=20260730090046** — §9.3) | `supabase/rollback/20260730090046_comments_author_label_denormalize_rollback.sql` | 있음(단, `author_label` 컬럼·정규화 라벨 보존 — forward-only 예외 §9.2) | B |
+| M4 | api_web_v1_read_views | M1+M13 | 5 | `supabase/sql/20260730090049_api_web_v1_read_views.sql` (**실채번 TS5=20260730090049** — §9.3) | `supabase/rollback/20260730090049_api_web_v1_read_views_rollback.sql` | 있음 | B |
 | M5 | core_private_room_ensure | M1 | 6 | `supabase/sql/<TS6>_core_private_room_ensure.sql` | `supabase/rollback/<TS6>_core_private_room_ensure_rollback.sql` | 있음 | C |
 | M6 | api_web_v1_self_rpc | M5 | 7 | `supabase/sql/<TS7>_api_web_v1_self_rpc.sql` | `supabase/rollback/<TS7>_api_web_v1_self_rpc_rollback.sql` | 있음 | C |
 | M7 | api_web_v1_community_rpc | M1 | 8 | `supabase/sql/<TS8>_api_web_v1_community_rpc.sql` | `supabase/rollback/<TS8>_api_web_v1_community_rpc_rollback.sql` | 있음 | C |
@@ -227,7 +227,7 @@ functiondef md5 `d0d31620671c6f9707a7b9d324d1ed35`·prosrc SHA-256
 | M15 | `20260729211941` | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | `supabase/rollback/20260729211941_weekly_usage_pair_party_guard_rollback.sql` | `42f5266d270b71b4caa6730e505665423342d0a2588199330781d4d3e0eb6363` | `LOCAL_PASS` |
 
 - timestamp 는 UTC `YYYYMMDDHHMMSS`(2026-07-29T21:19Z대 = KST 2026-07-30 06:19대 채번). `TS1(M0) < TS2(M15)` 충족.
-- 미생성 잔여 S2 forward는 **M1·M4~M14·M16·M17, 총 14개**다(invent 금지 — 위 §9 계획표의 `<TSn>` 형식 유지). M0·M15는 Batch A에서 생성·`LOCAL_PASS` 완료됐고 M2·M3는 retired다.
+- 미생성 잔여 S2 forward는 **M5~M12·M14·M16·M17, 총 11개**다(invent 금지 — 위 §9 계획표의 `<TSn>` 형식 유지). M0·M15는 Batch A, M1·M13·M4는 Batch B(§9.3)에서 생성·`LOCAL_PASS` 완료됐고 M2·M3는 retired다.
 - 상세 ledger mapping·rollback 인벤토리 실체는 `sql_apply_manifest.md` 「S2 환경별 적용 대조표·rollback 인벤토리」에 기록.
 
 ### 9.2 M13 정본 재정의 역기입 (baseline 정합 보정 — 오너 승인 2026-07-30)
@@ -252,6 +252,51 @@ functiondef md5 `d0d31620671c6f9707a7b9d324d1ed35`·prosrc SHA-256
   **현행 정본 = 2,994행 / 329,690B / SHA-256 `bd9fc0dd2802c8358bb09f2938e0de7248d8b60703794895708e300f8ef32fa6`**(본 보정 커밋) —
   **앱 계약 재동기화 필요 상태**(`APP_CONTRACT_RESYNC_REQUIRED: YES`, 완료 전 S2-2 Batch B는 BLOCKED 유지).
 - Batch A(M0·M15)의 `LOCAL_PASS` 실적·파일 SHA-256(§9.1)은 본 보정과 무관하게 불변이다.
+
+### 9.3 Batch B 실체 역기입 (2026-07-30 KST — `LOCAL_PASS`)
+
+Batch B(M1·M13·M4)는 §5 절차대로 `supabase migration new`로 timestamp를 실채번(사람 임의 입력 0,
+채번 순서 M1→M13→M4)한 뒤 `supabase/sql/`로 이동해 구현했고(`supabase/migrations/` 잔존 0),
+격리 로컬 스택(Supabase CLI 2.110.0 / **PostgreSQL 17.6** — 컨테이너 레지스트리 egress 차단 환경이라
+supabase/postgres:17.6.1.143 이미지 대신 **PG 17.6 소스 빌드 + supabase 동등 role·auth·storage·
+default-privilege 부트스트랩** 스크래치 스택으로 재현, 운영·staging 반입 0)에서 다음을 확인했다.
+
+- baseline 후보 C 175개(175/175) + Batch A 2개 = **177/177 PASS** 재현 후, M13 사전 구조 게이트
+  (§9.2 — `comments.author_label` 037 선재·`author_role` 부재·163/164 브리지 정본) 전건 실측 일치.
+- Batch B forward 3건 순차 적용(M1→M13→M4) = **180/180 PASS**.
+- 반복 검증기(`scripts/verify/s2_2_batch_b_verify.sql`, 3-phase): baseline **8/8** ·
+  forward **78/78**(M1 경계 / M13 카탈로그·T-M13-02~14 / M4 V1~V5 필드·타입·옵션·필터·GRANT·행동 /
+  V3 의도적 SECDEF 예외 / PII 0 / View DML 0 / `core_private` 외부 USAGE 0 / fixture 잔여 0) ·
+  rollback **10/10**(T-M13-15·16 포함) — T-M13-01~16 전 16종 커버.
+- 백필 fixture(스푸핑 라벨 canonical 2·legacy board 1·shortform 2·브리지 미러 포함) 명시 검증
+  **7/7 PASS** + 행 수·shortform 바이트·비대상 컬럼(md5) **불변 확인**(016 `updated_at` 트리거는
+  백필 구간만 비활성화, 브리지는 163/164 자체 재귀 방지 GUC 로 억제 — 본문 무수정).
+- rollback 왕복(M4→M13→M1) 후 forward 전 기준선과 카탈로그·ACL·트리거·함수·행 수·비대상 데이터
+  **완전 일치** — 유일한 차이는 **M13 forward-only 라벨 backfill 유지**(§9.2·계약 §22 #8 승인 예외).
+- 동일 파일 2차 forward 재적용(180/180) 후 forward 검증 **78/78 재PASS**, roundtrip fixture 잔여 **0**.
+- `supabase db lint`(schema public, level error): **오류 0** (V3 SECDEF 뷰는 `api_web_v1` 소속·계약 승인
+  예외로 분류). `git diff --check` 통과. `node scripts/verify/sql_number_integrity.mjs` 통과
+  (Batch B 산식 갱신: 총 195 · clean-install 180 · rollback 5).
+
+상태 = **`LOCAL_PASS`** — staging·production 원장에는 **미적용**이며 ledger version/name 기록은
+원격 적용 시점에만 한다(§3). **운영 적용·Data API(Exposed schemas) 변경은 미실행**이다(D-API-W 는
+Batch B 이후 별도 플랫폼 단계 — 계약 §20.6).
+
+| 논리 ID | timestamp | forward 파일 | forward SHA-256 | rollback 파일 | rollback SHA-256 | 상태 |
+|---|---|---|---|---|---|---|
+| M1 | `20260730090043` | `supabase/sql/20260730090043_api_web_v1_schemas.sql` | `9587c4a54dc1c851672bd0dca3767953955450684d1fd559007f9b128e6905fb` | `supabase/rollback/20260730090043_api_web_v1_schemas_rollback.sql` | `5dbfb606ac753edabf28ff5176dca23c6b364987e92789340d18ca30a6f13765` | `LOCAL_PASS` |
+| M13 | `20260730090046` | `supabase/sql/20260730090046_comments_author_label_denormalize.sql` | `843051b85ba9f475b813fdb050fb45d71b188fce79b9ada5664cd9c38730fd4e` | `supabase/rollback/20260730090046_comments_author_label_denormalize_rollback.sql` | `176dc280d39b406c2df68a648ba9af44b4762bccace4600c54d600d97b4c8838` | `LOCAL_PASS` |
+| M4 | `20260730090049` | `supabase/sql/20260730090049_api_web_v1_read_views.sql` | `23dce61aac4a1452f9abcd411105f77b3ec2dc58e56ab3a1e02c92ad0510b167` | `supabase/rollback/20260730090049_api_web_v1_read_views_rollback.sql` | `738af51fa311ad6339ef644cfeb0c274ebde30fc91ef66edbc4e848f83d3689c` | `LOCAL_PASS` |
+
+- timestamp 는 UTC `YYYYMMDDHHMMSS`(2026-07-30T09:00Z대 = KST 2026-07-30 18:00대 채번).
+  `TS1(M0) < TS2(M15) < TS3(M1) < TS4(M13) < TS5(M4)` 충족. 적용 순서 M1→M13→M4 · rollback 역순 M4→M13→M1.
+- **현재 정규 clean-install: 기존 baseline 175 + Batch A 2 + Batch B 3 = 180** ·
+  rollback 인벤토리 5 (최종 목표 191·15 와 혼동 금지). ledger version = **미적용**.
+- M1 의 `ALTER DEFAULT PRIVILEGES … REVOKE EXECUTE FROM PUBLIC`(계약 §5.3.3)은 실측상 per-schema
+  기본 ACL 이 전역 기본에 additive 만 가능해 카탈로그 항목을 남기지 않는다 — 실효 방어는 계약
+  §5.3 주의 1 의 **함수별 명시 REVOKE**(M13 함수 2종에서 이행·검증됨)이며, 검증기는
+  "per-schema 기본 ACL 의 PUBLIC 추가 부여 0"을 상시 assertion 한다.
+- 상세 ledger mapping·rollback 인벤토리 실체는 `sql_apply_manifest.md` 「S2 환경별 적용 대조표·rollback 인벤토리」에 기록.
 
 ## 10. Batch A~F 계획표
 
