@@ -187,7 +187,7 @@ S2 rollback: 15개 — clean-install 불포함
 
 ## 9. M0~M17 물리 계획표
 
-> **M0~M17은 논리 ID이며 물리 timestamp가 아니다.** `<TSn>` = 권고 생성 순서 n번째에 §5 절차로 채번되는 UTC `YYYYMMDDHHMMSS`. **Batch A(M0·M15)는 2026-07-30(KST) 세션에서 §5 절차로 실채번·구현·로컬 검증 완료됐다(§9.1 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** **Batch B(M1·M13·M4)도 2026-07-30(KST) 재개 세션에서 §5 절차로 실채번·구현·로컬 왕복 검증 완료됐다(§9.3 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** **Batch C(M5·M6·M7)도 같은 세션 연속 지시로 §5 절차 실채번·구현·로컬 왕복 검증 완료됐다(§9.4 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** **Batch D(M17·M8·M14)도 연속 지시로 §5 절차 실채번·구현·로컬 왕복 검증 완료됐다(§9.5 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** 나머지 미생성 S2 forward는 **M9~M12·M16, 총 5개**이며 timestamp·SHA-256·ledger version은 현재 **미생성**이다(invent 금지). M2·M3는 retired 슬롯 — 파일을 만들지 않는다. D-API-W·D-API-A·C1~C11은 SQL 파일이 아니다.
+> **M0~M17은 논리 ID이며 물리 timestamp가 아니다.** `<TSn>` = 권고 생성 순서 n번째에 §5 절차로 채번되는 UTC `YYYYMMDDHHMMSS`. **Batch A(M0·M15)는 2026-07-30(KST) 세션에서 §5 절차로 실채번·구현·로컬 검증 완료됐다(§9.1 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** **Batch B(M1·M13·M4)도 2026-07-30(KST) 재개 세션에서 §5 절차로 실채번·구현·로컬 왕복 검증 완료됐다(§9.3 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** **Batch C(M5·M6·M7)도 같은 세션 연속 지시로 §5 절차 실채번·구현·로컬 왕복 검증 완료됐다(§9.4 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** **Batch D(M17·M8·M14)도 연속 지시로 §5 절차 실채번·구현·로컬 왕복 검증 완료됐다(§9.5 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** **Batch E(M9)도 연속 지시로 §5 절차 실채번·구현·로컬 왕복 검증 완료됐다(§9.6 역기입 — 상태 `LOCAL_PASS`, 원격 미적용).** 나머지 미생성 S2 forward는 **M10~M12·M16, 총 4개**이며 timestamp·SHA-256·ledger version은 현재 **미생성**이다(invent 금지). M2·M3는 retired 슬롯 — 파일을 만들지 않는다. D-API-W·D-API-A·C1~C11은 SQL 파일이 아니다.
 
 | 논리 ID | 계약 filename stem | 직접 선행조건 | 권고 생성 순서 | forward 물리 경로 형식 | rollback 경로 형식 | rollback 여부 | 구현 batch |
 |---|---|---|---:|---|---|---|---|
@@ -202,7 +202,7 @@ S2 rollback: 15개 — clean-install 불포함
 | M17 | api_app_v1_surface | M5+M7 | 9 | `supabase/sql/20260730112525_api_app_v1_surface.sql` (**실채번 TS9=20260730112525** — §9.5) | `supabase/rollback/20260730112525_api_app_v1_surface_rollback.sql` (§22 순서: 노출 제거→config 반영→DROP) | 있음 | D |
 | M8 | api_web_v1_mentor_rpc | M1 | 10 | `supabase/sql/20260730112528_api_web_v1_mentor_rpc.sql` (**실채번 TS10=20260730112528** — §9.5) | `supabase/rollback/20260730112528_api_web_v1_mentor_rpc_rollback.sql` | 있음 | D |
 | M14 | api_web_v1_payout_account_rpc | M1 | 11 | `supabase/sql/20260730112531_api_web_v1_payout_account_rpc.sql` (**실채번 TS11=20260730112531** — §9.5) | `supabase/rollback/20260730112531_api_web_v1_payout_account_rpc_rollback.sql` | 있음 | D |
-| M9 | money_rpc | M5 | 12 | `supabase/sql/<TS12>_money_rpc.sql` | `supabase/rollback/<TS12>_money_rpc_rollback.sql` (레거시 구 본문 복원 포함 — §22 #3) | 있음 | E |
+| M9 | money_rpc | M5 | 12 | `supabase/sql/20260730120103_money_rpc.sql` (**실채번 TS12=20260730120103** — §9.6) | `supabase/rollback/20260730120103_money_rpc_rollback.sql` (레거시 구 본문 복원 포함 — §22 #3) | 있음 | E |
 | M11 | revoke_mentor_profiles_write | 전환 게이트(M8+C6 · M14+C11 · 백업 upsert 제거 · 직접 쓰기 0건) | 13 | `supabase/sql/<TS13>_revoke_mentor_profiles_write.sql` | `supabase/rollback/<TS13>_revoke_mentor_profiles_write_rollback.sql` (GRANT 문자 그대로 복원 — §22 #6) | 있음 | F |
 | M12 | revoke_mentor_plans_write | 전환 게이트(M8+C6 · 플랜 직접 쓰기 0건) | 14 | `supabase/sql/<TS14>_revoke_mentor_plans_write.sql` | `supabase/rollback/<TS14>_revoke_mentor_plans_write_rollback.sql` (동일 원칙) | 있음 | F |
 | M16 | community_direct_write_lockdown | M7+M17+D-API-A+웹·앱 전환+앱 Gate 4+§14.7 7단계 | 15 | `supabase/sql/<TS15>_community_direct_write_lockdown.sql` | `supabase/rollback/<TS15>_community_direct_write_lockdown_rollback.sql` (GRANT+정책 6종 복원) | 있음 | F |
@@ -227,7 +227,7 @@ functiondef md5 `d0d31620671c6f9707a7b9d324d1ed35`·prosrc SHA-256
 | M15 | `20260729211941` | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | `supabase/rollback/20260729211941_weekly_usage_pair_party_guard_rollback.sql` | `42f5266d270b71b4caa6730e505665423342d0a2588199330781d4d3e0eb6363` | `LOCAL_PASS` |
 
 - timestamp 는 UTC `YYYYMMDDHHMMSS`(2026-07-29T21:19Z대 = KST 2026-07-30 06:19대 채번). `TS1(M0) < TS2(M15)` 충족.
-- 미생성 잔여 S2 forward는 **M9~M12·M16, 총 5개**다(invent 금지 — 위 §9 계획표의 `<TSn>` 형식 유지). M0·M15는 Batch A에서, M1·M13·M4는 Batch B(§9.3)에서, M5·M6·M7은 Batch C(§9.4)에서, M17·M8·M14는 Batch D(§9.5)에서 생성·`LOCAL_PASS` 완료됐고 M2·M3는 retired다.
+- 미생성 잔여 S2 forward는 **M10~M12·M16, 총 4개**다(invent 금지 — 위 §9 계획표의 `<TSn>` 형식 유지). M0·M15는 Batch A에서, M1·M13·M4는 Batch B(§9.3)에서, M5·M6·M7은 Batch C(§9.4)에서, M17·M8·M14는 Batch D(§9.5)에서, M9는 Batch E(§9.6)에서 생성·`LOCAL_PASS` 완료됐고 M2·M3는 retired다.
 - 상세 ledger mapping·rollback 인벤토리 실체는 `sql_apply_manifest.md` 「S2 환경별 적용 대조표·rollback 인벤토리」에 기록.
 
 ### 9.2 M13 정본 재정의 역기입 (baseline 정합 보정 — 오너 승인 2026-07-30)
@@ -433,6 +433,85 @@ Data API 변경 미실행**. **D-API-A(api_app_v1 Exposed schemas 추가)는 SQL
 단계로 미실행이며**(앱 계약 §3.1 순서 — M17 적용 직후 게이트 PASS 가 그 선행 조건을 로컬
 수준에서 충족), 앱 제품 코드 전환·앱 Gate 4·M16(HD-1)은 후속 단계다. Batch A(§9.1)·
 Batch B(§9.3)·Batch C(§9.4) 실적·SHA 는 불변이다.
+
+### 9.6 Batch E 실체 역기입 (2026-07-30 KST — `LOCAL_PASS`)
+
+Batch E(M9 단독 — 자금 최고위험 격리)는 오너 연속 지시(base commit
+`13d27fa050f4d8efcb2301b6adfd5839246da031`, branch `claude/s2-2-batch-e-20260730`)로 §5
+절차대로 실채번(money_rpc, **TS12=20260730120103** — TS11 이후, `supabase/migrations/`
+잔존 0) 후 구현했고, 격리 로컬 스택(Supabase CLI 2.110.0 / PostgreSQL 17.6 fresh 재구축)
+에서 baseline 후보 C 175 + Batch A 2(177/177 · 검증기 38/38) + Batch B·C·D 9(=186) 위에
+M9 를 적용해 **clean-install 187/187 PASS** 를 확인했다.
+
+| 논리 ID | timestamp | forward 파일 | forward SHA-256 | rollback 파일 | rollback SHA-256 | 상태 |
+|---|---|---|---|---|---|---|
+| M9 | `20260730120103` | `supabase/sql/20260730120103_money_rpc.sql` | `3821e05f3a0c8787af180c34bbdafbcfb866a61cc3b25cbf6534783522e115d5` | `supabase/rollback/20260730120103_money_rpc_rollback.sql` | `c89af2f1d94dc367946ba6e3d7fc1849d6979cc53f33c4fa9d634d728015de0f` | `LOCAL_PASS` |
+
+신규 객체·본문 교체(계약 §7 F11 3층 + F12 — 전부 같은 마이그레이션): **F11i =
+`core_private.record_cash_topup_impl`**(SECURITY INVOKER·`search_path=''`·외부 EXECUTE 0 —
+ON CONFLICT 원자 판정(사전 SELECT 추정 금지)·신규에만 지갑 가산·duplicate FOR UPDATE
+재조회 8필드 내부 형상) · **2층 = 레거시 `public.record_cash_topup` 내부 구현만 F11i
+위임으로 교체**(시그니처·void·SECDEF·service_role 전용 ACL·duplicate 무음 반환 불변 —
+T-REG-06 의 계약된 본문 교체, 신규 public 함수 0) · **F11 =
+`api_web_v1.record_cash_topup_v2`**(3인자 strict wrapper, `p_idempotency_key = p_order_ref`,
+`^cash-(.+)-([0-9]+)$` 강제·소유자 재검증·duplicate 6필드 NULL-safe 전건 대조) · **F12 =
+`api_web_v1.subscription_checkout_confirm_v2`**(잠금 순서 [C3] payments FOR UPDATE →
+advisory → mentor_plans FOR UPDATE · 3자 일치(`payments.amount×100 =
+p_expected_amount_cents = 잠근 amount_cents`, 불일치 = PLAN_AMOUNT_CHANGED 차감 0) ·
+최초 실행 = 정본 `confirm_subscription_checkout` + F10 방 확보를 한 subtransaction(방
+실패 시 자금·원장·구독·결제 전부 롤백 = ROOM_ENSURE_FAILED) · 재생 = 정본 재호출 없이
+Phase 1(검증 전용 — 9단계 우선순위·`SUBSCRIPTION_REF_INVALID` detail 3종·C 당사자 8단계
+분리·anomaly 기록만 허용) → Phase 2(room 확보·보정 — NULL/stale→C 복구) 자체 판정 ·
+현재 플랜 가격 미독 · 정본 raise 17종 동명 envelope 변환·사전 밖 예외 bare RAISE 전파).
+F11·F12 EXECUTE 는 **service_role 전용**(§10.3 — anon·authenticated·PUBLIC 0). §20.3
+「M9 이전」의 **F12 배포 전 사전 검사**는 forward 사전 게이트가 **탐지**(구독이 참조하는
+succeeded 결제 중 방 없는 건 >0 이면 중단 — 보정은 운영 절차)로 구현했고 로컬 0건이었다.
+
+검증 실적(반복 검증기 `scripts/verify/s2_2_batch_e_verify.sql` — phase 스위치형·pre-M9
+prosrc md5 스냅샷 GUC 대조, SHA-256
+`d451fb7c79bed7031bf9376b5ffcbcbce0e38e269bc042c7d7650842701be791`):
+
+- **1차 forward**: 187/187 + forward phase **17/17 PASS** — 카탈로그(F11i INVOKER·외부
+  EXECUTE 0·core_private census 6 / F11·F12 service_role 전용·api_web_v1 census 14 /
+  레거시 record_cash_topup 본문 교체·ACL 불변 + 정본 confirm_subscription_checkout
+  prosrc md5 불변 실측 / authenticated 호출 42501) · **T-TOP-01~06**(레거시 신규·동일
+  duplicate 무음·충돌 duplicate 무음·혼합 흐름 지갑 정확히 1회 가산·F11 만 동일/충돌
+  구분 — 충돌 = LEDGER_FIELD_MISMATCH) · **T-FIN-01~04**(`idempotency_key = orderId`·
+  `ref_id NULL`·`ref_type='topup'` / 타인 orderId → ORDER_REF_OWNER_MISMATCH 원장 0행 /
+  PLAN_AMOUNT_CHANGED 차감 0 / CASH_INSUFFICIENT 구독 생성 0) · 테스트 충전 형식
+  `cash_topup_…` 기각(ORDER_REF_INVALID — 테스트 충전 분리 rev 8 A-6 정정 2) · F12
+  최초 확정(성공 envelope + room_id·원장 `sub_debit_`·지갑 차감·payments succeeded·
+  plan_id 기록·room 참조 기입) · 재구독(reactivated·last_payment_id 최신화·room
+  payment_id 최신 참조 갱신) · 오류 변환 표본 6종(자체 4 + 정본 raise 변환 2) ·
+  **T-REP-A~H 전건**(늦은 재생 무부작용 멱등 / stale·NULL room 참조 → C 복구 / 제3
+  결제 → ROOM_REF_MISMATCH+anomaly / C 전제 실패 detail 3종(FK 는 fixture 한정
+  트랜잭션 내 일시 해제로 NOT_FOUND 재현·원상 복구) / C 당사자 →
+  PARTY_BINDING_MISMATCH / 상위 오류 시 room 후보 보정 미실행) · **T-CONC-09 등가**
+  (가격 변경 후 기존 expected 재생 = `idempotent:true`·anomaly 0 — 재생은 현재 플랜
+  가격을 읽지 않음).
+- **2세션 동시성**(별도 러너): **T-CONC-02**(F11 동일 orderId ×2 — 원장 1행·지갑 1회·
+  duplicate true/false 각 1) · **T-TOP-04**(레거시+F11 동일 키 병행 — 원장 정확히 1행) ·
+  **T-CONC-03**(F12 동일 payment ×2 — 구독 1·`sub_debit_` 1행·두 번째 `idempotent:true`) ·
+  **T-CONC-04**(F12 잠금 유지 중 멘토 가격 UPDATE **1,477ms 대기** 실측·확정 금액 =
+  잠금 시점 값 −2,990,000) · **T-CONC-08**(F12 vs 레거시 직접 호출 동시 — 2건 병행·동일
+  payment 변형 모두 **교착(40P01) 0**·원장 정확성. 동일 P 변형은 레거시가 room 참조를
+  관리하지 않는 계약 사실에 따라 room 참조 NULL(복구 후보) 상태에서 어느 쪽이 이기든
+  ok×2 로 수렴함을 실측) — 전건 PASS, fixture 전건 삭제·anomaly 무증가 확인.
+- **rollback 왕복**: M9 rollback(진입점 2종 DROP → **레거시 020 구 본문 문자 그대로 복원**
+  (§22 #3 — prosrc 바이트 동일을 사전 diff 로 검증) → F11i DROP) 후 **@186 카탈로그·데이터
+  카운트 완전 일치(forward-only 예외 0 — M9 는 데이터 백필 없음)** + post_rollback
+  **3/3 PASS**(객체 소거·census 12/5 복원·레거시 prosrc md5 = pre-M9 스냅샷·정본 불변·
+  레거시 topup 기능 회귀).
+- **2차 forward**: 재적용(사전 게이트 재통과) → **17/17 재검증 PASS**.
+- **lint**: `supabase db lint --local --schema public --level error` → **오류 0**.
+- **fixture 잔여 0** · **정합 검사**: `sql_number_integrity.mjs` PASS(레거시 190·제외 15
+  불변 · supabase/sql 총 202 · 현재 정규 clean-install 187 · rollback 12 ·
+  `TS(M0)<…<TS(M14)<TS(M9)`) · `git diff --check` 통과.
+
+상태 = **`LOCAL_PASS`** — staging·production 원장 **미적용**(ledger 미채번), **운영 적용
+미실행**. 웹 callsite 전환 **C7(충전 원장 → F11 — `lib/toss/cashTopupFromPayment.ts` 만,
+`walletTopupActions.ts` 테스트 충전은 레거시 유지)·C8(구독 확정 → F12)** 은 M9 이후의
+코드 단계로 **미실행**이다. Batch A(§9.1)·B(§9.3)·C(§9.4)·D(§9.5) 실적·SHA 는 불변이다.
 
 ## 10. Batch A~F 계획표
 
