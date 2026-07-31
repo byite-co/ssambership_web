@@ -178,20 +178,22 @@ test("verifyApprovedOrderMatches: 전부 일치할 때만 ok", () => {
 
 // ── §4-3 중복 원장 0 ────────────────────────────────────────────────────────
 
-test("기승인 수렴이 반복돼도 원장은 1행뿐이다(idempotency_key=orderId 조기 반환)", async () => {
+test("기승인 수렴이 반복돼도 원장은 1행뿐이다(F11 duplicate 정본 — idempotency_key=orderId)", async () => {
   // 실제 원장 정본(recordCashTopupCore)을 그대로 물려 중복 기록 여부를 센다.
-  const rpcCalls: Array<{ userId: string; cents: number; key: string }> = [];
+  // W3(C7): 신규/duplicate 판정은 F11 반환의 duplicate 하나뿐이다(사전 SELECT 없음).
+  const rpcInserts: Array<{ userId: string; cents: number; key: string }> = [];
   const recovered: string[] = [];
   const ledgerKeys = new Set<string>();
 
   const recordPorts: RecordCashTopupPorts = {
     isAllowedPayKrw: (won) => won === PAY,
     cashKrwForPayKrw: () => PAY,
-    hasTopupForOrderId: async (id) => ledgerKeys.has(id),
-    recordTopupRpc: async (userId, cents, key) => {
-      rpcCalls.push({ userId, cents, key });
-      ledgerKeys.add(key); // UNIQUE(idempotency_key) 재현
-      return { error: false };
+    recordTopupV2: async (userId, cents, orderRef) => {
+      // UNIQUE(idempotency_key) 재현 — 기존 키면 INSERT 없이 duplicate:true(F11 계약).
+      if (ledgerKeys.has(orderRef)) return { ok: true, duplicate: true };
+      rpcInserts.push({ userId, cents, key: orderRef });
+      ledgerKeys.add(orderRef);
+      return { ok: true, duplicate: false };
     },
     recoverPastDue: async (userId) => { recovered.push(userId); },
   };
@@ -222,9 +224,9 @@ test("기승인 수렴이 반복돼도 원장은 1행뿐이다(idempotency_key=o
     assert.equal(again.ok && again.duplicate, true, `재시도 ${i + 1} duplicate`);
   }
 
-  assert.equal(rpcCalls.length, 1, "원장 INSERT 는 정확히 1회여야 한다(중복 원장 0)");
-  assert.equal(rpcCalls[0]?.key, ORDER, "idempotency_key 는 orderId 계약");
-  assert.equal(rpcCalls[0]?.userId, USER);
+  assert.equal(rpcInserts.length, 1, "원장 INSERT 는 정확히 1회여야 한다(중복 원장 0)");
+  assert.equal(rpcInserts[0]?.key, ORDER, "idempotency_key 는 orderId 계약(p_order_ref 원문)");
+  assert.equal(rpcInserts[0]?.userId, USER);
   assert.equal(ledgerKeys.size, 1);
 });
 
@@ -236,8 +238,11 @@ test("past_due 복구는 신규 적립 성공 시 1회, duplicate 재호출에�
   const p: RecordCashTopupPorts = {
     isAllowedPayKrw: (won) => won === PAY,
     cashKrwForPayKrw: () => PAY,
-    hasTopupForOrderId: async (id) => ledgerKeys.has(id),
-    recordTopupRpc: async (_u, _c, key) => { ledgerKeys.add(key); return { error: false }; },
+    recordTopupV2: async (_u, _c, orderRef) => {
+      if (ledgerKeys.has(orderRef)) return { ok: true, duplicate: true };
+      ledgerKeys.add(orderRef);
+      return { ok: true, duplicate: false };
+    },
     recoverPastDue: async (userId) => { recovered.push(userId); },
   };
 
@@ -254,8 +259,7 @@ test("past_due 복구 실패는 적립 결과를 되돌리지 않는다(best-eff
   const p: RecordCashTopupPorts = {
     isAllowedPayKrw: (won) => won === PAY,
     cashKrwForPayKrw: () => PAY,
-    hasTopupForOrderId: async () => false,
-    recordTopupRpc: async () => ({ error: false }),
+    recordTopupV2: async () => ({ ok: true, duplicate: false }),
     recoverPastDue: async () => { throw new Error("복구 실패"); },
   };
   const r = await recordCashTopupCore(ORDER, PAY, p);
@@ -268,8 +272,7 @@ test("원장 RPC 실패는 ledger_failed 이고 복구를 호출하지 않는다
   const p: RecordCashTopupPorts = {
     isAllowedPayKrw: (won) => won === PAY,
     cashKrwForPayKrw: () => PAY,
-    hasTopupForOrderId: async () => false,
-    recordTopupRpc: async () => ({ error: true }),
+    recordTopupV2: async () => ({ ok: false, code: "" }),
     recoverPastDue: async (u) => { recovered.push(u); },
   };
   const r = await recordCashTopupCore(ORDER, PAY, p);

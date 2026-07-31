@@ -108,36 +108,55 @@ test("duplicate 재호출 → 원장 정본이 duplicate 반환, 이중 적립 �
   if (out.ok) assert.equal(out.duplicate, true);
 });
 
-// ── 원장 코어(webhook 회귀 — recordCashTopupFromTossOrder 의 판정 정본) ────────
+// ── 원장 코어(confirm·webhook 회귀 — S2-2 W3(C7): F11 record_cash_topup_v2 전환) ──
+//
+// W3 §4.1 계약: 신규/duplicate 판정은 F11 단일 호출의 `duplicate` 가 정본이다.
+// 사전 SELECT 포트(hasTopupForOrderId)는 타입에서 제거됐다 — 추정 경로 부활 금지.
 
 function topupPorts(over: Partial<RecordCashTopupPorts>, calls: { rpc: number; recover: number }): RecordCashTopupPorts {
   return {
     isAllowedPayKrw: (won) => won === 30_000,
     cashKrwForPayKrw: (won) => (won === 30_000 ? 30_000 : null),
-    hasTopupForOrderId: async () => false,
-    recordTopupRpc: async () => { calls.rpc++; return { error: false }; },
+    recordTopupV2: async () => { calls.rpc++; return { ok: true, duplicate: false }; },
     recoverPastDue: async () => { calls.recover++; },
     ...over,
   };
 }
 
-test("webhook 회귀: 신규 적립 → RPC 1회 + past_due 복구 정확히 1회", async () => {
+test("F11 신규 적립 → RPC 1회 + past_due 복구 정확히 1회 + orderRef=orderId 원문", async () => {
   const calls = { rpc: 0, recover: 0 };
-  const out = await recordCashTopupCore(ORDER, 30_000, topupPorts({}, calls));
+  let seen: { userId?: string; amountCents?: number; orderRef?: string } = {};
+  const out = await recordCashTopupCore(
+    ORDER,
+    30_000,
+    topupPorts({
+      recordTopupV2: async (userId, amountCents, orderRef) => {
+        calls.rpc++;
+        seen = { userId, amountCents, orderRef };
+        return { ok: true, duplicate: false };
+      },
+    }, calls),
+  );
   assert.deepEqual(out, { ok: true, duplicate: false, amount: 30_000, payAmount: 30_000, userId: USER });
   assert.equal(calls.rpc, 1);
   assert.equal(calls.recover, 1);
+  // p_order_ref 는 Toss orderId 원문 그대로 — 별도 멱등키 생성 금지(W3 §4.1).
+  assert.deepEqual(seen, { userId: USER, amountCents: 3_000_000, orderRef: ORDER });
 });
 
-test("webhook 회귀: duplicate(동일 orderId) → RPC 0·복구 0·이중 적립 0(기존 계약 유지)", async () => {
+test("F11 duplicate 재생 → 정상 멱등 성공(duplicate:true)·복구 0·사전 SELECT 없이 RPC 1회", async () => {
   const calls = { rpc: 0, recover: 0 };
-  const out = await recordCashTopupCore(ORDER, 30_000, topupPorts({ hasTopupForOrderId: async () => true }, calls));
+  const out = await recordCashTopupCore(
+    ORDER,
+    30_000,
+    topupPorts({ recordTopupV2: async () => { calls.rpc++; return { ok: true, duplicate: true }; } }, calls),
+  );
   assert.deepEqual(out, { ok: true, duplicate: true, amount: 30_000, payAmount: 30_000, userId: USER });
-  assert.equal(calls.rpc, 0);
+  assert.equal(calls.rpc, 1);
   assert.equal(calls.recover, 0);
 });
 
-test("webhook 회귀: 복구 실패(throw)는 적립 성공을 되돌리지 않는다(best-effort 유지)", async () => {
+test("복구 실패(throw)는 적립 성공을 되돌리지 않는다(best-effort 유지)", async () => {
   const calls = { rpc: 0, recover: 0 };
   const out = await recordCashTopupCore(
     ORDER,
@@ -150,14 +169,28 @@ test("webhook 회귀: 복구 실패(throw)는 적립 성공을 되돌리지 않�
   assert.equal(calls.recover, 1);
 });
 
-test("webhook 회귀: RPC 실패 → ledger_failed, 복구 미호출", async () => {
-  const calls = { rpc: 0, recover: 0 };
-  const out = await recordCashTopupCore(ORDER, 30_000, topupPorts({ recordTopupRpc: async () => { calls.rpc++; return { error: true }; } }, calls));
-  assert.deepEqual(out, { ok: false, code: "ledger_failed", message: "충전 기록에 실패했습니다." });
-  assert.equal(calls.recover, 0);
+test("F11 실패 코드 매핑: 성공 승격·코드 은폐 금지 + 복구 미호출", async () => {
+  const cases: Array<{ f11: string; code: string }> = [
+    { f11: "ORDER_REF_INVALID", code: "invalid_order" },
+    { f11: "ORDER_REF_OWNER_MISMATCH", code: "order_owner_mismatch" },
+    // LEDGER_FIELD_MISMATCH 는 그대로 노출한다(삼킴 금지 — W3 §4.1).
+    { f11: "LEDGER_FIELD_MISMATCH", code: "LEDGER_FIELD_MISMATCH" },
+    { f11: "", code: "ledger_failed" },
+  ];
+  for (const c of cases) {
+    const calls = { rpc: 0, recover: 0 };
+    const out = await recordCashTopupCore(
+      ORDER,
+      30_000,
+      topupPorts({ recordTopupV2: async () => { calls.rpc++; return { ok: false, code: c.f11 }; } }, calls),
+    );
+    assert.equal(out.ok, false, c.f11);
+    if (!out.ok) assert.equal(out.code, c.code, c.f11);
+    assert.equal(calls.recover, 0, c.f11);
+  }
 });
 
-test("원장 코어 입력 매핑: 비허용 금액·주문 형식 오류", async () => {
+test("원장 코어 입력 매핑: 비허용 금액·주문 형식 오류(F11 호출 0)", async () => {
   const calls = { rpc: 0, recover: 0 };
   const badPkg = await recordCashTopupCore(ORDER, 31_000, topupPorts({}, calls));
   assert.equal(badPkg.ok, false);
