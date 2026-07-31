@@ -105,7 +105,9 @@ export function ledgerBalanceAfter(row: Row): string {
 }
 
 export function ledgerOrderOrPaymentRef(row: Row): string {
+  // W1(C1): V5 `order_ref` 우선 — topup 행의 Toss 주문번호(계약 §6 V5, W3 가시화)
   const a = getStringField(row, [
+    "order_ref",
     "payment_id",
     "order_id",
     "ref_id",

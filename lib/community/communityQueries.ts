@@ -5,8 +5,19 @@ import {
   communityRowAuthorId,
   type AuthorModerationNotice,
 } from "@/lib/community/communityModerationVisibility";
+import { API_WEB_V1_SCHEMA } from "@/lib/apiWebV1/rpc";
 
 type Row = Record<string, unknown>;
+
+/**
+ * S2-2 전환 W1(C1): 게시판 글 읽기는 V1 `api_web_v1.community_posts_v1` 을 쓴다
+ * (계약 §6 V1 · §17 #6). 노출 조건(`deleted_at IS NULL` AND (`published` OR 본인 글))
+ * 은 view 소유 — 프로빙(firstReadableTable)·정렬 폴백(selectOrdered) 없이 정본
+ * `created_at` 로 정렬한다. 숏폼(`shortform_posts`) 경로는 V1 대상이 아니다(유지).
+ */
+function boardPostsView(supabase: SupabaseClient) {
+  return supabase.schema(API_WEB_V1_SCHEMA).from("community_posts_v1");
+}
 
 function fmt(err: PostgrestError | null): string | null {
   return err ? err.message : null;
@@ -66,15 +77,12 @@ export async function listBoardPosts(
   supabase: SupabaseClient,
   limit: number
 ): Promise<{ rows: Row[]; table: string | null; error: string | null }> {
-  const probe = await firstReadableTable(supabase, ["community_posts"] as const);
-  if (!probe.table) return { rows: [], table: null, error: probe.error };
-  const t = probe.table;
-  const res = await selectOrdered<Row>(async (orderBy) => {
-    let q = supabase.from(t).select("*");
-    if (orderBy) q = q.order(orderBy, { ascending: false });
-    return await q.limit(limit);
-  });
-  return { ...res, table: t, error: res.error };
+  const { data, error } = await boardPostsView(supabase)
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) return { rows: [], table: "api_web_v1.community_posts_v1", error: error.message };
+  return { rows: (data as Row[]) ?? [], table: "api_web_v1.community_posts_v1", error: null };
 }
 
 function rowTimestampMs(row: Row): number {
@@ -94,18 +102,13 @@ export async function loadMyCommunityBoardPosts(
   userId: string,
   limit: number
 ): Promise<{ rows: Row[]; error: string | null }> {
-  const probe = await firstReadableTable(supabase, ["community_posts"] as const);
-  if (!probe.table) return { rows: [], error: null };
-  const t = probe.table;
-  const res = await selectOrdered<Row>(async (orderBy) => {
-    let q = supabase.from(t).select("*").eq("author_id", userId);
-    if (orderBy) q = q.order(orderBy, { ascending: false });
-    return await q.limit(limit);
-  });
-  if (res.error && !/column|does not exist|order|schema cache/i.test(res.error)) {
-    return { rows: [], error: res.error };
-  }
-  return { rows: res.rows, error: null };
+  const { data, error } = await boardPostsView(supabase)
+    .select("*")
+    .eq("author_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) return { rows: [], error: error.message };
+  return { rows: (data as Row[]) ?? [], error: null };
 }
 
 /** 내 활동: 숏폼 — author_id 우선, 스키마에 따라 user_id 폴백 */
@@ -136,10 +139,9 @@ export async function loadMyShortformPosts(
 }
 
 export async function countMyCommunityBoardPosts(supabase: SupabaseClient, userId: string): Promise<number | null> {
-  const probe = await firstReadableTable(supabase, ["community_posts"] as const);
-  if (!probe.table) return null;
-  const t = probe.table;
-  const { count, error } = await supabase.from(t).select("*", { count: "exact", head: true }).eq("author_id", userId);
+  const { count, error } = await boardPostsView(supabase)
+    .select("*", { count: "exact", head: true })
+    .eq("author_id", userId);
   if (error) return null;
   return typeof count === "number" ? count : null;
 }
@@ -174,11 +176,9 @@ export async function getBoardPost(
   supabase: SupabaseClient,
   id: string
 ): Promise<{ row: Row | null; table: string | null; error: string | null }> {
-  const probe = await firstReadableTable(supabase, ["community_posts"] as const);
-  if (!probe.table) return { row: null, table: null, error: probe.error };
-  const { data, error } = await supabase.from(probe.table).select("*").eq("id", id).maybeSingle();
-  if (error) return { row: null, table: probe.table, error: error.message };
-  return { row: (data as Row) ?? null, table: probe.table, error: null };
+  const { data, error } = await boardPostsView(supabase).select("*").eq("id", id).maybeSingle();
+  if (error) return { row: null, table: "api_web_v1.community_posts_v1", error: error.message };
+  return { row: (data as Row) ?? null, table: "api_web_v1.community_posts_v1", error: null };
 }
 
 export function pickTitle(r: Row): string {

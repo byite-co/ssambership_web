@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getQnaApiSession } from "@/lib/qna/questionRoomApiAuth";
 import {
-  fetchWeeklyQuestionUsageWithFallback,
+  fetchWeeklyQuestionUsageSelf,
   weeklyUsageDisplayLimit,
   weeklyUsageToSnapshot,
 } from "@/lib/qna/weeklyQuestionUsage";
@@ -27,7 +27,7 @@ export async function GET(req: Request) {
     const usageMap: Record<string, ReturnType<typeof weeklyUsageToSnapshot>> = {};
     await Promise.all(
       ids.map(async (mid) => {
-        const { usage } = await fetchWeeklyQuestionUsageWithFallback(
+        const { usage } = await fetchWeeklyQuestionUsageSelf(
           session.supabase,
           session.user.id,
           mid
@@ -42,7 +42,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ ok: false, error: "mentorId가 필요합니다." }, { status: 400 });
   }
 
-  const { usage, error } = await fetchWeeklyQuestionUsageWithFallback(
+  const { usage, error } = await fetchWeeklyQuestionUsageSelf(
     session.supabase,
     session.user.id,
     mentorId

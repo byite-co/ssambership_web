@@ -17,7 +17,7 @@ import {
   loadMessageCountsByThreadId,
   loadQuestionRoomSubscriptionContext,
 } from "@/lib/qna/questionRoomStudentContext";
-import { fetchWeeklyQuestionUsageWithFallback } from "@/lib/qna/weeklyQuestionUsage";
+import { fetchWeeklyQuestionUsagePairParty } from "@/lib/qna/weeklyQuestionUsage";
 import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
 import {
   loadLastAttachmentByThreadId,
@@ -105,7 +105,7 @@ export default async function MentorQuestionThreadDetailPage(props: Props) {
   const [subscriptionContext, weeklyUsageResult] = studentId
     ? await Promise.all([
         loadQuestionRoomSubscriptionContext(supabase, studentId, currentRoom),
-        fetchWeeklyQuestionUsageWithFallback(supabase, studentId, user.id),
+        fetchWeeklyQuestionUsagePairParty(supabase, studentId, user.id),
       ])
     : [null, null];
   const studentWeeklyUsage = weeklyUsageResult?.usage ?? null;

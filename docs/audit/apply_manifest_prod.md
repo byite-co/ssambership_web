@@ -8,9 +8,9 @@
 ## 0. 상태·범위
 
 - 대상: fresh/clean 설치와 운영 배포의 적용 순서 정본.
-- staging 실적용 이력(권위 있음): `123 · 124 · 125 · 126 · 129` — `docs/audit/sql_apply_manifest.md` 하단 표.
+- **staging 실적용 이력의 상세 정본 = `docs/audit/sql_apply_manifest.md` 하단 적용 이력표**(132~183 등 이후 기록 누적). `123·124·125·126·129`는 당시(2026-07-19)의 역사적 checkpoint이며, 현재 전체 적용 이력을 열거한 목록이 아니다.
 - `supabase_migrations` 원장은 저장소 파일 번호와 드리프트가 크므로 **운영 정의가 우선**하고, 수동 적용은 원장에 가짜 행으로 기재하지 않는다.
-- **검증 부채:** 이 환경에는 `supabase` CLI가 없어 `supabase db reset` + 순차 적용의 **클린 DB 재현을 실행하지 못했다.** 이 부재는 코드·DRAFT 작성을 막는 HARD STOP이 아니다. 단, CLI 환경 확보 전에는 클린 DB 재현을 PASS로 기록하지 않는다(재현 명령은 §7).
+- **클린 DB 재현 검증 완료(2026-07-30, 후보 C 정본):** Supabase CLI 2.110.0 / PostgreSQL 17.6 환경에서 정규 적용 후보 **175개**를 §2~§4 순서로 전건 적용해 **175/175 성공**했다. 게이트 결과 G0·G1·G2_STRUCTURAL_REPLAY·G3·G4 PASS / G5 완료. 상세 결과·후보 이력은 §7. (구 "클린 DB 재현 미실행" 검증 부채는 이 검증으로 해소.)
 
 ## 1. 번들 폐기 (deprecated)
 
@@ -26,23 +26,39 @@
 2. 같은 숫자 접두어(중복) 및 의존 역전은 §4 예외표로 덮어쓴다.
 3. `NNNb_` 파일은 대응 `NNN` 직후에 보정으로 적용.
 4. 기존 적용 SQL은 수정·재번호하지 않는다. 보안·수렴 보정은 새 번호로만 추가.
-5. **DRAFT(`[DRAFT — DB 미적용]`)·one-off·기능플래그·지급 스택은 정규 순차 적용에서 제외**(§3).
-6. 수동 staging 적용은 성공 후에만 `sql_apply_manifest.md`에 기록.
+5. **inventory/reference-only 초안·one-off·감사/진단 SQL·운영 시드·지급 스택(게이트, `[DRAFT — DB 미적용]` 포함)은 정규 순차 적용에서 제외**(§3).
+6. **기능 플래그 OFF 는 런타임 기능 비활성화일 뿐, schema migration 제외 사유가 아니다.** 플래그 파일(예: `115`·`116`·`151`·`152`)의 스키마도 정규 clean-install 에 포함한다.
+7. **본 문서의 manifest 분류가 오래된 SQL 파일 헤더 문구보다 우선한다.** 예: `115`·`116` 헤더의 "라이브 미적용", `167`~`169` 헤더의 "초안·staging 미적용" 은 작성 당시의 역사 문구다. 기존 migration 불변 원칙에 따라 SQL 파일 자체는 수정하지 않으며, 현재 판정은 §3·§7 이 정본이다.
+8. 수동 staging 적용은 성공 후에만 `sql_apply_manifest.md`에 기록.
 
-## 3. 정규 적용 제외 (별도 게이트)
+## 3. 정규 적용 제외 (별도 게이트) — 총 15개 파일
+
+정규 clean-install 적용 후보 = `supabase/sql/*.sql` 전체 190개 중 아래 **15개**를 제외한 **175개**(2026-07-30 후보 C 검증 PASS — §7).
 
 | 분류 | 파일 | 사유 |
 |---|---|---|
-| DRAFT 미적용 | `105 106 107 108 109 110` (지급 스택 초안) | `[DRAFT — DB 미적용]`. 지급 스택 게이트(§5)에서만 취급 |
+| inventory/reference-only | `002_app_core_schema_draft.sql` | 인벤토리 초안 — 헤더가 "바로 적용하지 마세요"인 참고용 파일. 실행 대상 아님(보존). 최초 178개 실행 실측에서 002 중복 정의 실패의 원인(§7) |
 | one-off 정리 | `071_individual_question_test_data_cleanup.sql` | 마이그레이션 아님. 운영/클린 적용 전 별도 승인 |
 | Storage 감사 | `039_storage_buckets_private_audit.sql` | 점검 SQL(버킷 private 확인). 데이터 변경 아님 |
-| 지급 스택 | `105 106 107 108 109 110 111 114` | 내부지갑 적립 모델·자금 코드 승인·독립 2세션 검증 전 운영 적용 금지(§5) |
-| 예약(미생성) | `127 128 130 131` | §6 예약번호 — 파일 생성 전까지 순서에 없음 |
+| READ-ONLY 진단 | `146_p2_1_avatar_document_crossref_diagnostic.sql` | 진단 전용(DDL·DML 없음) — 적용 대상 아님(§146 표 "미적용(진단)") |
+| 지급 스택 게이트 | `105 106 107 108 109 110 111 114` (8개, `105`~`110`은 `[DRAFT — DB 미적용]`) | 내부지갑 적립 모델·자금 코드 승인·독립 2세션 검증 전 운영 적용 금지(§5) |
+| 지급 게이트 후속 | `153_p2_25_pay_due_payouts_convergence.sql` | 지급 게이트로 제외된 `105·106·107·109·110·111·114`를 필수 선행으로 요구하는 staging 수렴 파일. 지급 스택 승인 전에는 같은 게이트에 묶어 clean-install 제외(§5) |
+| 지급 게이트 후속 | `156_p2_25_payout_scheduler_foundation.sql` | `153`과 지급 객체를 필수 선행으로 요구하는 scheduler 기반 파일. 동일 게이트(§5) |
+| 운영 시드 | `184_seed_additional_admin.sql` | 특정 운영자 계정 시드(멱등 one-off). 스키마 migration 아님 — 환경별 별도 승인·실행 |
+
+> **참고(파일 수 집계 제외 — 파일 자체가 없음):** `127`(예약 미생성) · `172`(결번)는 실제 SQL 파일이 아니므로 위 제외 **15개** 집계에 포함되지 않는다(§6 예약번호 — 파일이 없어 순서에도 없음). 구 예약 `128·130·131`은 파일 생성·적용됨(정규 포함). 정본 산식: **실제 SQL 파일 190개 − 실제 제외 파일 15개 = 정규 적용 파일 175개.**
+
+**정규 포함 명시(분류 확정 2026-07-30):**
+
+- `115_account_deletion.sql` · `116_user_blocks.sql` — **정규 clean-install 포함.** 기능 플래그 파일이지만 §2 원칙 6에 따라 스키마는 포함한다. 근거: staging migration 원장 `20260704135803 / 115_account_deletion` · `20260704135524 / 116_user_blocks`, 현 staging 카탈로그에 `public.user_deletion_log` · `public.anonymize_user_for_deletion(uuid,text)` · `public.user_blocks` 실존, `154` 이후 account-deletion migration 이 115 의 함수·객체를 필수 선행으로 사용.
+- `167_iq_attachment_unique_question_storage_path.sql` · `168_iq_attachment_register_rpc_idempotent.sql` · `169_iq_attachment_storage_delete_policy.sql` — **정규 clean-install 포함.** 현재 staging historical baseline 에 세 파일과 동일한 객체 효과가 존재하며, fresh install 수렴을 위해 포함한다(정확한 파일↔원장 매핑은 확인되지 않았다 — 상세 근거는 `sql_apply_manifest.md`).
+- 위 5개 파일 헤더의 "라이브 미적용"·"초안·staging 미적용" 문구보다 본 분류가 우선한다(§2 원칙 7).
 
 ## 4. 순서 예외표 (숫자순 위반·의존)
 
 | 파일 | 규칙 |
 |---|---|
+| **시작 순서(고정)** | `001` → `002_p0_subscriptions_questions_draft` → `003_p0_custom_request_draft` → `002_custom_request_orders_status` → 이후 정본 순서(숫자순+본 표). `002_app_core_schema_draft` 는 실행하지 않는다(§3 inventory/reference-only) |
 | `002_custom_request_orders_status.sql` | `003_p0_custom_request_draft.sql` 이후 |
 | `033_p1_admin_reviews_moderation.sql` | `042_reviews_system.sql` 이후 |
 | `033_question_threads_topic.sql`, `034_mentor_favorites.sql`, `032_*`, `039_*` 중복 | `sql_apply_manifest.md` §숫자 접두어 중복 표 기준 |
@@ -54,6 +70,7 @@
 
 확정 적용 순서: **`105 → 106 → 107 → 109 → 110 → 111 → 114 → 108`**.
 
+- **게이트 범위 = `105~111 · 114 · 153 · 156`.** `153`(P2-25 지급 수렴)·`156`(P2-25 scheduler 기반)은 게이트로 제외된 지급 객체를 필수 선행으로 요구하므로 같은 게이트에 묶어 정규 clean-install 에서 제외한다(§3). 게이트 승인 시 위 확정 순서 적용 후 `153 → 156` 순으로 적용한다.
 - 현행 확정 모델 = **즉시 내부지갑 적립**(실은행 송금 아님).
 - 자금 코드 승인 + staging fixture + 독립 2세션 경쟁 검증 전 **운영 적용 금지**.
 - P2-25 필수 교정(주문/settlement ID 분리, `(source_type,source_id)` 전역 UNIQUE, `108` ON CONFLICT/RETURNING, 실 INSERT 행만 합산, 중복 자동삭제 금지·대사)과 함께만 확정.
@@ -152,27 +169,105 @@
 - **최종 판정**: **P1-8A = `IMPLEMENTED_WITH_CONCURRENCY_DEBT`** (Storage OR-우회 0, 직접 write 우회 서버 트리거로 봉쇄, pending-refund 연동 완료; 독립 2세션 first-answered/한도 경쟁 실측만 부채). **P1-13 = `IMPLEMENTED_WITH_CONCURRENCY_DEBT`** (구조적 잠금: pair advisory lock + uq_subscriptions_pair UNIQUE/ON CONFLICT 검증; 독립 2세션 실측만 부채). Part 5 dead-code 제거로 eslint warning 0.
 - 잔여 노트: P1-13 가격은 mentor_plans 정본만 사용(미가격 플랜 멘토 명시적 오류=배포 전 검증). pending-refund 는 refunds.subscription_id+request_type 기준(P1-13 billing-event 정본 확정 시 last_billing_event_id helper 로 교체 가능). direct 정책·open→pending 최종 제거 = P1-8B(WAITING_EXTERNAL_APP).
 
-## 7. 클린 DB 재현 (검증 부채 — 미실행)
+## 7. 클린 DB 재현 검증 (2026-07-30 — 후보 C PASS)
 
-`supabase` CLI 부재로 아래를 **실행하지 못함**. CLI 환경 확보 시 실행하고, 그 전에는 PASS로 기록하지 않는다.
+검증 환경: **Supabase CLI 2.110.0 / PostgreSQL 17.6** (fresh local stack, `supabase db reset` 후 순차 적용).
 
-```
-# CLI 환경에서:
-supabase db reset                       # 로컬 스택 초기화
-# 본 문서 §2~§4 순서로 supabase/sql/*.sql 를 numeric+예외표 순 적용
-#   (DRAFT·one-off·지급스택·감사 SQL 제외)
-# 클린설치 리뷰 정본 = 교정 042 → 123 → 126
-# 적용 후 docs/audit/db_permission_audit_queries.sql 실행 →
-#   docs/audit/db_expected_state.md 대조
-```
+- 정규 적용 후보: **175개** (§3 제외 15개를 뺀 `supabase/sql/*.sql`. 목록 산정·포함 근거는 `sql_apply_manifest.md` §clean-install 적용 집합).
+- 결과: **175/175 적용 성공.** 마지막 파일 = `183_p1_10_account_deletion_verify_object_owners.sql`.
+- 게이트: **G0·G1·G2_STRUCTURAL_REPLAY·G3·G4 PASS / G5 완료.**
+- 후보 이력: **최초 178개 실행**(후보 B 아님, `002_app_core_schema_draft`·`153`·`156` 포함)은 #3 `002` 중복 정의 오류로 실패 → **후보 B 177개**(`002_app_core_schema_draft`만 제외)는 `153`의 지급 객체 부재로 실패(`167`~`169` 미도달) → **후보 C 175개**(`002_app_core_schema_draft`·`153`·`156` 제외) **175/175 전건 PASS = 정본**(`167`~`169` 실제 도달·적용 성공). 상세는 `sql_apply_manifest.md` §후보 검증 이력.
+- 적용 후 대조(운영·재검증 시): `docs/audit/db_permission_audit_queries.sql` 실행 → `docs/audit/db_expected_state.md` 대조. 클린설치 리뷰 정본 = 교정 `042` → `123` → `126`(§4).
+- 판정: `MANIFEST_POLICY_CLASSIFICATION_DEBT: RESOLVED` · `SAFE_TEST_ENV_UNAVAILABLE: RESOLVED` · `Data API baseline: RESOLVED` · `G0~G5: PASS` · `READY_FOR_S2_2_GO: YES` — 단 `READY_FOR_S2_2_GO`는 M0~M17 구현 브랜치·migration version 배정에 착수할 수 있다는 의미이며, **운영 DB 적용 승인이나 제품 배포 완료를 의미하지 않는다.**
 
-## 8. 001–129 정본 순서 (요약)
+## 8. 001–183 정본 순서 (요약)
 
-- **001–085:** `docs/audit/sql_apply_manifest.md`의 「전체 SQL 파일 목록」·「Fresh DB 권장 적용 흐름」·「숫자 접두어 중복」표를 그대로 사용(파일별 의존 주석 포함). 본 문서 §3·§4 예외를 우선 적용.
+- **001–085:** 시작 순서(고정, §4): `001` → `002_p0_subscriptions_questions_draft` → `003_p0_custom_request_draft` → `002_custom_request_orders_status` → 이후 정본 순서. `002_app_core_schema_draft` 는 실행하지 않는다(§3). 나머지는 `docs/audit/sql_apply_manifest.md`의 「전체 SQL 파일 목록」·「Fresh DB 권장 적용 흐름」·「숫자 접두어 중복」표를 그대로 사용(파일별 의존 주석 포함). 본 문서 §3·§4 예외를 우선 적용. 039 감사·071 one-off 제외.
 - **086–104:** 숫자순. 금융/에스크로/개별질문/구독 후속(086 정산항목, 088 주문상태전이 RPC, 090 맞춤의뢰 5%, 091 개별질문 환불 래퍼, 094 IQ 가격, 095 구독 15%, 096 IQ 15%, 098 주간사용량 생성시집계, 099 구독환불 settlement-paid 가드, 101 댓글 관리자 모더레이션, 102 계정상태, 103 멘토 활동정지, 104 경고). one-off·DRAFT 없음.
-- **105–114:** 지급 스택(§5 게이트) + 정규(112·113). 순차 적용 대상에서 지급 스택 제외.
-- **115–121:** 숫자순(115 계정삭제, 116 차단, 117 첨부 v2 백필, 118 이미지 ref 백필, 119 users role 가드, 120 관리자 콘솔, 121 멘토 플랜 밴드 클램프).
+- **105–114:** 지급 스택(§5 게이트 = `105~111·114`) 제외 + 정규(112·113)만 순차 적용.
+- **115–121:** 숫자순 **전건 정규 포함**(115 계정삭제, 116 차단 — 기능 플래그와 무관하게 스키마 포함(§3), 117 첨부 v2 백필, 118 이미지 ref 백필, 119 users role 가드, 120 관리자 콘솔, 121 멘토 플랜 밴드 클램프).
 - **122–126, 129:** staging 수동 적용 완료(권위 = `sql_apply_manifest.md` 하단 표). 클린설치 시 122 → (교정 042) → 123 → 124 → 125 → 126 → 129 순, 리뷰 정본 수렴 규칙 준수.
-- **127·128·130·131:** 예약(미생성).
+- **127:** 예약(미생성) · **172:** 결번. 구 예약 `128·130·131`은 생성·적용됨(§6 해소 경과 참조) — 정규 순번으로 포함.
+- **130–183:** 숫자순. 단 §3 제외 반영 — `146`(READ-ONLY 진단)·`153`·`156`(지급 게이트 후속) 제외, `167~169` 포함(§3), 클린설치 시 `132`(outbox) 는 `136` 이전 선행(§6). 정규 적용의 마지막 파일 = `183_p1_10_account_deletion_verify_object_owners.sql`. `184`는 운영 시드로 정규 집합 제외(§3).
 
 > 이 문서는 순서·정책의 정본이고, 파일별 1줄 설명·중복 근거의 상세는 `sql_apply_manifest.md`가 보조한다. 두 문서가 다르면 **순서·정책은 본 문서**, **파일별 상세는 sql_apply_manifest.md**가 정본이다.
+
+## 9. S2 신규 migration 물리 정책 (2026-07-30 오너 확정 — 요약)
+
+> 정본 상세: `docs/audit/s2_2_migration_physical_policy_20260730.md`. 기록 양식: `sql_apply_manifest.md` 「S2 환경별 적용 대조표·rollback 인벤토리」. 이 절은 운영 적용 관점의 요약이다.
+
+- **forward 정본 경로:** `supabase/sql/<FILE_TS>_<STEM>.sql` — UTC timestamp 파일명(계약 §20.1). timestamp는 사람이 임의 입력하지 않고 `supabase migration new <stem>`으로 채번한 뒤 파일을 즉시 `supabase/sql/`로 이동한다(`supabase/migrations/` 잔존·이중 보존 금지, 한 건씩 순차 생성). S2 신규분에 기존 숫자 번호 접두어를 쓰지 않는다.
+- **stable migration identity 1:1 (구 「숫자 version 3자 동일성」 폐기):** 불변 식별자는 ① repository file basename ② ledger `name` ③ repository file SHA-256. `apply_migration`의 `name`은 파일 basename에서 `.sql`만 제거한 값과 정확히 같아야 하고, 동일 환경에서 하나의 ledger name은 정확히 한 행에만 대응한다. ledger `version`은 **환경별 서버 자동 채번값으로 수용**한다 — 파일 timestamp와 다를 수 있고, staging·production 간 달라도 정상. 파일명·SHA-256은 최초 커밋 이후 불변(적용 후 개명 금지).
+- **적용 전 확인:** 적용 직전 동일 ledger name 존재 여부를 확인하고, 이미 존재하면 자동 재적용하지 않고 중단한다. migration repair·원장 PATCH·수동 원장 행 삽입·삭제 금지, 운영 DB 임의 `execute_sql` DDL 금지. 위반·불일치 발생 시 `MIGRATION_HISTORY_DRIFT` 즉시 재활성(조건 8종 = 정책 문서 §4).
+- **rollback 정본 경로:** `supabase/rollback/<FORWARD_FILE_TS>_<STEM>_rollback.sql` — forward clean-install과 구조적으로 분리하며 **정규 clean-install 파일 수에 포함하지 않는다**(`supabase/sql/*.sql`·미래 재귀 glob에 포함 금지). 실행은 장애 시 오너 승인 후 파일 1건을 명시적으로 골라 `apply_migration`으로 수행하고, 원장에는 **새 행으로 append**한다(forward 원장 행 삭제·수정·reverted 처리 금지, Management API의 선택적 `rollback` 필드 미사용). M10은 상태 0 checkpoint — rollback 파일 없음.
+- **정규 산식(S2 완료 시):** 기존 baseline **175** + S2 forward **16**(M0·M1·M4~M17, M2·M3 retired) = **191**. S2 rollback **15**개·D-API-W·D-API-A·C1~C11은 SQL 적용 파일 수에 불포함. 기존 175개 순서·제외 15개·후보 C 판정(§7)은 변경하지 않는다.
+- **편입 시점:** Batch별 로컬 PG17 검증 PASS 후 해당 forward만 본 문서에 편입한다. 나머지 미생성 S2 forward(**M10~M12·M16, 총 4개**)는 **미생성** 상태이며, M0·M15는 Batch A `LOCAL_PASS`로 §9.1에, M1·M13·M4는 Batch B `LOCAL_PASS`로 §9.2에, M5·M6·M7은 Batch C `LOCAL_PASS`로 §9.3에, M17·M8·M14는 Batch D `LOCAL_PASS`로 §9.4에, M9는 Batch E `LOCAL_PASS`로 §9.5에 편입 완료됐다. M2·M3는 retired다. 실제 timestamp·SHA-256·ledger version은 생성·적용 후에만 기록한다(invent 금지).
+
+### 9.1 Batch A 편입 (2026-07-30 KST — 로컬 PG17 검증 PASS, 원격 미적용)
+
+정규 clean-install 순서: §2~§4의 기존 175개(마지막 `183_p1_10_account_deletion_verify_object_owners.sql`) 뒤에 아래 S2 forward 2건을 timestamp 순으로 이어 적용한다.
+
+| 순서 | 파일 | SHA-256 | 로컬 검증 |
+|---:|---|---|---|
+| 176 | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` (M0) | `3bb2edd97b921900f93d460f206add873c80b6cbcf1782844b6c5e835184d94c` | PG17.6 forward·rollback·reapply PASS |
+| 177 | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` (M15) | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | PG17.6 forward·rollback·reapply PASS |
+
+- Batch A 편입 시점의 정규 clean-install: 기존 baseline 175 + Batch A forward 2 = 177 (2026-07-30 로컬 재현: 177/177 적용 성공 + Batch A 검증기 38/38 PASS + rollback 왕복·재적용 재검증 PASS). **현행 정규 clean-install 은 Batch B 편입(§9.2)의 180 이다.**
+- **최종 목표(S2 완주 시): 기존 baseline 175 + S2 forward 16 = 191.** 현재값과 혼동하지 않는다.
+- rollback 2건(`supabase/rollback/20260729211929_..._rollback.sql`·`20260729211941_..._rollback.sql`)은 **정규 적용 수에서 제외**한다(§9 rollback 정본 경로 규칙).
+- 본 편입은 **로컬 검증 실적**이다 — staging·production 원장 적용 실적이 아니며, 원격 적용·ledger 기록은 오너 승인 후 `sql_apply_manifest.md` 대조표에 환경별로 기록한다.
+
+### 9.2 Batch B 편입 (2026-07-30 KST — 로컬 PG17 검증 PASS, 원격 미적용)
+
+정규 clean-install 순서: §9.1의 177개(마지막 `20260729211941_weekly_usage_pair_party_guard.sql`) 뒤에 아래 S2 forward 3건을 timestamp 순으로 이어 적용한다.
+
+| 순서 | 파일 | SHA-256 | 로컬 검증 |
+|---:|---|---|---|
+| 178 | `supabase/sql/20260730095435_api_web_v1_schemas.sql` (M1) | `97e7f6c28442b96415753b8b8caace7c28d5d393ca57b8d79f2faf5d89de4912` | PG17.6 forward·rollback·reapply PASS |
+| 179 | `supabase/sql/20260730095438_comments_author_label_denormalize.sql` (M13) | `4d035c88c17030a5df3574fc7dee7768bfd2809255a47ad087edf1c4676b94ac` | PG17.6 forward·rollback·reapply PASS (라벨 backfill 은 forward-only — §9.2 정책·계약 §22 #8) |
+| 180 | `supabase/sql/20260730095441_api_web_v1_read_views.sql` (M4) | `301f44beea6805dd143ae3a04ac282b52e905a3e123d865c09399b318a33637e` | PG17.6 forward·rollback·reapply PASS |
+
+- Batch B 편입 시점의 정규 clean-install: 기존 baseline 175 + Batch A 2 + Batch B 3 = 180 — **현행 정규 clean-install 은 Batch C 편입(§9.3)의 183 이다.** 당시 검증 실적: (2026-07-30 로컬 재현: fresh PG17.6 에서 177/177 적용 + Batch A 검증기 38/38 PASS 후 M1→M13→M4 순차 적용 = **180/180**, Batch B 검증기 `scripts/verify/s2_2_batch_b_verify.sql` forward 39/39 PASS → rollback M4→M13→M1 후 카탈로그 기준선 1,372행 완전 일치 + post_rollback 6/6 PASS → 재적용 후 39/39 재검증 PASS + `supabase db lint --local --schema public --level error` 오류 0 + fixture 잔여 0).
+- rollback 왕복의 유일한 데이터 차이 = **M13 라벨 backfill 정규화 값 유지**(계약 §22 #8 이 승인한 forward-only 보안 정정 예외 — 과거 클라이언트 제공 라벨은 복원하지 않음). 그 외 schema·컬럼·default·함수·트리거·View·ACL·행 수·비대상 데이터는 기준선과 완전 일치를 실측했다.
+- rollback 3건(`supabase/rollback/20260730095435_..._rollback.sql`·`20260730095438_..._rollback.sql`·`20260730095441_..._rollback.sql`)은 **정규 적용 수에서 제외**한다(§9 rollback 정본 경로 규칙).
+- 본 편입은 **로컬 검증 실적**이다(`LOCAL_PASS`) — staging·production 원장 적용 실적이 아니며(ledger version **미적용**), 운영 적용·Data API(Exposed schemas) 변경은 **미실행**이다. D-API-W 는 Batch B 이후 별도 플랫폼 단계다(계약 §20.6).
+
+### 9.3 Batch C 편입 (2026-07-30 KST — 로컬 PG17 검증 PASS, 원격 미적용)
+
+정규 clean-install 순서: §9.2의 180개(마지막 `20260730095441_api_web_v1_read_views.sql`) 뒤에 아래 S2 forward 3건을 timestamp 순으로 이어 적용한다.
+
+| 순서 | 파일 | SHA-256 | 로컬 검증 |
+|---:|---|---|---|
+| 181 | `supabase/sql/20260730105244_core_private_room_ensure.sql` (M5) | `47dd392b3b14f8c4cc9a62edb5ab257f61feeb0a766a2839f2f1d044e8da5e62` | PG17.6 forward·rollback·reapply PASS |
+| 182 | `supabase/sql/20260730105248_api_web_v1_self_rpc.sql` (M6) | `0066357d68dcb3ffcf2fb386ddd5ae1d05db88870146f71a780f0169ceb85a98` | PG17.6 forward·rollback·reapply PASS |
+| 183 | `supabase/sql/20260730105252_api_web_v1_community_rpc.sql` (M7) | `504dea03f6af15fc86a041a29fb4f0945b8245734204896dc059ed433770c80c` | PG17.6 forward·rollback·reapply PASS |
+
+- Batch C 편입 시점의 정규 clean-install: 기존 baseline 175 + Batch A 2 + Batch B 3 + Batch C 3 = 183 — **현행 정규 clean-install 은 Batch D 편입(§9.4)의 186 이다.** 당시 검증 실적: (2026-07-30 로컬 재현: fresh PG17.6 에서 177/177 + Batch A 검증기 38/38 + Batch B 3건 적용 후 M5→M6→M7 = **183/183**, Batch C 검증기 `scripts/verify/s2_2_batch_c_verify.sql` forward **23/23 PASS** + 2세션 동시성 **T-CONC-01·T-CONC-06 PASS** → rollback M7→M6→M5 후 **@180 카탈로그·데이터 카운트 완전 일치(forward-only 예외 0)** + post_rollback 3/3 PASS → 재적용 후 23/23 재검증 PASS + `supabase db lint --local --schema public --level error` 오류 0 + fixture 잔여 0).
+- rollback 3건(`supabase/rollback/20260730105244_..._rollback.sql`·`20260730105248_..._rollback.sql`·`20260730105252_..._rollback.sql`)은 **정규 적용 수에서 제외**한다(§9 rollback 정본 경로 규칙).
+- 본 편입은 **로컬 검증 실적**(`LOCAL_PASS`)이다 — staging·production 원장 **미적용**(ledger version 미채번), 운영 적용·Data API 변경 **미실행**. 상세 역기입: 물리 정책 §9.4.
+
+### 9.4 Batch D 편입 (2026-07-30 KST — 로컬 PG17 검증 PASS, 원격 미적용)
+
+정규 clean-install 순서: §9.3의 183개(마지막 `20260730105252_api_web_v1_community_rpc.sql`) 뒤에 아래 S2 forward 3건을 timestamp 순으로 이어 적용한다.
+
+| 순서 | 파일 | SHA-256 | 로컬 검증 |
+|---:|---|---|---|
+| 184 | `supabase/sql/20260730112525_api_app_v1_surface.sql` (M17) | `6b6134df59430e14dbb88a0160740bc846523fe3273ccdb4b262b51efb142637` | PG17.6 forward·rollback·reapply PASS |
+| 185 | `supabase/sql/20260730112528_api_web_v1_mentor_rpc.sql` (M8) | `bd2c2ce5b23edb4ca5247ff63a694323f7ba2912d778d628336546490ffb0ca2` | PG17.6 forward·rollback·reapply PASS |
+| 186 | `supabase/sql/20260730112531_api_web_v1_payout_account_rpc.sql` (M14) | `b78ae36e58f90e26e2d795f687c93d06f0ee873f9b901919a3a99783780bfd07` | PG17.6 forward·rollback·reapply PASS |
+
+- Batch D 편입 시점의 정규 clean-install: 기존 baseline 175 + Batch A 2 + Batch B 3 + Batch C 3 + Batch D 3 = 186 — **현행 정규 clean-install 은 Batch E 편입(§9.5)의 187 이다.** 당시 검증 실적: (2026-07-30 로컬 재현: fresh PG17.6 에서 177/177 + Batch A 검증기 38/38 + Batch B·C 6건 = 183 위에 M17→M8→M14 = **186/186**, Batch D 검증기 `scripts/verify/s2_2_batch_d_verify.sql` forward **13/13 PASS**(T-CON-07·08 웹·앱 실객체 대조 포함) → rollback M14→M8→M17 후 **@183 카탈로그·데이터 완전 일치(forward-only 예외 0)** + post_rollback 3/3 → 재적용 13/13 + lint 오류 0 + fixture 잔여 0).
+- rollback 3건은 **정규 적용 수에서 제외**(§9 규칙). **D-API-A(Exposed schemas 추가)는 플랫폼 단계로 미실행** — 앱 계약 §3.1 순서(M17 → 적용 직후 게이트 → D-API-A → 앱 전환 → Gate 4 → M16)의 SQL 구간까지만 완료다.
+- 본 편입은 **로컬 검증 실적**(`LOCAL_PASS`) — staging·production 원장 **미적용**, 운영 적용·Data API 변경 **미실행**. 상세 역기입: 물리 정책 §9.5.
+
+### 9.5 Batch E 편입 (2026-07-30 KST — 로컬 PG17 검증 PASS, 원격 미적용)
+
+정규 clean-install 순서: §9.4의 186개(마지막 `20260730112531_api_web_v1_payout_account_rpc.sql`) 뒤에 아래 S2 forward 1건을 이어 적용한다.
+
+| 순서 | 파일 | SHA-256 | 로컬 검증 |
+|---:|---|---|---|
+| 187 | `supabase/sql/20260730120103_money_rpc.sql` (M9) | `3821e05f3a0c8787af180c34bbdafbcfb866a61cc3b25cbf6534783522e115d5` | PG17.6 forward·rollback·reapply PASS |
+
+- **현재 정규 clean-install: 기존 baseline 175 + Batch A 2 + Batch B 3 + Batch C 3 + Batch D 3 + Batch E 1 = 187** (2026-07-30 로컬 재현: fresh PG17.6 에서 177/177 + Batch A 검증기 38/38 + Batch B·C·D 9건 = 186 위에 M9 = **187/187**, Batch E 검증기 `scripts/verify/s2_2_batch_e_verify.sql` forward **17/17 PASS**(T-TOP-01~06 · T-FIN-01~04 · T-REP-A~H · T-CONC-09 등가) + 2세션 동시성 **T-CONC-02·03·04·08 + T-TOP-04 병행분 PASS**(T-CONC-04 잠금 대기 1,477ms·확정 금액 = 잠금 시점 값 / T-CONC-08 교착 40P01 0건) → rollback 후 **@186 카탈로그·데이터 완전 일치(forward-only 예외 0)** + post_rollback 3/3(레거시 020 구 본문 md5 복원 실측) → 재적용 17/17 + lint 오류 0 + fixture 잔여 0).
+- rollback 1건(`supabase/rollback/20260730120103_money_rpc_rollback.sql` — **레거시 `record_cash_topup` 020 구 본문 문자 그대로 복원 포함**, §22 #3)은 **정규 적용 수에서 제외**(§9 규칙).
+- 본 편입은 **로컬 검증 실적**(`LOCAL_PASS`) — staging·production 원장 **미적용**, 운영 적용 **미실행**. 웹 callsite 전환 **C7·C8 은 M9 이후 코드 단계로 미실행**(C7 은 `lib/toss/cashTopupFromPayment.ts` 만 — `walletTopupActions.ts` 테스트 충전은 레거시 유지, rev 8 A-6 정정 2). 상세 역기입: 물리 정책 §9.6.

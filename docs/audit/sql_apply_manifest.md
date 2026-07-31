@@ -4,21 +4,23 @@
 
 이 문서는 `supabase/sql/`의 현재 SQL 파일 목록, 숫자 접두어 중복, fresh DB 기준 권장 적용 순서를 정리한다. 이미 운영 DB에 적용된 마이그레이션은 재번호하지 않는다. 중복 번호는 이력 보존 대상으로 취급하고, 미적용 파일만 팀 합의 후 다음 빈 번호로 복제/정리한다.
 
-현재 다음 신규 번호: `086`.
+레거시 3자리 번호 체계의 다음 번호는 `185`이며(정본 최대 `183` · `184` 시드 존재 · 결번 `127`·`172` 미사용 유지) **S2 M0~M17에는 적용하지 않는다.** S2 신규 migration 은 물리 정책 정본(`docs/audit/s2_2_migration_physical_policy_20260730.md`)에 따라 UTC timestamp 파일명(`supabase/sql/<TS>_<STEM>.sql`)을 사용한다.
 
 ## 원칙
 
 - 기존 적용 SQL 파일은 수정하거나 재번호하지 않는다.
-- 보안 보정은 항상 새 번호 파일로 추가한다.
+- 레거시 보정은 새 3자리 번호 파일로 추가한다. S2 M0~M17 은 물리 정책 정본에 따라 UTC timestamp 파일을 사용하며 3자리 번호를 쓰지 않는다.
 - 같은 숫자 접두어 파일이 있으면 파일명과 의존 주석을 함께 보고 적용 순서를 결정한다.
 - `073`, `073b`처럼 뒤늦은 실DB 드리프트 보정 파일은 정규 번호 뒤에 이어 적용된 보정으로 간주한다.
 - `071_individual_question_test_data_cleanup.sql`은 one-off 정리 스크립트로, 일반 fresh DB 마이그레이션 필수 목록과 분리한다.
+- **manifest 의 명시 분류가 오래된 SQL 파일 헤더 문구보다 우선한다.** 예: `115`·`116` 헤더의 "라이브 미적용", `167`~`169` 헤더의 "초안·staging 미적용"은 작성 당시의 역사 문구다. 기존 migration 불변 원칙에 따라 SQL 파일은 수정하지 않으며, 현재 판정은 아래 「clean-install 적용 집합」과 `apply_manifest_prod.md` §3·§7 이 정본이다.
+- **기능 플래그 OFF 는 런타임 기능 비활성화일 뿐, schema migration 제외 사유가 아니다.**
 
 ## 숫자 접두어 중복
 
 | 번호 | 파일 | 판정/조치 |
 | --- | --- | --- |
-| `002` | `002_app_core_schema_draft.sql`, `002_p0_subscriptions_questions_draft.sql`, `002_custom_request_orders_status.sql` | 이미 존재하는 중복. 재번호 금지. fresh DB에서는 `001` 이후 core/qna를 먼저 보고, `002_custom_request_orders_status.sql`은 `003` 이후 적용 의존. |
+| `002` | `002_app_core_schema_draft.sql`, `002_p0_subscriptions_questions_draft.sql`, `002_custom_request_orders_status.sql` | 이미 존재하는 중복. 재번호 금지. `002_app_core_schema_draft.sql`은 **inventory/reference-only — 실행 대상 아님**(아래 「clean-install 적용 집합」). 실행 시작 순서(고정, 후보 C): `001` → `002_p0_subscriptions_questions_draft` → `003_p0_custom_request_draft` → `002_custom_request_orders_status` → 이후 정본 순서. |
 | `032` | `032_p0_weekly_question_usage.sql`, `032_p1_admin_content_reports.sql` | 이미 존재하는 중복. 각각 QnA usage와 admin content reports로 독립. 재번호 금지. |
 | `033` | `033_question_threads_topic.sql`, `033_p1_admin_reviews_moderation.sql` | 이미 존재하는 중복. reviews moderation은 `042_reviews_system.sql` 이후 의존. 재번호 금지. |
 | `034` | `034_mentor_favorites.sql`, `034_p1_admin_disputes_processing.sql` | 이미 존재하는 중복. favorites와 admin disputes로 독립. 재번호 금지. |
@@ -31,7 +33,7 @@
 아래는 파일명 숫자순을 기본으로 하되, 중복 번호와 의존 관계를 반영한 큰 흐름이다. 운영 DB 재실행 순서가 아니라 신규 환경 부트스트랩 검토용이다.
 
 1. Base auth/profile: `001_initial_auth_profile.sql`.
-2. Core/QnA base: `002_app_core_schema_draft.sql`, `002_p0_subscriptions_questions_draft.sql`.
+2. Core/QnA base: `002_p0_subscriptions_questions_draft.sql`. (`002_app_core_schema_draft.sql`은 inventory/reference-only — 실행하지 않는다. 최초 178개 실행 실측에서 002 중복 정의 실패의 원인 — 아래 「후보 검증 이력」.)
 3. Custom request base: `003_p0_custom_request_draft.sql` 이후 `002_custom_request_orders_status.sql`.
 4. Cash/disputes/community draft: `004_p0_cash_disputes_admin_draft.sql`.
 5. Public read and custom request hardening: `005`-`018`.
@@ -43,12 +45,44 @@
 11. Individual question escrow and cleanup: `070`; `071`은 one-off cleanup이므로 운영/fresh 적용 전 별도 승인 필요.
 12. Security hardening and C/D follow-ups: `072`-`085`. `073`/`073b`, `078`, `083`, `084`, `085`는 출시 전 보안 점검에서 특히 대조한다.
 
+## clean-install 적용 집합 (후보 C 정본 — 2026-07-30 검증 완료)
+
+> 검증 환경: **Supabase CLI 2.110.0 / PostgreSQL 17.6**. 결과: **175/175 적용 성공**, G0·G1·G2_STRUCTURAL_REPLAY·G3·G4 PASS / G5 완료. 마지막 파일 `183_p1_10_account_deletion_verify_object_owners.sql`. 순서·정책 정본은 `apply_manifest_prod.md` §2~§4·§7.
+
+**총 적용 대상 = 175개** — `supabase/sql/*.sql` 전체 190개 중 아래 **15개** 제외.
+
+| 제외 파일 | 분류 |
+|---|---|
+| `002_app_core_schema_draft.sql` | **inventory/reference-only — 실행 대상 아님**("바로 적용하지 마세요" 초안, 참고용 보존) |
+| `039_storage_buckets_private_audit.sql` | 점검(감사) SQL |
+| `071_individual_question_test_data_cleanup.sql` | one-off 정리 |
+| `105 106 107 108 109 110 111 114` (8개) | 지급 스택 게이트(`apply_manifest_prod.md` §5) |
+| `146_p2_1_avatar_document_crossref_diagnostic.sql` | READ-ONLY 진단 |
+| `153_p2_25_pay_due_payouts_convergence.sql` | **지급 게이트 종속 제외** — 게이트로 제외된 `105·106·107·109·110·111·114`를 필수 선행으로 요구 |
+| `156_p2_25_payout_scheduler_foundation.sql` | **지급 게이트 종속 제외** — `153`과 지급 객체를 필수 선행으로 요구 |
+| `184_seed_additional_admin.sql` | 운영 계정 시드(멱등 one-off) — 스키마 migration 아님, 환경별 별도 실행 |
+
+### 포함 확정 (2026-07-30 분류)
+
+- `115_account_deletion.sql` · `116_user_blocks.sql` — **clean-install 포함.** 근거: staging migration 원장 `20260704135803 / 115_account_deletion` · `20260704135524 / 116_user_blocks`, 현재 staging 카탈로그에 `public.user_deletion_log` · `public.anonymize_user_for_deletion(uuid,text)` · `public.user_blocks` 실존, `154` 이후 account-deletion migration 이 115 의 함수·객체를 필수 선행으로 사용. 기능 플래그 OFF 는 런타임 기능 비활성화일 뿐 스키마 제외 사유가 아니다(원칙). 두 파일 헤더의 "라이브 미적용"은 현재 상태와 맞지 않는 역사 문구이며, **본 manifest 판정이 헤더보다 우선한다**(SQL 파일은 수정하지 않는다).
+- `167_iq_attachment_unique_question_storage_path.sql` · `168_iq_attachment_register_rpc_idempotent.sql` · `169_iq_attachment_storage_delete_policy.sql` — **clean-install 포함(historical baseline 효과 수렴용).** 현재 staging 카탈로그 실측:
+  - `167` 효과: `individual_question_attachments` 에 UNIQUE `(question_id, storage_path)` — constraint `uq_iqa_question_storage_path` 실존.
+  - `168` 효과: `add_individual_question_attachment(uuid,text,text,text,uuid) RETURNS jsonb` · SECURITY DEFINER · ACL postgres·authenticated·service_role · btrim → party/path/message 검증 → ON CONFLICT 멱등 처리 — 파일 본문과 동일한 현재 정의.
+  - `169` 효과: `storage.objects` policy `iqa_storage_delete_unregistered_owner` — DELETE / authenticated · bucket + owner + party + 미등록 객체 조건.
+  - 단, **"167·168·169 파일이 해당 번호로 migration 원장에 적용됐다"고 단정하지 않는다 — 정확한 파일↔원장 매핑은 확인되지 않았다.** 현재 staging historical baseline 에 세 파일과 동일한 객체 효과가 존재하며, fresh install 수렴을 위해 세 파일을 포함한다. 세 파일 헤더의 "초안·staging 미적용"은 현재 카탈로그 기준 stale 한 역사 문구다(SQL 파일은 수정하지 않는다).
+
+### 후보 검증 이력 (2026-07-30)
+
+- **최초 178개 실행**(후보 B 아님 — 명명 전 최초 실측): `002_app_core_schema_draft`·`153`·`156` 포함. **#3 `002` 중복 정의 오류로 실패.**
+- **후보 B 177개**: `002_app_core_schema_draft`만 제외. `153`이 지급 게이트 제외 객체를 요구해 **지급 객체 부재로 실패.** `167`~`169`는 **미도달**(적용 시도 없음).
+- **후보 C 175개**: `002_app_core_schema_draft`·`153`·`156` 제외. **175/175 전건 PASS.** `167`~`169`는 실제 도달·적용 성공.
+
 ## 전체 SQL 파일 목록
 
 | 번호 | 중복 | 파일 | 설명 |
 | --- | --- | --- | --- |
 | 001 |  | `001_initial_auth_profile.sql` | Supabase SQL Editor에 붙여넣어 한 번에 실행하세요. (필요 시 팀에서 마이그레이션으로 옮깁니다.) |
-| 002 | yes | `002_app_core_schema_draft.sql` | [의존 순서] 이 파일은 001_initial_auth_profile.sql 이후 적용할 것 |
+| 002 | yes | `002_app_core_schema_draft.sql` | **inventory/reference-only — 실행 대상 아님**(2026-07-30 확정, 「clean-install 적용 집합」). 헤더의 [의존 순서] 문구는 역사 기록 |
 | 002 | yes | `002_custom_request_orders_status.sql` | [의존 순서] 이 파일은 003_p0_custom_request_draft.sql 이후 적용할 것 |
 | 002 | yes | `002_p0_subscriptions_questions_draft.sql` | [의존 순서] 이 파일은 001_initial_auth_profile.sql 이후 적용할 것 |
 | 003 |  | `003_p0_custom_request_draft.sql` | DRAFT P0 (003) — 맞춤의뢰(포스트·지원·주문) + 주문–결제 연결 + 납품/리비전/메시지/이벤트 |
@@ -205,3 +239,55 @@
 | 2026-07-26 | `182_p1_10_account_deletion_consent_locked_read.sql` (W5-e E3, md5 `76ca64ae8abb272c80527d25aea7e01f`) | ssambership-staging | Supabase MCP execute_sql 단일 배치 — 커밋 전문과 실행 의미 동일. 검증 T37~T39 는 별도 배치(판정 DO 블록이 PASS 도 예외 승격 → 전량 롤백) | 동의 스냅샷 FOR UPDATE 잠금 읽기 재정정 — A라인 정정의 정본 이식. **착수 근거(§2-3 실측)**: live `account_deletion_request_consented(uuid,integer,boolean,boolean,bigint)` prosrc 에 'for update' 부재(B본 후퇴 — 179 파일 머리 주석은 잠금 읽기를 주장하나 본문 미이행). 재정의: 동의 잔액을 `cash_wallets … FOR UPDATE` 로 읽어 스냅샷 기록, 그 외 본문은 B본(179)과 동일(잔액 0 → `v_consented := 0` 명시 기록 포함) · begin_locked 등 타 함수 변경 0 · ACL 재고정(service_role 전용). **T37** PASS: prosrc 'for update' 존재 · proacl 불변. **T38**(T27 재실행) PASS: 잔액 0 fixture → job pending · consented_balance_cents=0(NULL 아님)·forfeit_consent_at null. **T39**(T28b 재실행) PASS: topup 100 → 동의 100 박제(ok·consented=100) → topup 200(잔액 300) → begin_locked → `FORFEIT_CONSENT_STALE`(current_balance=300)·**pending 유지**. 종료 후 baseline 대조 **전 항목 일치**: auth.users 8 · jobs 1(canceled) · cash_ledger 6 · storage.objects 84 · fixture 잔여 0(w5e 계열 auth/ledger 0행). SQL 167~181 diff 0 · 172 결번 유지 · `ACCOUNT_DELETION_WORKER_ENABLED` 기본 false 불변 · worker/cron 실행 0 · d12hk2 무접촉(HEAD 7f25a2c… 확인만). ⚠ E4 동시성 C1~C3·E5 Auth 세션 폐기 실증은 `ENV_MISSING: SUPABASE_DB_URL·SUPABASE_URL·SUPABASE_SERVICE_ROLE_KEY·SUPABASE_ANON_KEY` 로 미결 — `CONCURRENCY_RUNTIME_NOT_VERIFIED` 존치 |
 | 2026-07-27 | `183_p1_10_account_deletion_verify_object_owners.sql` (W5-f F1, md5 `9c6f00b9820caa6b96fddcac71b8ea2d`) | ssambership-staging | Supabase MCP execute_sql 단일 배치 — 커밋 전문 그대로. 검증 T40~T43 은 별도 배치(T41 read-only·T42/T43 rollback) | OWNERSHIP_CONFLICT 감지 복원 — 181 최소반환의 의미 후퇴 정정(W5-e E2, 지시서 스펙 결함 판정). 신설 `account_deletion_verify_object_owners(p_user_id uuid, p_refs jsonb) returns table(bucket_id text, name text, owner_state text)` — 수집 ref 전건의 storage.objects 소유 상태를 `'target'/'other'/'none'` 3값의 **사실**로만 반환('other' 는 타인 owner 의 uid·값을 어떤 형태로도 반환·로그하지 않음 — OUT 3컬럼 고정). SECURITY DEFINER·`search_path=public`·storage.objects 스키마 한정·`owner_id = p_user_id::text`(181 동일 캐스팅)·p_refs 배열 상한 5,000 초과 예외·p_user_id null 예외·service_role 전용. **T40** PASS: anon·authenticated·PUBLIC EXECUTE false(proacl `{postgres=X/postgres,service_role=X/postgres}` — `=X` 엔트리 없음)·service_role true·secdef·반환 형상 `TABLE(bucket_id text, name text, owner_state text)`. **T41** PASS(read-only, `set local role service_role`): 최다 소유자(`4f51e7b1…`, 61객체) 소유 ref 2건 → `'target'` · null-owner ref 2건(individual-question-attachments — staging 5객체 전부 owner NULL) → `'none'` · 행 부재 ref → `'none'`(오탐 없음). **T42** PASS(rollback 배치): 타 uid(`…dead`) 소유 fixture 객체 1행을 storage.objects 에 심고 다른 대상 uid 로 검증 → `'other'` · OUT 컬럼 3개 고정(타인 uid 구조적 무노출) · rollback 후 잔여 0(storage.objects 84 불변). **T43** PASS: 5,001행 → `exceeds 5000` 예외. **분류 재배선(TS, 커밋 ea95653)**: 순수 `applyOwnerVerdicts`('other'→`FOREIGN_OWNER_MARKER`(비uuid 표지)·'none'→null·'target'→uid·미지 state 는 fail-closed throw) + `makeResolveObjectOwners` 가 181 소유 전수에 더해 수집 합집합(DB refs ∪ 인벤토리, 워커 refs 인자) 전건을 183 으로 배치 검증(500/배치 — 방어 상한의 1/10, staging 84객체 = 1배치). 분류: `'other'`→OWNERSHIP_CONFLICT(미커버 버킷과 동일 관문 — real-run 0·전이 0·record_error, 계약 테스트로 고정·record_error detail 에 owner 값 무노출)·`'none'`→현행 정상 삭제(null-owner 오탐 없음 고정)·`'target'`→정상 삭제. E2 박제 테스트("타인-owner 삭제 수렴")를 복원 계약으로 대체(사유: 183 도입으로 타인-owner 가 verdict 로 관측 가능). owner 귀속 수집(181)·UNATTRIBUTABLE 차단·buildDeletionPlan 4분류 무변경. 계약 테스트 266→**271 전건 PASS**. 종료 후 baseline 대조 **전 항목 일치**: auth.users 8 · jobs 1(canceled) · cash_ledger 6(양 키 0) · storage.objects 84 · fixture 잔여 0. SQL 167~182 diff 0(md5 4종 고정 재확인: 179 `17a79407…`·180 `c00e6f41…`·181 `1486cdcb…`·182 `76ca64ae…`) · 172 결번 유지 · `ACCOUNT_DELETION_WORKER_ENABLED` 기본 false 불변 · worker/cron 실행 0 · d12hk2 무접촉(7f25a2c… 확인만). ⚠ F2 planner 실왕복·F3 동시성 C1~C3·F4 Auth 세션 폐기 실증은 `ENV_MISSING: SUPABASE_DB_URL·SUPABASE_URL·SUPABASE_SERVICE_ROLE_KEY·SUPABASE_ANON_KEY` 로 미결 — `planner UNVERIFIED`·`CONCURRENCY_RUNTIME_NOT_VERIFIED` 존치 |
 | 2026-07-27 | **W5-f F2~F4 런타임 실증** (SQL 적용 없음 · 기록 전용 · 커밋: appSurfaceNoCommerce 이식성 정정 + `scripts/verify/w5f-concurrency.mjs` 신설 + 본 행) | ssambership-staging (`lbeqxarxothkmzqvpudy`) | 실클라이언트 런타임 — F2/F4 는 supabase-js(REST/Auth, service·anon 키), 베이스라인·잔여 대조는 MCP execute_sql(read-only). SQL DDL 0 | HEAD `6a4ff20…`(원격 일치 확인). **P0 win32 이식성 정정** — `lib/appSession/__contract__/appSurfaceNoCommerce.contract.test.ts` 의 경로 비교가 `path.join` 산출(win32 백슬래시)을 슬래시 리터럴로 매칭해 win32 로컬에서만 `compose page` 어서션이 실패하던 것을, `rel` 을 `split(sep).join('/')` 로 1회 정규화(어서션 문자열·대상·개수 불변, 테스트 추가/삭제/skip 0). **코드 회귀 아님**(대상 파일 `app/app/community/shortform/new/page.tsx` 실존) — 감사자 Linux 독립 실측 3/3 PASS(지시서 v2 판정), win32 정정 후 `npm run test:contract` **271/271 전건 PASS**(N_start=N_end=271). 커밋 `e8f8f21`. **F2 planner 실왕복 PASS**: 최다 소유자(`4f51e7b1…`, 61객체)에 대해 read-only planner 를 service-role supabase-js 로 1회 실행(정본 순수 모듈 `accountDeletionPurgePlan`·`accountDeletionBucketCoverage` import + 어댑터 I/O 재현) — 181 `account_deletion_storage_owner_refs` `.rpc().range()` 페이지네이션 완주(1페이지·**61행**), 183 `account_deletion_verify_object_owners` 배치 호출(수집 합집합 60 ≤ 500 → **1배치**) verdict 집계 **target 60·other 0·none 0**(other 0 기대 충족), 계획 refs 61·owner_attributed 61·**ownership_conflicts 0·unattributable 0·uncovered_buckets []**, 예외 0(1847ms). **W5-e `planner UNVERIFIED` 해소.** 상태 전이·객체 삭제·real-run 0. **F4 Auth 세션 폐기 실증 PASS**: admin API fixture(email_confirm=true) → anon password grant 로그인(access·refresh 확보, 값 미출력) → service `account_deletion_revoke_sessions` → **sessions_deleted 1·refresh_tokens_deleted 1** → refresh_token grant 재시도 **HTTP 400 `refresh_token_not_found`**(핵심 어서션) → access_token 은 exp 전까지 서명상 유효: 무상태 검증기 PostgREST **200**(revoked-but-unexpired JWT 수용) vs GoTrue `/user` **403**(세션 폐기 반영) · exp 잔여 3599s(즉시 무효화 불가 — JWT 무상태, '세션 폐기'≠'기존 토큰 무효화'). fixture 2회(29158b28…·0ae7e91a…) 전량 hard-delete, 잔여 0. **F3 동시성 C1~C3 실증 PASS** — `scripts/verify/w5f-concurrency.mjs`(staging ref 가드·admin API fixture u1~u3·uid 한정 정리) 2세션 raw pg(node-postgres) 실행. 최초 `SUPABASE_DB_URL` credential 이 **28P01**(pooler `postgres.<ref>`@aws-1-ap-northeast-2.pooler:5432)로 차단됐다가 **오너 비밀번호 갱신 후 재시도** 성공(스크립트가 connectionString→manual-raw 순으로 해석 — `.env` 리터럴 비밀번호는 manual-raw 로 접속). **C1**(잠금 대기→STALE): B `begin_locked` 시작 `06:08:06.722Z` → A 미커밋 `record_cash_topup(+500)` 이 cash_wallets 행 잠금 보유하는 동안 B 대기(`lock_wait_observed=true`) → A commit `06:08:07.726Z` → B 반환 `06:08:07.739Z`(커밋 13ms 후·대기 1017ms) → `FORFEIT_CONSENT_STALE`·job **pending 유지**·잔액 **1500**. **C2**(locked 충전 거부): `record_cash_topup` → `ACCOUNT_DELETION_IN_PROGRESS`(151 adg_cash_ledger BEFORE INSERT 가드)·잔액 **0 불변**. **C3**(동시 요청): advisory xact lock(`account_deletion_self:{uid}` — 176 self 경로 직렬화 재현) → fulfilled 2·**unique_violations 0**·fresh(existing:false) 1·idempotent(existing:true) 1·**활성 job 정확히 1행**(175 부분 UNIQUE `uq_adj_active_user`). **`CONCURRENCY_RUNTIME_NOT_VERIFIED` 해소.** 종료 baseline 대조(F2·F3·F4 종료 후) **전 항목 일치**: auth.users 8·public.users 8·account_deletion_jobs 1(canceled)·cash_ledger 6(양 forfeit 키 0)·orphan wallets 0·storage.objects 84·fixture(w5f-%@example.invalid) 잔여 0(F4 관측 refresh_tokens 45→46 은 기존 세션의 조직적 토큰 rotation — orphan 0·w5f 연결 0, 본 세션 무관). SQL 167~183 diff 0(md5 4종 고정 재확인: 179 `17a79407…`·180 `c00e6f41…`·181 `1486cdcb…`·182 `76ca64ae…`·183 `9c6f00b9…`) · 172 결번 유지 · 184 미생성 · `ACCOUNT_DELETION_WORKER_ENABLED` 기본 false 불변 · worker/cron 실행 0 · d12hk2(7f25a2c…) 무접촉. **W5F_RUNTIME_CLOSEOUT_COMPLETE 발행**(P0·F2·F3·F4 전건 통과). |
+
+## S2 신규 migration — 환경별 적용 대조표·rollback 인벤토리 (2026-07-30 오너 확정 형식)
+
+> 정본 정책: `docs/audit/s2_2_migration_physical_policy_20260730.md` (운영 요약: `apply_manifest_prod.md` §9).
+> S2 신규분은 숫자 번호 접두어를 쓰지 않고 UTC timestamp 파일명(`supabase/sql/<FILE_TS>_<STEM>.sql`)을 쓴다(계약 §20.1) — 위 「현재 다음 신규 번호: 185」는 S2 밖 레거시 번호 체계에 대한 기록이며 S2 forward에는 적용하지 않는다.
+> 식별자 정본 = stable migration identity 1:1(file basename · ledger name · file SHA-256). ledger `version`은 환경별 서버 자동 채번값으로 수용한다(staging·production 상이 정상). 구 「숫자 version 3자 동일성」 문구는 폐기됐다.
+> **기록 규율(invent 금지):** 파일이 실제로 생성·적용되기 전에는 timestamp·SHA-256·ledger version을 기입하지 않는다 — `미생성`/`미적용`으로 둔다. 적용 시 환경(staging·production)별로 1행씩 추가하고, `ledger_version`·`ledger_name`은 적용 직후 원장 조회값을 그대로 옮긴다. 불일치·중복·기록 누락은 `MIGRATION_HISTORY_DRIFT` 즉시 재활성 사유다(정책 문서 §4 — 조건 8종).
+
+### S2 환경별 적용 대조표 (ledger mapping)
+
+| logical_id | file_path | file_basename | sha256 | environment | ledger_version | ledger_name | applied_at | verification_result |
+|---|---|---|---|---|---|---|---|---|
+| M0 | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` | `20260729211929_mentor_profile_privileged_column_guard.sql` | `3bb2edd97b921900f93d460f206add873c80b6cbcf1782844b6c5e835184d94c` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: baseline 175 + forward 177/177 PASS · 검증기 38/38 PASS · rollback 후 기준선 복원 · reapply 재검증 PASS (원격 미적용 — ledger 채번 없음) |
+| M15 | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` | `20260729211941_weekly_usage_pair_party_guard.sql` | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: forward 177/177 PASS · pair-party 가드 허용 3종/거부 2종/NULL 우회 0 · 함수 identity·ACL 불변 · rollback 후 functiondef md5 `d0d31620671c6f9707a7b9d324d1ed35` 기준선 복원 · reapply 재검증 PASS (원격 미적용) |
+| M1 | `supabase/sql/20260730095435_api_web_v1_schemas.sql` | `20260730095435_api_web_v1_schemas.sql` | `97e7f6c28442b96415753b8b8caace7c28d5d393ca57b8d79f2faf5d89de4912` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: baseline 후보 C 175 + Batch A 2 위 forward 180/180 PASS · schema 2종 경계(PUBLIC 0·core_private 외부 USAGE 0) 실측 · rollback(RESTRICT) 후 카탈로그 기준선 1,372행 완전 일치 · reapply 재검증 PASS (원격 미적용 — ledger 채번 없음) |
+| M13 | `supabase/sql/20260730095438_comments_author_label_denormalize.sql` | `20260730095438_comments_author_label_denormalize.sql` | `4d035c88c17030a5df3574fc7dee7768bfd2809255a47ad087edf1c4676b94ac` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: 사전 구조 게이트(037 선재 label·author_role 부재·163/164 브리지) 전건 일치 · T-M13-01~16 전건 PASS(스푸핑 라벨 백필 정규화·shortform 바이트 불변·snapshot UPDATE 거부·브리지 회귀 0) · rollback 5단계 후 default `'쌤버십 회원'` 복원·author_label 보존·**정규화 라벨 유지(forward-only 예외 §22 #8)** · reapply 재백필 PASS (원격 미적용) |
+| M4 | `supabase/sql/20260730095441_api_web_v1_read_views.sql` | `20260730095441_api_web_v1_read_views.sql` | `301f44beea6805dd143ae3a04ac282b52e905a3e123d865c09399b318a33637e` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: V1~V5 필드 시그니처 계약 §6 원문 일치 · invoker 4 + V3 SECDEF 의도적 예외 · GRANT 매트릭스(§10.2)·DML 0·PII 0·order_ref topup 한정 실측 · anon V4/V5 거부(42501) · rollback(역순 DROP) 후 api_web_v1 객체 0 · reapply 재검증 PASS (원격 미적용) |
+| M5 | `supabase/sql/20260730105244_core_private_room_ensure.sql` | `20260730105244_core_private_room_ensure.sql` | `47dd392b3b14f8c4cc9a62edb5ab257f61feeb0a766a2839f2f1d044e8da5e62` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: 183/183 PASS · F10 identity·SECDEF·`search_path=''`·외부(EXECUTE service_role 포함) 0 실측 · 2세션 T-CONC-01(F2 동시 6회 — 방 1행·created:true 1회) PASS · rollback 후 @180 카탈로그 완전 일치 · reapply 재검증 PASS (원격 미적용 — ledger 채번 없음) |
+| M6 | `supabase/sql/20260730105248_api_web_v1_self_rpc.sql` | `20260730105248_api_web_v1_self_rpc.sql` | `0066357d68dcb3ffcf2fb386ddd5ae1d05db88870146f71a780f0169ceb85a98` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: F1·F2·F3·F9 + V6·V7 조회 RPC — envelope(T-CON-01·02)·V6/V7 반환 시그니처 §6 원문(T-CON-03)·F3 raise 14종 매핑+FREE_QUESTION_* 수렴 4쌍+사전 밖 예외 전파(T-CON-05·06)·당사자 판정·라벨·PII 비노출·anon 거부/무세션 AUTH_REQUIRED(42501) 실측 · rollback·reapply PASS (원격 미적용) |
+| M7 | `supabase/sql/20260730105252_api_web_v1_community_rpc.sql` | `20260730105252_api_web_v1_community_rpc.sql` | `504dea03f6af15fc86a041a29fb4f0945b8245734204896dc059ed433770c80c` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: B-1~B-4(INVOKER·외부 EXECUTE 0) + F4/F5/F6(승인 멘토 전용·replay-first 멱등·연락처 마스킹 정본 이식·이미지 5종 검증·낙관 충돌·soft delete) — T-CON-07·08(앱 계약 §3.2·§3.3 원문 대조)·T-CONC-06(동시 멱등 — 글 1건·재생 1회)·T-CONC-10 DB측 replay-first(재호출 전 Storage DELETE 0·객체 잔존) PASS · rollback·reapply PASS (원격 미적용) |
+| M17 | `supabase/sql/20260730112525_api_app_v1_surface.sql` | `20260730112525_api_app_v1_surface.sql` | `6b6134df59430e14dbb88a0160740bc846523fe3273ccdb4b262b51efb142637` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: 186/186 PASS · 소유 객체 정확히 7(schema+view+wrapper 5, 앱 계약 §3.3 identity 완전 일치) · 권한 = authenticated 만(anon·PUBLIC·service_role 0) · core_private 복제 0 · T-CON-07·08 웹·앱 실객체 대조 PASS · 앱 F4 replay-first(Gate 4 상당) PASS · rollback 후 @183 완전 일치 · reapply PASS (원격 미적용 — D-API-A 플랫폼 단계 미실행) |
+| M8 | `supabase/sql/20260730112528_api_web_v1_mentor_rpc.sql` | `20260730112528_api_web_v1_mentor_rpc.sql` | `bd2c2ce5b23edb4ca5247ff63a694323f7ba2912d778d628336546490ffb0ca2` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: F7(allowlist 9컬럼·특권 컬럼 참조 0 self-check·subjects 필터·avatar 소유 검증·특권 컬럼 전후 불변 실측) + F8(밴드 DB 강제·클램프 없이 거부·cap 1.0/2.5/4.5 강제·×100 저장·updated/unchanged) · rollback·reapply PASS (원격 미적용) |
+| M14 | `supabase/sql/20260730112531_api_web_v1_payout_account_rpc.sql` | `20260730112531_api_web_v1_payout_account_rpc.sql` | `b78ae36e58f90e26e2d795f687c93d06f0ee873f9b901919a3a99783780bfd07` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: F13 — 승인 멘토 전용·은행 allowlist 16종·계좌 숫자 8~24·원문 비반환(`**********1234` 마스킹 실측)·M11 게이트 ② 선행 충족 · rollback·reapply PASS (원격 미적용) |
+| M9 | `supabase/sql/20260730120103_money_rpc.sql` | `20260730120103_money_rpc.sql` | `3821e05f3a0c8787af180c34bbdafbcfb866a61cc3b25cbf6534783522e115d5` | local | 미적용 | 미적용 | 2026-07-30 KST (로컬 PG17 검증) | PG17.6 로컬: 187/187 PASS · F11 3층(F11i INVOKER·외부 EXECUTE 0 / 레거시 본문만 위임 교체 — 시그니처·void·ACL·무음 duplicate 불변 / strict wrapper orderId 형식·소유자·6필드 NULL-safe 대조) + F12([C3] 잠금 순서·3자 일치·재생 Phase 1/2 자체 판정·9단계·현재 플랜 미독·17종 동명 변환·방 실패 전부 롤백) · service_role 전용 · T-TOP-01~06 + T-FIN-01~04 + T-REP-A~H + T-CONC-02·03·04·08·09 PASS(교착 0·T-CONC-04 대기 1,477ms) · rollback 후 @186 완전 일치(레거시 020 구 본문 복원 실측) · reapply PASS (원격 미적용 — C7·C8 코드 전환 미실행) |
+| M11 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
+| M12 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
+| M16 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
+| M10 | 미생성 | 미생성 | 미생성 | — | 미적용 | 미적용 | 미적용 | 미적용 |
+
+- 행 순서는 권고 생성 순서(정책 문서 §9 = 계약 §20.2.1 위상 정렬)다. M2·M3는 retired — 행을 만들지 않는다. **S2 forward 총 16개**(M0·M1·M4~M17), S2 완료 시 정규 forward 적용 파일 = 기존 175 + 16 = **191**. D-API-W·D-API-A·C1~C11은 SQL 파일 수에 불포함.
+
+### S2 rollback 인벤토리 (clean-install 불포함 — `supabase/rollback/`)
+
+> rollback은 정규 clean-install 파일 수·glob에 포함하지 않는다. 실행은 장애 시 오너 승인 후 파일 1건 명시 선택·`apply_migration`(ledger name = `<FORWARD_FILE_TS>_<STEM>_rollback`, 원장 새 행 append — forward 행 삭제·수정·reverted 처리 금지). 역순·역의존 정본은 계약 §22(§20.2.1 역방향), 완료 후 M10 상당 읽기 전용 assertion 재실행. **총 15개**(M10은 상태 0 checkpoint — rollback 없음).
+
+| logical_id | forward_file | rollback_file | forward_sha256 | rollback_sha256 | rollback_preconditions | rollback_order | verification_assertion |
+|---|---|---|---|---|---|---:|---|
+| M16 | 미생성 | 미생성 | 미생성 | 미생성 | 역순 최선두 — 후행 의존 없음. 웹·앱 코드 롤백 선행(§22 #4) | 1 | M10 상당 읽기 전용 assertion 재실행 |
+| M12 | 미생성 | 미생성 | 미생성 | 미생성 | GRANT 문자 그대로 대칭 복원(§22 #6) | 2 | 동일 |
+| M11 | 미생성 | 미생성 | 미생성 | 미생성 | GRANT 문자 그대로 대칭 복원(§22 #6) | 3 | 동일 |
+| M9 | `supabase/sql/20260730120103_money_rpc.sql` | `supabase/rollback/20260730120103_money_rpc_rollback.sql` | `3821e05f3a0c8787af180c34bbdafbcfb866a61cc3b25cbf6534783522e115d5` | `c89af2f1d94dc367946ba6e3d7fc1849d6979cc53f33c4fa9d634d728015de0f` | 웹 호출점을 레거시 함수로 선복원(§22 #3·#4) — 진입점 2종 DROP → 레거시 `record_cash_topup` 020 구 본문 문자 그대로 복원(prosrc 바이트 동일 검증) → F11i DROP. 원장·지갑 데이터 무접촉(§22 #8 — 데이터 롤백 없음, 로컬 PG17 왕복 검증 PASS) | 4 | 동일 |
+| M14 | `supabase/sql/20260730112531_api_web_v1_payout_account_rpc.sql` | `supabase/rollback/20260730112531_api_web_v1_payout_account_rpc_rollback.sql` | `b78ae36e58f90e26e2d795f687c93d06f0ee873f9b901919a3a99783780bfd07` | `b972088905f84306d3837b8711799c31552b9229ecf08e19f146eee3c857900e` | C11 호출부 선복원 (F13 1객체 DROP — 정산계좌 데이터 무접촉, 로컬 PG17 왕복 검증 PASS) | 5 | 동일 |
+| M8 | `supabase/sql/20260730112528_api_web_v1_mentor_rpc.sql` | `supabase/rollback/20260730112528_api_web_v1_mentor_rpc_rollback.sql` | `bd2c2ce5b23edb4ca5247ff63a694323f7ba2912d778d628336546490ffb0ca2` | `34b88c4a499c79d256cac0e0ec8a2cc81e78aa47551d01c83b5425747d3ae8cf` | C6 호출부 선복원 (F8→F7 역순 DROP — mentor_profiles/mentor_plans 데이터·GRANT 무접촉, 로컬 PG17 왕복 검증 PASS) | 6 | 동일 |
+| M17 | `supabase/sql/20260730112525_api_app_v1_surface.sql` | `supabase/rollback/20260730112525_api_app_v1_surface_rollback.sql` | `6b6134df59430e14dbb88a0160740bc846523fe3273ccdb4b262b51efb142637` | `16ade4bd15aa49051255f859e5a4d628ce7a0cd8a32560327212b65c3c3b0258` | 앱 호출부 선복원 → `api_app_v1` 호출 0건 실측 → Exposed schemas 제거 → config 반영 확인 → DROP → schema cache reload(§22 M17 6단계 — rollback 파일은 wrapper 5→View→schema DROP 의 SQL 부분 소유). M7·M5 rollback보다 선행 (로컬 PG17 왕복 검증 PASS — core_private 공유 객체 무접촉) | 7 | 동일 |
+| M7 | `supabase/sql/20260730105252_api_web_v1_community_rpc.sql` | `supabase/rollback/20260730105252_api_web_v1_community_rpc_rollback.sql` | `504dea03f6af15fc86a041a29fb4f0945b8245734204896dc059ed433770c80c` | `209cae74feb545992f6731356d7c4ebb9a1f6ed52fa59ee7232ccd853559c8bd` | M16·M17 rollback 완료 후 (wrapper 3 → 구현부 4 역순 DROP·CASCADE 금지 — 로컬 PG17 왕복 검증 PASS) | 8 | 동일 |
+| M6 | `supabase/sql/20260730105248_api_web_v1_self_rpc.sql` | `supabase/rollback/20260730105248_api_web_v1_self_rpc_rollback.sql` | `0066357d68dcb3ffcf2fb386ddd5ae1d05db88870146f71a780f0169ceb85a98` | `4d33e8b8768000402900231b5acf5a73a35d4054105702fd037e73696e0f3011` | C2·C3·C4 호출부 선복원, M5보다 선행 (V7→V6→F9→F3→F2→F1 역순 DROP — 로컬 PG17 왕복 검증 PASS) | 9 | 동일 |
+| M5 | `supabase/sql/20260730105244_core_private_room_ensure.sql` | `supabase/rollback/20260730105244_core_private_room_ensure_rollback.sql` | `47dd392b3b14f8c4cc9a62edb5ab257f61feeb0a766a2839f2f1d044e8da5e62` | `959fa1202957be49bf106f018d7cd32ba95a6bcfa056ea1fdede997f6079a55d` | M6·M9·M17 rollback 완료 후 (F10 호출 wrapper 잔존 시 게이트 중단 — 로컬 PG17 왕복 검증 PASS) | 10 | 동일 |
+| M4 | `supabase/sql/20260730095441_api_web_v1_read_views.sql` | `supabase/rollback/20260730095441_api_web_v1_read_views_rollback.sql` | `301f44beea6805dd143ae3a04ac282b52e905a3e123d865c09399b318a33637e` | `97a368ac2db28d4b7799b3e3d2f573d4a6c68aeadabcb33aea0ca837de1127f2` | C1 호출부 선복원, M13·M1보다 선행 (View 5종 역순 DROP·CASCADE 금지 — 로컬 PG17 왕복 검증 PASS) | 11 | 동일 |
+| M13 | `supabase/sql/20260730095438_comments_author_label_denormalize.sql` | `supabase/rollback/20260730095438_comments_author_label_denormalize_rollback.sql` | `4d035c88c17030a5df3574fc7dee7768bfd2809255a47ad087edf1c4676b94ac` | `0d0058df855cdf14bd245692005d3050185b3dfdc22bde851102a5dd685af663` | M4 rollback 완료 후. §22 #8 5단계 한정 — `author_label` 컬럼·정규화 라벨 데이터 보존(forward-only 예외, 과거 클라이언트 라벨 미복원 — 로컬 PG17 왕복 검증 PASS) | 12 | 동일 |
+| M1 | `supabase/sql/20260730095435_api_web_v1_schemas.sql` | `supabase/rollback/20260730095435_api_web_v1_schemas_rollback.sql` | `97e7f6c28442b96415753b8b8caace7c28d5d393ca57b8d79f2faf5d89de4912` | `3834a675b7c317ddd2f7b74e5d13f1a8993524d4764c876b0cea3bf1ce63467e` | 스키마 내 객체(M4~M9·M14) rollback 완료 후 — 빈 스키마만 `DROP ... RESTRICT`(CASCADE 금지 — 로컬 PG17 왕복 검증 PASS) | 13 | 동일 |
+| M15 | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` | `supabase/rollback/20260729211941_weekly_usage_pair_party_guard_rollback.sql` | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | `42f5266d270b71b4caa6730e505665423342d0a2588199330781d4d3e0eb6363` | 독립 — 위치 제약 없음(가드 없는 구 본문 복원 — 098 정본 전체 정의 명시 복원, 로컬 PG17 왕복 검증 PASS) | 14 | 동일 |
+| M0 | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` | `supabase/rollback/20260729211929_mentor_profile_privileged_column_guard_rollback.sql` | `3bb2edd97b921900f93d460f206add873c80b6cbcf1782844b6c5e835184d94c` | `a6fbea2a93360eebfaea61f8e4d1c27d2beac7e32d50fe2a36ba9184d887d35e` | 최후미 — 되도록 남긴다(§20.5 심층 방어). 트리거 2종+함수만 명시 DROP(로컬 PG17 왕복 검증 PASS) | 15 | 동일 |

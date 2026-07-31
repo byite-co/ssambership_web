@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { API_WEB_V1_SCHEMA } from "@/lib/apiWebV1/rpc";
 
 export const SUBSCRIPTION_SETTLEMENT_ITEMS_TABLE = "subscription_settlement_items" as const;
 
@@ -98,39 +99,33 @@ export async function refreshSubscriptionSettlementItemsBestEffort(): Promise<{ 
   return { ok: true, error: null };
 }
 
+/**
+ * S2-2 전환 W1(C1): 멘토 본인 구독 정산 조회 — V7 RPC
+ * `api_web_v1.mentor_settlement_self()` (계약 §6 V7 · §17 #16).
+ * 자기 정산 판정(`mentor_id = auth.uid()`)은 함수 내부가 수행한다 — 멘토 세션
+ * 클라이언트 전제이며 mentorId 인자로 타인 정산을 조회할 수 없다. 구 직접 SELECT 와
+ * service_role 무음 fallback 은 제거했다(W1 §4 — fallback·dual-read 금지).
+ * V7 행(item_id)을 기존 소비 형상(id 키)으로 정규화하고, V7 이 노출하지 않는 내부
+ * 참조(payment_id·ledger_id·billing_event_id·mentor_id·student_id·updated_at)는
+ * 더 이상 반환하지 않는다(§6 V7 — 의도된 비노출).
+ */
 export async function loadSubscriptionSettlementRowsForMentor(
   supabase: SupabaseClient,
   mentorId: string,
   limit = 300
 ): Promise<SubscriptionSettlementItemRow[]> {
-  const { data, error } = await supabase
-    .from(SUBSCRIPTION_SETTLEMENT_ITEMS_TABLE)
-    .select(SELECT_COLUMNS)
-    .eq("mentor_id", mentorId)
-    .order("billing_at", { ascending: false })
-    .limit(limit);
-
-  if (!error && data) return data as unknown as SubscriptionSettlementItemRow[];
-  if (error && isSchemaNotReadyError(error)) return [];
-
-  try {
-    const admin = createServiceRoleClient();
-    const fallback = await admin
-      .from(SUBSCRIPTION_SETTLEMENT_ITEMS_TABLE)
-      .select(SELECT_COLUMNS)
-      .eq("mentor_id", mentorId)
-      .order("billing_at", { ascending: false })
-      .limit(limit);
-    if (!fallback.error && fallback.data) return fallback.data as unknown as SubscriptionSettlementItemRow[];
-    if (fallback.error && !isSchemaNotReadyError(fallback.error)) {
-      console.error("[loadSubscriptionSettlementRowsForMentor] service_role", fallback.error.message, { mentorId });
+  void mentorId; // V7 이 auth.uid() 로 본인 행만 반환한다
+  const { data, error } = await supabase.schema(API_WEB_V1_SCHEMA).rpc("mentor_settlement_self");
+  if (error) {
+    if (!isSchemaNotReadyError(error)) {
+      console.error("[loadSubscriptionSettlementRowsForMentor] mentor_settlement_self", error.message);
     }
-  } catch {
-    // Keep mentor payout pages resilient before 086 is applied.
+    return [];
   }
-
-  if (error) console.error("[loadSubscriptionSettlementRowsForMentor]", error.message, { mentorId });
-  return [];
+  const rows = (Array.isArray(data) ? (data as SubscriptionSettlementItemRow[]) : [])
+    .map((r): SubscriptionSettlementItemRow => ({ ...r, id: r.item_id }))
+    .sort((a, b) => String(b.billing_at ?? "").localeCompare(String(a.billing_at ?? "")));
+  return rows.slice(0, limit);
 }
 
 export async function loadSubscriptionSettlementRowsForAdmin(limit = 100): Promise<{

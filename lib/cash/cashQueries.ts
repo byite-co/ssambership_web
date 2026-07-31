@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { pickExistingColumn } from "@/lib/qna/safeSelect";
+import { API_WEB_V1_SCHEMA } from "@/lib/apiWebV1/rpc";
 
 type TableProbe = { table: string | null; error: string | null };
 
@@ -31,59 +32,47 @@ export async function fetchCashTopupPackages(
   return { rows: (data as CashPackageRow[]) ?? [], table: probe.table, error: null };
 }
 
+/**
+ * S2-2 전환 W1(C1): 자기 지갑 조회 — V4 `api_web_v1.my_wallet_v1` (계약 §6 V4).
+ * invoker view — RLS(`user_id = auth.uid()`)가 본인 행만 남긴다. 세션 클라이언트 전제.
+ * 구 테이블 프로빙(wallets/user_wallets/…)·FK 컬럼 프로빙은 제거했다(W1 §4 — fallback 금지).
+ */
 export async function fetchWalletBalanceByUserId(
   supabase: SupabaseClient,
   userId: string
 ): Promise<{ row: Record<string, unknown> | null; table: string | null; error: string | null }> {
-  const probe = await firstReadableTable(supabase, ["wallets", "user_wallets", "cash_wallets", "student_wallets"] as const);
-  if (!probe.table) {
-    return { row: null, table: null, error: probe.error };
-  }
-  const { column } = await pickExistingColumn(supabase, probe.table, ["user_id", "student_id", "owner_id"]);
-  if (!column) {
-    return { row: null, table: probe.table, error: "wallets: user FK column not found" };
-  }
-  const { data, error } = await supabase.from(probe.table).select("*").eq(column, userId).limit(1).maybeSingle();
-  if (error) return { row: null, table: probe.table, error: error.message };
-  return { row: (data as Record<string, unknown> | null) ?? null, table: probe.table, error: null };
+  const { data, error } = await supabase
+    .schema(API_WEB_V1_SCHEMA)
+    .from("my_wallet_v1")
+    .select("*")
+    .eq("user_id", userId)
+    .limit(1)
+    .maybeSingle();
+  if (error) return { row: null, table: "api_web_v1.my_wallet_v1", error: error.message };
+  return { row: (data as Record<string, unknown> | null) ?? null, table: "api_web_v1.my_wallet_v1", error: null };
 }
 
 export type LedgerLineRow = Record<string, unknown>;
 
+/**
+ * S2-2 전환 W1(C1): 자기 캐시 원장 조회 — V5 `api_web_v1.my_cash_ledger_v1` (계약 §6 V5).
+ * invoker view — RLS 로 본인 행만. `order_ref` 는 topup 행에서만 Toss orderId(§6 V5 —
+ * W3 가시화 지점), 그 외 NULL. 구 테이블·FK 프로빙과 재정렬 fallback 은 제거했다.
+ */
 export async function fetchCashLedgerForUser(
   supabase: SupabaseClient,
   userId: string,
   limit = 50
 ): Promise<{ rows: LedgerLineRow[]; table: string | null; error: string | null }> {
-  const probe = await firstReadableTable(supabase, [
-    "cash_ledger",
-    "cash_ledger_entries",
-    "wallet_ledger_lines",
-    "wallet_transactions",
-    "cash_ledger_lines",
-  ] as const);
-  if (!probe.table) {
-    return { rows: [], table: null, error: probe.error };
-  }
-  const { column } = await pickExistingColumn(supabase, probe.table, ["user_id", "student_id", "account_owner_id"]);
-  if (!column) {
-    return { rows: [], table: probe.table, error: "ledger: user FK column not found" };
-  }
+  void userId; // V5 는 invoker RLS 로 본인 행만 반환한다 — 명시 필터 불요(세션 클라이언트 전제)
   const { data, error } = await supabase
-    .from(probe.table)
+    .schema(API_WEB_V1_SCHEMA)
+    .from("my_cash_ledger_v1")
     .select("*")
-    .eq(column, userId)
     .order("created_at", { ascending: false })
     .limit(limit);
-  if (error) {
-    if (/column|does not exist|order/i.test(error.message)) {
-      const fb = await supabase.from(probe.table).select("*").eq(column, userId).limit(limit);
-      if (fb.error) return { rows: [], table: probe.table, error: fb.error.message };
-      return { rows: (fb.data as LedgerLineRow[]) ?? [], table: probe.table, error: null };
-    }
-    return { rows: [], table: probe.table, error: error.message };
-  }
-  return { rows: (data as LedgerLineRow[]) ?? [], table: probe.table, error: null };
+  if (error) return { rows: [], table: "api_web_v1.my_cash_ledger_v1", error: error.message };
+  return { rows: (data as LedgerLineRow[]) ?? [], table: "api_web_v1.my_cash_ledger_v1", error: null };
 }
 
 /** 캐시·지갑 화면 하단 안내(사용자용) */

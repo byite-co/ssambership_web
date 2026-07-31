@@ -32,7 +32,7 @@ export default async function StudentQuestionRoomListPage(props: Props) {
     if (existing?.id != null && String(existing.id).length > 0) {
       redirect(`/question-room/${encodeURIComponent(String(existing.id))}`);
     }
-    const ensured = await ensureFreeQuestionRoomForStudent(supabase, user.id, mentorIdParam);
+    const ensured = await ensureFreeQuestionRoomForStudent(supabase, mentorIdParam);
     if (ensured.ok) {
       redirect(`/question-room/${encodeURIComponent(ensured.roomId)}`);
     }
