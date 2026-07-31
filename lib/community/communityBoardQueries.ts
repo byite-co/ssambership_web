@@ -311,6 +311,8 @@ export type CommunityBoardDraftRow = {
   body: string;
   category: string;
   imageUrls: string[];
+  /** 낙관 잠금 기준값(F5 p_expected_updated_at — 계약 §7 F5). */
+  updatedAt: string;
 };
 
 export async function getCommunityBoardDraft(
@@ -319,7 +321,7 @@ export async function getCommunityBoardDraft(
   draftId: string
 ): Promise<{ draft: CommunityBoardDraftRow | null; error: string | null }> {
   const { data, error } = await boardPostsView(supabase)
-    .select("id, title, body, category, image_refs, status, author_id")
+    .select("id, title, body, category, image_refs, status, author_id, updated_at")
     .eq("id", draftId)
     .eq("author_id", userId)
     .eq("status", "draft")
@@ -338,6 +340,7 @@ export async function getCommunityBoardDraft(
       body,
       category: typeof row.category === "string" ? row.category : "free",
       imageUrls,
+      updatedAt: typeof row.updated_at === "string" ? row.updated_at : "",
     },
     error: null,
   };
@@ -353,7 +356,7 @@ export async function getCommunityBoardPostForEdit(
   postId: string
 ): Promise<{ draft: CommunityBoardDraftRow | null; error: string | null }> {
   const { data, error } = await boardPostsView(supabase)
-    .select("id, title, body, category, image_refs, status, author_id")
+    .select("id, title, body, category, image_refs, status, author_id, updated_at")
     .eq("id", postId)
     .eq("author_id", userId)
     .maybeSingle();
@@ -371,6 +374,7 @@ export async function getCommunityBoardPostForEdit(
       body,
       category: typeof row.category === "string" ? row.category : "free",
       imageUrls,
+      updatedAt: typeof row.updated_at === "string" ? row.updated_at : "",
     },
     error: null,
   };

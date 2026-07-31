@@ -6,12 +6,7 @@ import { requireRole } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
 import { updateMentorProfile } from "@/lib/mentor/mentorProfileMutations";
 import { deleteMentorAvatarObject, uploadMentorAvatar } from "@/lib/storage/mentorAvatarStorage";
-import {
-  isOutsideMentorPriceGuide,
-  mentorSubscriptionPriceRule,
-  SUBSCRIBE_PLAN_TIERS,
-} from "@/lib/subscribe/mentorPlanPricing";
-import { getSubscribeCatalogPlan } from "@/lib/subscribe/subscribePlanCatalog";
+import { SUBSCRIBE_PLAN_TIERS } from "@/lib/subscribe/mentorPlanPricing";
 import type { SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
 
 const PATH = "/mentor/profile/edit";
@@ -58,19 +53,9 @@ export async function submitMentorProfileEdit(formData: FormData) {
     redirect(errQ("구독 요금은 1캐시 이상 숫자로 입력해 주세요."));
   }
 
-  // 가격 밴드는 어떤 쓰기도 일어나기 전에 검증한다 — 뮤테이션 도중 실패하면
-  // 프로필 일부만 저장된 채 "저장 실패"가 표시되는 부분 저장이 생긴다.
-  for (const tier of SUBSCRIBE_PLAN_TIERS) {
-    const cashKrw = subscriptionPricesKrw[tier];
-    if (cashKrw != null && isOutsideMentorPriceGuide(cashKrw, tier)) {
-      const rule = mentorSubscriptionPriceRule(tier);
-      redirect(
-        errQ(
-          `${getSubscribeCatalogPlan(tier).label} 구독 요금은 ${rule.minCashKrw.toLocaleString("ko-KR")}~${rule.maxCashKrw.toLocaleString("ko-KR")}캐시 범위에서 설정할 수 있습니다.`
-        )
-      );
-    }
-  }
+  // W2(C6): 가격 밴드 판정은 DB(F8)가 정본 — 클라 선판정을 제거했다. 프로필(F7)과
+  // 요금(F8)이 각각 원자 RPC 라 구 "부분 저장" 우려도 함께 해소된다(clamp 없이
+  // PLAN_PRICE_OUT_OF_BAND envelope 를 그대로 사용자에게 매핑).
 
   // 교체 시 구 아바타 정리용: 새 업로드 전에 기존 profile_image_url 을 조회한다.
   let oldAvatarUrl: string | null = null;

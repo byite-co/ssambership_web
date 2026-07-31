@@ -37,7 +37,8 @@ function digitsOnly(value: string): string {
 export function MentorPayoutAccountPanel(props: Props) {
   const router = useRouter();
   const [bankName, setBankName] = useState(props.bankName ?? "");
-  const [accountNumber, setAccountNumber] = useState(props.accountNumber ?? "");
+  // W2(C11): props.accountNumber 는 마스킹 값(표시 전용) — 수정 입력은 빈칸에서 새로 입력한다.
+  const [accountNumber, setAccountNumber] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [isError, setIsError] = useState(false);
   const [isPending, startTransition] = useTransition();

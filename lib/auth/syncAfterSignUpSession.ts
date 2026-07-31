@@ -1,11 +1,4 @@
 import { createClient } from "@/lib/supabase/client";
-import {
-  buildStudentIdImageObjectPath,
-  formatStudentIdImageStoredRef,
-  safeStudentIdImageFileExtension,
-  STUDENT_ID_IMAGES_BUCKET,
-} from "@/lib/storage/studentIdImageStorage";
-import { validateJpgPngPdfMagicBytes } from "@/lib/storage/uploadMagicBytes";
 import { mapDataErrorMessage } from "@/lib/utils/mapDataError";
 import type { AppRole } from "@/lib/types/user";
 
@@ -68,81 +61,18 @@ export async function syncAfterSignUpWithSession(i: SyncInput): Promise<SyncResu
     warnings.push(`[프로필 저장] ${mapDataErrorMessage(msg)}`);
   }
 
-  if (i.role === "mentor") {
-    let subjects: string[] = [];
-    if (i.teachingSubjectsCsv.trim().length) {
-      subjects = i.teachingSubjectsCsv
-        .split(",")
-        .map((s) => s.trim())
-        .filter(Boolean);
-    }
-    try {
-      const { error } = await supabase.from("mentor_profiles").upsert(
-        {
-          user_id: i.userId,
-          university_name: i.universityName,
-          department_name: i.departmentName,
-          teaching_subjects: subjects,
-          high_school_name: i.highSchoolName,
-          intro_line: i.introLine || null,
-          verification_status: "pending",
-          updated_at: now,
-        },
-        { onConflict: "user_id" }
-      );
-      if (error) {
-        throw error;
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      warnings.push(`[멘토 프로필] ${mapDataErrorMessage(msg)}`);
-    }
-
-    if (i.studentIdFile) {
-      const objectPath = buildStudentIdImageObjectPath(i.userId, i.studentIdFile.name);
-      const storedRef = formatStudentIdImageStoredRef(objectPath);
-      let studentIdUploaded = false;
-
-      try {
-        const extension = safeStudentIdImageFileExtension(i.studentIdFile.name);
-        if (!extension) {
-          throw new Error("JPG, JPEG, PNG, PDF 형식의 파일만 업로드할 수 있습니다.");
-        }
-        const bytes = await i.studentIdFile.arrayBuffer();
-        const verified = validateJpgPngPdfMagicBytes(bytes, extension);
-        if (!verified.ok) {
-          throw new Error(verified.error);
-        }
-        const { error: upErr } = await supabase.storage
-          .from(STUDENT_ID_IMAGES_BUCKET)
-          .upload(objectPath, bytes, { cacheControl: "3600", contentType: verified.file.mimeType, upsert: true });
-        if (upErr) {
-          throw upErr;
-        }
-        studentIdUploaded = true;
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        warnings.push(
-          `[학생증 업로드] ${mapDataErrorMessage(msg)} — Storage bucket '${STUDENT_ID_IMAGES_BUCKET}' 생성·정책 확인`
-        );
-      }
-
-      if (studentIdUploaded) {
-        try {
-          const { error: mErr } = await supabase
-            .from("mentor_profiles")
-            .update({ student_id_image_url: storedRef, updated_at: now })
-            .eq("user_id", i.userId);
-          if (mErr) {
-            throw mErr;
-          }
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          warnings.push(`[학생증 경로 반영] ${mapDataErrorMessage(msg)}`);
-        }
-      }
-    }
-  }
+  // W2(C6): 구 mentor_profiles 백업 upsert(브라우저 직접 쓰기 — verification_status
+  // 포함)와 학생증 브라우저 업로드·student_id_image_url 직접 UPDATE 는 제거했다.
+  // 프로필 행 생성은 DB 가입 트리거(handle_new_auth_user)가 정본이고, RPC/트리거
+  // 실패를 직접 upsert 로 우회하지 않는다(계약 §20.3 M11 게이트 ③ 선행 조건).
+  // 학생증 저장은 세션 유무와 무관하게 service_role 서버 액션
+  // (uploadMentorStudentIdAfterSignUpAction)이 단일 경로다 — 호출은 가입 페이지가 한다.
+  void i.universityName;
+  void i.departmentName;
+  void i.teachingSubjectsCsv;
+  void i.highSchoolName;
+  void i.introLine;
+  void i.studentIdFile;
 
   return { warningMessages: warnings };
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 import {
   buildStudentIdImageObjectPath,
   formatStudentIdImageStoredRef,
@@ -64,13 +65,24 @@ export async function submitMentorStudentIdImageAction(formData: FormData) {
     redirectWith("error", mapDataErrorMessage(uploadError.message));
   }
 
-  const { error: updateError } = await supabase
-    .from("mentor_profiles")
-    .update({ student_id_image_url: storedRef, updated_at: new Date().toISOString() })
-    .eq("user_id", user.id);
-  if (updateError) {
+  // W2(C6): 인증서류 경로 반영은 service_role 로 수행한다(의도된 예외 — 목록화).
+  // student_id_image_url 은 F7 allowlist 밖의 인증서류 컬럼이라 RPC 대상이 아니고,
+  // 세션(authenticated) 직접 UPDATE 는 C6 게이트(직접 쓰기 0건)와 M11 회수 이후
+  // 모두 성립하지 않는다. 본인(user.id) 행 한정 + 가입 창구 액션과 동일 패턴.
+  let updateFailed: string | null = null;
+  try {
+    const admin = createServiceRoleClient();
+    const { error: updateError } = await admin
+      .from("mentor_profiles")
+      .update({ student_id_image_url: storedRef, updated_at: new Date().toISOString() })
+      .eq("user_id", user.id);
+    if (updateError) updateFailed = updateError.message;
+  } catch (e) {
+    updateFailed = e instanceof Error ? e.message : String(e);
+  }
+  if (updateFailed) {
     await supabase.storage.from(STUDENT_ID_IMAGES_BUCKET).remove([objectPath]);
-    redirectWith("error", mapDataErrorMessage(updateError.message));
+    redirectWith("error", mapDataErrorMessage(updateFailed));
   }
 
   revalidatePath(PATH);

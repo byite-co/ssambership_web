@@ -306,10 +306,22 @@ function sumNetByStatus(
     .reduce((a, l) => a + l.netAmount, 0);
 }
 
+/**
+ * W2(C11): 계좌 원문은 서버 경계 밖(응답)으로 내보내지 않는다 — F13 계약(§7 F13)과
+ * 동일하게 끝 4자리 외 마스킹 값만 반환한다(UI 는 마스킹 표시 전용, 수정은 새로 입력).
+ */
+function maskPayoutAccount(accountRaw: string | null): string | null {
+  if (!accountRaw) return null;
+  const digits = accountRaw.replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.length <= 4) return "*".repeat(digits.length);
+  return "*".repeat(digits.length - 4) + digits.slice(-4);
+}
+
 export async function loadMentorPayoutBankAccount(
   supabase: SupabaseClient,
   mentorId: string
-): Promise<{ display: string; editable: boolean; bankName: string | null; accountRaw: string | null }> {
+): Promise<{ display: string; editable: boolean; bankName: string | null; accountMasked: string | null }> {
   const bankCol = await pickExistingColumn(supabase, "mentor_profiles", [
     "payout_bank_name",
     "bank_name",
@@ -321,7 +333,7 @@ export async function loadMentorPayoutBankAccount(
   ]);
 
   if (!bankCol.column && !acctCol.column) {
-    return { display: DEFAULT_MASKED_BANK_DISPLAY, editable: false, bankName: null, accountRaw: null };
+    return { display: DEFAULT_MASKED_BANK_DISPLAY, editable: false, bankName: null, accountMasked: null };
   }
 
   const cols = [bankCol.column, acctCol.column].filter(Boolean).join(", ");
@@ -329,11 +341,12 @@ export async function loadMentorPayoutBankAccount(
   const row = (data as Row | null) ?? {};
   const bankName = bankCol.column ? String(row[bankCol.column] ?? "").trim() || null : null;
   const accountRaw = acctCol.column ? String(row[acctCol.column] ?? "").trim() || null : null;
+  const accountMasked = maskPayoutAccount(accountRaw);
   return {
     display: maskBankDisplay(bankName, accountRaw),
     editable: Boolean(bankCol.column && acctCol.column),
     bankName,
-    accountRaw,
+    accountMasked,
   };
 }
 
@@ -385,7 +398,7 @@ export async function loadMentorPayoutSummary(supabase: SupabaseClient, mentorId
     bankDisplay: bank.display,
     bankEditable: bank.editable,
     bankName: bank.bankName,
-    bankAccountNumber: bank.accountRaw,
+    bankAccountNumber: bank.accountMasked,
   };
 }
 
