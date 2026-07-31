@@ -82,8 +82,8 @@ async function submitShortformUploadCore(surface: "web" | "app", formData: FormD
     if (isApp) redirect(appBridgeErrorPath("session_expired"));
     redirect(`/login?next=${encodeURIComponent(returnPath)}`);
   }
-  // 계정 게이트: 앱 표면은 strict(fail-closed — bootstrap 이후 정지·삭제도 매 요청 차단),
-  // 웹 표면은 기존 fail-open 가드 유지(일반 웹 동작 불변).
+  // 계정 게이트: 앱 표면은 strict(fail-closed — status allowlist), 웹 표면도 C9 이후
+  // fail-closed(§11.5 판정식 — 확인 불가는 거부).
   const acctGate = isApp
     ? await assertAppSurfaceAccountActiveStrict(supabase, user.id)
     : await assertAccountActive(supabase, user.id);

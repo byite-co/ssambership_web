@@ -21,7 +21,6 @@ import { fetchRoomsForUser } from "@/lib/qna/questionRoomQueries";
 import { loadMentorPayoutsPageData } from "@/lib/mentor/mentorPayoutsService";
 import { MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE } from "@/lib/mentor/mentorPayoutsConstants";
 import { fetchMentorProfileRow } from "@/lib/mentor/mentorProfileQueries";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import {
   mapOrderRowToHub,
   mapOrderToScheduleItem,
@@ -131,22 +130,28 @@ async function loadMentorRating(
         ? profileRow.reviews_count
         : 0;
 
-  for (const table of ["reviews", "mentor_reviews", "subscription_reviews"] as const) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) continue;
-    const { column: mc } = await pickExistingColumn(supabase, table, ["mentor_id", "mentor_user_id"]);
-    if (!mc) continue;
-    const { data, error } = await supabase.from(table).select("rating").eq(mc, mentorId).limit(500);
-    if (error || !data?.length) continue;
-    const ratings = (data as Row[])
-      .map((r) => (typeof r.rating === "number" ? r.rating : Number(r.rating)))
-      .filter((n) => Number.isFinite(n) && n > 0);
-    if (!ratings.length) continue;
-    const avg = ratings.reduce((a, b) => a + b, 0) / ratings.length;
-    return { avg: Math.round(avg * 10) / 10, count: ratings.length };
+  // W4(C10): reviews/mentor_reviews/subscription_reviews 테이블·FK 프로빙 제거 — 정본
+  // public.reviews(mentor_id, rating) 단일 쿼리(187 baseline 실측). 멘토 본인 대시보드라
+  // hidden/blinded 무필터인 현행 의미를 유지한다. 오류 시 console.error 후 프로필 행
+  // 필드 폴백 — KPI 표시 전용 degrade(성공 아님). 빈 결과(리뷰 0건)도 기존과 동일하게
+  // 프로필 행 값으로 폴백한다.
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("rating")
+    .eq("mentor_id", mentorId)
+    .limit(500);
+  if (error) {
+    console.error("[loadMentorRating] reviews", error.message);
+    return { avg: fromProfile, count: reviewCountFromProfile };
   }
-
-  return { avg: fromProfile, count: reviewCountFromProfile };
+  const ratings = ((data as Row[]) ?? [])
+    .map((r) => (typeof r.rating === "number" ? r.rating : Number(r.rating)))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (!ratings.length) {
+    return { avg: fromProfile, count: reviewCountFromProfile };
+  }
+  const avg = ratings.reduce((a, b) => a + b, 0) / ratings.length;
+  return { avg: Math.round(avg * 10) / 10, count: ratings.length };
 }
 
 function estimateInProgressRevenue(orders: Row[], disputeSet: ReadonlySet<string>): number {

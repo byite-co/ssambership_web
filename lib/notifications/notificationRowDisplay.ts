@@ -1,27 +1,26 @@
-import { getStringField } from "@/lib/qna/safeSelect";
-
 type Row = Record<string, unknown>;
 
-const TIME_KEYS = ["created_at", "inserted_at", "sent_at", "occurred_at", "updated_at"] as const;
+// W4(C10): 후보 키 순회 제거 — notifications 정본 컬럼(body, created_at, type)과
+// 정본 writer(132)가 data jsonb 에 넣는 title 만 읽는다(187 baseline 실측).
+
+function dataTitle(row: Row): string | null {
+  const d = row.data;
+  if (d == null || typeof d !== "object") return null;
+  const t = (d as Row).title;
+  return typeof t === "string" && t.trim() ? t : null;
+}
 
 export function notificationTitleLine(row: Row): string {
-  return (
-    getStringField(row, [
-      "title",
-      "subject",
-      "summary",
-      "headline",
-    ]) ||
-    getStringField(row, ["message", "body", "content", "text", "label"]) ||
-    "알림(제목 없음)"
-  );
+  const fromData = dataTitle(row);
+  if (fromData) return fromData;
+  const body = row.body;
+  if (typeof body === "string" && body.trim()) return body;
+  return "알림(제목 없음)";
 }
 
 export function notificationTimeIso(row: Row): string {
-  for (const k of TIME_KEYS) {
-    const v = row[k];
-    if (typeof v === "string" && v.length > 8) return v;
-  }
+  const v = row.created_at;
+  if (typeof v === "string" && v.length > 8) return v;
   return "—";
 }
 
@@ -33,9 +32,9 @@ export function formatNotificationTime(iso: string): string {
 }
 
 export function typeRaw(row: Row, typeColumn: string | null): string | null {
-  if (typeColumn) {
-    const v = row[typeColumn];
-    if (typeof v === "string" && v.trim()) return v;
-  }
-  return getStringField(row, ["type", "kind", "category", "event_type", "notification_type"]);
+  // W4(C10): 정본 컬럼은 type — typeColumn 은 허브 호환 인자(고정 "type" 전달)로 유지.
+  const col = typeColumn ?? "type";
+  const v = row[col];
+  if (typeof v === "string" && v.trim()) return v;
+  return null;
 }

@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { canAccessOrder } from "@/lib/customRequest/orderAccess";
 import { sanitizeTrustSafetyText } from "@/lib/safety/trustSafetyText";
-import { firstReadableCustomTable } from "@/lib/customRequest/customRequestQueries";
 import {
   getOrderMessageAttachmentFileFromFormData,
   insertOrderMessageAttachmentRow,
@@ -15,7 +14,6 @@ import {
 } from "@/lib/customRequest/orderMessageAttachments";
 import { isOrderRowTerminalForActions } from "@/lib/customRequest/orderLifecycleConstants";
 import { insertOrderRoomMessage, recordOrderEventBestEffort } from "@/lib/customRequest/orderRoomMutations";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/lib/types/user";
 
@@ -105,21 +103,12 @@ export async function submitCustomOrderRoomMessageAction(formData: FormData): Pr
   }
 
   const supabase = await createClient();
-  const oT = await firstReadableCustomTable(supabase, ["custom_request_orders", "custom_orders", "request_orders"]);
-  if (!oT.table) {
-    logActionFailure("no orders table", {
-      orderId,
-      userId: user.id,
-      role,
-      canAccess: null,
-      studentMatch: null,
-      mentorMatch: null,
-      supabaseError: oT.error || null,
-    });
-    redirect(`${orderPath(orderId)}?error=${encodeURIComponent(oT.error || "주문 없음")}`);
-  }
-  const table = oT.table;
-  const { data: rowData, error: oe } = await supabase.from(table).select("*").eq("id", orderId).maybeSingle();
+  // W4(C10): custom_request_orders 정본 테이블 고정 — 후보 테이블 프로빙 제거
+  const { data: rowData, error: oe } = await supabase
+    .from("custom_request_orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
   if (oe || !rowData) {
     logActionFailure("order row load", {
       orderId,
@@ -152,18 +141,11 @@ export async function submitCustomOrderRoomMessageAction(formData: FormData): Pr
     redirect(`${orderPath(orderId)}?error=${encodeURIComponent("이 주문에 메시지를 보낼 권한이 없습니다.")}`);
   }
 
+  // W4(C10): custom_request_orders.student_id/mentor_id(NOT NULL) 직접 대조 — 소유자 컬럼 프로빙 제거
   if (role === "student") {
-    const { column: stuCol } = await pickExistingColumn(supabase, table, [
-      "student_id",
-      "buyer_id",
-      "user_id",
-      "client_id",
-      "author_id",
-      "requester_id",
-    ]);
-    const studentMatch = stuCol ? String(row[stuCol]) === user.id : false;
-    if (!stuCol || !studentMatch) {
-      logActionFailure("student id mismatch or column missing", {
+    const studentMatch = String(row.student_id) === user.id;
+    if (!studentMatch) {
+      logActionFailure("student id mismatch", {
         orderId,
         userId: user.id,
         role,
@@ -175,17 +157,9 @@ export async function submitCustomOrderRoomMessageAction(formData: FormData): Pr
       redirect(`${orderPath(orderId)}?error=${encodeURIComponent("의뢰자(학생) 본인만 이 영역에서 메시지를 보낼 수 있습니다.")}`);
     }
   } else {
-    const { column: menCol } = await pickExistingColumn(supabase, table, [
-      "mentor_id",
-      "mentor_user_id",
-      "assignee_id",
-      "assigned_mentor_id",
-      "selected_mentor_id",
-      "expert_id",
-    ]);
-    const mentorMatch = menCol ? String(row[menCol]) === user.id : false;
-    if (!menCol || !mentorMatch) {
-      logActionFailure("mentor id mismatch or column missing", {
+    const mentorMatch = String(row.mentor_id) === user.id;
+    if (!mentorMatch) {
+      logActionFailure("mentor id mismatch", {
         orderId,
         userId: user.id,
         role,
@@ -223,7 +197,8 @@ export async function submitCustomOrderRoomMessageAction(formData: FormData): Pr
   }
 
   const messageBody = safeText || "첨부 파일";
-  const insertRes = await insertOrderRoomMessage(supabase, orderId, user.id, messageBody, role);
+  // W4(C10): role/party 는 custom_order_messages 에 저장 열이 없어 전달하지 않음(라벨은 author_id 파생)
+  const insertRes = await insertOrderRoomMessage(supabase, orderId, user.id, messageBody);
   if (insertRes.error) {
     if (uploadedAttachment) {
       await removeOrderMessageAttachmentObjectBestEffort(supabase, uploadedAttachment.objectPath);

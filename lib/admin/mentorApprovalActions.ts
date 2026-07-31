@@ -9,10 +9,11 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { MENTOR_PENDING_STATUS_VALUES_FOR_IN } from "@/lib/admin/mentorApprovalConstants";
 import { logAdminAction } from "@/lib/admin/adminActionLog";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 
 const PATH = "/admin/mentor-approval";
 const TABLE = "mentor_profiles";
+// W4(C10): mentor_profiles 상태 컬럼은 verification_status 단일 정본(187 baseline 실측) — 후보 컬럼 프로빙 제거.
+const STATUS_COLUMN = "verification_status";
 
 function textFromForm(v: FormDataEntryValue | null): string {
   return typeof v === "string" ? v.trim() : "";
@@ -32,39 +33,16 @@ function safeActionMsg(raw: string | null | undefined): string {
   return toAdminDisplayError(raw, "mentorApprovals") ?? "처리에 실패했습니다. 잠시 후 다시 시도해 주세요.";
 }
 
-async function statusColumn(admin: SupabaseClient): Promise<string | null> {
-  const r = await pickExistingColumn(admin, TABLE, ["verification_status", "status", "approval_status", "review_state"]);
-  return r.column;
+// W4(C10): 후보 테이블·컬럼 부재 실측(187 baseline 0) — mentor_profiles 에는 reviewed_at/approved_at/verified_at,
+// reviewed_by/approved_by/verified_by, rejected_at/rejected_by, rejection_reason/admin_note/review_note/note 컬럼이
+// 전부 없어 프로빙이 항상 실패했다. 프로빙 제거, 현행 관측 동작(상태 컬럼만 갱신) 고정. 검토 시각·조치자·메모의
+// 정본 기록처는 admin_action_logs(logAdminAction) — 각 액션이 이미 기록한다. 기능 정본화는 비범위.
+function buildApprovePatch(): Record<string, unknown> {
+  return { [STATUS_COLUMN]: "approved" };
 }
 
-async function buildApprovePatch(admin: SupabaseClient, adminUserId: string, note: string): Promise<Record<string, unknown> | null> {
-  const st = await statusColumn(admin);
-  if (!st) return null;
-  const patch: Record<string, unknown> = { [st]: "approved" };
-  const reviewedAt = await pickExistingColumn(admin, TABLE, ["reviewed_at", "approved_at", "verified_at"]);
-  if (reviewedAt.column) patch[reviewedAt.column] = new Date().toISOString();
-  const reviewedBy = await pickExistingColumn(admin, TABLE, ["reviewed_by", "approved_by", "verified_by"]);
-  if (reviewedBy.column) patch[reviewedBy.column] = adminUserId;
-  if (note) {
-    const noteCol = await pickExistingColumn(admin, TABLE, ["admin_note", "review_note", "note"]);
-    if (noteCol.column) patch[noteCol.column] = note;
-  }
-  return patch;
-}
-
-async function buildRejectPatch(admin: SupabaseClient, adminUserId: string, reason: string): Promise<Record<string, unknown> | null> {
-  const st = await statusColumn(admin);
-  if (!st) return null;
-  const patch: Record<string, unknown> = { [st]: "rejected" };
-  const ra = await pickExistingColumn(admin, TABLE, ["rejected_at", "reviewed_at"]);
-  if (ra.column) patch[ra.column] = new Date().toISOString();
-  const rb = await pickExistingColumn(admin, TABLE, ["rejected_by", "reviewed_by"]);
-  if (rb.column) patch[rb.column] = adminUserId;
-  if (reason) {
-    const rc = await pickExistingColumn(admin, TABLE, ["rejection_reason", "admin_note", "review_note", "note"]);
-    if (rc.column) patch[rc.column] = reason;
-  }
-  return patch;
+function buildRejectPatch(): Record<string, unknown> {
+  return { [STATUS_COLUMN]: "rejected" };
 }
 
 async function runMentorProfileUpdate(
@@ -106,24 +84,7 @@ export async function approveMentorApplicationAction(formData: FormData) {
     redirect(errUrl(safeActionMsg("신청을 식별할 수 없습니다.")));
   }
 
-  let admin: SupabaseClient;
-  try {
-    admin = createServiceRoleClient();
-  } catch {
-    admin = await createClient();
-  }
-
-  const st = await statusColumn(admin);
-  if (!st) {
-    redirect(errUrl("승인 상태를 변경할 수 있는 컬럼을 찾지 못했습니다."));
-  }
-
-  const patch = await buildApprovePatch(admin, user.id, adminNote);
-  if (!patch) {
-    redirect(errUrl("승인 상태를 변경할 수 있는 컬럼을 찾지 못했습니다."));
-  }
-
-  const { touched, errorMsg } = await runMentorProfileUpdate(mentorUserId, st, patch);
+  const { touched, errorMsg } = await runMentorProfileUpdate(mentorUserId, STATUS_COLUMN, buildApprovePatch());
   if (errorMsg) {
     redirect(errUrl(safeActionMsg(errorMsg)));
   }
@@ -154,24 +115,7 @@ export async function rejectMentorApplicationAction(formData: FormData) {
     redirect(errUrl(safeActionMsg("신청을 식별할 수 없습니다.")));
   }
 
-  let admin: SupabaseClient;
-  try {
-    admin = createServiceRoleClient();
-  } catch {
-    admin = await createClient();
-  }
-
-  const st = await statusColumn(admin);
-  if (!st) {
-    redirect(errUrl("승인 상태를 변경할 수 있는 컬럼을 찾지 못했습니다."));
-  }
-
-  const patch = await buildRejectPatch(admin, user.id, reason);
-  if (!patch) {
-    redirect(errUrl("승인 상태를 변경할 수 있는 컬럼을 찾지 못했습니다."));
-  }
-
-  const { touched, errorMsg } = await runMentorProfileUpdate(mentorUserId, st, patch);
+  const { touched, errorMsg } = await runMentorProfileUpdate(mentorUserId, STATUS_COLUMN, buildRejectPatch());
   if (errorMsg) {
     redirect(errUrl(safeActionMsg(errorMsg)));
   }
@@ -201,21 +145,10 @@ export async function requestMentorDocumentsAction(formData: FormData) {
 
   if (!mentorUserId) redirect(errUrl(safeActionMsg("신청을 식별할 수 없습니다.")));
 
-  let admin: SupabaseClient;
-  try {
-    admin = createServiceRoleClient();
-  } catch {
-    admin = await createClient();
-  }
+  // W4(C10): 메모 컬럼(admin_note/review_note/note) 부재 실측 — 프로빙 제거, 상태만 갱신(메모는 admin_action_logs 에 기록).
+  const patch: Record<string, unknown> = { [STATUS_COLUMN]: "under_review" };
 
-  const st = await statusColumn(admin);
-  if (!st) redirect(errUrl("상태 컬럼을 찾지 못했습니다."));
-
-  const patch: Record<string, unknown> = { [st]: "under_review" };
-  const noteCol = await pickExistingColumn(admin, TABLE, ["admin_note", "review_note", "note"]);
-  if (noteCol.column && adminNote) patch[noteCol.column] = adminNote;
-
-  const { touched, errorMsg } = await runMentorProfileUpdate(mentorUserId, st, patch);
+  const { touched, errorMsg } = await runMentorProfileUpdate(mentorUserId, STATUS_COLUMN, patch);
   if (errorMsg) redirect(errUrl(safeActionMsg(errorMsg)));
   if (!touched) redirect(errUrl(safeActionMsg("처리할 수 없는 상태입니다.")));
 

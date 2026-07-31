@@ -1,5 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 
 type Row = Record<string, unknown>;
 
@@ -14,31 +13,20 @@ export async function fetchMentorProfileRow(
   return { row: (data as Row) ?? null, error: null };
 }
 
+/**
+ * W4(C10): 후보 테이블 부재 실측(187 baseline 0 — mentor_media/mentor_content_links/
+ * mentor_link_items 모두 CREATE 없음) — 프로빙 제거, 현행 관측 동작(빈 결과) 고정.
+ * 기능 정본화는 비범위. 소비처(공개 멘토 상세·프로필 편집·멘토 채널)는 기존과 동일하게
+ * 빈 상태를 렌더한다.
+ */
 export async function fetchMentorMediaSample(
   supabase: SupabaseClient,
   userId: string,
   limit = 12
 ): Promise<{ rows: Row[]; table: string | null; error: string | null }> {
-  const tables = ["mentor_media", "mentor_content_links", "mentor_link_items"] as const;
-  for (const table of tables) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) continue;
-    const { column } = await pickExistingColumn(supabase, table, [
-      "mentor_id",
-      "mentor_user_id",
-      "user_id",
-      "owner_id",
-    ]);
-    if (!column) {
-      const { data, error } = await supabase.from(table).select("*").limit(limit);
-      if (error) return { rows: [], table, error: null };
-      return { rows: (data as Row[]) ?? [], table, error: null };
-    }
-    const { data, error } = await supabase.from(table).select("*").eq(column, userId).limit(limit);
-    if (error) return { rows: [], table, error: null };
-    return { rows: (data as Row[]) ?? [], table, error: null };
-  }
-  /** 테이블 미배포·RLS·probe 실패는 출시 전 흔함 — 빈 목록으로 조용히 처리 */
+  void supabase;
+  void userId;
+  void limit;
   return { rows: [], table: null, error: null };
 }
 

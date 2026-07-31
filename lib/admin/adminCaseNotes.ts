@@ -34,9 +34,9 @@ function targetColumn(target: AdminCaseNoteTarget): "dispute_id" | "report_id" {
   return target.kind === "dispute" ? "dispute_id" : "report_id";
 }
 
-function isMissingNotesTable(message: string): boolean {
-  return /admin_case_notes|schema cache|relation .*does not exist|could not find the table|42P01/i.test(message);
-}
+// W4(C10): isMissingNotesTable(스키마 오류 → "missing" 상태 변환) 제거 — admin_case_notes 는
+// 187 baseline 실존(084)이라 해당 분기는 도달 불가 레거시였다. 모든 조회·기록 오류는 error 로
+// 전파한다. status "missing" 리터럴 타입은 UI 호환을 위해 유지(발생 경로 0).
 
 function shortId(id: string): string {
   return id.length > 10 ? `${id.slice(0, 8)}...` : id;
@@ -71,9 +71,6 @@ export async function loadAdminCaseNotes(
     .limit(limit);
 
   if (error) {
-    if (isMissingNotesTable(error.message)) {
-      return { status: "missing", notes: [], error: null };
-    }
     return { status: "error", notes: [], error: error.message };
   }
 
@@ -143,7 +140,7 @@ export async function insertAdminCaseNote(
   if (error) {
     return {
       ok: false,
-      missing: isMissingNotesTable(error.message),
+      missing: false,
       error: error.message,
     };
   }
@@ -174,13 +171,17 @@ export function insertAdminReportNote(
   });
 }
 
+/** best-effort 메모 기록 — 부모 액션의 성패와 분리(문서화된 열화). 조치 자체의 정본 감사 기록은
+ *  admin_action_logs(logAdminAction)가 담당한다.
+ *  W4(C10): missing(스키마 부재) 에러만 로그를 생략하던 분기 제거 — admin_case_notes 는 187 baseline 에
+ *  실존(084 SQL)하므로 모든 실패를 예외 없이 console.error 로 표면화한다. */
 export async function tryInsertAdminDisputeNote(
   supabase: SupabaseClient,
   input: { disputeId: string; note: string; adminId: string }
 ): Promise<void> {
   if (!input.note.trim()) return;
   const result = await insertAdminDisputeNote(supabase, input);
-  if (!result.ok && !result.missing) {
+  if (!result.ok) {
     console.error("[tryInsertAdminDisputeNote]", result.error);
   }
 }
@@ -191,7 +192,7 @@ export async function tryInsertAdminReportNote(
 ): Promise<void> {
   if (!input.note.trim()) return;
   const result = await insertAdminReportNote(supabase, input);
-  if (!result.ok && !result.missing) {
+  if (!result.ok) {
     console.error("[tryInsertAdminReportNote]", result.error);
   }
 }

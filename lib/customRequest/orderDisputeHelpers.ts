@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { firstReadableCustomTable } from "@/lib/customRequest/customRequestQueries";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
+// W4(C10): disputes 단일 정본 테이블 · custom_request_order_id 정본 FK 고정(004, 187 baseline 실측) — 프로빙 제거
+import { ORDER_CHILD_FK_COLUMN } from "@/lib/customRequest/customRequestQueries";
 
 type Row = Record<string, unknown>;
 
@@ -47,28 +47,18 @@ export async function fetchActiveOpenDisputeOrderIdSet(
   if (!trimmed.length) {
     return out;
   }
-  const dis = await firstReadableCustomTable(supabase, ["disputes", "order_disputes", "custom_disputes"]);
-  if (!dis.table) {
+  const { data, error } = await supabase.from("disputes").select("*").in(ORDER_CHILD_FK_COLUMN, trimmed);
+  if (error) {
+    // W4(C10): 표시 전용 강등(목록 배지·카운트) — 오류를 로그로 표면화하고 빈 집합 반환. 성공 아님.
+    // 쓰기 잠금은 getActiveDisputeBlockMessage(fail-closed)가 별도로 담당한다.
+    console.error("[fetchActiveOpenDisputeOrderIdSet] query failed", error.message);
     return out;
   }
-  const { column: fk } = await pickExistingColumn(supabase, dis.table, [
-    "custom_request_order_id",
-    "order_id",
-    "custom_order_id",
-    "request_order_id",
-  ]);
-  if (!fk) {
-    return out;
-  }
-  const { data, error } = await supabase.from(dis.table).select("*").in(fk, trimmed);
-  if (error || !data?.length) {
-    return out;
-  }
-  for (const row of data as Row[]) {
+  for (const row of (data as Row[] | null) ?? []) {
     if (!hasActiveDisputeForOrderRows([row])) {
       continue;
     }
-    const v = row[fk];
+    const v = row[ORDER_CHILD_FK_COLUMN];
     if (typeof v === "string" && v.trim()) {
       out.add(v.trim());
     }
@@ -83,20 +73,7 @@ export async function getDisputeRowsForOrderId(
   supabase: SupabaseClient,
   orderId: string
 ): Promise<{ rows: Row[]; error: string | null }> {
-  const dis = await firstReadableCustomTable(supabase, ["disputes", "order_disputes", "custom_disputes"]);
-  if (!dis.table) {
-    return { rows: [], error: dis.error || "disputes 테이블 없음" };
-  }
-  const { column: fk } = await pickExistingColumn(supabase, dis.table, [
-    "custom_request_order_id",
-    "order_id",
-    "custom_order_id",
-    "request_order_id",
-  ]);
-  if (!fk) {
-    return { rows: [], error: "disputes: order FK 열 없음" };
-  }
-  const { data, error } = await supabase.from(dis.table).select("*").eq(fk, orderId);
+  const { data, error } = await supabase.from("disputes").select("*").eq(ORDER_CHILD_FK_COLUMN, orderId);
   if (error) {
     return { rows: [], error: error.message };
   }
@@ -104,8 +81,10 @@ export async function getDisputeRowsForOrderId(
 }
 
 /**
- * 서버 액션 전용: 분쟁을 읽을 수 없으면(스키마 미배포·FK 미탐지) 기존과 같이 잠그지 않는다.
- * 실제 조회 오류(RLS·일시 장애 등)는 보수적으로 잠근다. (호출부는 멘토/학생 액션·정산 삽입뿐.)
+ * 서버 액션 전용 쓰기 잠금 게이트.
+ * W4(C10): '스키마 미배포(relation/schema cache) 오류면 잠그지 않는다'던 fail-open 분기 제거 —
+ * disputes 는 실존 테이블(004, 187 baseline)이므로 해당 분기는 RLS·일시 장애 오류까지 통과시키는 구멍이었다.
+ * 이제 모든 조회 오류는 보수적으로 잠근다(fail-closed).
  */
 export async function getActiveDisputeBlockMessage(
   supabase: SupabaseClient,
@@ -113,14 +92,7 @@ export async function getActiveDisputeBlockMessage(
 ): Promise<string | null> {
   const { rows, error } = await getDisputeRowsForOrderId(supabase, orderId);
   if (error) {
-    const e = error;
-    if (
-      /relation|does not exist|schema cache/i.test(e) ||
-      /테이블 없음|disputes 테이블 없음|order FK 열 없음/i.test(e)
-    ) {
-      return null;
-    }
-    console.error("[getActiveDisputeBlockMessage] dispute query failed", { orderId, error: e });
+    console.error("[getActiveDisputeBlockMessage] dispute query failed", { orderId, error });
     return "분쟁 상태를 확인할 수 없어 진행할 수 없습니다. 잠시 후 다시 시도해 주세요.";
   }
   if (hasActiveDisputeForOrderRows(rows)) {

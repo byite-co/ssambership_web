@@ -1,7 +1,6 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import { loadMentorSettlementItemsForPayouts } from "@/lib/mentor/mentorPayoutsQueries";
 import {
   formatSubscriptionSettlementPeriod,
@@ -15,7 +14,6 @@ import {
   MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
   MENTOR_CUSTOM_REQUEST_SHARE,
   MENTOR_INDIVIDUAL_QUESTION_SHARE,
-  minorUnitsToCash,
 } from "@/lib/mentor/mentorPayoutsConstants";
 import {
   buildPayoutScheduleInfo,
@@ -209,7 +207,13 @@ async function loadCustomRequestLines(client: SupabaseClient, mentorId: string):
     .order("created_at", { ascending: false })
     .limit(200);
 
-  if (error || !orders) return fromSettlement;
+  if (error || !orders) {
+    // W4(C10): 오류를 무음으로 부분 목록으로 바꾸지 않는다 — console.error 로 기록한다.
+    // 정산 항목(fromSettlement)까지는 반환하는 표시 전용 degrade(성공 아님) — 완료 주문
+    // 보강 라인만 빠지며, 반환 타입(MentorPayoutDetailLine[]) 형상 제약으로 error 필드가 없다.
+    if (error) console.error("[loadCustomRequestLines] custom_request_orders", error.message);
+    return fromSettlement;
+  }
 
   const extra: MentorPayoutDetailLine[] = [];
   for (const o of orders as Row[]) {
@@ -253,7 +257,12 @@ async function loadIndividualQuestionLines(
     .not("released_at", "is", null)
     .order("released_at", { ascending: false })
     .limit(300);
-  if (error || !data) return [];
+  if (error || !data) {
+    // W4(C10): 오류 무음 삼킴 금지 — console.error 로 기록. 빈 배열 반환은 정산 페이지
+    // 표시 전용 degrade(성공 아님) — 반환 타입 형상 제약으로 error 필드가 없다.
+    if (error) console.error("[loadIndividualQuestionLines] individual_questions", error.message);
+    return [];
+  }
 
   const lines: MentorPayoutDetailLine[] = [];
   for (const q of data as Row[]) {
@@ -318,33 +327,32 @@ function maskPayoutAccount(accountRaw: string | null): string | null {
   return "*".repeat(digits.length - 4) + digits.slice(-4);
 }
 
+/**
+ * W4(C10): 계좌 컬럼 프로빙(pickExistingColumn) 제거 — 정본
+ * public.mentor_profiles.payout_bank_name / payout_account_number 고정 컬럼(041 · 187 baseline 실측).
+ * 쿼리 오류 시 console.error 후 기본 마스킹 표기 반환 — 계좌 표시는 마스킹 표시 전용
+ * degrade(성공 아님 · 수정 플로우는 새로 입력이라 영향 없음).
+ */
 export async function loadMentorPayoutBankAccount(
   supabase: SupabaseClient,
   mentorId: string
 ): Promise<{ display: string; editable: boolean; bankName: string | null; accountMasked: string | null }> {
-  const bankCol = await pickExistingColumn(supabase, "mentor_profiles", [
-    "payout_bank_name",
-    "bank_name",
-  ]);
-  const acctCol = await pickExistingColumn(supabase, "mentor_profiles", [
-    "payout_account_number",
-    "bank_account_number",
-    "account_number",
-  ]);
-
-  if (!bankCol.column && !acctCol.column) {
-    return { display: DEFAULT_MASKED_BANK_DISPLAY, editable: false, bankName: null, accountMasked: null };
+  const { data, error } = await supabase
+    .from("mentor_profiles")
+    .select("payout_bank_name, payout_account_number")
+    .eq("user_id", mentorId)
+    .maybeSingle();
+  if (error) {
+    console.error("[loadMentorPayoutBankAccount]", error.message);
+    return { display: DEFAULT_MASKED_BANK_DISPLAY, editable: true, bankName: null, accountMasked: null };
   }
-
-  const cols = [bankCol.column, acctCol.column].filter(Boolean).join(", ");
-  const { data } = await supabase.from("mentor_profiles").select(cols).eq("user_id", mentorId).maybeSingle();
   const row = (data as Row | null) ?? {};
-  const bankName = bankCol.column ? String(row[bankCol.column] ?? "").trim() || null : null;
-  const accountRaw = acctCol.column ? String(row[acctCol.column] ?? "").trim() || null : null;
+  const bankName = String(row.payout_bank_name ?? "").trim() || null;
+  const accountRaw = String(row.payout_account_number ?? "").trim() || null;
   const accountMasked = maskPayoutAccount(accountRaw);
   return {
     display: maskBankDisplay(bankName, accountRaw),
-    editable: Boolean(bankCol.column && acctCol.column),
+    editable: true,
     bankName,
     accountMasked,
   };
@@ -448,31 +456,13 @@ function prevYm(ym: string): string {
   return ymKey(d);
 }
 
+/**
+ * W4(C10): payouts/mentor_payouts 프로빙 루프 제거 — 두 테이블 모두 187 baseline 부재
+ * 실측(payout 스택은 clean-install 제외)으로 항상 실패하던 사문 프로빙. 정본 경로는
+ * 기존 폴백이던 custom_order_settlement_items(paid) + api_web_v1.mentor_settlement_self(paid)
+ * 합산 단일 경로다.
+ */
 async function loadLifetimePaidPayouts(client: SupabaseClient, mentorId: string): Promise<number> {
-  for (const table of ["payouts", "mentor_payouts"] as const) {
-    const { error: pe } = await client.from(table).select("id").limit(1);
-    if (pe) continue;
-    const mentorCol = await pickExistingColumn(client, table, [
-      "mentor_id",
-      "mentor_user_id",
-      "user_id",
-    ]);
-    if (!mentorCol.column) continue;
-    const { data, error } = await client
-      .from(table)
-      .select("*")
-      .eq(mentorCol.column, mentorId)
-      .in("status", ["paid", "completed", "done"])
-      .limit(500);
-    if (error || !data) continue;
-    return (data as Row[]).reduce((sum, r) => {
-      for (const k of ["amount", "amount_cents", "net_amount", "payout_amount", "mentor_amount"]) {
-        const n = intWon(r[k]);
-        if (n > 0) return sum + (k.includes("cent") ? minorUnitsToCash(n) : n);
-      }
-      return sum;
-    }, 0);
-  }
   const [settlement, subscriptionRows] = await Promise.all([
     loadMentorSettlementItemsForPayouts(client, mentorId),
     loadSubscriptionSettlementRowsForMentor(client, mentorId, 500),

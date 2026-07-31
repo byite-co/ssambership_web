@@ -5,7 +5,6 @@ import { redirect } from "next/navigation";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { canAccessOrder } from "@/lib/customRequest/orderAccess";
 import { maskContactInUserText } from "@/lib/safety/trustSafetyText";
-import { firstReadableCustomTable } from "@/lib/customRequest/customRequestQueries";
 import { getDisputeRowsForOrderId, hasActiveDisputeForOrderRows } from "@/lib/customRequest/orderDisputeHelpers";
 import {
   isOrderStatusAllowingStudentAccept,
@@ -14,7 +13,6 @@ import {
 } from "@/lib/customRequest/orderLifecycleConstants";
 import { hasDeliverableRowsForOrder } from "@/lib/customRequest/orderStudentActions";
 import { pickOrderMentorIdFromRow, pickOrderStudentId, recordOrderEventBestEffort } from "@/lib/customRequest/orderRoomMutations";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/lib/types/user";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -27,10 +25,6 @@ function orderPath(orderId: string) {
 
 function redirectWithError(orderId: string, msg: string): never {
   redirect(`${orderPath(orderId)}?error=${encodeURIComponent(msg)}`);
-}
-
-function isMissingCol(msg: string): boolean {
-  return /column|does not exist|schema cache/i.test(msg);
 }
 
 /** PostgREST / Postgres — partial unique index 등으로 중복 삽입 시 */
@@ -52,8 +46,9 @@ function readDisputeFormFields(formData: FormData): { orderId: string; disputeBo
 }
 
 /**
- * `disputes` — 004는 custom_request_order_id·student_id·mentor_id·body·status,
- * 002 draft 는 reason/description 등 혼재. insert 는 주문 행에서만 학생/멘토 id 를 채우고, 상태는 서버에서만 고정한다.
+ * `disputes` — W4(C10): 정본 단일 insert(disputes.custom_request_order_id·student_id·mentor_id·body·status·submitted_by,
+ * 004+009 — 187 baseline 실측; state/reason/description 열은 존재하지 않아 구 payload 폴백 사다리는 사문이었음).
+ * insert 는 주문 행에서만 학생/멘토 id 를 채우고, 상태는 서버에서만 고정한다.
  */
 async function insertDisputeForCustomOrder(
   supabase: SupabaseClient,
@@ -63,54 +58,24 @@ async function insertDisputeForCustomOrder(
   body: string,
   submittedBy: string
 ): Promise<{ error: string | null }> {
-  const tR = await firstReadableCustomTable(supabase, ["disputes", "order_disputes", "custom_disputes"]);
-  if (!tR.table) {
-    return { error: tR.error || "disputes 테이블 없음" };
-  }
-  const t = tR.table;
-  const { column: fk } = await pickExistingColumn(supabase, t, [
-    "custom_request_order_id",
-    "order_id",
-    "custom_order_id",
-    "request_order_id",
-  ]);
-  if (!fk) {
-    return { error: "disputes: 주문 FK 열 없음" };
-  }
-  const { column: submittedByCol } = await pickExistingColumn(supabase, t, ["submitted_by"]);
-
-  const base: Record<string, unknown> = {
-    [fk]: orderId,
+  const payload: Record<string, unknown> = {
+    custom_request_order_id: orderId,
     student_id: studentId,
     mentor_id: mentorId,
+    submitted_by: submittedBy,
+    body,
+    status: "open",
   };
-  if (submittedByCol) {
-    base[submittedByCol] = submittedBy;
+  const { error } = await supabase.from("disputes").insert(payload).select("id").limit(1);
+  if (!error) {
+    return { error: null };
   }
-
-  const trials: Record<string, unknown>[] = [
-    { ...base, body, status: "open" },
-    { ...base, body, state: "open" },
-    { ...base, reason: body, status: "open" },
-    { ...base, description: body, status: "open" },
-    { ...base, body },
-  ];
-
-  for (const payload of trials) {
-    const { error } = await supabase.from(t).insert(payload).select("id").limit(1);
-    if (!error) {
-      return { error: null };
-    }
-    if (isUniqueViolation(error)) {
-      return {
-        error: "이미 진행 중인 분쟁이 있어 새로 접수할 수 없습니다. 추가 안내가 필요하면 고객센터로 문의해 주세요.",
-      };
-    }
-    if (!isMissingCol(error.message)) {
-      return { error: error.message };
-    }
+  if (isUniqueViolation(error)) {
+    return {
+      error: "이미 진행 중인 분쟁이 있어 새로 접수할 수 없습니다. 추가 안내가 필요하면 고객센터로 문의해 주세요.",
+    };
   }
-  return { error: "분쟁 기록을 저장하지 못했습니다(스키마 불일치)." };
+  return { error: error.message };
 }
 
 /**
@@ -146,12 +111,12 @@ export async function submitCustomOrderDisputeAction(formData: FormData): Promis
     redirectWithError(orderId, "분쟁 내용은 8,000자 이하로 입력하세요.");
   }
 
-  const oT = await firstReadableCustomTable(supabase, ["custom_request_orders", "custom_orders", "request_orders"]);
-  if (!oT.table) {
-    redirectWithError(orderId, oT.error || "주문 테이블을 찾을 수 없습니다.");
-  }
-  const table = oT.table;
-  const { data: rowData, error: oe } = await supabase.from(table).select("*").eq("id", orderId).maybeSingle();
+  // W4(C10): custom_request_orders 정본 테이블 고정 + student_id/mentor_id(NOT NULL) 직접 대조 — 프로빙 제거
+  const { data: rowData, error: oe } = await supabase
+    .from("custom_request_orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
   if (oe || !rowData) {
     redirectWithError(orderId, oe?.message ?? "주문을 찾을 수 없습니다.");
   }
@@ -163,27 +128,11 @@ export async function submitCustomOrderDisputeAction(formData: FormData): Promis
   }
 
   if (role === "student") {
-    const { column: stuCol } = await pickExistingColumn(supabase, table, [
-      "student_id",
-      "buyer_id",
-      "user_id",
-      "client_id",
-      "author_id",
-      "requester_id",
-    ]);
-    if (!stuCol || String(row[stuCol]) !== user.id) {
+    if (String(row.student_id) !== user.id) {
       redirectWithError(orderId, "의뢰자(학생) 본인만 이 주문에서 분쟁을 신청할 수 있습니다.");
     }
   } else {
-    const { column: menCol } = await pickExistingColumn(supabase, table, [
-      "mentor_id",
-      "mentor_user_id",
-      "assignee_id",
-      "assigned_mentor_id",
-      "selected_mentor_id",
-      "expert_id",
-    ]);
-    if (!menCol || String(row[menCol]) !== user.id) {
+    if (String(row.mentor_id) !== user.id) {
       redirectWithError(orderId, "배정 멘토 본인만 이 주문에서 분쟁을 신청할 수 있습니다.");
     }
   }
@@ -199,9 +148,13 @@ export async function submitCustomOrderDisputeAction(formData: FormData): Promis
 
   if (role === "mentor") {
     // 멘토 분쟁은 납품 이후 단계에서만 허용한다. 납품 전 진행 이슈는 메시지/고객센터로 처리.
-    const hasDel = await hasDeliverableRowsForOrder(supabase, orderId);
+    const delCheck = await hasDeliverableRowsForOrder(supabase, orderId);
+    if (delCheck.error) {
+      // W4(C10): 조회 오류를 '납품 없음'으로 오인하지 않도록 구분해 fail-closed
+      redirectWithError(orderId, "납품 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    }
     const inStudentReview = isOrderStatusAllowingStudentAccept(norm);
-    if (!hasDel && !inStudentReview) {
+    if (!delCheck.has && !inStudentReview) {
       redirectWithError(
         orderId,
         "멘토는 납품이 등록된 이후(또는 학생 검토·수락 단계)에만 분쟁을 신청할 수 있습니다. 납품 전 이슈는 주문 메시지·고객센터로 문의해 주세요."

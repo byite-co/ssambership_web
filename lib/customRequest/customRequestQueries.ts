@@ -1,7 +1,6 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import { fetchMentorProfileForPublicMentor, getMentorUserPublic } from "@/lib/auth/mentorPublicRead";
 import { buildMentorProfileDisplay, type MentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 
 type Row = Record<string, unknown>;
 
@@ -31,90 +30,28 @@ function isActiveCustomRequestOrderRow(row: Row): boolean {
   );
 }
 
-/** insert: 첫으로 존재하는 열에 주문 id. 003는 custom_request_order_id NOT NULL. */
-export const ORDER_TO_DELIVERABLE_FK_CANDIDATES = [
-  "custom_request_order_id",
-  "order_id",
-  "custom_order_id",
-  "request_order_id",
-] as const;
+/**
+ * W4(C10): 주문 자식 테이블(FK) 정본 열.
+ * custom_order_deliverables · custom_order_revisions · custom_order_messages · order_events 모두
+ * custom_request_order_id uuid NOT NULL (003, 187 baseline 실측) — 런타임 프로빙 불필요.
+ */
+export const ORDER_CHILD_FK_COLUMN = "custom_request_order_id" as const;
 
 /**
- * 읽기·count: OR 탐지 없이 SSOT 우선 단일 열(003: custom_request_order_id).
- * insert 후보(ORDER_TO_DELIVERABLE_FK_CANDIDATES)와 동일 후보이나 **우선순위가 고정**됨.
+ * W4(C10): 자식 행 insert 시 정본 FK + 호환 미러 열(order_id·custom_order_id·request_order_id, 비 FK·nullable)을
+ * 정적으로 채운다. 4개 자식 테이블 전부에 미러 열이 실존(187 baseline)하므로 기존 프로빙 결과와 동일 payload.
  */
-export const ORDER_CHILD_FK_READ_PRIORITY = [
-  "custom_request_order_id",
-  "order_id",
-  "custom_order_id",
-  "request_order_id",
-] as const;
-
-export async function resolveOrderChildFkReadColumn(
-  supabase: SupabaseClient,
-  table: string
-): Promise<{ column: string | null; error: string | null }> {
-  for (const col of ORDER_CHILD_FK_READ_PRIORITY) {
-    const { error } = await supabase.from(table).select(col).limit(1);
-    if (!error) {
-      return { column: col, error: null };
-    }
-  }
-  return { column: null, error: "no order child fk column" };
+export function buildOrderChildIdColumns(orderId: string): Record<string, unknown> {
+  return {
+    custom_request_order_id: orderId,
+    order_id: orderId,
+    custom_order_id: orderId,
+    request_order_id: orderId,
+  };
 }
 
-/**
- * 003: custom_request_order_id가 본 키이면 order_id·custom_order_id·request_order_id에 동일 UUID를 미러(열 있을 때만).
- * 통합 주문 시스템에서 `order_id`만 쓰는 API와 호환.
- */
-export async function mergeOrderChildIdMirrorColumns(
-  supabase: SupabaseClient,
-  table: string,
-  orderId: string,
-  base: Record<string, unknown>
-): Promise<Record<string, unknown>> {
-  const out: Record<string, unknown> = { ...base };
-  for (const col of ["order_id", "custom_order_id", "request_order_id"] as const) {
-    if (out[col] !== undefined) {
-      continue;
-    }
-    const { error } = await supabase.from(table).select(col).limit(1);
-    if (!error) {
-      out[col] = orderId;
-    }
-  }
-  return out;
-}
-
-export async function firstReadableCustomTable(
-  supabase: SupabaseClient,
-  candidates: readonly string[]
-): Promise<{ table: string | null; error: string }> {
-  let last = "no candidates";
-  for (const table of candidates) {
-    const { error } = await supabase.from(table).select("*").limit(1);
-    if (!error) return { table, error: "" };
-    last = error.message;
-  }
-  return { table: null, error: last };
-}
-
-async function selectWithOrder<T extends Row>(
-  supabase: SupabaseClient,
-  table: string,
-  limit: number
-): Promise<{ rows: T[]; error: string | null }> {
-  const orderCols = ["created_at", "updated_at", "id", "published_at"] as const;
-  for (const col of orderCols) {
-    const { data, error } = await supabase.from(table).select("*").order(col, { ascending: false }).limit(limit);
-    if (!error) return { rows: (data as T[] | null) ?? [], error: null };
-    if (!/column|does not exist|schema cache/i.test(error.message)) {
-      return { rows: [], error: error.message };
-    }
-  }
-  const { data, error } = await supabase.from(table).select("*").limit(limit);
-  return { rows: (data as T[] | null) ?? [], error: fmt(error) };
-}
+// W4(C10): firstReadableCustomTable(후보 테이블 순회 helper) 삭제 — customOrderEscrowService 의
+// 마지막 호출부까지 정본 custom_request_orders 고정으로 전환 완료, 활성 호출자 0.
 
 export type CustomListResult = {
   table: string | null;
@@ -123,65 +60,58 @@ export type CustomListResult = {
   error: string | null;
 };
 
+/** W4(C10): custom_request_posts.created_at desc 고정(003 — 187 baseline 실측). 프로빙·정렬 재시도 제거. */
 export async function loadRecentCustomRequestPosts(supabase: SupabaseClient, limit = 8): Promise<CustomListResult> {
-  const { table, error: te } = await firstReadableCustomTable(supabase, ["custom_request_posts", "custom_requests", "request_posts"]);
-  if (!table) {
-    return { table: null, sourceNote: te, rows: [], error: te };
+  const table = "custom_request_posts";
+  const { data, error } = await supabase
+    .from(table)
+    .select("*")
+    .order("created_at", { ascending: false })
+    .limit(Math.max(limit * 4, limit));
+  if (error) {
+    return { table, sourceNote: error.message, rows: [], error: error.message };
   }
-  const { rows, error } = await selectWithOrder<Row>(supabase, table, Math.max(limit * 4, limit));
+  const rows = (data as Row[] | null) ?? [];
   return {
     table,
     sourceNote: "최근 공개 의뢰(open/published)",
-    rows: error ? [] : rows.filter(isPublicBrowsePostRow).slice(0, limit),
-    error,
+    rows: rows.filter(isPublicBrowsePostRow).slice(0, limit),
+    error: null,
   };
 }
 
-/** 학생 본인이 등록한 의뢰 목록 */
+/** 학생 본인이 등록한 의뢰 목록 — W4(C10): custom_request_posts.author_id(NOT NULL) 고정, 무정렬 재시도 제거 */
 export async function loadStudentCustomRequestPosts(
   supabase: SupabaseClient,
   studentId: string,
   limit = 50
 ): Promise<CustomListResult> {
-  const { table, error: te } = await firstReadableCustomTable(supabase, ["custom_request_posts", "custom_requests", "request_posts"]);
-  if (!table) {
-    return { table: null, sourceNote: te, rows: [], error: te };
-  }
-  const { column, error: colErr } = await pickExistingColumn(supabase, table, ["author_id"]);
-  if (!column) {
-    return { table, sourceNote: colErr ?? "author column missing", rows: [], error: colErr };
-  }
+  const table = "custom_request_posts";
   const { data, error } = await supabase
     .from(table)
     .select("*")
-    .eq(column, studentId)
+    .eq("author_id", studentId)
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) {
-    const fb = await supabase.from(table).select("*").eq(column, studentId).limit(limit);
-    return { table, sourceNote: "order fallback", rows: (fb.data as Row[]) ?? [], error: fmt(fb.error) };
+    return { table, sourceNote: error.message, rows: [], error: error.message };
   }
-  return { table, sourceNote: `${table}.${column}`, rows: (data as Row[]) ?? [], error: null };
+  return { table, sourceNote: `${table}.author_id`, rows: (data as Row[]) ?? [], error: null };
 }
 
 export type CustomCategoryRow = { id?: string; name?: string; label?: string; title?: string; slug?: string };
 
-export async function loadCustomRequestCategories(supabase: SupabaseClient, limit = 30): Promise<{
+/**
+ * W4(C10): 후보 테이블 부재 실측(187 baseline 0 — custom_request_categories/categories/request_categories
+ * 어느 것도 존재하지 않음) — 프로빙 제거, 현행 관측 동작(빈 결과·static 소스) 고정. 기능 정본화는 비범위.
+ */
+export async function loadCustomRequestCategories(_supabase: SupabaseClient, _limit = 30): Promise<{
   rows: CustomCategoryRow[];
   source: "table" | "static";
   table: string | null;
   error: string | null;
 }> {
-  const { table, error: te } = await firstReadableCustomTable(supabase, ["custom_request_categories", "categories", "request_categories"]);
-  if (!table) {
-    return { rows: [], source: "static" as const, table: null, error: te };
-  }
-  const { data, error } = await supabase.from(table).select("*").limit(limit);
-  if (error) {
-    return { rows: [], source: "table", table, error: error.message };
-  }
-  const list = (data as Row[] | null) ?? [];
-  return { rows: list as CustomCategoryRow[], source: "table", table, error: null };
+  return { rows: [], source: "static" as const, table: null, error: null };
 }
 
 export function pickMentorIdFromApplication(r: Row): string | null {
@@ -212,15 +142,12 @@ export function verifyApplicationForPost(row: Row | null, postId: string): { ok:
   return { ok: false, detail: "postId 불일치" };
 }
 
+/** W4(C10): custom_request_applications 단일 정본 테이블(003 — 187 baseline 실측) */
 export async function loadApplicationById(
   supabase: SupabaseClient,
   applicationId: string
 ): Promise<{ row: Row | null; table: string | null; error: string | null }> {
-  const tProbe = await firstReadableCustomTable(supabase, ["custom_request_applications", "request_applications", "custom_bids"]);
-  if (!tProbe.table) {
-    return { row: null, table: null, error: tProbe.error || null };
-  }
-  const t = tProbe.table;
+  const t = "custom_request_applications";
   const { data, error } = await supabase.from(t).select("*").eq("id", applicationId).maybeSingle();
   if (error) {
     return { row: null, table: t, error: error.message };
@@ -230,39 +157,19 @@ export async function loadApplicationById(
 
 /**
  * 이미 이 의뢰·학생에 대한 주문이 있는지(1명 선정 = 1주문 정책)
+ * W4(C10): custom_request_orders.post_id + student_id(둘 다 NOT NULL, 003) 고정 — 컬럼 프로빙 제거.
  */
 export async function findOrderForPostAndStudent(
   supabase: SupabaseClient,
   postId: string,
   studentId: string
 ): Promise<{ row: Row | null; table: string | null; orderId: string | null; probe: string; error: string | null }> {
-  const oT = await firstReadableCustomTable(supabase, ["custom_request_orders", "custom_orders", "request_orders"]);
-  if (!oT.table) {
-    return { row: null, table: null, orderId: null, probe: oT.error, error: oT.error || null };
-  }
-  const t = oT.table;
-  const { column: postCol } = await pickExistingColumn(supabase, t, [
-    "post_id",
-    "custom_request_post_id",
-    "request_id",
-    "custom_request_id",
-  ]);
-  const { column: stuCol } = await pickExistingColumn(supabase, t, [
-    "student_id",
-    "buyer_id",
-    "user_id",
-    "client_id",
-    "author_id",
-    "requester_id",
-  ]);
-  if (!postCol || !stuCol) {
-    return { row: null, table: t, orderId: null, probe: "post+student FK 미식별", error: "order 테이블 FK로 필터 불가" };
-  }
+  const t = "custom_request_orders";
   const { data, error } = await supabase
     .from(t)
     .select("*")
-    .eq(postCol, postId)
-    .eq(stuCol, studentId)
+    .eq("post_id", postId)
+    .eq("student_id", studentId)
     .order("created_at", { ascending: false })
     .limit(20);
   if (error) {
@@ -271,7 +178,7 @@ export async function findOrderForPostAndStudent(
   const rows = ((data as Row[] | null) ?? []).filter(isActiveCustomRequestOrderRow);
   const row = rows[0] ?? null;
   const rid = row ? pickOrderIdFromRow(row) : null;
-  return { row, table: t, orderId: rid, probe: `${t}.${postCol}+${stuCol}`, error: null };
+  return { row, table: t, orderId: rid, probe: `${t}.post_id+student_id`, error: null };
 }
 
 function pickOrderIdFromRow(row: Row): string | null {
@@ -297,6 +204,7 @@ export type ApplicationAttachmentListItem = {
 
 /**
  * 의뢰 등록 첨부(메타) — RLS: 작성·멘토·admin만 행 조회. 비로그인·비참여는 0행.
+ * W4(C10): relation/schema cache 오류를 빈 성공으로 바꾸던 분기 제거(테이블 실존 — 012, 187 baseline) — 오류는 그대로 반환.
  */
 export async function loadPostAttachments(
   supabase: SupabaseClient,
@@ -308,9 +216,6 @@ export async function loadPostAttachments(
     .eq("custom_request_post_id", postId)
     .order("created_at", { ascending: true });
   if (error) {
-    if (/relation|does not exist|schema cache/i.test(error.message)) {
-      return { rows: [], error: null };
-    }
     return { rows: [], error: error.message };
   }
   const list = (data as Row[] | null) ?? [];
@@ -331,6 +236,7 @@ export async function loadPostAttachments(
 
 /**
  * 멘토 지원서 첨부(메타) — RLS: 지원 멘토 본인 · post 작성 학생 · admin만 행 조회.
+ * W4(C10): relation/schema cache 오류의 빈 성공 변환 제거(테이블 실존 — 059, 187 baseline).
  */
 export async function loadApplicationAttachments(
   supabase: SupabaseClient,
@@ -346,9 +252,6 @@ export async function loadApplicationAttachments(
     .in("application_id", ids)
     .order("created_at", { ascending: true });
   if (error) {
-    if (/relation|does not exist|schema cache/i.test(error.message)) {
-      return { byApplicationId: {}, error: null };
-    }
     return { byApplicationId: {}, error: error.message };
   }
   const byApplicationId: Record<string, ApplicationAttachmentListItem[]> = {};
@@ -372,14 +275,12 @@ export async function loadApplicationAttachments(
   return { byApplicationId, error: null };
 }
 
+/** W4(C10): custom_request_posts 단일 정본 테이블(003) */
 export async function loadCustomPostById(
   supabase: SupabaseClient,
   postId: string
 ): Promise<{ row: Row | null; table: string | null; error: string | null }> {
-  const { table, error: te } = await firstReadableCustomTable(supabase, ["custom_request_posts", "custom_requests", "request_posts"]);
-  if (!table) {
-    return { row: null, table: null, error: te || null };
-  }
+  const table = "custom_request_posts";
   const { data, error } = await supabase.from(table).select("*").eq("id", postId).maybeSingle();
   if (error) {
     return { row: null, table, error: error.message };
@@ -390,31 +291,22 @@ export async function loadCustomPostById(
 /**
  * 공개 상세 페이지: 작성자·동의어 컬럼은 RLS로 직접 SELECT 가능.
  * 멘토는 crp_select에 없어 0행 → `get_public_custom_request_post_for_browse` RPC로 최소 열만 조회(006 SQL).
+ * W4(C10): RPC 실존(006, 187 baseline) — missing-function 무음 강등 분기 제거, RPC 오류는 그대로 반환.
  */
 export async function loadCustomPostForPublicDetail(
   supabase: SupabaseClient,
   postId: string
 ): Promise<{ row: Row | null; table: string | null; error: string | null }> {
   const direct = await loadCustomPostById(supabase, postId);
-  if (direct.error && !direct.row) {
-    return direct;
-  }
-  if (direct.row) {
-    return direct;
-  }
-  if (!direct.table || direct.table !== "custom_request_posts") {
+  if (direct.row || direct.error) {
     return direct;
   }
   const { data, error } = await supabase.rpc("get_public_custom_request_post_for_browse", { p_post_id: postId }).maybeSingle();
   if (error) {
-    const missingRpc = /function|does not exist|schema cache/i.test(error.message);
-    if (missingRpc) {
-      return { row: null, table: direct.table ?? "custom_request_posts", error: direct.error };
-    }
-    return { row: null, table: direct.table ?? "custom_request_posts", error: error.message };
+    return { row: null, table: "custom_request_posts", error: error.message };
   }
   if (!data) {
-    return { row: null, table: direct.table ?? "custom_request_posts", error: null };
+    return { row: null, table: "custom_request_posts", error: null };
   }
   return { row: data as Row, table: "custom_request_posts", error: null };
 }
@@ -434,43 +326,32 @@ function pickAuthorColumn(row: Row): string | null {
   return null;
 }
 
+/**
+ * W4(C10): custom_request_applications.post_id(NOT NULL, 003) 고정.
+ * 구 코드의 "FK 미탐지 → 전체 샘플(무필터)" 분기·무정렬 재시도 제거 — 오류는 오류로 반환.
+ */
 export async function loadApplicationsForPost(
   supabase: SupabaseClient,
   postId: string,
   limit = 40
 ): Promise<CustomListResult & { postTable: string | null }> {
-  const tProbe = await firstReadableCustomTable(supabase, ["custom_request_applications", "request_applications", "custom_bids"]);
-  if (!tProbe.table) {
-    return { table: null, postTable: null, sourceNote: tProbe.error, rows: [], error: tProbe.error };
-  }
-  const t = tProbe.table;
-  const { column, error: colErr } = await pickExistingColumn(supabase, t, ["post_id", "request_id", "custom_request_id", "custom_request_post_id"]);
-  if (!column) {
-    const { rows, error } = await selectWithOrder<Row>(supabase, t, limit);
-    return {
-      table: t,
-      postTable: t,
-      sourceNote: colErr ? `${colErr} — 전체 샘플` : "post_id FK 없음, 최근 전체(필터 후속)",
-      rows: error ? [] : rows,
-      error,
-    };
-  }
+  const t = "custom_request_applications";
   const { data, error } = await supabase
     .from(t)
     .select("*")
-    .eq(column, postId)
+    .eq("post_id", postId)
     .order("created_at", { ascending: false })
     .limit(limit);
   if (error) {
-    if (!/order|column/i.test(error.message)) {
-      return { table: t, postTable: null, sourceNote: error.message, rows: [], error: error.message };
-    }
-    const fb = await supabase.from(t).select("*").eq(column, postId).limit(limit);
-    return { table: t, postTable: null, sourceNote: "order 생략", rows: (fb.data as Row[]) ?? [], error: fmt(fb.error) };
+    return { table: t, postTable: null, sourceNote: error.message, rows: [], error: error.message };
   }
-  return { table: t, postTable: t, sourceNote: `${t}.${column} = post`, rows: (data as Row[]) ?? [], error: null };
+  return { table: t, postTable: t, sourceNote: `${t}.post_id = post`, rows: (data as Row[]) ?? [], error: null };
 }
 
+/**
+ * W4(C10): 주문(custom_request_orders) · 납품(custom_order_deliverables.custom_request_order_id, version desc)
+ * · 분쟁(disputes.custom_request_order_id) 정본 고정 — 테이블/FK 프로빙과 무정렬 재시도 제거(187 baseline 실측).
+ */
 export async function loadOrderBundle(
   supabase: SupabaseClient,
   orderId: string
@@ -479,11 +360,11 @@ export async function loadOrderBundle(
   deliverables: CustomListResult;
   disputes: CustomListResult;
 }> {
-  const oT = await firstReadableCustomTable(supabase, ["custom_request_orders", "custom_orders", "request_orders"]);
+  const orderTable = "custom_request_orders";
   let orderRow: Row | null = null;
-  let orderErr: string | null = oT.error || null;
-  if (oT.table) {
-    const { data, error } = await supabase.from(oT.table).select("*").eq("id", orderId).maybeSingle();
+  let orderErr: string | null = null;
+  {
+    const { data, error } = await supabase.from(orderTable).select("*").eq("id", orderId).maybeSingle();
     if (error) {
       orderErr = error.message;
     } else {
@@ -491,80 +372,36 @@ export async function loadOrderBundle(
     }
   }
 
-  const dT = await firstReadableCustomTable(supabase, ["custom_order_deliverables", "order_deliverables", "request_deliverables"]);
-  let deliv: CustomListResult = { table: null, sourceNote: dT.error, rows: [], error: dT.error };
-  if (dT.table && oT.table) {
-    const { column: fk } = await resolveOrderChildFkReadColumn(supabase, dT.table);
-    if (fk) {
-      const { data, error } = await supabase
-        .from(dT.table)
-        .select("*")
-        .eq(fk, orderId)
-        .order("version", { ascending: false });
-      if (error) {
-        const r2 = await supabase.from(dT.table).select("*").eq(fk, orderId);
-        deliv = {
-          table: dT.table,
-          sourceNote: "납품 버전(스키마에 version 없으면 생략)",
-          rows: (r2.data as Row[]) ?? [],
-          error: fmt(r2.error),
-        };
-      } else {
-        deliv = { table: dT.table, sourceNote: `deliverables · ${fk}`, rows: (data as Row[]) ?? [], error: null };
-      }
-    } else {
-      console.warn("[loadOrderBundle] deliverables: order FK column unresolved; skipped child rows", {
-        orderId,
-        table: dT.table,
-      });
-      deliv = {
-        table: dT.table,
-        sourceNote: "납품: 주문 FK 컬럼을 찾지 못해 이 주문의 납품 목록을 표시하지 않습니다.",
-        rows: [],
-        error: null,
-      };
-    }
-  } else if (dT.table) {
-    console.warn("[loadOrderBundle] deliverables: order table missing; skipped unrelated rows", {
-      orderId,
-      deliverablesTable: dT.table,
-    });
+  const deliverablesTable = "custom_order_deliverables";
+  let deliv: CustomListResult;
+  {
+    const { data, error } = await supabase
+      .from(deliverablesTable)
+      .select("*")
+      .eq(ORDER_CHILD_FK_COLUMN, orderId)
+      .order("version", { ascending: false });
     deliv = {
-      table: dT.table,
-      sourceNote: oT.table ? "주문을 찾을 수 없어 납품 목록을 불러오지 않았습니다." : (dT.error ?? "납품 목록을 건너뜁니다."),
-      rows: [],
-      error: null,
+      table: deliverablesTable,
+      sourceNote: `deliverables · ${ORDER_CHILD_FK_COLUMN}`,
+      rows: error ? [] : ((data as Row[]) ?? []),
+      error: fmt(error),
     };
   }
 
-  const dis = await firstReadableCustomTable(supabase, ["disputes", "order_disputes", "custom_disputes"]);
-  let disputes: CustomListResult = { table: null, sourceNote: dis.error, rows: [], error: dis.error };
-  if (dis.table) {
-    const { column: fk } = await pickExistingColumn(supabase, dis.table, [
-      "custom_request_order_id",
-      "order_id",
-      "custom_order_id",
-      "request_order_id",
-    ]);
-    if (fk) {
-      const { data, error } = await supabase.from(dis.table).select("*").eq(fk, orderId).limit(20);
-      disputes = { table: dis.table, sourceNote: "분쟁(조회만)", rows: (data as Row[]) ?? [], error: fmt(error) };
-    } else {
-      console.warn("[loadOrderBundle] disputes: order FK column unresolved; skipped child rows", {
-        orderId,
-        table: dis.table,
-      });
-      disputes = {
-        table: dis.table,
-        sourceNote: "분쟁: 주문 FK 컬럼을 찾지 못해 이 주문의 분쟁 목록을 표시하지 않습니다.",
-        rows: [],
-        error: null,
-      };
-    }
+  const disputesTable = "disputes";
+  let disputes: CustomListResult;
+  {
+    const { data, error } = await supabase.from(disputesTable).select("*").eq(ORDER_CHILD_FK_COLUMN, orderId).limit(20);
+    disputes = {
+      table: disputesTable,
+      sourceNote: "분쟁(조회만)",
+      rows: error ? [] : ((data as Row[]) ?? []),
+      error: fmt(error),
+    };
   }
 
   return {
-    order: { row: orderRow, table: oT.table, error: orderRow ? null : (orderErr ?? (oT.table ? "주문 없음" : oT.error)) },
+    order: { row: orderRow, table: orderTable, error: orderRow ? null : (orderErr ?? "주문 없음") },
     deliverables: deliv,
     disputes,
   };
@@ -749,8 +586,9 @@ export type EnrichedApplication = {
 };
 
 /**
- * 멘토용 모집 중 의뢰 목록 — 018 `list_open_custom_request_posts_for_mentor_browse` RPC
- * (미적용 DB에서는 RPC 없음 → status `rpc_unavailable`, 클라이언트는 안내 문구만 사용)
+ * 멘토용 모집 중 의뢰 목록 — 018 `list_open_custom_request_posts_for_mentor_browse` RPC.
+ * W4(C10): RPC 실존(018, 187 baseline) — 오류를 'empty'(빈 목록 성공)로 바꾸던 분기 제거.
+ * 모든 오류는 console.error 후 `rpc_unavailable`(안내 문구 표시)로 강등 — 표시 전용 강등이며 성공이 아님.
  */
 export async function loadOpenCustomRequestPostsForMentorBrowse(
   supabase: SupabaseClient,
@@ -758,73 +596,57 @@ export async function loadOpenCustomRequestPostsForMentorBrowse(
 ): Promise<{ rows: Row[]; status: "ok" | "empty" | "rpc_unavailable" }> {
   const { data, error } = await supabase.rpc("list_open_custom_request_posts_for_mentor_browse", { p_limit: limit });
   if (error) {
-    if (/function|does not exist|schema cache/i.test(error.message)) {
-      return { rows: [], status: "rpc_unavailable" };
-    }
-    return { rows: [], status: "empty" };
+    console.error("[loadOpenCustomRequestPostsForMentorBrowse] rpc failed", error.message);
+    return { rows: [], status: "rpc_unavailable" };
   }
   return { rows: (data as Row[]) ?? [], status: "ok" };
 }
 
 /**
- * 이미 이 의뢰에 (동일 멘토) 지원이 있는지 — 지원서 작성·중복 안내
+ * 이미 이 의뢰에 (동일 멘토) 지원이 있는지 — 지원서 작성·중복 안내.
+ * W4(C10): custom_request_applications.post_id+mentor_id 고정.
+ * 조회 오류 시 console.error 후 false — 표시 전용 강등(중복 안내 UX 힌트일 뿐, 성공 아님. 실제 중복 차단은 insert 시 dup 검사).
  */
 export async function mentorHasApplicationForPost(
   supabase: SupabaseClient,
   postId: string,
   mentorId: string
 ): Promise<boolean> {
-  const tProbe = await firstReadableCustomTable(supabase, ["custom_request_applications", "request_applications", "custom_bids"]);
-  if (!tProbe.table) return false;
-  const t = tProbe.table;
-  const { column: postCol } = await pickExistingColumn(supabase, t, [
-    "post_id",
-    "request_id",
-    "custom_request_id",
-    "custom_request_post_id",
-  ]);
-  const { column: mentorCol } = await pickExistingColumn(supabase, t, [
-    "mentor_id",
-    "applicant_id",
-    "user_id",
-    "proposer_id",
-  ]);
-  if (!postCol || !mentorCol) return false;
-  const { data, error } = await supabase.from(t).select("id").eq(postCol, postId).eq(mentorCol, mentorId).limit(1).maybeSingle();
-  if (error || !data) return false;
-  return true;
+  const { data, error } = await supabase
+    .from("custom_request_applications")
+    .select("id")
+    .eq("post_id", postId)
+    .eq("mentor_id", mentorId)
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error("[mentorHasApplicationForPost] query failed", { postId, error: error.message });
+    return false;
+  }
+  return Boolean(data);
 }
 
-/** 멘토가 해당 post에 제출한 application id (없으면 null) */
+/**
+ * 멘토가 해당 post에 제출한 application id (없으면 null).
+ * W4(C10): 정본 고정. 조회 오류 시 console.error 후 null — 표시 전용 강등(링크 힌트), 성공 아님.
+ */
 export async function loadMentorApplicationIdForPost(
   supabase: SupabaseClient,
   postId: string,
   mentorId: string
 ): Promise<string | null> {
-  const tProbe = await firstReadableCustomTable(supabase, ["custom_request_applications", "request_applications", "custom_bids"]);
-  if (!tProbe.table) return null;
-  const t = tProbe.table;
-  const { column: postCol } = await pickExistingColumn(supabase, t, [
-    "post_id",
-    "request_id",
-    "custom_request_id",
-    "custom_request_post_id",
-  ]);
-  const { column: mentorCol } = await pickExistingColumn(supabase, t, [
-    "mentor_id",
-    "applicant_id",
-    "user_id",
-    "proposer_id",
-  ]);
-  if (!postCol || !mentorCol) return null;
   const { data, error } = await supabase
-    .from(t)
+    .from("custom_request_applications")
     .select("id")
-    .eq(postCol, postId)
-    .eq(mentorCol, mentorId)
+    .eq("post_id", postId)
+    .eq("mentor_id", mentorId)
     .limit(1)
     .maybeSingle();
-  if (error || !data) return null;
+  if (error) {
+    console.error("[loadMentorApplicationIdForPost] query failed", { postId, error: error.message });
+    return null;
+  }
+  if (!data) return null;
   const id = (data as Row).id;
   return id != null ? String(id) : null;
 }
@@ -858,53 +680,30 @@ function applicationHasMentorOrder(app: Row, keys: MentorOrderApplicationFilterK
 
 /**
  * 멘토 주문 중 application·post 연결 키(제안 목록에서 주문 전환 건 제외용, 읽기 전용).
+ * W4(C10): custom_request_orders.mentor_id/application_id/post_id 고정(003).
+ * 조회 오류 시 console.error 후 빈 집합 — 표시 전용 강등(목록 필터 힌트), 성공 아님.
  */
 export async function fetchMentorOrderApplicationFilterKeys(
   supabase: SupabaseClient,
   mentorId: string
 ): Promise<MentorOrderApplicationFilterKeys> {
   const empty = { applicationIds: new Set<string>(), postIds: new Set<string>() };
-  const oT = await firstReadableCustomTable(supabase, ["custom_request_orders", "custom_orders", "request_orders"]);
-  if (!oT.table) {
-    return empty;
-  }
-  const t = oT.table;
-  const { column: mentorCol } = await pickExistingColumn(supabase, t, [
-    "mentor_id",
-    "mentor_user_id",
-    "expert_id",
-    "assignee_id",
-    "selected_mentor_id",
-  ]);
-  if (!mentorCol) {
-    return empty;
-  }
-  const { column: appCol } = await pickExistingColumn(supabase, t, [
-    "application_id",
-    "custom_request_application_id",
-    "bid_id",
-  ]);
-  const { column: postCol } = await pickExistingColumn(supabase, t, [
-    "post_id",
-    "custom_request_post_id",
-    "request_id",
-    "custom_request_id",
-  ]);
-  const selectCols = [appCol, postCol].filter(Boolean).join(", ") || "*";
-  const { data, error } = await supabase.from(t).select(selectCols).eq(mentorCol, mentorId);
+  const { data, error } = await supabase
+    .from("custom_request_orders")
+    .select("application_id, post_id")
+    .eq("mentor_id", mentorId);
   if (error) {
+    console.error("[fetchMentorOrderApplicationFilterKeys] query failed", { mentorId, error: error.message });
     return empty;
   }
   const applicationIds = new Set<string>();
   const postIds = new Set<string>();
   for (const row of ((data ?? []) as unknown as Row[])) {
-    if (appCol) {
-      const aid = String(row[appCol] ?? "").trim();
-      if (aid) {
-        applicationIds.add(aid);
-      }
+    const aid = String(row.application_id ?? "").trim();
+    if (aid) {
+      applicationIds.add(aid);
     }
-    const pid = postCol ? String(row[postCol] ?? "").trim() : pickPostIdFromCustomRow(row);
+    const pid = String(row.post_id ?? "").trim();
     if (pid) {
       postIds.add(pid);
     }
@@ -914,38 +713,24 @@ export async function fetchMentorOrderApplicationFilterKeys(
 
 /**
  * 멘토가 지원한 의뢰 post id 전체(주문 전환 여부 무관) — open 풀 제외용.
+ * W4(C10): custom_request_applications.mentor_id/post_id 고정.
+ * 조회 오류 시 console.error 후 빈 집합 — 표시 전용 강등(open 풀 필터), 성공 아님.
  */
 export async function loadMentorAppliedPostIdSet(
   supabase: SupabaseClient,
   mentorId: string
 ): Promise<Set<string>> {
-  const tProbe = await firstReadableCustomTable(supabase, ["custom_request_applications", "request_applications", "custom_bids"]);
-  if (!tProbe.table) {
-    return new Set();
-  }
-  const t = tProbe.table;
-  const { column: mentorCol } = await pickExistingColumn(supabase, t, [
-    "mentor_id",
-    "applicant_id",
-    "user_id",
-    "proposer_id",
-  ]);
-  const { column: postCol } = await pickExistingColumn(supabase, t, [
-    "post_id",
-    "custom_request_post_id",
-    "request_id",
-    "custom_request_id",
-  ]);
-  if (!mentorCol || !postCol) {
-    return new Set();
-  }
-  const { data, error } = await supabase.from(t).select(postCol).eq(mentorCol, mentorId);
+  const { data, error } = await supabase
+    .from("custom_request_applications")
+    .select("post_id")
+    .eq("mentor_id", mentorId);
   if (error) {
+    console.error("[loadMentorAppliedPostIdSet] query failed", { mentorId, error: error.message });
     return new Set();
   }
   const ids = new Set<string>();
   for (const row of ((data ?? []) as unknown as Row[])) {
-    const id = String(row[postCol] ?? "").trim();
+    const id = String(row.post_id ?? "").trim();
     if (id) {
       ids.add(id);
     }
@@ -956,43 +741,23 @@ export async function loadMentorAppliedPostIdSet(
 /**
  * 멘토가 제출한 지원 요약(의뢰 제목은 browse RPC·상세 조회로 보강).
  * 주문으로 전환된 지원은 제외(매칭 대기만).
+ * W4(C10): custom_request_applications.mentor_id + created_at desc 고정 — 무정렬 재시도 제거, 오류는 listFailed.
  */
 export async function loadMentorRecentApplicationsWithPostHints(
   supabase: SupabaseClient,
   mentorId: string,
   max = 20
 ): Promise<{ items: MentorApplicationWithPostHint[]; listFailed: boolean }> {
-  const tProbe = await firstReadableCustomTable(supabase, ["custom_request_applications", "request_applications", "custom_bids"]);
-  if (!tProbe.table) {
-    return { items: [], listFailed: false };
-  }
-  const t = tProbe.table;
-  const { column: mentorCol } = await pickExistingColumn(supabase, t, [
-    "mentor_id",
-    "applicant_id",
-    "user_id",
-    "proposer_id",
-  ]);
-  if (!mentorCol) {
-    return { items: [], listFailed: true };
-  }
   const orderKeys = await fetchMentorOrderApplicationFilterKeys(supabase, mentorId);
   const o1 = await supabase
-    .from(t)
+    .from("custom_request_applications")
     .select("*")
-    .eq(mentorCol, mentorId)
+    .eq("mentor_id", mentorId)
     .order("created_at", { ascending: false })
     .limit(max);
   if (o1.error) {
-    if (!/order|column|does not exist/i.test(o1.error.message)) {
-      return { items: [], listFailed: true };
-    }
-    const o2 = await supabase.from(t).select("*").eq(mentorCol, mentorId).limit(max);
-    if (o2.error) {
-      return { items: [], listFailed: true };
-    }
-    const pending = ((o2.data as Row[]) ?? []).filter((a) => !applicationHasMentorOrder(a, orderKeys));
-    return mapAppsToHints(supabase, pending);
+    console.error("[loadMentorRecentApplicationsWithPostHints] query failed", { mentorId, error: o1.error.message });
+    return { items: [], listFailed: true };
   }
   const pending = ((o1.data as Row[]) ?? []).filter((a) => !applicationHasMentorOrder(a, orderKeys));
   return mapAppsToHints(supabase, pending);
@@ -1023,7 +788,9 @@ async function mapAppsToHints(
 }
 
 /**
- * 학생·의뢰자: 선정한 주문 id(선택 전·비해당 시 null) — UI에는 orderId만 사용
+ * 학생·의뢰자: 선정한 주문 id(선택 전·비해당 시 null) — UI에는 orderId만 사용.
+ * W4(C10): 조회 오류 시 console.error 후 null — 표시 전용 강등(주문방 이동 링크 힌트), 성공 아님.
+ * 실제 1의뢰 1주문 강제는 주문 생성 경로에서 별도 수행.
  */
 export async function getOrderIdForPostAndStudent(
   supabase: SupabaseClient,
@@ -1032,7 +799,7 @@ export async function getOrderIdForPostAndStudent(
 ): Promise<string | null> {
   const r = await findOrderForPostAndStudent(supabase, postId, studentId);
   if (r.error) {
-    console.warn("[getOrderIdForPostAndStudent]", r.error);
+    console.error("[getOrderIdForPostAndStudent] query failed", { postId, error: r.error });
   }
   return r.orderId;
 }

@@ -19,7 +19,8 @@ import {
   isCustomOrderPaymentStatusStrictlyPaid,
   mustBlockUnpaidAcceptForProduction,
 } from "@/lib/customRequest/orderPaymentPolicy";
-import { firstReadableCustomTable, ORDER_TO_DELIVERABLE_FK_CANDIDATES } from "@/lib/customRequest/customRequestQueries";
+// W4(C10): 테이블/컬럼 프로빙 제거 — custom_request_orders·custom_order_deliverables 정본 고정(187 baseline 실측)
+import { ORDER_CHILD_FK_COLUMN } from "@/lib/customRequest/customRequestQueries";
 import { recordOrderEventBestEffort } from "@/lib/customRequest/orderRoomMutations";
 import { splitPlatformAndMentorForGross } from "@/lib/customRequest/orderSettlementAmounts";
 import { MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE } from "@/lib/mentor/mentorPayoutsConstants";
@@ -27,7 +28,6 @@ import {
   acceptCustomOrderDeliverableAtomic,
   recordCustomOrderSettlementCreatedEvent,
 } from "@/lib/customRequest/orderSettlementService";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import { createClient } from "@/lib/supabase/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -41,24 +41,22 @@ function redirectWithError(orderId: string, msg: string): never {
   redirect(`${orderPath(orderId)}?error=${encodeURIComponent(msg)}`);
 }
 
-export async function hasDeliverableRowsForOrder(supabase: SupabaseClient, orderId: string): Promise<boolean> {
-  const dT = await firstReadableCustomTable(supabase, [
-    "custom_order_deliverables",
-    "order_deliverables",
-    "request_deliverables",
-  ]);
-  if (!dT.table) {
-    return false;
-  }
-  const { column: fk } = await pickExistingColumn(supabase, dT.table, [...ORDER_TO_DELIVERABLE_FK_CANDIDATES]);
-  if (!fk) {
-    return false;
-  }
+/**
+ * W4(C10): custom_order_deliverables.custom_request_order_id 정본 count 고정.
+ * 조회 오류는 '납품 없음'과 구분해 error 로 반환 — 호출부는 fail-closed 처리.
+ */
+export async function hasDeliverableRowsForOrder(
+  supabase: SupabaseClient,
+  orderId: string
+): Promise<{ has: boolean; error: string | null }> {
   const { count, error } = await supabase
-    .from(dT.table)
+    .from("custom_order_deliverables")
     .select("id", { count: "exact", head: true })
-    .eq(fk, orderId);
-  return !error && (count ?? 0) > 0;
+    .eq(ORDER_CHILD_FK_COLUMN, orderId);
+  if (error) {
+    return { has: false, error: error.message };
+  }
+  return { has: (count ?? 0) > 0, error: null };
 }
 
 /**
@@ -73,12 +71,12 @@ export async function acceptCustomOrderDeliverableAction(formData: FormData): Pr
     redirect("/custom-request?error=" + encodeURIComponent("orderId가 필요합니다."));
   }
 
-  const oT = await firstReadableCustomTable(supabase, ["custom_request_orders", "custom_orders", "request_orders"]);
-  if (!oT.table) {
-    redirectWithError(orderId, oT.error || "주문 테이블을 찾을 수 없습니다.");
-  }
-
-  const { data: rowData, error: oe } = await supabase.from(oT.table).select("*").eq("id", orderId).maybeSingle();
+  // W4(C10): custom_request_orders 정본 테이블 + student_id(NOT NULL) 직접 대조 — 프로빙 제거
+  const { data: rowData, error: oe } = await supabase
+    .from("custom_request_orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
   if (oe || !rowData) {
     redirectWithError(orderId, "주문을 찾을 수 없어요. 잠시 후 다시 시도해 주세요.");
   }
@@ -89,15 +87,7 @@ export async function acceptCustomOrderDeliverableAction(formData: FormData): Pr
     redirectWithError(orderId, "이 주문을 수락할 권한이 없습니다.");
   }
 
-  const { column: stuCol } = await pickExistingColumn(supabase, oT.table, [
-    "student_id",
-    "buyer_id",
-    "user_id",
-    "client_id",
-    "author_id",
-    "requester_id",
-  ]);
-  if (!stuCol || String(row[stuCol]) !== user.id) {
+  if (String(row.student_id) !== user.id) {
     redirectWithError(orderId, "의뢰자(학생) 본인만 납품을 수락할 수 있습니다.");
   }
 
@@ -144,8 +134,12 @@ export async function acceptCustomOrderDeliverableAction(formData: FormData): Pr
     redirectWithError(orderId, `현재 상태(${norm})에서는 납품 수락을 할 수 없습니다.`);
   }
 
-  const hasDel = await hasDeliverableRowsForOrder(supabase, orderId);
-  if (!hasDel) {
+  const delCheck = await hasDeliverableRowsForOrder(supabase, orderId);
+  if (delCheck.error) {
+    // W4(C10): 조회 오류를 '납품 없음'으로 오인하지 않도록 구분해 fail-closed
+    redirectWithError(orderId, "납품 정보를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+  }
+  if (!delCheck.has) {
     redirectWithError(orderId, "등록된 납품이 없어 수락할 수 없습니다.");
   }
 
@@ -208,12 +202,12 @@ export async function cancelCustomOrderByStudentAction(formData: FormData): Prom
     redirect("/custom-request?error=" + encodeURIComponent("orderId가 필요합니다."));
   }
 
-  const oT = await firstReadableCustomTable(supabase, ["custom_request_orders", "custom_orders", "request_orders"]);
-  if (!oT.table) {
-    redirectWithError(orderId, oT.error || "주문 테이블을 찾을 수 없습니다.");
-  }
-
-  const { data: rowData, error: oe } = await supabase.from(oT.table).select("*").eq("id", orderId).maybeSingle();
+  // W4(C10): custom_request_orders 정본 테이블 + student_id(NOT NULL) 직접 대조 — 프로빙 제거
+  const { data: rowData, error: oe } = await supabase
+    .from("custom_request_orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
   if (oe || !rowData) {
     redirectWithError(orderId, "주문을 찾을 수 없어요. 잠시 후 다시 시도해 주세요.");
   }
@@ -224,15 +218,7 @@ export async function cancelCustomOrderByStudentAction(formData: FormData): Prom
     redirectWithError(orderId, "이 주문을 취소할 권한이 없습니다.");
   }
 
-  const { column: stuCol } = await pickExistingColumn(supabase, oT.table, [
-    "student_id",
-    "buyer_id",
-    "user_id",
-    "client_id",
-    "author_id",
-    "requester_id",
-  ]);
-  if (!stuCol || String(row[stuCol]) !== user.id) {
+  if (String(row.student_id) !== user.id) {
     redirectWithError(orderId, "의뢰자(학생) 본인만 주문을 취소할 수 있습니다.");
   }
 

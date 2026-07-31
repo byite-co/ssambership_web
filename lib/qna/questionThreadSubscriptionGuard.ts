@@ -27,7 +27,12 @@ export async function assertThreadCreationSubscriptionAllowed(
   }
 
   const active = await findActiveSubscriptionForPair(supabase, studentId, mentorId);
-  if (!active) {
+  if (active.error) {
+    // W4: 구독 조회 실패를 "구독 없음"으로 취급하지 않는다(fail-closed).
+    console.error("[assertThreadCreationSubscriptionAllowed] subscriptions select", active.error);
+    return { ok: false, userMessage: "구독 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+  }
+  if (!active.active) {
     if (actor === "student" && options?.isNewThread) {
       const free = await assertFreeQuestionAllowedAndRecord(supabase, studentId, mentorId);
       if (!free.ok) {
@@ -39,14 +44,19 @@ export async function assertThreadCreationSubscriptionAllowed(
     const messageThreadId =
       !options?.isNewThread && typeof options?.threadId === "string" ? options.threadId.trim() : "";
     if (messageThreadId) {
-      const isFreeThread = await isFreeQuestionThreadInRoom(
+      const freeThread = await isFreeQuestionThreadInRoom(
         supabase,
         studentId,
         mentorId,
         roomId,
         messageThreadId
       );
-      if (isFreeThread) {
+      if (freeThread.error) {
+        // W4: 무료 스레드 여부를 확인할 수 없으면 통과시키지 않는다(fail-closed·오류 구분).
+        console.error("[assertThreadCreationSubscriptionAllowed] free thread check", freeThread.error);
+        return { ok: false, userMessage: "질문 유형을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요." };
+      }
+      if (freeThread.isFree) {
         return { ok: true };
       }
     }

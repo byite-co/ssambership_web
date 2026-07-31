@@ -7,7 +7,6 @@ import {
   insertCustomRequestOrder,
   type CreateOrderFromApplicationInput,
 } from "@/lib/customRequest/customRequestMutations";
-import { firstReadableCustomTable } from "@/lib/customRequest/customRequestQueries";
 
 export type CustomOrderEscrowErrorCode =
   | "ORDER_INSERT"
@@ -88,13 +87,9 @@ export async function recordCustomOrderEscrowHoldRpc(
 async function setOrderPaymentStatusEscrowed(orderId: string, studentId: string): Promise<boolean> {
   try {
     const admin = createServiceRoleClient();
-    const oT = await firstReadableCustomTable(admin, ["custom_request_orders", "custom_orders", "request_orders"]);
-    if (!oT.table) {
-      console.error("[setOrderPaymentStatusEscrowed] orders table missing", oT.error);
-      return false;
-    }
+    // W4(C10): 정본 custom_request_orders 고정(custom_orders/request_orders — 187 baseline 부재).
     const { data, error } = await admin
-      .from(oT.table)
+      .from("custom_request_orders")
       .update({ payment_status: "escrowed", updated_at: new Date().toISOString() })
       .eq("id", orderId)
       .eq("student_id", studentId)
@@ -115,10 +110,9 @@ async function setOrderPaymentStatusEscrowed(orderId: string, studentId: string)
 async function deleteUnpaidOrderBestEffort(orderId: string, studentId: string): Promise<void> {
   try {
     const admin = createServiceRoleClient();
-    const oT = await firstReadableCustomTable(admin, ["custom_request_orders", "custom_orders", "request_orders"]);
-    if (!oT.table) return;
+    // W4(C10): 정본 custom_request_orders 고정.
     const { error } = await admin
-      .from(oT.table)
+      .from("custom_request_orders")
       .delete()
       .eq("id", orderId)
       .eq("student_id", studentId)

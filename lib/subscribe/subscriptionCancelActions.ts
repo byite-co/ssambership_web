@@ -68,7 +68,12 @@ async function loadOwnedSubscription(admin: ReturnType<typeof createServiceRoleC
   return { row, error: null as string | null };
 }
 
-async function latestSucceededBillingEvent(admin: ReturnType<typeof createServiceRoleClient>, subscriptionId: string): Promise<Row | null> {
+// W4(C10): subscription_billing_events(064 — 정본 테이블·고정 컬럼) 조회 실패를 null("청구
+// 이력 없음" → 환불 0원 판정)로 삼키던 silent-catch 제거 — 오류를 error 필드로 전파한다.
+async function latestSucceededBillingEvent(
+  admin: ReturnType<typeof createServiceRoleClient>,
+  subscriptionId: string
+): Promise<{ row: Row | null; error: string | null }> {
   const { data, error } = await admin
     .from("subscription_billing_events")
     .select("id, subscription_id, amount_cents, payment_id, period_start, period_end, billing_at, event_type, status")
@@ -80,9 +85,9 @@ async function latestSucceededBillingEvent(admin: ReturnType<typeof createServic
 
   if (error) {
     console.error("[latestSucceededBillingEvent]", error.message);
-    return null;
+    return { row: null, error: error.message };
   }
-  return (rowsFromSupabaseData(data)[0] as Row | undefined) ?? null;
+  return { row: (rowsFromSupabaseData(data)[0] as Row | undefined) ?? null, error: null };
 }
 
 export async function requestSubscriptionCancelAtPeriodEndAction(formData: FormData) {
@@ -197,7 +202,12 @@ export async function requestSubscriptionProratedRefundAction(formData: FormData
     redirect(withMessage(REFUNDS_PATH, "error", "이미 검토 중인 환불 신청이 있습니다."));
   }
 
-  const billingEvent = await latestSucceededBillingEvent(admin, subscriptionId);
+  const billingLoad = await latestSucceededBillingEvent(admin, subscriptionId);
+  if (billingLoad.error) {
+    // W4(C10): 인프라 오류를 "환불 예상액 없음" 도메인 판정으로 바꾸지 않는다 — 시스템 오류로 안내.
+    redirect(withMessage(REFUNDS_PATH, "error", "결제 이력을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."));
+  }
+  const billingEvent = billingLoad.row;
   const periodStart = stringValue(loaded.row.current_period_start) ?? stringValue(billingEvent?.period_start);
   const periodEnd = stringValue(loaded.row.current_period_end) ?? stringValue(billingEvent?.period_end);
   const mentorId = stringValue(loaded.row.mentor_id);

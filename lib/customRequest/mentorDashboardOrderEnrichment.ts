@@ -1,12 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import {
-  firstReadableCustomTable,
-  loadCustomPostById,
-  pickDisplayField,
-} from "@/lib/customRequest/customRequestQueries";
+// W4(C10): custom_request_applications 정본 테이블·mentor_id 정본 컬럼 고정(003, 187 baseline) — 프로빙 제거
+import { loadCustomPostById, pickDisplayField } from "@/lib/customRequest/customRequestQueries";
 import { pickOrderStudentId } from "@/lib/customRequest/orderRoomMutations";
 import { maskStudentName } from "@/lib/reviews/reviewDisplay";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 
 type Row = Record<string, unknown>;
 
@@ -27,17 +23,24 @@ export async function fetchMentorStudentDisplayName(
 ): Promise<string> {
   const sid = typeof studentId === "string" ? studentId.trim() : "";
   if (!sid) return "의뢰자";
+  // W4(C10): RPC 오류를 무음으로 삼키지 않고 로그로 표면화. 반환값 "의뢰자"는 표시 전용 강등
+  // (멘토 화면의 학생 표시명 마스킹 기본값)이며 성공이 아님 — 조회 자체는 정본 RPC(058/140) 단일 경로.
   try {
-    const { data } = await supabase.rpc("get_mentor_student_nicknames", {
+    const { data, error } = await supabase.rpc("get_mentor_student_nicknames", {
       p_student_ids: [sid],
     });
+    if (error) {
+      console.error("[fetchMentorStudentDisplayName] rpc failed", error.message);
+      return "의뢰자";
+    }
     const row = ((data as Row[]) ?? []).find((u) => u.id === sid);
     if (!row) return "의뢰자";
     return formatMentorStudentDisplayName({
       full_name: typeof row.full_name === "string" ? row.full_name : null,
       nickname: typeof row.nickname === "string" ? row.nickname : null,
     });
-  } catch {
+  } catch (e) {
+    console.error("[fetchMentorStudentDisplayName] rpc threw", e instanceof Error ? e.message : e);
     return "의뢰자";
   }
 }
@@ -74,24 +77,18 @@ export async function enrichMentorDashboardOrderRows(
   const studentIds = [...new Set(orders.map((o) => pickOrderStudentId(o)).filter(Boolean))];
 
   const appsById = new Map<string, Row>();
-  const appTableProbe = await firstReadableCustomTable(supabase, [
-    "custom_request_applications",
-    "request_applications",
-    "custom_bids",
-  ]);
-  if (appTableProbe.table && appIds.length > 0) {
-    const { column: mentorCol } = await pickExistingColumn(supabase, appTableProbe.table, [
-      "mentor_id",
-      "applicant_id",
-      "user_id",
-      "proposer_id",
-    ]);
-    let q = supabase.from(appTableProbe.table).select("*").in("id", appIds);
-    if (mentorCol) {
-      q = q.eq(mentorCol, mentorId);
+  if (appIds.length > 0) {
+    // W4(C10): custom_request_applications.mentor_id 정본 고정 — 테이블/컬럼 프로빙 제거.
+    // 오류는 로그로 표면화 후 보강 생략 — 표시 전용 강등(제목·마감 힌트 merge), 성공 아님.
+    const { data, error } = await supabase
+      .from("custom_request_applications")
+      .select("*")
+      .in("id", appIds)
+      .eq("mentor_id", mentorId);
+    if (error) {
+      console.error("[enrichMentorDashboardOrderRows] applications query failed", error.message);
     }
-    const { data } = await q;
-    for (const row of (data as Row[]) ?? []) {
+    for (const row of (data as Row[] | null) ?? []) {
       const id = typeof row.id === "string" ? row.id : "";
       if (id) appsById.set(id, row);
     }
@@ -107,10 +104,14 @@ export async function enrichMentorDashboardOrderRows(
 
   const usersById = new Map<string, { full_name: string | null; nickname: string | null }>();
   if (studentIds.length > 0) {
-    const { data } = await supabase.rpc("get_mentor_student_nicknames", {
+    const { data, error } = await supabase.rpc("get_mentor_student_nicknames", {
       p_student_ids: studentIds,
     });
-    for (const u of (data as Row[]) ?? []) {
+    if (error) {
+      // W4(C10): 표시 전용 강등(학생 표시명 힌트) — 오류를 로그로 표면화, 성공 아님.
+      console.error("[enrichMentorDashboardOrderRows] nickname rpc failed", error.message);
+    }
+    for (const u of (data as Row[] | null) ?? []) {
       const id = typeof u.id === "string" ? u.id : "";
       if (id) {
         usersById.set(id, {

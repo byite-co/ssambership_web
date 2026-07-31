@@ -1,41 +1,22 @@
-import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchRoomsForUser } from "@/lib/qna/questionRoomQueries";
-import { CONNECTION_NOTES_ROOM_FK_CANDIDATES, QUESTION_THREADS_ROOM_FK_CANDIDATES } from "@/lib/qna/questionThreadRoomRef";
-import { normalizeQuestionSubjectCode, questionSubjectLabelFromCode } from "@/lib/qna/questionSubjects";
-import { sanitizeTrustSafetyText } from "@/lib/safety/trustSafetyText";
+import { CONNECTION_NOTES_ROOM_FK, QUESTION_THREADS_ROOM_FK } from "@/lib/qna/questionThreadRoomRef";
 
 type QnaRole = "student" | "mentor";
-
-type MutationOk<T extends Record<string, unknown>> = {
-  ok: true;
-  row: T | null;
-};
 
 type MutationFail = {
   ok: false;
   error: string;
 };
 
-type MutationResult<T extends Record<string, unknown>> = MutationOk<T> | MutationFail;
-
-function isMissingColumnError(err: PostgrestError | null): boolean {
-  if (!err) return false;
-  return /column|does not exist|schema cache/i.test(err.message);
-}
+// S2-2 전환 W4(C10): thread·message 직접 INSERT 경로(createQuestionThread /
+// createQuestionMessage — 컬럼 후보 payload 순회 insertWithCandidates)는 호출부 0의
+// dead code 로 삭제했다. 정본 쓰기 경로는 P1-8A RPC(createQuestionThreadViaRpc /
+// appendQuestionMessageViaRpc — lib/qna/questionRoomRpc.ts)다.
 
 function textFromFormValue(value: FormDataEntryValue | null): string {
   if (typeof value !== "string") return "";
   return value.trim();
-}
-
-function getThreadLabel(row: Record<string, unknown>): string {
-  const keys = ["title", "subject", "topic"];
-  for (const k of keys) {
-    const val = row[k];
-    if (typeof val === "string" && val.trim()) return val;
-  }
-  return "새 질문 thread";
 }
 
 function includesAny(message: string, words: string[]): boolean {
@@ -58,184 +39,6 @@ async function ensureRoomScope(
   return null;
 }
 
-async function insertWithCandidates<T extends Record<string, unknown>>(
-  supabase: SupabaseClient,
-  table: string,
-  payloads: Record<string, unknown>[]
-): Promise<MutationResult<T>> {
-  let lastError = "insert 후보를 모두 실패했습니다.";
-  for (const payload of payloads) {
-    const { data, error } = await supabase.from(table).insert(payload).select("*").limit(1).maybeSingle();
-    if (!error) return { ok: true, row: (data as T | null) ?? null };
-    lastError = error.message;
-    if (!isMissingColumnError(error)) return { ok: false, error: error.message };
-  }
-  return { ok: false, error: lastError };
-}
-
-function buildThreadPayloads(
-  roomColumn: string,
-  roomId: string,
-  title: string,
-  subject: string | null,
-  topic: string | null,
-  role: QnaRole,
-  userId: string
-): Record<string, unknown>[] {
-  const titleKeys = ["title"] as const;
-  const roleKeys = ["author_role", "sender_role", "writer_role"] as const;
-  const userKeysCommon = ["author_id", "created_by", "user_id", "sender_id"] as const;
-  const userKeysRole = role === "student" ? (["student_id", "student_user_id"] as const) : (["mentor_id", "mentor_user_id"] as const);
-
-  const payloads: Record<string, unknown>[] = [];
-  const subjectCode = normalizeQuestionSubjectCode(subject);
-  const topicText = topic?.trim() || null;
-  const subjectFallback = subjectCode ? questionSubjectLabelFromCode(subjectCode) ?? subjectCode : null;
-
-  for (const t of titleKeys) {
-    const base = { [roomColumn]: roomId, [t]: title, status: "pending" };
-    const bases: Record<string, unknown>[] = [];
-    if (subjectCode && topicText) bases.push({ ...base, subject: subjectCode, topic: topicText });
-    if (subjectCode) bases.push({ ...base, subject: subjectCode });
-    if (topicText) bases.push({ ...base, topic: topicText });
-    if (subjectFallback) bases.push({ ...base, topic: subjectFallback });
-    if (topicText) bases.push({ ...base, category: topicText });
-    if (subjectFallback) bases.push({ ...base, category: subjectFallback });
-    bases.push(base);
-    for (const base of bases) {
-      payloads.push(base);
-      for (const roleKey of roleKeys) payloads.push({ ...base, [roleKey]: role });
-      for (const userKey of userKeysCommon) payloads.push({ ...base, [userKey]: userId });
-      for (const userKey of userKeysRole) payloads.push({ ...base, [userKey]: userId });
-      for (const roleKey of roleKeys) {
-        for (const userKey of userKeysCommon) payloads.push({ ...base, [roleKey]: role, [userKey]: userId });
-        for (const userKey of userKeysRole) payloads.push({ ...base, [roleKey]: role, [userKey]: userId });
-      }
-    }
-  }
-  return payloads;
-}
-
-function buildMessagePayloads(
-  threadColumn: string,
-  threadId: string,
-  content: string,
-  role: QnaRole,
-  userId: string
-): Record<string, unknown>[] {
-  const contentKeys = ["body", "content", "text", "message"] as const;
-  const roleKeys = ["author_role", "sender_role", "writer_role"] as const;
-  const userKeysCommon = ["author_id", "created_by", "user_id", "sender_id"] as const;
-  const userKeysRole = role === "student" ? (["student_id", "student_user_id"] as const) : (["mentor_id", "mentor_user_id"] as const);
-
-  const payloads: Record<string, unknown>[] = [];
-  for (const c of contentKeys) {
-    payloads.push({ [threadColumn]: threadId, author_id: userId, [c]: content });
-    payloads.push({ [threadColumn]: threadId, [c]: content, author_id: userId });
-  }
-  for (const c of contentKeys) {
-    const base: Record<string, unknown> = { [threadColumn]: threadId, [c]: content };
-    payloads.push(base);
-    for (const roleKey of roleKeys) payloads.push({ ...base, [roleKey]: role });
-    for (const userKey of userKeysCommon) payloads.push({ ...base, [userKey]: userId });
-    for (const userKey of userKeysRole) payloads.push({ ...base, [userKey]: userId });
-    for (const roleKey of roleKeys) {
-      for (const userKey of userKeysCommon) payloads.push({ ...base, [roleKey]: role, [userKey]: userId });
-      for (const userKey of userKeysRole) payloads.push({ ...base, [roleKey]: role, [userKey]: userId });
-    }
-  }
-  return payloads;
-}
-
-function buildNotePayloads(content: string, userId: string, role: QnaRole): Record<string, unknown>[] {
-  // 작성자(author_id/author_role)를 우선 시도하고, 컬럼 미존재(미마이그레이션) 시 body-only로 폴백.
-  const contentKeys = ["body", "content", "note", "text", "memo", "summary"] as const;
-  const payloads: Record<string, unknown>[] = [];
-
-  for (const c of contentKeys) {
-    payloads.push({ [c]: content, author_id: userId, author_role: role });
-    payloads.push({ [c]: content, author_id: userId });
-    payloads.push({ [c]: content });
-  }
-  return payloads;
-}
-
-export async function createQuestionThread(params: {
-  supabase: SupabaseClient;
-  role: QnaRole;
-  userId: string;
-  roomId: string;
-  title: string;
-  subject?: string | null;
-  topic?: string | null;
-  subjectTag?: string | null;
-}): Promise<{ ok: true; threadId: string | null; row: Record<string, unknown> | null } | MutationFail> {
-  const { supabase, role, userId, roomId, title, subject, topic, subjectTag } = params;
-  if (!title.trim()) return { ok: false, error: "thread 제목을 입력하세요." };
-
-  const scopeError = await ensureRoomScope(supabase, role, userId, roomId);
-  if (scopeError) return scopeError;
-
-  const { column: roomColumn, error: roomColumnError } = await pickExistingColumn(
-    supabase,
-    "question_threads",
-    QUESTION_THREADS_ROOM_FK_CANDIDATES
-  );
-  if (!roomColumn) return { ok: false, error: roomColumnError ?? "question_threads room FK를 찾지 못했습니다." };
-
-  const created = await insertWithCandidates<Record<string, unknown>>(
-    supabase,
-    "question_threads",
-    buildThreadPayloads(roomColumn, roomId, title.trim(), subject ?? subjectTag ?? null, topic ?? null, role, userId)
-  );
-  if (!created.ok) return created;
-
-  const threadId = (typeof created.row?.id === "string" ? created.row.id : null) ?? (await findNewestThreadId(supabase, roomId));
-  return { ok: true, threadId, row: created.row };
-}
-
-export async function createQuestionMessage(params: {
-  supabase: SupabaseClient;
-  role: QnaRole;
-  userId: string;
-  roomId: string;
-  threadId: string;
-  content: string;
-}): Promise<{ ok: true; row: Record<string, unknown> | null } | MutationFail> {
-  const { supabase, role, userId, roomId, threadId, content } = params;
-  const trimmedContent = content.trim();
-  if (!threadId.trim()) return { ok: false, error: "thread를 먼저 선택하세요." };
-  if (!trimmedContent) return { ok: false, error: "메시지 내용을 입력하세요." };
-
-  const safety = sanitizeTrustSafetyText(trimmedContent);
-  if (!safety.ok) return { ok: false, error: safety.error };
-  const scopeError = await ensureRoomScope(supabase, role, userId, roomId);
-  if (scopeError) return scopeError;
-
-  const { column: threadColumn, error: threadColumnError } = await pickExistingColumn(supabase, "question_messages", [
-    "thread_id",
-    "question_thread_id",
-  ]);
-  if (!threadColumn) return { ok: false, error: threadColumnError ?? "question_messages thread FK를 찾지 못했습니다." };
-
-  const created = await insertWithCandidates<Record<string, unknown>>(
-    supabase,
-    "question_messages",
-    buildMessagePayloads(threadColumn, threadId, safety.text, role, userId)
-  );
-  if (!created.ok) {
-    console.error("[createQuestionMessage] insert failed", {
-      threadId,
-      roomId,
-      messageThreadColumn: threadColumn,
-      supabaseError: created.error,
-    });
-    return created;
-  }
-
-  return { ok: true, row: created.row };
-}
-
 export async function saveConnectionNote(params: {
   supabase: SupabaseClient;
   role: QnaRole;
@@ -249,30 +52,20 @@ export async function saveConnectionNote(params: {
   const scopeError = await ensureRoomScope(supabase, role, userId, roomId);
   if (scopeError) return scopeError;
 
-  const { column: roomColumn, error: roomColumnError } = await pickExistingColumn(
-    supabase,
-    "connection_notes",
-    CONNECTION_NOTES_ROOM_FK_CANDIDATES
-  );
-  if (!roomColumn) {
-    const err = roomColumnError ?? "connection_notes room FK를 찾지 못했습니다.";
-    console.error("[saveConnectionNote] room FK column not found", { roomId, supabaseError: err });
-    return { ok: false, error: err };
+  // W4(C10) 정본 고정: connection_notes(mentor_student_room_id, body, author_id, author_role)
+  // — 187 baseline 실측 컬럼. 구 컬럼 후보 payload 순회(body/content/note/… × 작성자 유무)는
+  // 제거했다. 작성자별 카드를 유지하기 위해 매 저장마다 새 노트를 append (room 단위 공유).
+  const { data, error } = await supabase
+    .from("connection_notes")
+    .insert({ [CONNECTION_NOTES_ROOM_FK]: roomId, body: content.trim(), author_id: userId, author_role: role })
+    .select("*")
+    .limit(1)
+    .maybeSingle();
+  if (error) {
+    console.error("[saveConnectionNote] insert failed", { roomId, code: error.code });
+    return { ok: false, error: error.message };
   }
-
-  // 작성자별 카드를 유지하기 위해 매 저장마다 새 노트를 append (room 단위 공유).
-  const notePayloads = buildNotePayloads(content.trim(), userId, role);
-  const insertPayloads = notePayloads.map((payload) => ({ [roomColumn]: roomId, ...payload }));
-  const inserted = await insertWithCandidates<Record<string, unknown>>(supabase, "connection_notes", insertPayloads);
-  if (!inserted.ok) {
-    console.error("[saveConnectionNote] insert failed", {
-      roomId,
-      roomColumn,
-      supabaseError: inserted.error,
-    });
-    return inserted;
-  }
-  return { ok: true, row: inserted.row };
+  return { ok: true, row: (data as Record<string, unknown> | null) ?? null };
 }
 
 /**
@@ -280,38 +73,12 @@ export async function saveConnectionNote(params: {
  * ★room id로만 필터(학생 전체 합산 아님) → 질문방마다 1,2,3… 독립 카운트.
  */
 export async function nextRoomQuestionNumber(supabase: SupabaseClient, roomId: string): Promise<number> {
-  const { column } = await pickExistingColumn(supabase, "question_threads", [...QUESTION_THREADS_ROOM_FK_CANDIDATES]);
-  if (!column) return 1;
   const { count, error } = await supabase
     .from("question_threads")
     .select("id", { count: "exact", head: true })
-    .eq(column, roomId);
+    .eq(QUESTION_THREADS_ROOM_FK, roomId);
   if (error || count == null) return 1;
   return count + 1;
-}
-
-async function findNewestThreadId(supabase: SupabaseClient, roomId: string): Promise<string | null> {
-  const { column } = await pickExistingColumn(supabase, "question_threads", [...QUESTION_THREADS_ROOM_FK_CANDIDATES]);
-  if (!column) return null;
-
-  const tryOrders = ["created_at", "updated_at", "id"];
-  for (const orderBy of tryOrders) {
-    const q = await supabase
-      .from("question_threads")
-      .select("id")
-      .eq(column, roomId)
-      .order(orderBy, { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (!q.error) {
-      return typeof q.data?.id === "string" ? q.data.id : null;
-    }
-    if (!isMissingColumnError(q.error)) return null;
-  }
-
-  const fallback = await supabase.from("question_threads").select("id").eq(column, roomId).limit(1).maybeSingle();
-  if (fallback.error) return null;
-  return typeof fallback.data?.id === "string" ? fallback.data.id : null;
 }
 
 export function formatActionError(action: "thread" | "message" | "note", raw: string): string {
@@ -350,17 +117,9 @@ export function readNoteFromForm(formData: FormData): string {
   return textFromFormValue(formData.get("noteBody"));
 }
 
+/** W4(C10): 정본 컬럼 `connection_notes.body` 단일 참조(구 후보 키 6종 순회 제거). */
 export function extractNoteText(row: Record<string, unknown> | null | undefined): string {
   if (!row) return "";
-  const keys = ["body", "content", "note", "text", "memo", "summary"];
-  for (const k of keys) {
-    const val = row[k];
-    if (typeof val === "string" && val.trim()) return val;
-  }
-  return "";
-}
-
-export function extractThreadTitle(row: Record<string, unknown> | null | undefined): string {
-  if (!row) return "";
-  return getThreadLabel(row);
+  const val = row.body;
+  return typeof val === "string" && val.trim() ? val : "";
 }

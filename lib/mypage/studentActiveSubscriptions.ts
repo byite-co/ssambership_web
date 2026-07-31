@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { getMentorUserPublic, loadMentorProfilesForDirectory } from "@/lib/auth/mentorPublicRead";
 import { fetchPlansForMentor } from "@/lib/mentor/publicMentorBundle";
 import { buildMentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
-import { pickExistingColumn, rowsFromSupabaseData } from "@/lib/qna/safeSelect";
+import { rowsFromSupabaseData } from "@/lib/qna/safeSelect";
 import { getSubscribeCatalogPlan } from "@/lib/subscribe/subscribePlanCatalog";
 import {
   assignPlansByTier,
@@ -41,8 +41,6 @@ async function fetchMySubscriptionsSelf(
     .sort((a, b) => String(b.created_at ?? "").localeCompare(String(a.created_at ?? "")));
   return { rows, error: null };
 }
-
-const USAGE_COUNTERS_TABLE = "subscription_usage_counters";
 
 export type ActiveSubscriptionCard = {
   subscriptionId: string;
@@ -101,60 +99,15 @@ export function formatSubscriptionStartedAt(iso: string): string {
   }
 }
 
-export function formatQuestionsRemainingLabel(
-  counterRow: Row | null | undefined,
-  tier: SubscribePlanTier | null
-): string {
-  if (counterRow) {
-    for (const k of ["weekly_questions_remaining", "questions_remaining", "remaining_questions"] as const) {
-      const v = counterRow[k];
-      if (typeof v === "number" && Number.isFinite(v)) {
-        if (tier === "premium" && v >= 999) return "주 무제한 질문";
-        const cap =
-          tier === "limited" ? 4 : tier === "standard" ? 9 : tier === "premium" ? 999 : null;
-        if (cap != null && cap < 999) {
-          return `주 ${cap}개 질문 · 잔여 ${Math.max(0, v)}/${cap}`;
-        }
-        return `남은 질문 ${v}회`;
-      }
-    }
-  }
+// W4(C10): 후보 테이블 부재 실측(187 baseline 0 — subscription_usage_counters 없음) — 구
+// usage counter 테이블·컬럼 프로빙은 프로덕션에서 항상 빈 Map 이었으므로 제거하고, 현행 관측
+// 동작(플랜 기준 정적 라벨)을 고정. 기능 정본화는 비범위 — 실시간 잔여 질문 수의 정본은
+// RPC get_weekly_question_usage(lib/qna/weeklyQuestionUsage.ts, student·mentor 쌍 키).
+export function formatQuestionsRemainingLabel(tier: SubscribePlanTier | null): string {
   if (tier === "premium") return "주 무제한 질문";
   if (tier === "standard") return "주 9개 질문 (플랜 기준)";
   if (tier === "limited") return "주 4개 질문 (플랜 기준)";
   return "—";
-}
-
-async function fetchUsageCountersBySubscriptionId(
-  supabase: SupabaseClient,
-  subscriptionIds: string[]
-): Promise<Map<string, Row>> {
-  const out = new Map<string, Row>();
-  if (subscriptionIds.length === 0) return out;
-
-  const { error: pe } = await supabase.from(USAGE_COUNTERS_TABLE).select("id").limit(1);
-  if (pe) return out;
-
-  const { column: subCol } = await pickExistingColumn(supabase, USAGE_COUNTERS_TABLE, [
-    "subscription_id",
-  ]);
-  if (!subCol) return out;
-
-  const { data, error } = await supabase
-    .from(USAGE_COUNTERS_TABLE)
-    .select("*")
-    .in(subCol, subscriptionIds);
-  if (error) {
-    console.error("[fetchUsageCountersBySubscriptionId]", error.message);
-    return out;
-  }
-
-  const usageRows = rowsFromSupabaseData(data) as Row[];
-  for (const row of usageRows) {
-    const sid = row[subCol];
-    if (typeof sid === "string" && sid.trim()) out.set(sid.trim(), row);
-  }
-  return out;
 }
 
 async function planRowsByMentorId(
@@ -166,7 +119,9 @@ async function planRowsByMentorId(
     mentorIds.map(async (mentorId) => {
       const plans = await fetchPlansForMentor(supabase, mentorId);
       if (plans.error) {
-        console.warn("[loadActiveSubscriptionsForStudent] mentor plans", { mentorId, error: plans.error });
+        // W4(C10): display-only degrade — 다음 결제 금액 "표시"만 권장가(CLAUDE.md 정본 폴백)로
+        // 낙하하며 성공으로 위장하지 않는다(로그 유지). 실차감은 갱신 배치가 서버에서 재계산.
+        console.error("[loadActiveSubscriptionsForStudent] mentor plans", { mentorId, error: plans.error });
       }
       out.set(mentorId, assignPlansByTier(plans.rows).byTier as Partial<Record<SubscribePlanTier, Row>>);
     })
@@ -186,11 +141,9 @@ export async function loadActiveSubscriptionsForStudent(
 
   const rows = loaded.rows.filter((r) => String(r.status ?? "").toLowerCase() === "active");
   const mentorIds = [...new Set(rows.map((r) => String(r.mentor_id ?? "").trim()).filter(Boolean))];
-  const subscriptionIds = rows.map((r) => String(r.id ?? "").trim()).filter(Boolean);
 
-  const [profilesLoad, usageBySubId, planRowsByMentor] = await Promise.all([
+  const [profilesLoad, planRowsByMentor] = await Promise.all([
     loadMentorProfilesForDirectory(supabase, mentorIds),
-    fetchUsageCountersBySubscriptionId(supabase, subscriptionIds),
     planRowsByMentorId(supabase, mentorIds),
   ]);
 
@@ -211,7 +164,6 @@ export async function loadActiveSubscriptionsForStudent(
     const tier = parsePlanTier(row.plan_tier);
     const planLabel = tier ? `${getSubscribeCatalogPlan(tier).label} 플랜` : "구독 플랜";
     const subscribedAt = stringValue(row.started_at) ?? stringValue(row.created_at) ?? "";
-    const counterRow = usageBySubId.get(subscriptionId);
     const status = normalizeStatus(row.status);
     const cancelAtPeriodEnd = boolValue(row.cancel_at_period_end);
     const currentPeriodStart = stringValue(row.current_period_start) ?? subscribedAt;
@@ -232,7 +184,7 @@ export async function loadActiveSubscriptionsForStudent(
       planLabel,
       subscribedAt,
       subscribedAtLabel: subscribedAt ? formatSubscriptionStartedAt(subscribedAt) : "—",
-      questionsRemainingLabel: formatQuestionsRemainingLabel(counterRow, tier),
+      questionsRemainingLabel: formatQuestionsRemainingLabel(tier),
       currentPeriodLabel: formatSubscriptionPeriodLabel(currentPeriodStart, currentPeriodEnd),
       currentPeriodEndLabel: formatSubscriptionDate(currentPeriodEnd),
       nextBillingDisplayLabel: nextBillingDisplayLabel({

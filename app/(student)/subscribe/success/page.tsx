@@ -31,7 +31,13 @@ export default async function SubscribeSuccessPage({ searchParams }: Props) {
     findActiveSubscriptionForPair(supabase, user.id, mentorId),
   ]);
   const mentorName = data.kind === "ok" ? data.display.displayName : "멘토";
-  const verified = activeSub !== null;
+  if (activeSub.error) {
+    // W4(C10): display-only degrade — 구독 확인 조회 실패를 성공으로 위장하지 않고,
+    // 기존 "결제 정보를 확인할 수 없습니다" 경고 화면(fail-closed)을 그대로 보여준다.
+    // (표시 전용 경로 — 주문·차감·구독 상태에는 영향 없음. 오류는 로그로 남긴다.)
+    console.error("[SubscribeSuccessPage] findActiveSubscriptionForPair", activeSub.error);
+  }
+  const verified = activeSub.active !== null;
 
   if (!verified) {
     const retryHref = `/subscribe?mentorId=${encodeURIComponent(mentorId)}`;

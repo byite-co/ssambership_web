@@ -2,7 +2,6 @@
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { mentorProfilesAdminReadClient } from "@/lib/admin/mentorProfilesAdminRead";
 import type { AdminReviewModerationPlan } from "@/lib/admin/reviewLabels";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import {
   loadSubscriptionSettlementRowsForAdmin,
   minorCentsToCash,
@@ -15,74 +14,16 @@ function fmt(e: PostgrestError | null): string | null {
   return e ? e.message : null;
 }
 
-/** 테이블 후보 중 읽기 가능한 첫 테이블 */
-export async function firstReadableAdminTable(
-  supabase: SupabaseClient,
-  candidates: readonly string[]
-): Promise<{ table: string | null; error: string }> {
-  let last = "no candidates";
-  for (const table of candidates) {
-    const { error } = await supabase.from(table).select("*").limit(1);
-    if (!error) return { table, error: "" };
-    last = error.message;
-  }
-  return { table: null, error: last };
-}
+// W4(C10): firstReadableAdminTable(후보 테이블 순회 helper) 삭제 — 전 호출부(대시보드 감사
+// 카운트·리뷰 조치/상세·환불 상세·분쟁 목록/상세) 정본 단일 조회로 전환 완료, 활성 호출자 0.
 
-async function selectWithOrder<T extends Row>(
-  supabase: SupabaseClient,
-  table: string,
-  limit: number
-): Promise<{ rows: T[]; error: string | null }> {
-  const orderCols = ["created_at", "updated_at", "id", "submitted_at"] as const;
-  for (const col of orderCols) {
-    const { data, error } = await supabase.from(table).select("*").order(col, { ascending: false }).limit(limit);
-    if (!error) return { rows: (data as T[] | null) ?? [], error: null };
-    if (!/column|does not exist|schema cache/i.test(error.message)) {
-      return { rows: [], error: error.message };
-    }
-  }
-  const { data, error } = await supabase.from(table).select("*").limit(limit);
-  return { rows: (data as T[] | null) ?? [], error: fmt(error) };
-}
+// W4(C10): selectWithOrder(order 컬럼 후보 재시도)·countEq·countQueuePending(컬럼·값 후보 프로빙 +
+// 전체건수 대체 성공 처리) 삭제 — 각 호출부는 created_at 고정 정렬·고정 컬럼 count로 정본화(187 baseline 실측).
 
 async function countAll(supabase: SupabaseClient, table: string): Promise<{ n: number | null; error: string | null }> {
   const { count, error } = await supabase.from(table).select("*", { count: "exact", head: true });
   if (error) return { n: null, error: error.message };
   return { n: count ?? 0, error: null };
-}
-
-async function countEq(
-  supabase: SupabaseClient,
-  table: string,
-  col: string,
-  val: string
-): Promise<{ n: number | null; error: string | null }> {
-  const { count, error } = await supabase.from(table).select("*", { count: "exact", head: true }).eq(col, val);
-  if (error) return { n: null, error: error.message };
-  return { n: count ?? 0, error: null };
-}
-
-/** pending류 큐: 컬럼·값 후보로 첫 성공 count */
-async function countQueuePending(
-  supabase: SupabaseClient,
-  table: string,
-  colCandidates: readonly string[],
-  valueCandidates: readonly string[]
-): Promise<{ n: number; detail: string; ok: boolean; usedTotalFallback?: boolean }> {
-  for (const col of colCandidates) {
-    const { column } = await pickExistingColumn(supabase, table, [col]);
-    if (!column) continue;
-    for (const val of valueCandidates) {
-      const r = await countEq(supabase, table, column, val);
-      if (r.n !== null && !r.error) {
-        return { n: r.n, detail: `조건에 맞는 건 ${r.n}건`, ok: true };
-      }
-    }
-  }
-  const t = await countAll(supabase, table);
-  if (t.n === null) return { n: 0, detail: t.error ?? "건수를 확인할 수 없습니다.", ok: false };
-  return { n: t.n, detail: `전체 ${t.n}건`, ok: true, usedTotalFallback: true };
 }
 
 // —— dashboard —— //
@@ -94,8 +35,6 @@ export type AdminQueueMetric = {
   detail: string;
   state: "connected" | "empty" | "skeleton";
 };
-
-export type AdminScaffold = { title: string; body: string; status: "connected" | "skeleton" };
 
 function safeDashboardError(raw: string | undefined): string | undefined {
   if (!raw) return undefined;
@@ -134,21 +73,9 @@ export type AdminDashboardSummary = {
   errors: AdminDashboardSummaryErrors;
 };
 
-function wonLabel(n: number): string {
-  return `${new Intl.NumberFormat("ko-KR", { maximumFractionDigits: 0 }).format(Math.round(n))}원`;
-}
-
-function metricState(n: number | null, okZero: boolean): AdminQueueMetric["state"] {
-  if (n === null) return "skeleton";
-  if (okZero && n === 0) return "empty";
-  return "connected";
-}
-
-async function dashboardRefundPendingCount(
-  supabase: SupabaseClient,
-  table: string
-): Promise<{ n: number | null; err?: string }> {
-  const { count, error } = await supabase.from(table).select("*", { count: "exact", head: true }).eq("status", "pending");
+// W4(C10): 테이블 파라미터 제거 — refunds(status) 고정(187 baseline 실측).
+async function dashboardRefundPendingCount(supabase: SupabaseClient): Promise<{ n: number | null; err?: string }> {
+  const { count, error } = await supabase.from("refunds").select("*", { count: "exact", head: true }).eq("status", "pending");
   if (error) return { n: null, err: error.message };
   return { n: count ?? 0 };
 }
@@ -191,8 +118,8 @@ async function dashboardNoticesActiveCount(supabase: SupabaseClient): Promise<{ 
   const b = await supabase.from("promotion_campaigns").select("*", { count: "exact", head: true }).eq("is_active", true);
   if (b.error) errs.push(b.error.message);
   else total += b.count ?? 0;
-  if (errs.length === 2) return { n: null, err: errs[0] };
-  if (errs.length === 1 && total === 0) return { n: null, err: errs[0] };
+  // W4(C10): 한쪽 소스만 실패해도 부분합을 성공으로 삼지 않는다 — 실패는 항상 err로 표면화.
+  if (errs.length > 0) return { n: null, err: errs[0] };
   return { n: total };
 }
 
@@ -202,120 +129,66 @@ async function dashboardNoticesActiveCount(supabase: SupabaseClient): Promise<{ 
 export async function loadAdminDashboardSummary(supabase: SupabaseClient): Promise<AdminDashboardSummary> {
   const errors: AdminDashboardSummaryErrors = {};
 
+  // W4(C10): mentor_profiles.verification_status 고정 count — 후보 컬럼·값 프로빙(countQueuePending) 제거(187 baseline 실측).
   const mentorRead = mentorProfilesAdminReadClient(supabase);
-  const mTable = await firstReadableAdminTable(mentorRead, ["mentor_profiles"]);
   let mentorApprovalPendingCount: number | null = null;
-  if (!mTable.table) {
-    errors.mentorApprovals = dashboardErrorMessage(mTable.error);
-  } else {
-    const p = await countQueuePending(
-      mentorRead,
-      mTable.table,
-      ["verification_status", "status", "approval_status", "review_state"],
-      ["pending", "submitted", "under_review", "awaiting", "PENDING"]
-    );
-    if (!p.ok) {
-      mentorApprovalPendingCount = null;
-      errors.mentorApprovals = dashboardErrorMessage(p.detail);
+  {
+    const { count, error: mErr } = await mentorRead
+      .from("mentor_profiles")
+      .select("*", { count: "exact", head: true })
+      .in("verification_status", ["pending", "submitted", "under_review"]);
+    if (mErr) {
+      errors.mentorApprovals = dashboardErrorMessage(mErr.message);
     } else {
-      mentorApprovalPendingCount = p.n;
+      mentorApprovalPendingCount = count ?? 0;
     }
   }
 
+  // W4(C10): content_reports.status 고정 — 존재 프로브·phantom 후보(reports/abuse_reports) 폴백 제거.
   let reportOpenCount: number | null = null;
-  const crProbe = await supabase.from("content_reports").select("id").limit(1);
-  if (!crProbe.error) {
+  {
     const { count, error: crCountErr } = await supabase
       .from("content_reports")
       .select("*", { count: "exact", head: true })
       .in("status", ["pending", "reviewing"]);
     if (crCountErr) {
-      reportOpenCount = null;
       errors.reports = dashboardErrorMessage(crCountErr.message);
     } else {
       reportOpenCount = count ?? 0;
     }
-  } else {
-    const rTable = await firstReadableAdminTable(supabase, ["reports", "abuse_reports", "content_reports"]);
-    if (!rTable.table) {
-      errors.reports = dashboardErrorMessage(rTable.error);
-    } else {
-      const p = await countQueuePending(
-        supabase,
-        rTable.table,
-        ["status", "state", "report_status"],
-        ["open", "pending", "new", "submitted", "PENDING", "OPEN"]
-      );
-      if (!p.ok) {
-        reportOpenCount = null;
-        errors.reports = dashboardErrorMessage(p.detail);
-      } else {
-        reportOpenCount = p.n;
-      }
-    }
   }
 
-  const dTable = await firstReadableAdminTable(supabase, [
-    "disputes",
-    "order_disputes",
-    "refund_disputes",
-    "user_disputes",
-    "support_tickets",
-  ] as const);
+  // W4(C10): disputes.status 고정 — phantom 후보(order/refund/user_disputes, support_tickets) 프로빙·근사치 폴백 제거.
   let disputeActiveCount: number | null = null;
-  let disputeApproximate = false;
-  if (!dTable.table) {
-    errors.disputes = dashboardErrorMessage(dTable.error);
-  } else if (dTable.table === "disputes") {
+  const disputeApproximate = false;
+  {
     const { count, error: dErr } = await supabase
       .from("disputes")
       .select("*", { count: "exact", head: true })
       .in("status", ["open", "under_review", "escalated"]);
     if (dErr) {
-      disputeActiveCount = null;
       errors.disputes = dashboardErrorMessage(dErr.message);
     } else {
       disputeActiveCount = count ?? 0;
-      disputeApproximate = false;
-    }
-  } else {
-    const p = await countQueuePending(
-      supabase,
-      dTable.table,
-      ["status", "state", "phase", "resolution", "outcome"],
-      ["open", "pending", "new", "submitted", "PENDING", "OPEN", "review", "awaiting"]
-    );
-    if (!p.ok) {
-      disputeActiveCount = null;
-      errors.disputes = dashboardErrorMessage(p.detail);
-    } else {
-      disputeActiveCount = p.n;
-      disputeApproximate = Boolean(p.usedTotalFallback);
     }
   }
 
-  const fTable = await firstReadableAdminTable(supabase, ["refunds"]);
+  // W4(C10): refunds 고정 — 단일 후보 존재 프로브 제거.
   let refundPendingCount: number | null = null;
-  if (!fTable.table) {
-    errors.refunds = dashboardErrorMessage(fTable.error);
-  } else {
-    const rp = await dashboardRefundPendingCount(supabase, fTable.table);
+  {
+    const rp = await dashboardRefundPendingCount(supabase);
     if (rp.err) {
-      refundPendingCount = null;
       errors.refunds = dashboardErrorMessage(rp.err);
     } else {
       refundPendingCount = rp.n;
     }
   }
 
-  const wTable = await firstReadableAdminTable(supabase, ["reviews", "mentor_reviews", "mentor_review"] as const);
+  // W4(C10): reviews 고정 — phantom 후보(mentor_reviews/mentor_review) 프로빙 제거.
   let reviewTotalCount: number | null = null;
-  if (!wTable.table) {
-    errors.reviews = dashboardErrorMessage(wTable.error);
-  } else {
-    const t = await countAll(supabase, wTable.table);
+  {
+    const t = await countAll(supabase, "reviews");
     if (t.n === null) {
-      reviewTotalCount = null;
       errors.reviews = dashboardErrorMessage(t.error ?? undefined);
     } else {
       reviewTotalCount = t.n;
@@ -332,12 +205,13 @@ export async function loadAdminDashboardSummary(supabase: SupabaseClient): Promi
     settlementPendingCount = sp.count;
   }
 
-  const aTable = await firstReadableAdminTable(supabase, ["audit_logs", "audit_events", "verification_logs", "admin_audit_logs"] as const);
+  // W4(C10): 구 후보 순회([audit_logs, audit_events, verification_logs, admin_audit_logs])는
+  // 앞 2개가 187 baseline 부재라 항상 verification_logs 로 결정론적으로 귀결됐다(실측).
+  // 프로빙을 제거하고 현행 관측 지표(verification_logs 전체 건수)로 고정한다. 이 지표의 의미
+  // 정본화(예: admin_action_logs 기반 감사 트레일 지표로 교체)는 오너 결정 사항 — W4 비범위.
   let auditLogCount: number | null = null;
-  if (!aTable.table) {
-    errors.auditLogs = dashboardErrorMessage(aTable.error);
-  } else {
-    const t = await countAll(supabase, aTable.table);
+  {
+    const t = await countAll(supabase, "verification_logs");
     if (t.n === null) {
       auditLogCount = null;
       errors.auditLogs = dashboardErrorMessage(t.error ?? undefined);
@@ -368,162 +242,8 @@ export async function loadAdminDashboardSummary(supabase: SupabaseClient): Promi
   };
 }
 
-function summaryToQueueCards(summary: AdminDashboardSummary): AdminQueueMetric[] {
-  const fmt = (n: number | null) => (n === null ? "—" : String(n));
-
-  const qMentor: AdminQueueMetric = {
-    label: "멘토 승인 대기",
-    nText: fmt(summary.mentorApprovalPendingCount),
-    href: "/admin/mentor-approvals",
-    detail:
-      summary.mentorApprovalPendingCount === null
-        ? "목록을 불러올 수 없습니다."
-        : summary.mentorApprovalPendingCount === 0
-          ? "표시할 대기 건이 없습니다(0건)."
-          : "승인 대기·검토 중 멘토 신청 건수입니다.",
-    state: metricState(summary.mentorApprovalPendingCount, true),
-  };
-
-  const qRep: AdminQueueMetric = {
-    label: "신고 접수",
-    nText: fmt(summary.reportOpenCount),
-    href: "/admin/reports",
-    detail:
-      summary.reportOpenCount === null
-        ? "목록을 불러올 수 없습니다."
-        : summary.reportOpenCount === 0
-          ? "표시할 접수 건이 없습니다(0건)."
-          : "접수·진행 중 신고 건수입니다.",
-    state: metricState(summary.reportOpenCount, true),
-  };
-
-  const qDis: AdminQueueMetric = {
-    label: "분쟁 관리",
-    nText: fmt(summary.disputeActiveCount),
-    href: "/admin/disputes",
-    detail:
-      summary.disputeActiveCount === null
-        ? "목록을 불러올 수 없습니다."
-        : summary.disputeApproximate
-          ? "진행 상태 필터가 맞지 않아 전체 건수로 표시합니다. 확인이 필요합니다."
-          : "분쟁 기록 기준 접수·검토·에스컬레이션 상태 건수입니다.",
-    state: metricState(summary.disputeActiveCount, true),
-  };
-
-  const qRef: AdminQueueMetric = {
-    label: "환불 요청",
-    nText: fmt(summary.refundPendingCount),
-    href: "/admin/refunds",
-    detail:
-      summary.refundPendingCount === null
-        ? "목록을 불러올 수 없습니다."
-        : summary.refundPendingCount === 0
-          ? "대기 중인 환불 요청이 없습니다(0건)."
-          : "상태가 대기인 환불 요청 건수입니다.",
-    state: metricState(summary.refundPendingCount, true),
-  };
-
-  const qRev: AdminQueueMetric = {
-    label: "리뷰 관리",
-    nText: fmt(summary.reviewTotalCount),
-    href: "/admin/reviews",
-    detail:
-      summary.reviewTotalCount === null
-        ? "목록을 불러올 수 없습니다."
-        : summary.reviewTotalCount === 0
-          ? "등록된 리뷰가 없거나 조회 결과가 0건입니다."
-          : "전체 리뷰 건수입니다. 리뷰 관리 화면에서는 최근 50건만 표시됩니다.",
-    state: metricState(summary.reviewTotalCount, true),
-  };
-
-  const amt = summary.settlementPendingAmount ?? 0;
-  const qSet: AdminQueueMetric = {
-    label: "정산 관리",
-    nText:
-      summary.settlementPendingCount === null
-        ? "—"
-        : `${summary.settlementPendingCount}건`,
-    href: "/admin/settlements",
-    detail:
-      summary.settlementPendingAmount === null || summary.settlementPendingCount === null
-        ? "목록을 불러올 수 없습니다."
-        : `${wonLabel(amt)} 지급 대기(멘토 정산금)`,
-    state:
-      summary.settlementPendingCount === null && summary.settlementPendingAmount === null
-        ? "skeleton"
-        : summary.settlementPendingCount === 0
-          ? "empty"
-          : "connected",
-  };
-
-  const qAud: AdminQueueMetric = {
-    label: "감사 로그",
-    nText: fmt(summary.auditLogCount),
-    href: "/admin/audit-logs",
-    detail:
-      summary.auditLogCount === null
-        ? "목록을 불러올 수 없습니다."
-        : summary.auditLogCount === 0
-          ? "집계 대상 로그가 없거나 0건입니다."
-          : "전용 로그 저장소 기준 건수입니다. 감사 로그 화면의 통합 목록과 다를 수 있습니다.",
-    state: metricState(summary.auditLogCount, true),
-  };
-
-  const qNotices: AdminQueueMetric = {
-    label: "공지·프로모션",
-    nText: fmt(summary.noticesActiveCount),
-    href: "/admin/notices",
-    detail:
-      summary.noticesActiveCount === null
-        ? "목록을 불러올 수 없습니다."
-        : summary.noticesActiveCount === 0
-          ? "현재 활성화된 공지·프로모션이 없습니다(0건)."
-          : "활성 공지·프로모션 합계입니다.",
-    state: metricState(summary.noticesActiveCount, true),
-  };
-
-  return [qMentor, qRep, qDis, qRef, qRev, qSet, qAud, qNotices];
-}
-
-export async function loadAdminDashboardMetrics(
-  supabase: SupabaseClient
-): Promise<{ queueCards: AdminQueueMetric[]; scaffolds: AdminScaffold[]; globalError: string | null }> {
-  const summary = await loadAdminDashboardSummary(supabase);
-  const queueCards = summaryToQueueCards(summary);
-
-  const hasErr = Object.keys(summary.errors).length > 0;
-  const globalError = hasErr ? "일부 집계를 불러오지 못했습니다. 각 메뉴에서 상세를 확인해 주세요." : null;
-
-  const scaffolds: AdminScaffold[] = [
-    {
-      title: "운영 상태",
-      body: "주요 운영 메뉴와 최근 집계 상태를 확인할 수 있습니다.",
-      status: hasErr ? "skeleton" : "connected",
-    },
-    {
-      title: "권한 보호",
-      body: "관리자 권한이 확인된 세션에서만 접근할 수 있습니다.",
-      status: "connected",
-    },
-    {
-      title: "다음 작업",
-      body: "승인·신고·분쟁·환불 등 세부 처리는 각 관리 메뉴에서 진행합니다.",
-      status: "connected",
-    },
-    {
-      title: "운영 지표",
-      body: "최근 운영 데이터를 기준으로 집계합니다.",
-      status: "connected",
-    },
-    {
-      title: "긴급 알림",
-      body: "이 대시보드에서 푸시·외부 알림을 보내는 기능은 제공하지 않습니다.",
-      status: "skeleton",
-    },
-  ];
-
-  return { queueCards, scaffolds, globalError };
-}
+// W4(C10): 미사용 export loadAdminDashboardMetrics(+summaryToQueueCards·AdminScaffold) 삭제 —
+// 저장소 전체 호출부 0건 실측. 대시보드 정본 경로는 lib/admin/adminDashboardExtended.ts(loadAdminDashboardSummary 사용).
 
 // —— sub-pages: list fetches (실데이터, 없으면 empty + error) —— //
 
@@ -536,37 +256,8 @@ export type AdminListResult = {
   keyHints: { status?: string | null; targetType?: string | null; paymentRef?: string | null; disputeRef?: string | null };
 };
 
-export async function loadMentorApprovalsList(supabase: SupabaseClient, limit = 30): Promise<AdminListResult> {
-  const db = mentorProfilesAdminReadClient(supabase);
-  const { table, error: te } = await firstReadableAdminTable(db, ["mentor_profiles"]);
-  if (!table) {
-    return { table: null, sourceNote: "목록을 연결할 수 없습니다.", rows: [], error: te, keyHints: {} };
-  }
-  const statusCol = await pickExistingColumn(db, table, ["verification_status", "status", "approval_status", "review_state"]);
-  const preferPending = ["pending", "submitted", "under_review", "awaiting", "PENDING"] as const;
-  if (statusCol.column) {
-    for (const v of preferPending) {
-      const { data, error } = await db.from(table).select("*").eq(statusCol.column, v).limit(limit);
-      if (!error && data?.length) {
-        return {
-          table,
-          sourceNote: "승인 대기 상태를 우선 표시합니다.",
-          rows: (data as Row[]) ?? [],
-          error: null,
-          keyHints: { status: statusCol.column, targetType: null, paymentRef: null },
-        };
-      }
-    }
-  }
-  const { rows, error: oe } = await selectWithOrder<Row>(db, table, limit);
-  return {
-    table,
-    sourceNote: "최근 생성된 항목부터 표시합니다.",
-    rows: oe ? [] : rows,
-    error: oe,
-    keyHints: { status: statusCol.column, targetType: null, paymentRef: null },
-  };
-}
+// W4(C10): 미사용 export loadMentorApprovalsList 삭제 — 저장소 전체 호출부 0건 실측.
+// 멘토 승인 목록의 정본 경로는 loadAdminMentorApprovalsListPaged(mentor_profiles.verification_status 고정).
 
 /** 멘토 승인 목록의 user_id에 대응하는 users 표시용(서비스 롤 등 읽기 클라이언트 권장). */
 export async function fetchAdminUsersDisplayByIds(
@@ -577,7 +268,12 @@ export async function fetchAdminUsersDisplayByIds(
   const unique = [...new Set(ids.filter((x) => typeof x === "string" && x.length > 0))] as string[];
   const slice = unique.slice(0, 80);
   if (!slice.length) return map;
-  const { data } = await supabase.from("users").select("id, nickname, full_name, email").in("id", slice);
+  const { data, error } = await supabase.from("users").select("id, nickname, full_name, email").in("id", slice);
+  if (error) {
+    // W4(C10): 에러 무음 폐기 금지 — 표시 보조(이름 표기) 전용 경로라 빈 맵으로 열화하되(성공 아님) 반드시 로그를 남긴다.
+    console.error("[fetchAdminUsersDisplayByIds] users 조회 실패:", error.message);
+    return map;
+  }
   const rows = (data ?? []) as { id?: string; nickname?: string | null; full_name?: string | null; email?: string | null }[];
   for (const r of rows) {
     const id = r.id != null ? String(r.id) : "";
@@ -586,60 +282,8 @@ export async function fetchAdminUsersDisplayByIds(
   return map;
 }
 
-const CONTENT_REPORTS_TABLE = "content_reports" as const;
-
-export async function loadAdminReportsList(supabase: SupabaseClient, limit = 50): Promise<AdminListResult> {
-  const crProbe = await supabase.from(CONTENT_REPORTS_TABLE).select("id").limit(1);
-  if (!crProbe.error) {
-    const { data, error } = await supabase
-      .from(CONTENT_REPORTS_TABLE)
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(limit);
-    const tt = await pickExistingColumn(supabase, CONTENT_REPORTS_TABLE, [
-      "target_type",
-      "subject_type",
-      "resource_type",
-      "content_type",
-      "category",
-    ]);
-    const st = await pickExistingColumn(supabase, CONTENT_REPORTS_TABLE, ["status", "state", "report_status"]);
-    return {
-      table: CONTENT_REPORTS_TABLE,
-      sourceNote: "",
-      rows: error ? [] : ((data as Row[]) ?? []),
-      error: error ? error.message : null,
-      keyHints: { status: st.column ?? "status", targetType: tt.column ?? "target_type" },
-    };
-  }
-
-  const { table, error: te } = await firstReadableAdminTable(supabase, ["reports", "abuse_reports"]);
-  if (!table) {
-    return { table: null, sourceNote: "목록을 연결할 수 없습니다.", rows: [], error: te, keyHints: {} };
-  }
-  const { rows, error } = await selectWithOrder<Row>(supabase, table, limit);
-  const tt = await pickExistingColumn(supabase, table, ["target_type", "subject_type", "resource_type", "content_type", "category"]);
-  const st = await pickExistingColumn(supabase, table, ["status", "state", "report_status"]);
-  return { table, sourceNote: "최근 생성된 항목부터 표시합니다.", rows: error ? [] : rows, error, keyHints: { status: st.column, targetType: tt.column } };
-}
-
-export async function loadAdminRefundsList(supabase: SupabaseClient, limit = 30): Promise<AdminListResult> {
-  const { table, error: te } = await firstReadableAdminTable(supabase, ["refunds"]);
-  if (!table) {
-    return { table: null, sourceNote: "목록을 연결할 수 없습니다.", rows: [], error: te, keyHints: {} };
-  }
-  const { rows, error } = await selectWithOrder<Row>(supabase, table, limit);
-  const pay = await pickExistingColumn(supabase, table, ["payment_id", "order_id", "pg_payment_id", "stripe_payment_intent", "imp_uid", "mcht_trd_no"] as const);
-  const st = await pickExistingColumn(supabase, table, ["status", "refund_status", "state"]);
-  const dCol = await pickExistingColumn(supabase, table, ["dispute_id", "case_id"]);
-  return {
-    table,
-    sourceNote: "최근 요청 기준으로 표시합니다.",
-    rows: error ? [] : rows,
-    error,
-    keyHints: { status: st.column, paymentRef: pay.column, disputeRef: dCol.column },
-  };
-}
+// W4(C10): 미사용 export loadAdminReportsList·loadAdminRefundsList 삭제 — 저장소 전체 호출부 0건 실측.
+// 정본 경로는 loadAdminReportsListPaged(content_reports 고정)·loadAdminRefundsListPaged(refunds 고정).
 
 export type AdminListPagedResult = AdminListResult & { totalCount: number };
 
@@ -704,18 +348,8 @@ export async function loadAdminRefundsListPaged(
     sort?: string;
   }
 ): Promise<AdminListPagedResult> {
-  const { table, error: te } = await firstReadableAdminTable(supabase, ["refunds"]);
-  if (!table) {
-    return {
-      table: null,
-      sourceNote: "목록을 연결할 수 없습니다.",
-      rows: [],
-      error: te,
-      keyHints: {},
-      totalCount: 0,
-    };
-  }
-
+  // W4(C10): refunds 고정 — 테이블 존재 프로브 제거(187 baseline 실측).
+  const table = "refunds";
   const from = Math.max(0, (args.page - 1) * args.pageSize);
   const to = from + args.pageSize - 1;
   const applyFilters = (q: PgRestQueryBuilder): PgRestQueryBuilder => {
@@ -751,25 +385,25 @@ export async function loadAdminRefundsListPaged(
     ascending: args.sort === "deadline",
   });
 
-  const pay = await pickExistingColumn(supabase, table, [
-    "payment_id",
-    "order_id",
-    "pg_payment_id",
-    "stripe_payment_intent",
-    "imp_uid",
-    "mcht_trd_no",
-  ] as const);
-  const st = await pickExistingColumn(supabase, table, ["status", "refund_status", "state"]);
-  const dCol = await pickExistingColumn(supabase, table, ["dispute_id", "case_id"]);
-
+  // W4(C10): keyHints 고정 — refunds.status·payment_id 실존, dispute_id/case_id 부재(187 baseline 실측). 컬럼 프로빙 제거.
   return {
     table,
     sourceNote: "최근 요청 기준으로 표시합니다.",
     rows: paged.rows,
     error: paged.errorMsg,
-    keyHints: { status: st.column, paymentRef: pay.column, disputeRef: dCol.column },
+    keyHints: { status: "status", paymentRef: "payment_id", disputeRef: null },
     totalCount: paged.count,
   };
+}
+
+/** W4(C10): head-count 에러 무음 폐기 금지 — 탭 배지 표시 전용 경로의 명시적 열화.
+ *  실패 시 0을 표시하되(성공 처리 아님) 반드시 console.error 로 표면화한다. 빈 결과(0건)와 구분됨. */
+function headCountOrLoggedZero(count: number | null, error: PostgrestError | null, ctx: string): number {
+  if (error) {
+    console.error(`[adminQueries] head-count 실패(${ctx}):`, error.message);
+    return 0;
+  }
+  return count ?? 0;
 }
 
 /** 환불 상태별 카운트(탭 옆 표시용). 검색은 제외, 상태만. */
@@ -778,16 +412,16 @@ export async function countAdminRefundsByStatus(
 ): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
   const statuses = ["pending", "succeeded", "rejected", "canceled"];
-  const { count: totalAll } = await supabase
+  const all = await supabase
     .from("refunds")
     .select("*", { count: "exact", head: true });
-  out.all = totalAll ?? 0;
+  out.all = headCountOrLoggedZero(all.count, all.error, "refunds all");
   for (const s of statuses) {
-    const { count } = await supabase
+    const r = await supabase
       .from("refunds")
       .select("*", { count: "exact", head: true })
       .eq("status", s);
-    out[s] = count ?? 0;
+    out[s] = headCountOrLoggedZero(r.count, r.error, `refunds.status=${s}`);
   }
   return out;
 }
@@ -803,18 +437,18 @@ export async function countAdminRefundsByRequestType(
     "iq",
     "order",
   ];
-  const { count: allPending } = await supabase
+  const all = await supabase
     .from("refunds")
     .select("*", { count: "exact", head: true })
     .eq("status", "pending");
-  out.all = allPending ?? 0;
+  out.all = headCountOrLoggedZero(all.count, all.error, "refunds pending all");
   for (const t of types) {
-    const { count } = await supabase
+    const r = await supabase
       .from("refunds")
       .select("*", { count: "exact", head: true })
       .eq("status", "pending")
       .eq("request_type", t);
-    out[t] = count ?? 0;
+    out[t] = headCountOrLoggedZero(r.count, r.error, `refunds.request_type=${t}`);
   }
   return out;
 }
@@ -824,19 +458,8 @@ export async function loadAdminReportsListPaged(
   supabase: SupabaseClient,
   args: { search: string; status: string; page: number; pageSize: number }
 ): Promise<AdminListPagedResult> {
+  // W4(C10): content_reports 고정 — 사전 존재 프로브 제거(실 쿼리 에러는 아래 error 로 그대로 표면화).
   const TABLE = "content_reports";
-  const { error: probe } = await supabase.from(TABLE).select("id").limit(1);
-  if (probe) {
-    return {
-      table: null,
-      sourceNote: "목록을 연결할 수 없습니다.",
-      rows: [],
-      error: probe.message,
-      keyHints: {},
-      totalCount: 0,
-    };
-  }
-
   const from = Math.max(0, (args.page - 1) * args.pageSize);
   const to = from + args.pageSize - 1;
   const applyFilters = (q: PgRestQueryBuilder): PgRestQueryBuilder => {
@@ -878,16 +501,16 @@ export async function countAdminReportsByStatus(
 ): Promise<Record<string, number>> {
   const out: Record<string, number> = {};
   const statuses = ["pending", "reviewing", "resolved", "rejected", "dismissed", "hidden", "removed"];
-  const { count: total } = await supabase
+  const all = await supabase
     .from("content_reports")
     .select("*", { count: "exact", head: true });
-  out.all = total ?? 0;
+  out.all = headCountOrLoggedZero(all.count, all.error, "content_reports all");
   for (const s of statuses) {
-    const { count } = await supabase
+    const r = await supabase
       .from("content_reports")
       .select("*", { count: "exact", head: true })
       .eq("status", s);
-    out[s] = count ?? 0;
+    out[s] = headCountOrLoggedZero(r.count, r.error, `content_reports.status=${s}`);
   }
   return out;
 }
@@ -944,16 +567,16 @@ export async function countAdminCustomRequestOrdersByStatus(
     "cancelled",
     "refunded",
   ];
-  const { count: total } = await supabase
+  const all = await supabase
     .from("custom_request_orders")
     .select("*", { count: "exact", head: true });
-  out.all = total ?? 0;
+  out.all = headCountOrLoggedZero(all.count, all.error, "custom_request_orders all");
   for (const s of statuses) {
-    const { count } = await supabase
+    const r = await supabase
       .from("custom_request_orders")
       .select("*", { count: "exact", head: true })
       .eq("status", s);
-    out[s] = count ?? 0;
+    out[s] = headCountOrLoggedZero(r.count, r.error, `custom_request_orders.status=${s}`);
   }
   return out;
 }
@@ -1007,14 +630,14 @@ export async function countAdminDisputesByStatus(
   const out: Record<string, number> = {};
   const client = opts?.adminBypassClient ?? supabase;
   const statuses = ["open", "under_review", "resolved", "dismissed", "escalated"];
-  const { count: total } = await client.from("disputes").select("*", { count: "exact", head: true });
-  out.all = total ?? 0;
+  const all = await client.from("disputes").select("*", { count: "exact", head: true });
+  out.all = headCountOrLoggedZero(all.count, all.error, "disputes all");
   for (const s of statuses) {
-    const { count } = await client
+    const r = await client
       .from("disputes")
       .select("*", { count: "exact", head: true })
       .eq("status", s);
-    out[s] = count ?? 0;
+    out[s] = headCountOrLoggedZero(r.count, r.error, `disputes.status=${s}`);
   }
   return out;
 }
@@ -1063,14 +686,14 @@ export async function countAdminMentorApprovalsByStatus(
   const db = mentorProfilesAdminReadClient(supabase);
   const out: Record<string, number> = {};
   const statuses = ["pending", "submitted", "under_review", "approved", "rejected"];
-  const { count: total } = await db.from("mentor_profiles").select("*", { count: "exact", head: true });
-  out.all = total ?? 0;
+  const all = await db.from("mentor_profiles").select("*", { count: "exact", head: true });
+  out.all = headCountOrLoggedZero(all.count, all.error, "mentor_profiles all");
   for (const s of statuses) {
-    const { count } = await db
+    const r = await db
       .from("mentor_profiles")
       .select("*", { count: "exact", head: true })
       .eq("verification_status", s);
-    out[s] = count ?? 0;
+    out[s] = headCountOrLoggedZero(r.count, r.error, `mentor_profiles.verification_status=${s}`);
   }
   return out;
 }
@@ -1120,54 +743,46 @@ export async function countAdminAcademicRecordChangesByStatus(
   const db = mentorProfilesAdminReadClient(supabase);
   const out: Record<string, number> = {};
   const statuses = ["pending", "resubmit_required", "approved", "rejected"];
-  const { count: total } = await db
+  const all = await db
     .from("mentor_academic_record_change_requests")
     .select("*", { count: "exact", head: true });
-  out.all = total ?? 0;
+  out.all = headCountOrLoggedZero(all.count, all.error, "mentor_academic_record_change_requests all");
   for (const s of statuses) {
-    const { count } = await db
+    const r = await db
       .from("mentor_academic_record_change_requests")
       .select("*", { count: "exact", head: true })
       .eq("status", s);
-    out[s] = count ?? 0;
+    out[s] = headCountOrLoggedZero(r.count, r.error, `mentor_academic_record_change_requests.status=${s}`);
   }
   return out;
 }
 
 export async function loadAdminReviewsList(supabase: SupabaseClient, limit = 50): Promise<AdminListResult> {
-  const { table, error: te } = await firstReadableAdminTable(supabase, ["reviews", "mentor_reviews", "mentor_review"]);
-  if (!table) {
-    return { table: null, sourceNote: "목록을 연결할 수 없습니다.", rows: [], error: te, keyHints: {} };
-  }
-  const { rows, error } = await selectWithOrder<Row>(supabase, table, limit);
-  const hidden = await pickExistingColumn(supabase, table, ["hidden", "is_hidden", "is_blind", "visible", "moderation_state"]);
-  return { table, sourceNote: "최근 생성된 항목부터 표시합니다.", rows: error ? [] : rows, error, keyHints: { status: hidden.column } };
+  // W4(C10): reviews 고정(mentor_reviews/mentor_review 는 phantom) + created_at desc 고정 정렬 —
+  // 테이블·정렬 컬럼 프로빙 제거(187 baseline 실측). 에러는 rows 빈 채로 error 에 그대로 표면화.
+  const table = "reviews";
+  const { data, error } = await supabase.from(table).select("*").order("created_at", { ascending: false }).limit(limit);
+  return {
+    table,
+    sourceNote: "최근 생성된 항목부터 표시합니다.",
+    rows: error ? [] : (((data as Row[] | null) ?? [])),
+    error: fmt(error),
+    keyHints: { status: "is_hidden" },
+  };
 }
 
-/** 리뷰 관리 조치용 컬럼 매핑(액션·표시 공통) */
+/** 리뷰 관리 조치용 컬럼 매핑(액션·표시 공통)
+ *  W4(C10): reviews.is_hidden·is_blinded·moderation_state 실존(187 baseline 실측) — 후보 컬럼 프로빙을
+ *  상수 플랜으로 정본화. 외부 호출부(adminReviewActions) 시그니처 유지를 위해 async export 형태는 유지. */
 export async function probeAdminReviewModerationPlan(
-  supabase: SupabaseClient,
-  table: string
+  _supabase: SupabaseClient,
+  _table: string
 ): Promise<AdminReviewModerationPlan> {
-  const hiddenPrefer = await pickExistingColumn(supabase, table, ["is_hidden", "hidden"]);
-  const visiblePrefer = await pickExistingColumn(supabase, table, ["visible", "is_public", "is_visible"]);
-  let hide: AdminReviewModerationPlan["hide"] = null;
-  if (hiddenPrefer.column) {
-    hide = { column: hiddenPrefer.column, mode: "boolean_true" };
-  } else if (visiblePrefer.column) {
-    hide = { column: visiblePrefer.column, mode: "boolean_false_for_visible" };
-  }
-  const blindPick = await pickExistingColumn(supabase, table, ["is_blinded", "is_blind"]);
-  const blind = blindPick.column ? { column: blindPick.column } : null;
-  const modState = await pickExistingColumn(supabase, table, ["moderation_state", "moderation_status", "review_status"]);
-  const modAt = await pickExistingColumn(supabase, table, ["moderated_at", "reviewed_at", "admin_reviewed_at"]);
-  let reviewDone: AdminReviewModerationPlan["reviewDone"] = null;
-  if (modState.column) {
-    reviewDone = { column: modState.column, kind: "enum", enumValue: "reviewed" };
-  } else if (modAt.column) {
-    reviewDone = { column: modAt.column, kind: "timestamp", enumValue: "" };
-  }
-  return { hide, blind, reviewDone };
+  return {
+    hide: { column: "is_hidden", mode: "boolean_true" },
+    blind: { column: "is_blinded" },
+    reviewDone: { column: "moderation_state", kind: "enum", enumValue: "reviewed" },
+  };
 }
 
 /** 숨김·블라인드 외 운영 메타(moderation_state, moderated_at, moderated_by) 컬럼명 */
@@ -1177,14 +792,12 @@ export type AdminReviewAuditColumnNames = {
   moderatedBy: string | null;
 };
 
+// W4(C10): reviews.moderation_state·moderated_at·moderated_by 실존(187 baseline 실측) — 상수로 정본화.
 export async function probeAdminReviewAuditColumnNames(
-  supabase: SupabaseClient,
-  table: string
+  _supabase: SupabaseClient,
+  _table: string
 ): Promise<AdminReviewAuditColumnNames> {
-  const st = await pickExistingColumn(supabase, table, ["moderation_state", "moderation_status"]);
-  const at = await pickExistingColumn(supabase, table, ["moderated_at"]);
-  const by = await pickExistingColumn(supabase, table, ["moderated_by"]);
-  return { moderationState: st.column, moderatedAt: at.column, moderatedBy: by.column };
+  return { moderationState: "moderation_state", moderatedAt: "moderated_at", moderatedBy: "moderated_by" };
 }
 
 export type AdminReviewsPageMeta = {
@@ -1205,14 +818,11 @@ export async function loadAdminReviewsPage(
     return { list, meta: null };
   }
   const table = list.table;
-  const authorColumn = (await pickExistingColumn(supabase, table, ["author_id", "user_id", "reviewer_id", "student_id"])).column;
-  const ratingColumn = (await pickExistingColumn(supabase, table, ["rating", "score", "stars"])).column;
-  const bodyColumn = (await pickExistingColumn(supabase, table, ["body", "comment", "content", "text"])).column;
-  const mentorColumn = (await pickExistingColumn(supabase, table, ["mentor_id", "mentor_user_id", "target_user_id", "to_user_id"])).column;
+  // W4(C10): reviews.author_id·rating·body·mentor_id 고정(123_reviews_converge 가 legacy 후보 컬럼 제거) — 컬럼 프로빙 삭제.
   const plan = await probeAdminReviewModerationPlan(supabase, table);
   return {
     list,
-    meta: { table, authorColumn, ratingColumn, bodyColumn, mentorColumn, plan },
+    meta: { table, authorColumn: "author_id", ratingColumn: "rating", bodyColumn: "body", mentorColumn: "mentor_id", plan },
   };
 }
 
@@ -1382,23 +992,22 @@ async function fetchMentorPayoutAccountDisplayMap(
   for (const id of unique) out.set(id, "미등록");
   if (!unique.length) return out;
 
+  // W4(C10): mentor_profiles.payout_bank_name·payout_account_number 고정(041 SQL, 187 baseline 실측) — 컬럼 프로빙 제거.
   const db = mentorProfilesAdminReadClient(supabase);
-  const bankCol = await pickExistingColumn(db, "mentor_profiles", ["payout_bank_name", "bank_name"]);
-  const acctCol = await pickExistingColumn(db, "mentor_profiles", [
-    "payout_account_number",
-    "bank_account_number",
-    "account_number",
-  ]);
-  if (!acctCol.column) return out;
-
-  const cols = ["user_id", bankCol.column, acctCol.column].filter(Boolean).join(", ");
   for (const part of chunkIds(unique, 80)) {
-    const { data, error } = await db.from("mentor_profiles").select(cols).in("user_id", part);
-    if (error || !data) continue;
-    for (const row of data as unknown as Row[]) {
+    const { data, error } = await db
+      .from("mentor_profiles")
+      .select("user_id, payout_bank_name, payout_account_number")
+      .in("user_id", part);
+    if (error) {
+      // W4(C10): 표시 보조(마스킹 계좌 표기) 전용 열화 — '미등록' 기본값 유지하되 실패는 반드시 로그로 표면화(성공 아님).
+      console.error("[fetchMentorPayoutAccountDisplayMap] mentor_profiles 조회 실패:", error.message);
+      continue;
+    }
+    for (const row of (data ?? []) as unknown as Row[]) {
       const mentorId = String(row.user_id ?? "");
       if (!mentorId) continue;
-      out.set(mentorId, maskAdminPayoutAccount(bankCol.column ? row[bankCol.column] : null, row[acctCol.column]));
+      out.set(mentorId, maskAdminPayoutAccount(row.payout_bank_name, row.payout_account_number));
     }
   }
   return out;
@@ -1419,8 +1028,12 @@ async function fetchCustomRequestOrdersMap(supabase: SupabaseClient, orderIds: s
       .from("custom_request_orders")
       .select("id, payment_status, status, state, order_status, agreed_price, proposed_price, price, amount, completed_at")
       .in("id", part);
-    if (error || !data) continue;
-    for (const row of data as unknown as Row[]) {
+    if (error) {
+      // W4(C10): 표시 보조(주문 툴팁 한 줄) 전용 열화 — 정산 목록은 유지하되 실패는 반드시 로그로 표면화(성공 아님).
+      console.error("[fetchCustomRequestOrdersMap] custom_request_orders 조회 실패:", error.message);
+      continue;
+    }
+    for (const row of (data ?? []) as unknown as Row[]) {
       const oid = String(row.id ?? "");
       if (oid) map.set(oid, row);
     }

@@ -18,7 +18,12 @@ export async function loadFreeTrialThreadIdsForMentorRoom(
 ): Promise<string[]> {
   if (!studentId || !mentorId || !roomId) return [];
   try {
-    const ids = await loadFreeQuestionThreadIdsInRoom(supabase, studentId, mentorId, roomId);
+    const { ids, error } = await loadFreeQuestionThreadIdsInRoom(supabase, studentId, mentorId, roomId);
+    if (error) {
+      // 우선노출 배지는 표시 전용 — 실패를 명시 로그로 남기고 기존 정렬을 유지한다(성공 위장 아님).
+      console.error("[freeTrialPriority] load failed", { mentorId, roomId, error });
+      return [];
+    }
     return [...ids];
   } catch (e) {
     console.error("[freeTrialPriority] load failed", { mentorId, roomId, e });

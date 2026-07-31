@@ -3,17 +3,14 @@
 import { redirect } from "next/navigation";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { canAccessOrder } from "@/lib/customRequest/orderAccess";
-import {
-  firstReadableCustomTable,
-  ORDER_TO_DELIVERABLE_FK_CANDIDATES,
-} from "@/lib/customRequest/customRequestQueries";
+// W4(C10): 테이블/컬럼 프로빙 제거 — custom_request_orders·custom_order_deliverables 정본 고정(187 baseline 실측)
+import { ORDER_CHILD_FK_COLUMN } from "@/lib/customRequest/customRequestQueries";
 import {
   DELIVERABLE_STORAGE_BUCKET,
   pickStoragePathFromDeliverableRow,
   validateDeliverableStoragePath,
 } from "@/lib/customRequest/orderDeliverableFiles";
 import { studentCanDownloadDeliverable } from "@/lib/customRequest/orderLifecycleConstants";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/lib/types/user";
 
@@ -47,11 +44,11 @@ export async function downloadCustomOrderDeliverableAction(formData: FormData): 
 
   const supabase = await createClient();
 
-  const oT = await firstReadableCustomTable(supabase, ["custom_request_orders", "custom_orders", "request_orders"]);
-  if (!oT.table) {
-    redirect(orderPath(orderId) + "?error=" + encodeURIComponent("주문을 찾을 수 없습니다."));
-  }
-  const { data: orderRow, error: oe } = await supabase.from(oT.table).select("*").eq("id", orderId).maybeSingle();
+  const { data: orderRow, error: oe } = await supabase
+    .from("custom_request_orders")
+    .select("*")
+    .eq("id", orderId)
+    .maybeSingle();
   if (oe || !orderRow) {
     redirect(orderPath(orderId) + "?error=" + encodeURIComponent("주문을 찾을 수 없습니다."));
   }
@@ -64,20 +61,11 @@ export async function downloadCustomOrderDeliverableAction(formData: FormData): 
     redirect(orderPath(orderId) + "?error=" + encodeURIComponent("수락(완료) 후에 다운로드할 수 있어요."));
   }
 
-  const dT = await firstReadableCustomTable(supabase, ["custom_order_deliverables", "order_deliverables", "request_deliverables"]);
-  if (!dT.table) {
-    redirect(orderPath(orderId) + "?error=" + encodeURIComponent("납품 테이블을 찾을 수 없습니다."));
-  }
-  const { column: fk } = await pickExistingColumn(supabase, dT.table, [...ORDER_TO_DELIVERABLE_FK_CANDIDATES]);
-  if (!fk) {
-    redirect(orderPath(orderId) + "?error=" + encodeURIComponent("납품 스키마를 확인할 수 없습니다."));
-  }
-
   const { data: drow, error: de } = await supabase
-    .from(dT.table)
+    .from("custom_order_deliverables")
     .select("*")
     .eq("id", deliverableId)
-    .eq(fk, orderId)
+    .eq(ORDER_CHILD_FK_COLUMN, orderId)
     .maybeSingle();
   if (de || !drow) {
     redirect(orderPath(orderId) + "?error=" + encodeURIComponent("해당 납품을 찾을 수 없습니다."));

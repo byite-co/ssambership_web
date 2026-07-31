@@ -1,35 +1,19 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 import { API_WEB_V1_SCHEMA } from "@/lib/apiWebV1/rpc";
-
-type TableProbe = { table: string | null; error: string | null };
-
-/** 테이블 존재/RLS read 가능할 때까지 후보만 시도(더미 row 생성 금지) */
-async function firstReadableTable(
-  supabase: SupabaseClient,
-  candidates: readonly string[]
-): Promise<TableProbe> {
-  let last = "no candidates";
-  for (const table of candidates) {
-    const { error } = await supabase.from(table).select("*").limit(1);
-    if (!error) return { table, error: null };
-    last = error.message;
-  }
-  return { table: null, error: last };
-}
 
 export type CashPackageRow = Record<string, unknown>;
 
+/**
+ * S2-2 전환 W4(C10): 충전 패키지 조회 — 정본 `public.cash_topup_packages` 단일 조회.
+ * 구 테이블 프로빙(topup_packages/cash_packages — baseline 부재)은 제거했다.
+ * 조회 오류는 error 로 반환한다(빈 결과로 은폐하지 않는다).
+ */
 export async function fetchCashTopupPackages(
   supabase: SupabaseClient
 ): Promise<{ rows: CashPackageRow[]; table: string | null; error: string | null }> {
-  const probe = await firstReadableTable(supabase, ["cash_topup_packages", "topup_packages", "cash_packages"] as const);
-  if (!probe.table) {
-    return { rows: [], table: null, error: probe.error };
-  }
-  const { data, error } = await supabase.from(probe.table).select("*").limit(50);
-  if (error) return { rows: [], table: probe.table, error: error.message };
-  return { rows: (data as CashPackageRow[]) ?? [], table: probe.table, error: null };
+  const { data, error } = await supabase.from("cash_topup_packages").select("*").limit(50);
+  if (error) return { rows: [], table: "cash_topup_packages", error: error.message };
+  return { rows: (data as CashPackageRow[]) ?? [], table: "cash_topup_packages", error: null };
 }
 
 /**
@@ -84,38 +68,25 @@ export const CASH_DATA_MODEL = [
   "잔액·사용 내역(원장)",
 ] as const;
 
-const PAY_TABLES = ["payments", "payment_intents", "order_payments"] as const;
-const PAY_USER_FK = ["user_id", "student_id", "subscriber_id", "owner_id", "recipient_id"] as const;
-
 /**
- * 캐시·지갑 맥락의 최근 결제 row(맞춤의뢰 order_payments와 혼동 시 payload로 구분 예정)
+ * S2-2 전환 W4(C10): 캐시·지갑 맥락의 최근 결제 조회 — 정본 `public.payments` 단일 조회.
+ * 컬럼 정본: `user_id`(intent writer·RLS payments_select_own·idx_payments_user 실측 일치),
+ * 정렬 `created_at desc`(동일 인덱스). 구 PAY_TABLES(payment_intents 부재)·FK/정렬 컬럼
+ * 프로빙·order 생략 재시도는 제거했다. 조회 오류는 error 로 반환한다(빈 결과 은폐 금지).
  */
 export async function fetchRecentPaymentsForUser(
   supabase: SupabaseClient,
   userId: string,
   limit = 5
 ): Promise<{ rows: Record<string, unknown>[]; table: string | null; error: string | null; probe: string }> {
-  for (const table of PAY_TABLES) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) continue;
-    const { column: sc } = await pickExistingColumn(supabase, table, PAY_USER_FK);
-    if (!sc) continue;
-    const { column: createdCol } = await pickExistingColumn(supabase, table, ["created_at", "inserted_at", "updated_at"]);
-    let q = supabase.from(table).select("*").eq(sc, userId);
-    if (createdCol) {
-      q = q.order(createdCol, { ascending: false });
-    }
-    const o1 = await q.limit(limit);
-    if (o1.error) {
-      const o2 = await supabase.from(table).select("*").eq(sc, userId).limit(limit);
-      if (o2.error) {
-        return { table, rows: [], error: o2.error.message, probe: table };
-      }
-      return { table, rows: (o2.data as Record<string, unknown>[]) ?? [], error: null, probe: `${table} · order 생략` };
-    }
-    return { table, rows: (o1.data as Record<string, unknown>[]) ?? [], error: null, probe: `${table} · ${sc}` };
-  }
-  return { table: null, rows: [], error: null, probe: "payments 조회 경로 없음" };
+  const { data, error } = await supabase
+    .from("payments")
+    .select("*")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) return { table: "payments", rows: [], error: error.message, probe: "payments" };
+  return { table: "payments", rows: (data as Record<string, unknown>[]) ?? [], error: null, probe: "payments · user_id" };
 }
 
 function formatCashUnitsFromMinorUnits(cents: number): string {

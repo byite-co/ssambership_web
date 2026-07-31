@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getStringField, pickExistingColumn } from "@/lib/qna/safeSelect";
+import { getStringField } from "@/lib/qna/safeSelect";
 import { maskContactInText } from "@/lib/customRequest/contactMasking";
 
 type Row = Record<string, unknown>;
@@ -263,11 +263,13 @@ export async function removeStorageObjectBestEffort(
   }
 }
 
-export async function buildDeliverableRowPayload(
-  supabase: SupabaseClient,
-  table: string,
+/**
+ * W4(C10): 컬럼 동의어 프로빙(회당 최대 ~20 probe 쿼리) 제거 — custom_order_deliverables 정본 컬럼 고정
+ * (note, status, version, file_url, storage_path, original_filename, mime_type, file_size — 003+010+039, 187 baseline 실측).
+ * 업로더 컬럼(mentor_id/uploaded_by 등)은 스키마에 없어 종전에도 기록되지 않았음 — 파라미터 제거.
+ */
+export function buildDeliverableRowPayload(
   idBase: Record<string, unknown>,
-  _orderId: string,
   version: number,
   note: string,
   fileMeta: {
@@ -275,59 +277,20 @@ export async function buildDeliverableRowPayload(
     originalName: string;
     mime: string;
     size: number;
-  } | null,
-  mentorUserId: string | null
-): Promise<Record<string, unknown>> {
-  const noteCol = (await pickExistingColumn(supabase, table, ["note", "body", "message", "description", "text"]))
-    .column;
-  const statusCol = (await pickExistingColumn(supabase, table, ["status", "state", "label"])).column;
-  const verCol = (await pickExistingColumn(supabase, table, ["version", "v"])).column;
-  const fileUrlCol = (await pickExistingColumn(supabase, table, ["file_url", "url", "file_uri"])).column;
-  const storagePathCol = (await pickExistingColumn(supabase, table, [
-    "storage_path",
-    "file_path",
-    "file_storage_path",
-    "object_path",
-  ])).column;
-  const origNameCol = (await pickExistingColumn(supabase, table, [
-    "original_filename",
-    "file_name",
-    "filename",
-    "original_name",
-  ])).column;
-  const mimeCol = (await pickExistingColumn(supabase, table, ["mime_type", "content_type", "file_mime_type"])).column;
-  const sizeCol = (await pickExistingColumn(supabase, table, ["file_size", "file_size_bytes", "size_bytes", "size"]))
-    .column;
-  const mentorCol = (await pickExistingColumn(supabase, table, ["mentor_id", "uploaded_by", "submitted_by", "author_id"]))
-    .column;
-
-  const p: Record<string, unknown> = { ...idBase };
-  if (verCol) {
-    p[verCol] = version;
-  } else {
-    p.version = version;
-  }
-  if (statusCol) {
-    p[statusCol] = "submitted";
-  } else {
-    p.status = "submitted";
-  }
-  if (noteCol) {
-    p[noteCol] = note;
-  } else {
-    p.note = note;
-  }
-  if (fileUrlCol && fileMeta) {
-    p[fileUrlCol] = null;
-  }
+  } | null
+): Record<string, unknown> {
+  const p: Record<string, unknown> = {
+    ...idBase,
+    version,
+    status: "submitted",
+    note,
+  };
   if (fileMeta) {
-    if (storagePathCol) p[storagePathCol] = fileMeta.objectPath;
-    if (origNameCol) p[origNameCol] = fileMeta.originalName;
-    if (mimeCol) p[mimeCol] = fileMeta.mime;
-    if (sizeCol) p[sizeCol] = fileMeta.size;
-  }
-  if (mentorUserId && mentorCol) {
-    p[mentorCol] = mentorUserId;
+    p.file_url = null;
+    p.storage_path = fileMeta.objectPath;
+    p.original_filename = fileMeta.originalName;
+    p.mime_type = fileMeta.mime;
+    p.file_size = fileMeta.size;
   }
   return p;
 }

@@ -24,16 +24,17 @@ function freeQuestionExpiryInstant(signupCreatedAt: string | Date): number {
   return signupMs + FREE_QUESTION_EXPIRY_DAYS * MS_PER_DAY;
 }
 
-/** 가입일(users.created_at) 기준 무료 질문권 유효 여부 */
+/**
+ * 가입일(users.created_at) 기준 무료 질문권 유효 여부.
+ * W4(C10): 구 "relation 부재 → 미만료(fail-open)" 분기를 제거 — 조회 오류는 전부 error 로
+ * 전파하고, 게이트 호출부(assertFreeQuestionAllowed)는 error 시 거부한다(fail-closed).
+ */
 export async function isFreeQuestionQuotaExpired(
   supabase: SupabaseClient,
   studentId: string
 ): Promise<{ expired: boolean; error: string | null }> {
   const { data, error } = await supabase.from("users").select("created_at").eq("id", studentId).maybeSingle();
   if (error) {
-    if (/relation|does not exist|schema cache/i.test(error.message)) {
-      return { expired: false, error: null };
-    }
     return { expired: false, error: error.message };
   }
   const createdAt = (data as { created_at?: string } | null)?.created_at;
@@ -47,14 +48,12 @@ export async function countFreeQuestionsTotal(
   supabase: SupabaseClient,
   studentId: string
 ): Promise<{ count: number; error: string | null }> {
+  // W4(C10): `free_question_usage`(044) 정본 — 구 "relation 부재 → 0건" fail-open 분기 제거.
   const { count, error } = await supabase
     .from(TABLE)
     .select("id", { count: "exact", head: true })
     .eq("student_id", studentId);
   if (error) {
-    if (/relation|does not exist|schema cache/i.test(error.message)) {
-      return { count: 0, error: null };
-    }
     return { count: 0, error: error.message };
   }
   return { count: count ?? 0, error: null };
@@ -71,9 +70,6 @@ export async function countFreeQuestionsForMentor(
     .eq("student_id", studentId)
     .eq("mentor_id", mentorId);
   if (error) {
-    if (/relation|does not exist|schema cache/i.test(error.message)) {
-      return { count: 0, error: null };
-    }
     return { count: 0, error: error.message };
   }
   return { count: count ?? 0, error: null };
@@ -251,62 +247,58 @@ function pairFreeUsageRowsToThreadIds(
 
 /**
  * 무료 스레드 짝짓기용 usage 조회 — service_role 전용.
- * `free_question_usage` RLS는 student_id=auth.uid() select만 허용하므로 멘토 세션 폴백은 항상 빈 결과(답변 차단)가 된다.
+ * `free_question_usage` RLS는 student_id=auth.uid() select만 허용하므로 멘토 세션에서도
+ * 동작하도록 service_role 로 읽는다.
  *
- * P1-8A(136): `thread_id` 정본 링크가 채워진 행은 정확 매칭에 사용하고, 링크가 없는 레거시 행만
- * 시각 근접 휴리스틱으로 폴백한다. `thread_id` 미적용(구DB) 시 select 실패 → created_at 만으로 재조회.
+ * W4(C10): `thread_id` 는 P1-8A(136) 정본 컬럼(FK + UNIQUE) — 구 "thread_id 미적용 DB →
+ * created_at 만으로 재조회" 컬럼 fallback 은 제거했다. 조회 실패는 error 로 전파한다
+ * (빈 결과로 은폐하지 않는다).
  */
 async function readFreeQuestionUsageRowsForPairing(
   studentId: string,
   mentorId: string
-): Promise<{ created_at: unknown; thread_id: unknown }[]> {
+): Promise<{ rows: { created_at: unknown; thread_id: unknown }[]; error: string | null }> {
   try {
     const admin = createServiceRoleClient();
-    const withThread = await admin
+    const { data, error } = await admin
       .from(TABLE)
       .select("created_at, thread_id")
       .eq("student_id", studentId)
       .eq("mentor_id", mentorId)
       .order("created_at", { ascending: true });
-    if (!withThread.error) {
-      return (withThread.data as { created_at: unknown; thread_id: unknown }[]) ?? [];
+    if (error) {
+      console.error("[readFreeQuestionUsageRowsForPairing]", { studentId, mentorId, code: error.code });
+      return { rows: [], error: error.message };
     }
-    if (!/column|does not exist|schema cache/i.test(withThread.error.message)) {
-      console.error("[readFreeQuestionUsageRowsForPairing]", withThread.error.message, { studentId, mentorId });
-      return [];
-    }
-    const legacy = await admin
-      .from(TABLE)
-      .select("created_at")
-      .eq("student_id", studentId)
-      .eq("mentor_id", mentorId)
-      .order("created_at", { ascending: true });
-    if (legacy.error) {
-      console.error("[readFreeQuestionUsageRowsForPairing] legacy", legacy.error.message, { studentId, mentorId });
-      return [];
-    }
-    return ((legacy.data as { created_at: unknown }[]) ?? []).map((r) => ({ ...r, thread_id: null }));
-  } catch (e) {
-    console.error("[readFreeQuestionUsageRowsForPairing] service role unavailable", { studentId, mentorId, e });
-    return [];
+    return { rows: (data as { created_at: unknown; thread_id: unknown }[]) ?? [], error: null };
+  } catch {
+    console.error("[readFreeQuestionUsageRowsForPairing] service role unavailable", { studentId, mentorId });
+    return { rows: [], error: "free_question_usage 조회에 실패했습니다." };
   }
 }
 
-/** room 내 무료질문권으로 생성된 것으로 매칭된 thread id 집합 */
+/** room 내 무료질문권으로 생성된 것으로 매칭된 thread id 집합. 조회 실패는 error 로 구분한다. */
 export async function loadFreeQuestionThreadIdsInRoom(
   supabase: SupabaseClient,
   studentId: string,
   mentorId: string,
   roomId: string
-): Promise<Set<string>> {
-  const usages = await readFreeQuestionUsageRowsForPairing(studentId, mentorId);
+): Promise<{ ids: Set<string>; error: string | null }> {
+  const usagesQ = await readFreeQuestionUsageRowsForPairing(studentId, mentorId);
+  if (usagesQ.error) {
+    return { ids: new Set(), error: usagesQ.error };
+  }
+  const usages = usagesQ.rows;
   if (usages.length === 0) {
-    return new Set();
+    return { ids: new Set(), error: null };
   }
 
   const { rows: threads, error: threadErr } = await fetchThreadsForRoom(supabase, roomId);
-  if (threadErr || threads.length === 0) {
-    return new Set();
+  if (threadErr) {
+    return { ids: new Set(), error: threadErr };
+  }
+  if (threads.length === 0) {
+    return { ids: new Set(), error: null };
   }
 
   const roomThreadIds = new Set<string>();
@@ -337,21 +329,24 @@ export async function loadFreeQuestionThreadIdsInRoom(
     paired.forEach((id) => result.add(id));
   }
 
-  return result;
+  return { ids: result, error: null };
 }
 
-/** 메시지/답변 게이트: 해당 thread 가 무료질문권 1회 사용과 짝지어진 스레드인지 */
+/** 메시지/답변 게이트: 해당 thread 가 무료질문권 1회 사용과 짝지어진 스레드인지. 조회 실패는 error 로 구분. */
 export async function isFreeQuestionThreadInRoom(
   supabase: SupabaseClient,
   studentId: string,
   mentorId: string,
   roomId: string,
   threadId: string
-): Promise<boolean> {
+): Promise<{ isFree: boolean; error: string | null }> {
   const tid = threadId.trim();
   if (!tid) {
-    return false;
+    return { isFree: false, error: null };
   }
-  const ids = await loadFreeQuestionThreadIdsInRoom(supabase, studentId, mentorId, roomId);
-  return ids.has(tid);
+  const { ids, error } = await loadFreeQuestionThreadIdsInRoom(supabase, studentId, mentorId, roomId);
+  if (error) {
+    return { isFree: false, error };
+  }
+  return { isFree: ids.has(tid), error: null };
 }

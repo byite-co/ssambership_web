@@ -1,7 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { firstReadableAdminTable } from "@/lib/admin/adminQueries";
 import { pickText } from "@/lib/disputes/disputeQueries";
-import { pickExistingColumn } from "@/lib/qna/safeSelect";
 
 type Row = Record<string, unknown>;
 
@@ -195,84 +193,14 @@ export function mapRowToAdminListItem(r: Row): AdminDisputeListItem {
   };
 }
 
-/** 관리자 전용: 세션 RLS로 disputes 읽기 실패 시에만 전달(서버에서 requireRole 이후). 일반 경로는 전달하지 않는다. */
-export type LoadDisputesListForAdminOpts = {
-  adminBypassClient?: SupabaseClient;
-};
+// W4(C10): loadDisputesListForAdmin(+LoadDisputesListForAdminOpts) 삭제 — 레포 전역 호출부 0곳
+// (관리자 목록 정본 경로는 app/(admin)/admin/(console)/disputes/page.tsx 가 자체 조회 후
+// mapRowToAdminListItem 만 사용). 프로빙(후보 테이블 5종·정렬 재시도)째 폐기.
 
 /**
- * 관리자 전체 분쟁 목록 — party FK 필터 없음(RLS는 admin 정책에 따름).
- * `adminBypassClient`는 관리자 라우트에서만 세션 조회가 막힐 때 동일 SELECT를 재시도하는 용도.
- */
-export async function loadDisputesListForAdmin(
-  supabase: SupabaseClient,
-  limit = 50,
-  opts?: LoadDisputesListForAdminOpts
-): Promise<{ table: string | null; items: AdminDisputeListItem[]; error: string | null; probe: string }> {
-  let client: SupabaseClient = supabase;
-  let disputesProbe = await supabase.from("disputes").select("id").limit(1);
-  const sessionProbeEmpty =
-    !disputesProbe.error &&
-    (!disputesProbe.data || (Array.isArray(disputesProbe.data) && disputesProbe.data.length === 0));
-  if ((disputesProbe.error || sessionProbeEmpty) && opts?.adminBypassClient) {
-    const b = await opts.adminBypassClient.from("disputes").select("id").limit(1);
-    if (!b.error) {
-      const bypassHasRow = Array.isArray(b.data) && b.data.length > 0;
-      if (bypassHasRow || disputesProbe.error) {
-        client = opts.adminBypassClient;
-        disputesProbe = b;
-      }
-    }
-  }
-  let table: string | null = null;
-  let probe = "";
-  if (!disputesProbe.error) {
-    table = "disputes";
-    probe = "disputes · 우선 사용";
-  } else {
-    const tProbe = await firstReadableAdminTable(client, [
-      "disputes",
-      "order_disputes",
-      "refund_disputes",
-      "user_disputes",
-      "support_tickets",
-    ] as const);
-    if (!tProbe.table) {
-      return { table: null, items: [], error: tProbe.error ?? null, probe: tProbe.error || "" };
-    }
-    table = tProbe.table;
-    probe = `${table} · 폴백`;
-  }
-  const run = async (withOrder: boolean) => {
-    let q = client.from(table).select("*").limit(limit);
-    if (withOrder) {
-      q = q.order("created_at", { ascending: false });
-    }
-    return q;
-  };
-  let { data, error } = await run(true);
-  if (error) {
-    if (!/order|column|schema cache|does not exist/i.test(error.message)) {
-      return { table, items: [], error: error.message, probe: table };
-    }
-    const r2 = await run(false);
-    data = r2.data;
-    error = r2.error;
-  }
-  if (error) {
-    return { table, items: [], error: error.message, probe: table };
-  }
-  const rows = (data as Row[] | null) ?? [];
-  return {
-    table,
-    items: rows.map((r) => mapRowToAdminListItem(r as Row)),
-    error: null,
-    probe: `${probe} · 최신순(가능 시 created_at)`,
-  };
-}
-
-/**
- * 본인 분쟁 목록(학생: 원고, 멘토: 피응·멘토 FK) — 첫로 매칭되는 user FK 컬럼 사용
+ * 본인 분쟁 목록 — 정본: public.disputes, 학생 = student_id · 멘토 = mentor_id,
+ * created_at DESC (187 baseline 실측). W4(C10): 후보 테이블·user FK 컬럼 프로빙과
+ * 정렬 재시도 제거. 오류는 error 로 반환(0건과 구분).
  */
 export async function loadDisputesListForUser(
   supabase: SupabaseClient,
@@ -280,57 +208,23 @@ export async function loadDisputesListForUser(
   kind: "student" | "mentor",
   limit = 40
 ): Promise<{ table: string | null; items: DisputeListItem[]; error: string | null; usedColumn: string | null; probe: string }> {
-  const tProbe = await firstReadableAdminTable(supabase, [
-    "disputes",
-    "order_disputes",
-    "refund_disputes",
-    "user_disputes",
-    "support_tickets",
-  ] as const);
-  if (!tProbe.table) {
-    return { table: null, items: [], error: tProbe.error, usedColumn: null, probe: tProbe.error || "" };
+  const table = "disputes";
+  const column = kind === "student" ? "student_id" : "mentor_id";
+  const { data, error } = await supabase
+    .from(table)
+    .select("*")
+    .eq(column, userId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+  if (error) {
+    return { table, items: [], error: error.message, usedColumn: null, probe: table };
   }
-  const table = tProbe.table;
-  const colPool =
-    kind === "student"
-      ? (["reporter_id", "user_id", "student_id", "created_by", "applicant_id", "plaintiff_id"] as const)
-      : (["mentor_id", "mentor_user_id", "expert_id", "responder_id", "counterparty_id", "defendant_id", "assigned_mentor_id"] as const);
-
-  for (const col of colPool) {
-    const { column } = await pickExistingColumn(supabase, table, [col]);
-    if (!column) continue;
-    const run = async (withOrder: boolean) => {
-      let q = supabase.from(table).select("*").eq(column, userId);
-      if (withOrder) {
-        q = q.order("created_at", { ascending: false });
-      }
-      return q.limit(limit);
-    };
-    let { data, error } = await run(true);
-    if (error) {
-      if (!/order|column|schema cache|does not exist/i.test(error.message)) {
-        return { table, items: [], error: error.message, usedColumn: null, probe: table };
-      }
-      const r2 = await run(false);
-      data = r2.data;
-      error = r2.error;
-    }
-    if (error) {
-      if (!/column|schema/i.test(error.message)) {
-        return { table, items: [], error: error.message, usedColumn: null, probe: table };
-      }
-      continue;
-    }
-    const rows = (data as Row[] | null) ?? [];
-    if (rows.length) {
-      return {
-        table,
-        items: rows.map((r) => mapRowToListItem(r as Row)),
-        error: null,
-        usedColumn: column,
-        probe: `${table}.${column}`,
-      };
-    }
-  }
-  return { table, items: [], error: null, usedColumn: null, probe: `${table}: user FK 후보마다 0건(또는 RLS)` };
+  const rows = (data as Row[] | null) ?? [];
+  return {
+    table,
+    items: rows.map((r) => mapRowToListItem(r as Row)),
+    error: null,
+    usedColumn: column,
+    probe: `${table}.${column}`,
+  };
 }

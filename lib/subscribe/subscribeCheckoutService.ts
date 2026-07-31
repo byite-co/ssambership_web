@@ -4,7 +4,7 @@ import { callApiWebV1Rpc } from "@/lib/apiWebV1/rpc";
 import { getMentorUserPublic } from "@/lib/auth/mentorPublicRead";
 import { transferReleasedIndividualQuestionsToRoom } from "@/lib/individualQuestion/transferIndividualQuestionsToRoom";
 import { fetchPlansForMentor } from "@/lib/mentor/publicMentorBundle";
-import { pickExistingColumn, rowsFromSupabaseData } from "@/lib/qna/safeSelect";
+import { rowsFromSupabaseData } from "@/lib/qna/safeSelect";
 import { assignPlansByTier, type SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
 import { SUBSCRIBE_PLAN_CATALOG } from "@/lib/subscribe/subscribePlanCatalog";
 import { recommendedAmountCentsForSubscribeTier } from "@/lib/subscribe/mentorPlanPricing";
@@ -23,69 +23,44 @@ import { loadMentorSubscribeOpen } from "@/lib/mentor/mentorSubscribeOpen";
 
 type Row = Record<string, unknown>;
 
-// SUB_TABLES/STU_FK/MEN_FK 는 findActiveSubscriptionForPair(레거시 프로빙 helper) 전용이다.
-// S2-2 W3(C8): checkout 확정 경로에서는 사용하지 않는다 — 남은 사용처(intent 사전 dup 게이트 ·
-// qna 구독 게이트 3곳 · subscribe/success 표시)는 C10 전역 프로빙 제거 대상으로 이월.
-const SUB_TABLES = ["subscriptions", "mentor_subscriptions", "user_subscriptions"] as const;
-const STU_FK = ["student_id", "user_id", "student_user_id", "subscriber_id"] as const;
-const MEN_FK = ["mentor_id", "mentor_user_id", "creator_id", "host_id"] as const;
-
 function isRowSubscriptionActive(row: Row): boolean {
-  const st = String(
-    row.status ?? row.state ?? row.subscription_status ?? ""
-  )
-    .toLowerCase()
-    .trim();
-  return st === "active";
+  return String(row.status ?? "").toLowerCase().trim() === "active";
 }
 
+export type ActiveSubscriptionLookup = {
+  active: { table: string; row: Row } | null;
+  error: string | null;
+};
+
 /**
- * 멘토·학생 쌍에 대해 "활성"으로 보이는 구독이 이미 있으면 해당 행(첫 개)
+ * 멘토·학생 쌍의 "활성" 구독 조회 — S2-2 W4(C10): 정본 `public.subscriptions`
+ * (student_id·mentor_id — 계약 §6 V6 "원천은 subscriptions 한 테이블만") 단일 조회.
+ * 구 SUB_TABLES(mentor_subscriptions/user_subscriptions — baseline 부재) 순회와
+ * STU_FK/MEN_FK 컬럼 프로빙은 제거했다. 조회 오류는 error 로 전파한다
+ * ("활성 구독 없음"으로 은폐하지 않는다 — 호출부가 각자 fail-closed 처리).
  */
 export async function findActiveSubscriptionForPair(
   supabase: SupabaseClient,
   studentId: string,
   mentorId: string
-): Promise<{ table: string; row: Row } | null> {
-  for (const table of SUB_TABLES) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) continue;
-    if (table === SUBSCRIPTIONS_TABLE) {
-      const { data, error } = await supabase
-        .from(SUBSCRIPTIONS_TABLE)
-        .select(SUBSCRIPTIONS_SELECT)
-        .eq("student_id", studentId)
-        .eq("mentor_id", mentorId)
-        .order(SUBSCRIPTIONS_ORDER_COLUMN, { ascending: false })
-        .limit(20);
-      if (error) continue;
-      const rows = rowsFromSupabaseData(data) as Row[];
-      for (const r of rows) {
-        if (isRowSubscriptionActive(r)) {
-          return { table: SUBSCRIPTIONS_TABLE, row: r };
-        }
-      }
-      continue;
-    }
-
-    const { column: sc } = await pickExistingColumn(supabase, table, STU_FK);
-    const { column: mc } = await pickExistingColumn(supabase, table, MEN_FK);
-    if (!sc || !mc) continue;
-    const { data, error } = await supabase
-      .from(table)
-      .select("*")
-      .eq(sc, studentId)
-      .eq(mc, mentorId)
-      .limit(20);
-    if (error) continue;
-    const rows = (data as Row[] | null) ?? [];
-    for (const r of rows) {
-      if (isRowSubscriptionActive(r)) {
-        return { table, row: r };
-      }
+): Promise<ActiveSubscriptionLookup> {
+  const { data, error } = await supabase
+    .from(SUBSCRIPTIONS_TABLE)
+    .select(SUBSCRIPTIONS_SELECT)
+    .eq("student_id", studentId)
+    .eq("mentor_id", mentorId)
+    .order(SUBSCRIPTIONS_ORDER_COLUMN, { ascending: false })
+    .limit(20);
+  if (error) {
+    return { active: null, error: error.message };
+  }
+  const rows = rowsFromSupabaseData(data) as Row[];
+  for (const r of rows) {
+    if (isRowSubscriptionActive(r)) {
+      return { active: { table: SUBSCRIPTIONS_TABLE, row: r }, error: null };
     }
   }
-  return null;
+  return { active: null, error: null };
 }
 
 /** DB `record_subscription_cash_debit`: idempotency_key = 'sub_debit_' || payment_id */
@@ -93,20 +68,8 @@ function subscriptionCashDebitIdempotencyKey(paymentId: string): string {
   return `sub_debit_${paymentId}`;
 }
 
-function isSchemaNotReadyError(error: unknown): boolean {
-  const e = error as { code?: string; message?: string } | null | undefined;
-  const code = String(e?.code ?? "");
-  const message = String(e?.message ?? "").toLowerCase();
-  return (
-    code === "42P01" ||
-    code === "42703" ||
-    code === "PGRST204" ||
-    code === "PGRST205" ||
-    message.includes("schema cache") ||
-    message.includes("could not find") ||
-    message.includes("does not exist")
-  );
-}
+// (W4 C10: isSchemaNotReadyError 제거 — 42P01/42703/PGRST204/205 를 "로그 억제" 신호로
+//  쓰던 분기를 폐기했다. billing event 기록은 best-effort 지만 모든 실패를 로그로 남긴다.)
 
 function isoFromUnknown(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
@@ -145,12 +108,10 @@ async function recordInitialSubscriptionBillingEvent(args: {
     .maybeSingle();
 
   if (subError || !subscriptionRow) {
-    if (!isSchemaNotReadyError(subError)) {
-      console.error("[recordInitialSubscriptionBillingEvent] subscription select failed", {
-        subscriptionId,
-        error: subError,
-      });
-    }
+    console.error("[recordInitialSubscriptionBillingEvent] subscription select failed", {
+      subscriptionId,
+      error: subError,
+    });
     return;
   }
 
@@ -161,7 +122,7 @@ async function recordInitialSubscriptionBillingEvent(args: {
     .select("id, delta_cents, created_at")
     .eq("idempotency_key", ledgerKey)
     .maybeSingle();
-  if (ledgerError && !isSchemaNotReadyError(ledgerError)) {
+  if (ledgerError) {
     console.warn("[recordInitialSubscriptionBillingEvent] ledger lookup failed", {
       subscriptionId,
       ledgerKey,
@@ -207,12 +168,10 @@ async function recordInitialSubscriptionBillingEvent(args: {
     .maybeSingle();
 
   if (eventError || !eventRow) {
-    if (!isSchemaNotReadyError(eventError)) {
-      console.error("[recordInitialSubscriptionBillingEvent] event upsert failed", {
-        subscriptionId,
-        error: eventError,
-      });
-    }
+    console.error("[recordInitialSubscriptionBillingEvent] event upsert failed", {
+      subscriptionId,
+      error: eventError,
+    });
     return;
   }
 
@@ -226,7 +185,7 @@ async function recordInitialSubscriptionBillingEvent(args: {
       last_payment_id: args.paymentId,
     })
     .eq("id", subscriptionId);
-  if (linkError && !isSchemaNotReadyError(linkError)) {
+  if (linkError) {
     console.error("[recordInitialSubscriptionBillingEvent] subscription link update failed", {
       subscriptionId,
       eventId,
@@ -300,7 +259,11 @@ export async function createSubscriptionPaymentIntent(
     return { ok: false, error: "이 멘토는 현재 신규 구독을 받지 않고 있어요.", code: "mentor" };
   }
   const dup = await findActiveSubscriptionForPair(supabase, studentId, mentorId);
-  if (dup) {
+  if (dup.error) {
+    // W4: 조회 실패를 "활성 구독 없음"으로 취급하지 않는다(fail-closed — F12 pair 잠금이 최종 방어).
+    return { ok: false, error: "구독 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.", code: "db" };
+  }
+  if (dup.active) {
     return {
       ok: false,
       error: "이미 해당 멘토에 활성 구독이 있습니다. 중복 구독을 막았습니다.",
@@ -330,9 +293,8 @@ export async function createSubscriptionPaymentIntent(
     return { ok: false, error: `선택한 티어(${planTier})에 맞는 플랜 행이 없습니다. ${fillProbe}`, code: "plan" };
   }
   const intentKey = `sub_${randomUUID()}`;
-  const planIdStr = String(
-    (planRow as Row).id ?? (planRow as Row).plan_id ?? (planRow as Row).uuid ?? ""
-  );
+  // W4(C10): mentor_plans PK 는 id 뿐이다(실측) — plan_id/uuid 후보 키 제거.
+  const planIdStr = String((planRow as Row).id ?? "");
 
   // 정본 payments 고정 컬럼 INSERT. amount 는 학생 동의 금액(KRW = cents ÷ 100)이고,
   // metadata.expected_amount_cents 는 F12 p_expected 로 전달할 불변 동의 사본이다.
@@ -399,17 +361,23 @@ export function isSubscribeCheckoutPendingBypassAllowed(): boolean {
   return on;
 }
 
-const PLAN_TABLE_CANDIDATES = ["plans", "mentor_plans", "subscription_plans", "mentor_subscription_plans"] as const;
-const PLAN_FK_CANDIDATES = ["mentor_id", "mentor_user_id", "user_id", "owner_id"] as const;
-
 /**
  * 구독 카탈로그 티어 행이 DB에 없으면 service role로 생성(캐시 구독 전용).
+ *
+ * S2-2 W4(C10): 정본 `public.mentor_plans` 고정 컬럼(mentor_id, plan_tier, amount_cents,
+ * label, updated_at, price_updated_at — 187 baseline 실측)만 INSERT 한다. 구 PLAN_TABLE_CANDIDATES
+ * (plans/subscription_plans/… — baseline 부재) 테이블 순회와 FK·컬럼 프로빙 5종은 제거했다.
+ * service_role 의도 경로(멘토 미가격 행 시드 — 권장가 기록)는 유지한다.
  */
 export async function ensureMentorCatalogPlanRows(
   supabase: SupabaseClient,
   mentorId: string
 ): Promise<{ ok: true; table: string | null } | { ok: false; error: string }> {
   const plans = await fetchPlansForMentor(supabase, mentorId);
+  if (plans.error) {
+    // 조회 실패를 "플랜 없음"으로 취급해 시드 INSERT 를 시도하지 않는다(fail-closed).
+    return { ok: false, error: `플랜 조회 실패: ${plans.error}` };
+  }
   const { byTier } = assignPlansByTier(plans.rows);
   const missing = SUBSCRIBE_PLAN_CATALOG.filter((p) => !byTier[p.tier]);
   if (missing.length === 0) {
@@ -424,44 +392,21 @@ export async function ensureMentorCatalogPlanRows(
     return { ok: false, error: `서비스 설정 오류: ${m}` };
   }
 
-  let table = plans.table;
-  if (!table) {
-    for (const t of PLAN_TABLE_CANDIDATES) {
-      const { error } = await admin.from(t).select("id").limit(1);
-      if (!error) {
-        table = t;
-        break;
-      }
-    }
-  }
-  if (!table) {
-    return { ok: false, error: "플랜 테이블을 찾을 수 없습니다. 스키마를 확인해 주세요." };
-  }
-
-  const { column: fk } = await pickExistingColumn(admin, table, PLAN_FK_CANDIDATES);
-  if (!fk) {
-    return { ok: false, error: `${table}: 멘토 FK 컬럼이 없습니다.` };
-  }
-  const tierCol = (await pickExistingColumn(admin, table, ["plan_tier", "tier", "slug", "code"])).column;
-  const amtCol = (await pickExistingColumn(admin, table, ["amount_cents", "price_cents", "amount", "price"])).column;
-  const labelCol = (await pickExistingColumn(admin, table, ["label", "title", "name"])).column;
-  const updatedAtCol = (await pickExistingColumn(admin, table, ["updated_at"])).column;
-  const priceUpdatedAtCol = (await pickExistingColumn(admin, table, ["price_updated_at"])).column;
-
   for (const item of missing) {
-    const row: Record<string, unknown> = { [fk]: mentorId };
     const now = new Date().toISOString();
-    if (tierCol) row[tierCol] = item.tier;
-    if (amtCol) row[amtCol] = recommendedAmountCentsForSubscribeTier(item.tier);
-    if (labelCol) row[labelCol] = item.label;
-    if (updatedAtCol) row[updatedAtCol] = now;
-    if (priceUpdatedAtCol) row[priceUpdatedAtCol] = now;
-    const { error } = await admin.from(table).insert(row);
+    const { error } = await admin.from("mentor_plans").insert({
+      mentor_id: mentorId,
+      plan_tier: item.tier,
+      amount_cents: recommendedAmountCentsForSubscribeTier(item.tier),
+      label: item.label,
+      updated_at: now,
+      price_updated_at: now,
+    });
     if (error) {
-      return { ok: false, error: `${table} 플랜(${item.tier}) 생성 실패: ${error.message}` };
+      return { ok: false, error: `mentor_plans 플랜(${item.tier}) 생성 실패: ${error.message}` };
     }
   }
-  return { ok: true, table };
+  return { ok: true, table: "mentor_plans" };
 }
 
 /**
