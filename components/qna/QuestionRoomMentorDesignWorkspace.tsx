@@ -301,10 +301,17 @@ export function QuestionRoomMentorDesignWorkspace(props: {
       <ConnectionNotesPanel {...notesPanelProps} variant="mobile" />
     </div>
   );
+  // detailMode 모바일: 컨테이너가 viewport 고정 높이라 노트 전개 시 내부 스크롤이 없으면 잘린다(D-21).
+  const detailMobileNotesPanel = (
+    <div className="custom-scrollbar max-h-[45dvh] shrink-0 overflow-y-auto border-t border-slate-100 bg-white p-3 lg:hidden">
+      <ConnectionNotesPanel {...notesPanelProps} variant="mobile" />
+    </div>
+  );
 
-  /* 채팅(톡방) 본문 — 3단계 중앙 */
+  /* 채팅(톡방) 본문 — 3단계 중앙. min-h-0: grid 항목의 자동 최소 높이(auto)가
+     stretch 높이를 내용 크기로 끌어올려 메시지 영역 내부 스크롤을 깨는 것을 차단(D-21). */
   const chatThread = (
-    <main className="flex min-w-0 flex-1 flex-col border-slate-200 bg-white lg:border-r">
+    <main className="flex min-h-0 min-w-0 flex-1 flex-col border-slate-200 bg-white lg:border-r">
       <header className="flex shrink-0 items-center gap-3 border-b border-slate-100 px-5 py-4">
         <Link
           href={props.backHref ?? roomBase}
@@ -432,13 +439,17 @@ export function QuestionRoomMentorDesignWorkspace(props: {
           </form>
         )}
       </div>
-      {mobileNotesPanel}
+      {detailMobileNotesPanel}
     </main>
   );
 
   if (detailMode) {
     return (
-      <div className="flex h-[calc(100vh-100px)] min-h-[640px] flex-col overflow-hidden border-t border-slate-200 bg-[#f8fafc] font-sans text-slate-900">
+      // D-21: 셸 고정 오버헤드 = 헤더 h-16(4rem)+border 1px + AppShell main py-8(위/아래 4rem) = 8rem+1px.
+      // rem 로 쓴다 — px 상수(129px)는 root font-size 16px 에서만 맞고, 브라우저 글꼴 크기를 키우면
+      // 오버헤드가 커져 document 스크롤이 되살아난다(20px→32px, 24px→64px 밀림·입력창 이탈).
+      // min-h 고정값은 짧은 viewport에서 document 스크롤을 만들므로 상세 화면에선 두지 않는다.
+      <div className="flex h-[calc(100dvh-8rem-1px)] flex-col overflow-hidden border-t border-slate-200 bg-[#f8fafc] font-sans text-slate-900">
         {props.actionFeedback?.ok ? (
           <div className="shrink-0 border-b border-emerald-100 bg-emerald-50 px-4 py-2 text-center text-[11px] font-bold text-emerald-900">
             {props.actionFeedback.ok}
@@ -449,7 +460,8 @@ export function QuestionRoomMentorDesignWorkspace(props: {
             {props.actionFeedback.error}
           </div>
         ) : null}
-        <div className="grid min-h-0 flex-1 grid-cols-1 overflow-hidden lg:grid-cols-[1fr_420px]">
+        {/* grid-rows-[minmax(0,1fr)]: 암시적 auto 행이 내용 높이만큼 커지면 내부 overflow-y-auto가 무력화된다 */}
+        <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,1fr)] overflow-hidden lg:grid-cols-[1fr_420px]">
           {chatThread}
           {notesPanel}
         </div>

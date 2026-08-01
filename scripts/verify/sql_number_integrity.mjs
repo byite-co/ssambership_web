@@ -15,12 +15,15 @@
 //   - S2 forward 각각에 supabase/rollback/<TS>_<STEM>_rollback.sql 정확히 1개 —
 //     단 M10(contract_permission_assertions)은 상태 0 checkpoint 로 rollback 없음(정확히 0개).
 //   - rollback 은 supabase/sql/ 아래 금지·clean-install 수에 불포함.
-//   - 레거시 190개·제외 15개 불변 / MC(S2-4 baseline convergence) 편입 후
-//     supabase/sql/*.sql 총 207개(190+17) / 정규 clean-install 175+17=192 ·
-//     rollback 16개(M10 없음·M2/M3 retired).
+//   - 레거시 190개·제외 15개 불변 / MC(S2-4 baseline convergence)·F2(D-12) 편입 후
+//     supabase/sql/*.sql 총 208개(190+18) / 정규 clean-install 175+18=193 ·
+//     rollback 17개(M10 없음·M2/M3 retired).
 //   - MC(20260730095436_comments_author_label_baseline_convergence)는 S2-3 P0 D-1
 //     해소 계약이 지정한 과거 삽입 슬롯(M1<MC<M13)의 일회성 고정 timestamp 예외다
 //     — timestamp 정책 일반 변경이 아니다(S2-4 감사 문서 참조).
+//   - POST-S2: F2-D12(20260801040844_qna_answer_notification_per_event)는 S2 프로그램 밖
+//     운영 QA 결함 수정 forward 다 — 동일 물리 정책(CLI 실채번 timestamp·rollback 1:1)을 따르고
+//     전건이 S2 timestamp 뒤에 온다(sql_apply_manifest.md 「F2 신규 migration」 참조).
 // 사용: node scripts/verify/sql_number_integrity.mjs
 
 import { readdirSync, existsSync } from "node:fs";
@@ -136,7 +139,11 @@ const S2_BATCH_F = [
   { id: "M16", stem: "community_direct_write_lockdown" },
   { id: "M10", stem: "contract_permission_assertions", noRollback: true }, // 상태 0 checkpoint — rollback 없음
 ];
-const S2_EXPECTED = [...S2_BATCH_A, ...S2_BATCH_B, ...S2_BATCH_C, ...S2_BATCH_D, ...S2_BATCH_E, ...S2_BATCH_F];
+// POST-S2 forward (S2 프로그램 밖 — 동일 물리 정책, 전건 S2 뒤 timestamp)
+const POST_S2 = [
+  { id: "F2-D12", stem: "qna_answer_notification_per_event" }, // 2026-08-01 질문방 답변 알림 행 단위 계약
+];
+const S2_EXPECTED = [...S2_BATCH_A, ...S2_BATCH_B, ...S2_BATCH_C, ...S2_BATCH_D, ...S2_BATCH_E, ...S2_BATCH_F, ...POST_S2];
 const S2_NO_ROLLBACK_STEMS = new Set(S2_EXPECTED.filter((x) => x.noRollback).map((x) => x.stem));
 
 const legacyFiles = files.filter((f) => /^\d{3}[a-z]?_/.test(f));
@@ -176,7 +183,7 @@ const byStem = new Map(s2Parsed.map((s) => [s.stem, s]));
 for (const { id, stem } of S2_EXPECTED) {
   if (!byStem.has(stem)) fail(`S2 forward 부재: ${id} (${stem})`);
 }
-for (const batch of [S2_BATCH_A, S2_BATCH_B, S2_BATCH_C, S2_BATCH_D, S2_BATCH_E, S2_BATCH_F]) {
+for (const batch of [S2_BATCH_A, S2_BATCH_B, S2_BATCH_C, S2_BATCH_D, S2_BATCH_E, S2_BATCH_F, POST_S2]) {
   for (let i = 1; i < batch.length; i++) {
     const prev = byStem.get(batch[i - 1].stem);
     const cur = byStem.get(batch[i].stem);
@@ -186,7 +193,7 @@ for (const batch of [S2_BATCH_A, S2_BATCH_B, S2_BATCH_C, S2_BATCH_D, S2_BATCH_E,
   }
 }
 {
-  const batches = [["A", S2_BATCH_A], ["B", S2_BATCH_B], ["C", S2_BATCH_C], ["D", S2_BATCH_D], ["E", S2_BATCH_E], ["F", S2_BATCH_F]];
+  const batches = [["A", S2_BATCH_A], ["B", S2_BATCH_B], ["C", S2_BATCH_C], ["D", S2_BATCH_D], ["E", S2_BATCH_E], ["F", S2_BATCH_F], ["POST-S2", POST_S2]];
   for (let i = 1; i < batches.length; i++) {
     const [prevName, prev] = batches[i - 1];
     const [curName, cur] = batches[i];
@@ -248,13 +255,13 @@ if (legacyFiles.length !== LEGACY_TOTAL) {
 for (const ex of LEGACY_EXCLUDED) {
   if (!legacyFiles.includes(ex)) fail(`제외 15 목록 파일 부재(불변 위반): ${ex}`);
 }
-const EXPECTED_TOTAL = LEGACY_TOTAL + S2_EXPECTED.length; // 207 (MC 편입 후 — 190+17)
+const EXPECTED_TOTAL = LEGACY_TOTAL + S2_EXPECTED.length; // 208 (MC·F2 편입 후 — 190+18)
 if (files.length !== EXPECTED_TOTAL) {
   fail(`supabase/sql/*.sql 총수 ${EXPECTED_TOTAL}개 기대, 현재 ${files.length}개`);
 }
 const cleanInstallNow = LEGACY_TOTAL - LEGACY_EXCLUDED.length + s2Parsed.length; // 175 + S2 forward
-const CLEAN_INSTALL_EXPECTED_NOW = 192; // MC 편입 — S2 forward 17 전건(175+17 = 190-15+17)
-const EXPECTED_ROLLBACK_TOTAL = 16; // S2 forward 17 − M10(rollback 없음). M2·M3 retired — 파일 자체 없음
+const CLEAN_INSTALL_EXPECTED_NOW = 193; // MC·F2 편입 — timestamp forward 18 전건(175+18 = 190-15+18)
+const EXPECTED_ROLLBACK_TOTAL = 17; // timestamp forward 18 − M10(rollback 없음). M2·M3 retired — 파일 자체 없음
 if (cleanInstallNow !== CLEAN_INSTALL_EXPECTED_NOW) {
   fail(`정규 clean-install 수 ${CLEAN_INSTALL_EXPECTED_NOW} 기대, 계산값 ${cleanInstallNow} (rollback 은 불포함)`);
 }
@@ -264,7 +271,7 @@ if (rollbackFiles.length !== EXPECTED_ROLLBACK_TOTAL) {
 
 console.log(`\n[S2] forward files: ${s2Parsed.length} (${s2Parsed.map((s) => s.file).join(", ")})`);
 console.log(`[S2] rollback files: ${rollbackFiles.length} (${rollbackFiles.join(", ")})`);
-console.log(`[S2] legacy ${legacyFiles.length} (제외 ${LEGACY_EXCLUDED.length}) + S2 forward ${s2Parsed.length} → 정규 clean-install ${cleanInstallNow} (최종 — S2 forward 17 전건 = 기존 16 + MC)`);
+console.log(`[S2] legacy ${legacyFiles.length} (제외 ${LEGACY_EXCLUDED.length}) + timestamp forward ${s2Parsed.length} → 정규 clean-install ${cleanInstallNow} (S2 17 전건 = 기존 16 + MC · POST-S2 F2-D12 1건)`);
 console.log(`[S2] rollback ${rollbackFiles.length}/${EXPECTED_ROLLBACK_TOTAL} (M10 은 상태 0 checkpoint — rollback 없음 · M2/M3 retired)`);
 
 if (failed) {

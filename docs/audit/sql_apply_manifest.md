@@ -291,3 +291,24 @@
 | M1 | `supabase/sql/20260730095435_api_web_v1_schemas.sql` | `supabase/rollback/20260730095435_api_web_v1_schemas_rollback.sql` | `97e7f6c28442b96415753b8b8caace7c28d5d393ca57b8d79f2faf5d89de4912` | `3834a675b7c317ddd2f7b74e5d13f1a8993524d4764c876b0cea3bf1ce63467e` | 스키마 내 객체(M4~M9·M14) rollback 완료 후 — 빈 스키마만 `DROP ... RESTRICT`(CASCADE 금지 — 로컬 PG17 왕복 검증 PASS) | 13 | 동일 |
 | M15 | `supabase/sql/20260729211941_weekly_usage_pair_party_guard.sql` | `supabase/rollback/20260729211941_weekly_usage_pair_party_guard_rollback.sql` | `aabd465b12818d5d17c2326b05331ba42de59ed835a1203f58ca2facb1a4827e` | `42f5266d270b71b4caa6730e505665423342d0a2588199330781d4d3e0eb6363` | 독립 — 위치 제약 없음(가드 없는 구 본문 복원 — 098 정본 전체 정의 명시 복원, 로컬 PG17 왕복 검증 PASS) | 14 | 동일 |
 | M0 | `supabase/sql/20260729211929_mentor_profile_privileged_column_guard.sql` | `supabase/rollback/20260729211929_mentor_profile_privileged_column_guard_rollback.sql` | `3bb2edd97b921900f93d460f206add873c80b6cbcf1782844b6c5e835184d94c` | `a6fbea2a93360eebfaea61f8e4d1c27d2beac7e32d50fe2a36ba9184d887d35e` | 최후미 — 되도록 남긴다(§20.5 심층 방어). 트리거 2종+함수만 명시 DROP(로컬 PG17 왕복 검증 PASS) | 15 | 동일 |
+
+---
+
+## F2 신규 migration — 질문방 답변 알림 행 단위 계약 (D-12 수정 · 2026-08-01)
+
+> 물리 정책은 S2 정본(`docs/audit/s2_2_migration_physical_policy_20260730.md`)을 그대로 따른다 —
+> UTC timestamp 파일명(`supabase migration new` 실채번, 사람 임의 입력 0), 정본 경로 `supabase/sql/`,
+> rollback 은 `supabase/rollback/`(clean-install 불포함), 불변 식별자 3종(file basename · ledger name · SHA-256).
+> **기록 규율(invent 금지)** 동일 — 원격 적용 전에는 ledger version/name 을 기입하지 않는다.
+
+### F2 환경별 적용 대조표 (ledger mapping)
+
+| logical_id | file_path | file_basename | sha256 | environment | ledger_version | ledger_name | applied_at | verification_result |
+|---|---|---|---|---|---|---|---|---|
+| F2-D12 | `supabase/sql/20260801040844_qna_answer_notification_per_event.sql` | `20260801040844_qna_answer_notification_per_event.sql` | `9e2a13c3e0838205806ef1deb7801fe3e3a30fe6b85ad6830754ecdbc8dbd21a` | local | 미적용 | 미적용 | 2026-08-01 UTC (로컬 PG16 검증) | 로컬 스크래치 PG16(`scripts/verify/local_qna_answer_notification_check.sh`): 기준선(132+136+139+141+142+144)에서 D-12 실측 재현(두 번째 멘토 답변 알림 +0) → forward 적용 → rollback-only fixture **80 assertion 전부 PASS**(최초/후속/3번째 답변 각 +1 · 동일 행 재처리 +0 · 단독 첨부 +1 · 연결 첨부 +0 · 학생 이벤트 +0 · 비당사자/잠금/banned/차단/미승인 거부 · 직접쓰기 트리거 경로 동일 계약 · 중복 event/dedup key 0 · outbox 1:1 · **R1**: helper(`qna_emit_answer_notification`)·알림 트리거 함수 외부 EXECUTE 0 — anon/authenticated/service_role `has_function_privilege` false + non-owner grantee 0 실측, 수동 소급 호출 42501 거부·알림 없는 과거 멘토 행 retro delta 0·owner 내부 재처리 멱등) · 독립 2세션 동시성(message 2·notification 2·outbox 2·전이 1회·중복 키 0) · rollback 후 카탈로그 서명(함수 def md5·ACL·트리거 def) 기준선 완전 복원(helper 부재 포함) · reapply 재검증 PASS (원격 미적용 — ledger 채번 없음) |
+
+### F2 rollback 인벤토리 (clean-install 불포함 — `supabase/rollback/`)
+
+| logical_id | forward_file | rollback_file | forward_sha256 | rollback_sha256 | rollback_preconditions | rollback_order | verification_assertion |
+|---|---|---|---|---|---|---:|---|
+| F2-D12 | `supabase/sql/20260801040844_qna_answer_notification_per_event.sql` | `supabase/rollback/20260801040844_qna_answer_notification_per_event_rollback.sql` | `9e2a13c3e0838205806ef1deb7801fe3e3a30fe6b85ad6830754ecdbc8dbd21a` | `e7119f1a62c6fd4f5f3d900b747e9b95595397e91198ec295e33b5070f51a50b` | 독립 — 후행 의존 없음. 142/144 정본 본문·ACL 문자 그대로 복원 + R1 알림 트리거 2종(`trg_qm/qa_answer_notification_after`)·트리거 함수 2종·`qna_emit_answer_notification` DROP. **forward 기간 생성 알림 데이터(`question_answer_message:%`/`question_answer_attachment:%`) 삭제 금지**(데이터 롤백 없음 — 로컬 PG16 왕복 검증 PASS: 카탈로그 서명 diff 0) | 1 | rollback 후 대상 함수 def md5·ACL 이 forward 적용 전 기준선과 일치하고 helper·알림 트리거(함수 2종·트리거 2종)가 부재함을 카탈로그 서명 diff 로 확인 |
