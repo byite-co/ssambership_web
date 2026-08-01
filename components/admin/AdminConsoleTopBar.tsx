@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { LogoutButton } from "@/components/auth/LogoutButton";
 import { BrandSymbol } from "@/components/brand/BrandLogo";
 import { UserNameWithRoleBadge } from "@/components/shell/UserNameWithRoleBadge";
 import type { UserRow } from "@/lib/types/user";
@@ -20,12 +21,7 @@ export function AdminConsoleTopBar(props: { profile?: UserRow | null }) {
         </div>
         <div className="flex flex-1 items-center justify-end gap-2 sm:max-w-2xl">
           <UserNameWithRoleBadge profile={props.profile ?? null} role="admin" />
-          <a
-            href="/logout"
-            className="shrink-0 text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
-          >
-            로그아웃
-          </a>
+          <LogoutButton className="shrink-0 text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline" />
         </div>
       </div>
     </header>
