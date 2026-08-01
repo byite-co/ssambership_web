@@ -7,7 +7,10 @@
 > 정답으로 고정한 것이었다. 신 정본: **첫 답변 상태 전이 = 스레드 단위 exactly-once(유지)**,
 > **답변 알림 = 멘토 답변 이벤트(메시지 행/단독 첨부 행) 단위 exactly-once**
 > (`question_answer_message:{message_id}` / `question_answer_attachment:{attachment_id}`,
-> 메시지 연결 첨부는 추가 알림 0). 정본 SQL `supabase/sql/20260801040844_qna_answer_notification_per_event.sql`,
+> 메시지 연결 첨부는 추가 알림 0). 알림 발행 경로는 `question_messages`/`question_attachments` 의
+> AFTER INSERT 알림 트리거로 한정되며, 내부 helper `qna_emit_answer_notification` 은 Data API 호출
+> 표면이 아니다(외부 EXECUTE 0 — 과거 행 ID 수동 RPC 로 소급 알림 생성 불가, R1 보정).
+> 정본 SQL `supabase/sql/20260801040844_qna_answer_notification_per_event.sql`,
 > 계약 상세 `docs/audit/notification_event_coverage.md` 「갱신 (F2/D-12)」. 아래 원문은 역사 기록으로 보존한다.
 
 > **갱신 2026-07-20 — 구현 완료(단일세션 검증).** 정본 SQL `supabase/sql/136_p1_8a_question_room_atomic_rpc.sql`

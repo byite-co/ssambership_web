@@ -101,15 +101,19 @@ production 은 미적용 — 적용 순서는 runbook §1(SQL 먼저, 웹 나중
 | 멘토 단독 첨부(message_id IS NULL) event_key/dedup_key | `question_answer_attachment:{attachment_id}` |
 | 메시지 연결 첨부 | 메시지 이벤트에 합류 — **추가 알림 0** (텍스트+첨부 한 답변 = 알림 1) |
 | 학생 메시지/첨부 · 거부된 쓰기 · 기존 과거 행 · 동일 행 재처리 | 알림 0 |
-| 알림 소스 단일화 | 신규 helper `qna_emit_answer_notification(thread_id, message_id, attachment_id)` — RPC 2종(`qna_append_message`/`qna_register_attachment`)과 direct-write AFTER 트리거 2종(`qm/qa_direct_answered_after`)이 모두 이 helper 로 수렴. `qna_apply_answered_transition` 은 전이 전용으로 축소 |
+| 알림 소스 단일화 (R1) | 알림은 `question_messages`/`question_attachments` 의 **AFTER INSERT 알림 트리거**(`trg_qm/qa_answer_notification_after` → SECDEF 트리거 함수 → owner-only helper `qna_emit_answer_notification`)에서만 발행 — RPC INSERT 와 허용된 direct-write INSERT 가 같은 행에서 같은 트리거를 정확히 1회 발화. RPC 는 helper 를 직접 호출하지 않는다. `qna_apply_answered_transition` 은 전이 전용으로 축소 |
+| helper 노출 (R1) | `qna_emit_answer_notification` 은 **Data API 호출 표면이 아니다** — PUBLIC/anon/authenticated/service_role EXECUTE 전면 회수(owner 내부 실행만). 과거 message_id/attachment_id 를 전달하는 수동 RPC 는 permission denied(42501)로 거부 — **소급 알림 생성 불가**. 알림 발생 출처는 canonical INSERT 트랜잭션으로 한정 |
 | 원자성 | 132 결정 C 유지 — helper 는 도메인 트랜잭션 내 PERFORM, 실패 시 도메인 write 까지 전체 롤백 |
 | 함수 identity | `qna_append_message`/`qna_register_attachment`/`qna_apply_answered_transition` 의 시그니처·반환형·SECDEF·search_path·EXECUTE ACL 불변 |
 | 과거 데이터 | 구 `question_answered:{thread_id}` 키 행은 백필·삭제하지 않음 |
 
 **검증(2026-08-01, 로컬 스크래치 PG16 — `scripts/verify/local_qna_answer_notification_check.sh`):**
 기준선(132+136+139+141+142+144)에서 D-12 실측 재현(두 번째 답변 알림 +0) → forward 적용 후
-rollback-only fixture(`scripts/verify/fixtures/qna_answer_notification_per_event_fixture.sql`) **64 assertion
+rollback-only fixture(`scripts/verify/fixtures/qna_answer_notification_per_event_fixture.sql`) **80 assertion
 전부 PASS**(최초/후속/3번째 답변 각 +1·행 재처리 +0·단독 첨부 +1·연결 첨부 +0·학생 이벤트 +0·비당사자/잠금
-거부·직접쓰기 경로 동일 계약·중복 키 0) + 독립 2세션 동시성(메시지 2·알림 2·outbox 2·전이 1회·중복 키 0)
-+ rollback 후 카탈로그 서명(함수 def md5·ACL·트리거) 기준선 완전 복원 + 재적용 재검증 PASS.
+거부·직접쓰기 경로 동일 계약·중복 키 0 · **R1**: helper/알림 트리거 함수 외부 EXECUTE 0(권한 매트릭스 실측)·
+anon/authenticated/service_role 수동 호출 42501 거부·알림 없는 과거 멘토 행 소급 알림 delta 0·
+owner 내부 재처리 멱등 +0·INSERT 1회당 알림 정확히 1) + 독립 2세션 동시성(메시지 2·알림 2·outbox 2·전이
+1회·중복 키 0) + rollback 후 카탈로그 서명(함수 def md5·ACL·트리거 — 알림 트리거/helper 부재 포함) 기준선
+완전 복원 + 재적용 재검증 PASS.
 **staging·production 원장 미적용** — 원격 적용은 별도 승인 단계다.

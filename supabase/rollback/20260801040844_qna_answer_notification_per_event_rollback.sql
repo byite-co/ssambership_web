@@ -5,9 +5,10 @@
 --   * qna_append_message(uuid,text)                              → 142 본문(스레드 키·최초 답변 분기 내 알림)
 --   * qna_register_attachment(uuid,text,text,text,uuid)          → 142 본문(동일)
 --   * qna_apply_answered_transition(uuid)                        → 144 본문(전이+알림 결합)
---   * qm_direct_answered_after() / qa_direct_answered_after()    → 144 본문(전이 helper 만 호출)
+--   * trg_qm/qa_answer_notification_after + 트리거 함수 2종      → DROP (forward 신규 객체 — R1 알림 트리거)
 --   * qna_emit_answer_notification(uuid,uuid,uuid)               → DROP (forward 신규 객체)
 --   * EXECUTE ACL                                                → forward 전과 동일하게 재선언
+--   * qm_direct_answered_after()/qa_direct_answered_after()      → forward(R1) 가 수정하지 않으므로 복원 불필요(144 정본 유지)
 --
 -- 데이터 정책: forward 적용 후 생성된 notifications/notification_outbox 행
 --   (event_key 'question_answer_message:%'/'question_answer_attachment:%')은 **삭제하지 않는다**
@@ -118,20 +119,11 @@ end; $$;
 
 comment on function public.qna_apply_answered_transition(uuid) is null;
 
--- ── 4) direct-write AFTER 트리거 함수 — 144 정본 복원 ──
-create or replace function public.qm_direct_answered_after()
-returns trigger language plpgsql security invoker set search_path to 'public' as $$
-begin
-  if public.qna_is_direct_untrusted_writer() then perform public.qna_apply_answered_transition(NEW.thread_id); end if;
-  return NEW;
-end; $$;
-
-create or replace function public.qa_direct_answered_after()
-returns trigger language plpgsql security invoker set search_path to 'public' as $$
-begin
-  if public.qna_is_direct_untrusted_writer() then perform public.qna_apply_answered_transition(NEW.thread_id); end if;
-  return NEW;
-end; $$;
+-- ── 4) forward 신규 알림 트리거·트리거 함수 제거 (R1) ──
+drop trigger if exists trg_qm_answer_notification_after on public.question_messages;
+drop trigger if exists trg_qa_answer_notification_after on public.question_attachments;
+drop function if exists public.qm_answer_notification_after();
+drop function if exists public.qa_answer_notification_after();
 
 -- ── 5) forward 신규 helper 제거 ──
 drop function if exists public.qna_emit_answer_notification(uuid, uuid, uuid);
@@ -147,5 +139,6 @@ grant execute on function public.qna_apply_answered_transition(uuid) to authenti
 commit;
 
 -- §V: rollback 후 qna_append_message/qna_register_attachment/qna_apply_answered_transition/
---   qm·qa_direct_answered_after 정의가 forward 적용 전 카탈로그와 일치하고,
---   qna_emit_answer_notification 이 부재하며, forward 기간 생성 알림 행은 그대로 남는다.
+--   qm·qa_direct_answered_after 정의·ACL 이 forward 적용 전(142/144) 카탈로그와 일치하고,
+--   qna_emit_answer_notification·qm/qa_answer_notification_after·알림 트리거 2종이 부재하며,
+--   forward 기간 생성 알림 행은 그대로 남는다.

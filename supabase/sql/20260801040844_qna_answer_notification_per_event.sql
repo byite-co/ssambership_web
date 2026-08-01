@@ -15,15 +15,21 @@
 --         (message_id IS NULL 인 첨부만 독립 이벤트)
 --       - 메시지 연결 첨부       → 메시지 이벤트에 합류, 추가 알림 +0 (텍스트+첨부 한 답변 = 알림 1)
 --       - 학생 메시지/첨부·저장 실패·비당사자·잠금 스레드 거부·기존 과거 행·동일 행 재처리 → 알림 +0
---   * 알림 책임 단일화: 모든 canonical 쓰기 경로(RPC 2종 + 직접쓰기 AFTER 트리거 2종)가
---     신규 내부 helper `qna_emit_answer_notification` 하나로 수렴한다.
---     RPC 는 SECURITY DEFINER(owner=postgres) 실행이라 direct-write 트리거 분기
---     (qna_is_direct_untrusted_writer)가 false → 이중 발행 경로 없음.
---   * 원자성: helper 는 도메인 트랜잭션 안에서 PERFORM 되므로(132 결정 C 계약 동일)
+--   * 알림 책임 단일화 (R1 보정 반영): 알림은 question_messages/question_attachments 의
+--     신규 AFTER INSERT 알림 트리거(qm/qa_answer_notification_after — SECURITY DEFINER)가
+--     내부 helper `qna_emit_answer_notification` 을 호출해서만 발행한다.
+--     RPC 경로(qna_append_message/qna_register_attachment)와 허용된 direct-write 경로 모두
+--     같은 INSERT 행이 같은 트리거를 정확히 1회 발화 → 이중 발행 경로 없음.
+--   * helper 외부 호출 차단 (R1): `qna_emit_answer_notification` 은 Data API 호출 표면이 아니다.
+--     PUBLIC/anon/authenticated/service_role EXECUTE 전면 회수 — owner(postgres) 내부
+--     (SECURITY DEFINER 알림 트리거 함수) 실행만 가능하다. 과거 message_id/attachment_id 를
+--     직접 전달하는 수동 RPC 는 permission denied 로 거부되며 소급 알림을 만들 수 없다.
+--     알림 발생 출처는 canonical INSERT 트랜잭션(위 4경로)으로 한정된다.
+--   * 원자성: 알림 트리거는 INSERT 와 같은 트랜잭션에서 실행되므로(132 결정 C 계약 동일)
 --     record_domain_notification 실패 시 메시지/첨부 저장까지 전체 롤백된다. 부분 성공 없음.
 --   * 함수 identity 불변: qna_append_message(uuid,text)·qna_register_attachment(uuid,text,text,text,uuid)·
 --     qna_apply_answered_transition(uuid) 의 이름/인자/반환형/SECURITY DEFINER/search_path/EXECUTE ACL 유지.
---     트리거 함수 qm_direct_answered_after/qa_direct_answered_after 는 본문만 교체(트리거 DDL 불변).
+--     144 의 qm_direct_answered_after/qa_direct_answered_after(전이 트리거)는 수정하지 않는다.
 --   * 기존 'question_answered:<thread_id>' 키로 적재된 과거 알림 행은 백필·삭제하지 않는다.
 --
 -- 선행: 132(record_domain_notification/outbox) · 136 · 139 · 141 · 142 · 144.
@@ -67,6 +73,8 @@ begin
 end$$;
 
 -- ── 1) 신규 내부 helper: 멘토 답변 이벤트(행 단위) → 학생 question_answered 알림 exactly-once ──
+--   ⚠️ owner-only 내부 함수(R1): 외부 EXECUTE 0 — 아래 AFTER INSERT 알림 트리거 함수
+--   (SECURITY DEFINER, owner=postgres)에서만 호출된다. Data API 직접 RPC 는 permission denied.
 --   self-gating(144 계약 동형): 호출 세션 auth.uid() = room 멘토 AND 대상 행의 author = room 멘토.
 --   메시지 스코프: 해당 스레드의 멘토 메시지 행. 첨부 스코프: message_id IS NULL 인 멘토 단독 첨부 행만
 --   (메시지 연결 첨부는 메시지 이벤트에 합류 — 추가 알림 없음). 조건 불충족 시 무발화 no-op.
@@ -138,10 +146,11 @@ end;
 $$;
 
 comment on function public.qna_emit_answer_notification(uuid, uuid, uuid) is
-  'F2(D-12): 멘토 답변 이벤트(메시지 행/단독 첨부 행)당 학생 question_answered 알림 exactly-once. event_key = question_answer_message:<message_id> | question_answer_attachment:<attachment_id>. 메시지 연결 첨부는 메시지 이벤트에 합류(추가 알림 0). self-gating: auth.uid()=room 멘토 AND 행 author=멘토. 모든 canonical 쓰기 경로(RPC 2종 + direct-write AFTER 트리거 2종)의 단일 알림 소스.';
+  'F2(D-12)+R1: 멘토 답변 이벤트(메시지 행/단독 첨부 행)당 학생 question_answered 알림 exactly-once. event_key = question_answer_message:<message_id> | question_answer_attachment:<attachment_id>. 메시지 연결 첨부는 메시지 이벤트에 합류(추가 알림 0). self-gating: auth.uid()=room 멘토 AND 행 author=멘토. owner-only 내부 함수 — 외부(PUBLIC/anon/authenticated/service_role) EXECUTE 0, AFTER INSERT 알림 트리거(qm/qa_answer_notification_after)에서만 실행. Data API 호출 표면 아님 — 과거 행 ID 수동 전달로 소급 알림 생성 불가.';
 
-revoke all on function public.qna_emit_answer_notification(uuid, uuid, uuid) from public, anon;
-grant execute on function public.qna_emit_answer_notification(uuid, uuid, uuid) to authenticated, service_role;
+-- R1: 외부 EXECUTE 전면 회수 — owner(postgres) 내부 실행만 허용. GRANT 없음.
+revoke all on function public.qna_emit_answer_notification(uuid, uuid, uuid)
+  from public, anon, authenticated, service_role;
 
 -- ── 2) qna_apply_answered_transition: 상태 전이 전용으로 축소(알림 책임 제거) ──
 --   144 계약 유지: 멘토 첫 실제 콘텐츠에서만 pending/open→answered + first_answered_at exactly-once.
@@ -168,9 +177,9 @@ comment on function public.qna_apply_answered_transition(uuid) is
 revoke all on function public.qna_apply_answered_transition(uuid) from public, anon;
 grant execute on function public.qna_apply_answered_transition(uuid) to authenticated, service_role;
 
--- ── 3) qna_append_message: 142 본문 유지 + 멘토 메시지마다 행 단위 알림 ──
---   변경점: (a) 최초 전이 분기에서 알림 발행 제거(전이만 수행),
---           (b) 멘토 메시지면 최초/후속 무관하게 qna_emit_answer_notification(메시지 스코프) 호출.
+-- ── 3) qna_append_message: 142 본문 유지 — 전이 분기에서 알림 발행 제거(전이만 수행) ──
+--   알림은 본 RPC 가 직접 발행하지 않는다(R1) — INSERT 가 AFTER INSERT 알림 트리거(§5)를
+--   정확히 1회 발화해 행 단위 알림이 발생한다(최초/후속 무관).
 create or replace function public.qna_append_message(p_thread_id uuid, p_body text)
 returns jsonb language plpgsql security definer set search_path to 'public' as $$
 declare
@@ -194,14 +203,11 @@ begin
     if v_sub_id is not null and public.qna_subscription_has_live_refund(v_sub_id) then raise exception 'SUBSCRIPTION_REFUND_PENDING'; end if;
   end if;
 
+  -- F2(D-12)+R1: 아래 INSERT 가 AFTER INSERT 알림 트리거를 발화 — 멘토 메시지 행 1건 = 알림 정확히 1건.
   insert into public.question_messages (thread_id, author_id, body) values (p_thread_id, v_uid, btrim(p_body)) returning id into v_message_id;
   if v_is_mentor and v_first_answered is null then
     update public.question_threads set status='answered', first_answered_at=now(), updated_at=now() where id=p_thread_id and first_answered_at is null;
     v_transitioned := true;
-  end if;
-  -- F2(D-12): 최초/후속 무관 — 멘토 메시지 행 1건 = 학생 알림 정확히 1건(행 단위 멱등).
-  if v_is_mentor then
-    perform public.qna_emit_answer_notification(p_thread_id, v_message_id, null);
   end if;
   return jsonb_build_object('ok',true,'message_id',v_message_id,'answered_transition',v_transitioned);
 end; $$;
@@ -209,10 +215,10 @@ end; $$;
 revoke all on function public.qna_append_message(uuid,text) from public, anon;
 grant execute on function public.qna_append_message(uuid,text) to authenticated, service_role;
 
--- ── 4) qna_register_attachment: 142 본문 유지 + 멘토 단독 첨부마다 행 단위 알림 ──
---   변경점: (a) 최초 전이 분기에서 알림 발행 제거(전이만 수행),
---           (b) 멘토 단독 첨부(message_id IS NULL)면 qna_emit_answer_notification(첨부 스코프) 호출.
---           메시지 연결 첨부는 해당 메시지 이벤트에 합류 — 추가 알림 없음.
+-- ── 4) qna_register_attachment: 142 본문 유지 — 전이 분기에서 알림 발행 제거(전이만 수행) ──
+--   알림은 본 RPC 가 직접 발행하지 않는다(R1) — INSERT 가 AFTER INSERT 알림 트리거(§5)를
+--   정확히 1회 발화한다. 멘토 단독 첨부(message_id IS NULL)만 알림 +1,
+--   메시지 연결 첨부는 해당 메시지 이벤트에 합류 — 추가 알림 없음(helper self-gate).
 create or replace function public.qna_register_attachment(
   p_thread_id uuid, p_storage_path text, p_file_name text default null, p_mime_type text default null, p_message_id uuid default null
 ) returns jsonb language plpgsql security definer set search_path to 'public' as $$
@@ -236,15 +242,12 @@ begin
     if v_sub_id is not null and public.qna_subscription_has_live_refund(v_sub_id) then raise exception 'SUBSCRIPTION_REFUND_PENDING'; end if;
   end if;
 
+  -- F2(D-12)+R1: 아래 INSERT 가 AFTER INSERT 알림 트리거를 발화 — 멘토 단독 첨부 행 1건 = 알림 정확히 1건.
   insert into public.question_attachments (thread_id, message_id, author_id, storage_path, file_name, mime_type)
   values (p_thread_id, p_message_id, v_uid, btrim(p_storage_path), p_file_name, p_mime_type) returning id into v_att_id;
   if v_is_mentor and v_first_answered is null then
     update public.question_threads set status='answered', first_answered_at=now(), updated_at=now() where id=p_thread_id and first_answered_at is null;
     v_transitioned := true;
-  end if;
-  -- F2(D-12): 멘토 단독 첨부 행 1건 = 학생 알림 정확히 1건. 연결 첨부는 메시지 이벤트에 합류(+0).
-  if v_is_mentor and p_message_id is null then
-    perform public.qna_emit_answer_notification(p_thread_id, null, v_att_id);
   end if;
   return jsonb_build_object('ok',true,'attachment_id',v_att_id,'answered_transition',v_transitioned);
 end; $$;
@@ -252,29 +255,40 @@ end; $$;
 revoke all on function public.qna_register_attachment(uuid,text,text,text,uuid) from public, anon;
 grant execute on function public.qna_register_attachment(uuid,text,text,text,uuid) to authenticated, service_role;
 
--- ── 5) direct-write AFTER 트리거 함수: 전이 + 행 단위 알림(동일 helper 수렴) ──
---   트리거 DDL(trg_qm_direct_answered_after/trg_qa_direct_answered_after)은 불변 — 함수 본문만 교체.
---   helper 가 self-gating 하므로 학생 행·연결 첨부·비멘토 세션은 무발화 no-op 이다.
---   RPC 경로는 current_user='postgres' 라 본 분기 미진입(이중 발행 없음 — 141 판별 계약).
-create or replace function public.qm_direct_answered_after()
-returns trigger language plpgsql security invoker set search_path to 'public' as $$
+-- ── 5) AFTER INSERT 알림 트리거 (R1 — 단일 알림 발행 경로) ──
+--   RPC INSERT(정의자 postgres)와 허용된 direct-write INSERT(authenticated) 모두
+--   같은 AFTER INSERT 알림 트리거를 정확히 1회 통과한다. 트리거 함수는 SECURITY DEFINER
+--   (owner=postgres)라 owner-only helper 를 호출할 수 있고, helper 의 self-gate 가
+--   학생 행·연결 첨부·비멘토 세션(service_role 단독 INSERT 포함)을 무발화 no-op 처리한다.
+--   INSERT 없는 알림 생성 경로는 존재하지 않는다(helper 외부 EXECUTE 0).
+--   144 의 전이 트리거(trg_qm/qa_direct_answered_after — 상태 전이 전용)는 수정하지 않는다.
+create or replace function public.qm_answer_notification_after()
+returns trigger language plpgsql security definer set search_path to 'public' as $$
 begin
-  if public.qna_is_direct_untrusted_writer() then
-    perform public.qna_apply_answered_transition(NEW.thread_id);
-    perform public.qna_emit_answer_notification(NEW.thread_id, NEW.id, null);
-  end if;
+  perform public.qna_emit_answer_notification(NEW.thread_id, NEW.id, null);
   return NEW;
 end; $$;
+revoke all on function public.qm_answer_notification_after()
+  from public, anon, authenticated, service_role;
 
-create or replace function public.qa_direct_answered_after()
-returns trigger language plpgsql security invoker set search_path to 'public' as $$
+create or replace function public.qa_answer_notification_after()
+returns trigger language plpgsql security definer set search_path to 'public' as $$
 begin
-  if public.qna_is_direct_untrusted_writer() then
-    perform public.qna_apply_answered_transition(NEW.thread_id);
-    perform public.qna_emit_answer_notification(NEW.thread_id, null, NEW.id);
-  end if;
+  perform public.qna_emit_answer_notification(NEW.thread_id, null, NEW.id);
   return NEW;
 end; $$;
+revoke all on function public.qa_answer_notification_after()
+  from public, anon, authenticated, service_role;
+
+drop trigger if exists trg_qm_answer_notification_after on public.question_messages;
+create trigger trg_qm_answer_notification_after
+  after insert on public.question_messages
+  for each row execute function public.qm_answer_notification_after();
+
+drop trigger if exists trg_qa_answer_notification_after on public.question_attachments;
+create trigger trg_qa_answer_notification_after
+  after insert on public.question_attachments
+  for each row execute function public.qa_answer_notification_after();
 
 commit;
 
@@ -282,4 +296,7 @@ commit;
 --   최초 멘토 메시지(전이 1·알림 1·message 키) · 후속 메시지 2건(전이 0·알림 각 +1·키 상이) ·
 --   동일 행 재처리(+0) · 단독 첨부(+1·attachment 키) · 연결 첨부(+0, 텍스트+첨부 합계 1) ·
 --   학생 메시지/첨부(+0) · 비당사자/잠금 스레드 거부(행 0·알림 0) · 직접쓰기 경로 동일 계약 ·
---   기존 회귀(생성/무료소비/confirm/wrong/차단/미승인) 무변.
+--   기존 회귀(생성/무료소비/confirm/wrong/차단/미승인) 무변 ·
+--   R1: helper/알림 트리거 함수 외부 EXECUTE 0(anon/authenticated/service_role/PUBLIC) ·
+--   과거 멘토 메시지/단독 첨부 ID 수동 RPC = permission denied·알림 delta 0 ·
+--   RPC INSERT 1회당 알림 정확히 1(이중 발행 0).

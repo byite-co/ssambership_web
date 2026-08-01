@@ -56,6 +56,7 @@ from pg_proc p join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
   and p.proname in ('qna_append_message','qna_register_attachment','qna_apply_answered_transition',
                     'qm_direct_answered_after','qa_direct_answered_after','qna_emit_answer_notification',
+                    'qm_answer_notification_after','qa_answer_notification_after',
                     'record_domain_notification','qna_is_direct_untrusted_writer')
 union all
 select 'trg|' || c.relname || '.' || t.tgname || '|' || md5(pg_get_triggerdef(t.oid)) || '|-'

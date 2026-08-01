@@ -7,6 +7,9 @@
 --   * 멘토 단독 첨부 행 1건 = +1 (event_key = question_answer_attachment:<attachment_id>)
 --   * 메시지 연결 첨부 = +0 · 학생 이벤트 = +0 · 거부된 쓰기 = +0 · 동일 행 재처리 = +0
 --   * 상태 전이·first_answered_at 은 스레드당 exactly-once (기존 계약 유지)
+--   * R1: helper(qna_emit_answer_notification)·알림 트리거 함수는 외부 EXECUTE 0 —
+--     anon/authenticated/service_role 직접 RPC = permission denied(42501), 과거 행 소급 알림 0.
+--     알림 발생 출처는 canonical INSERT 트랜잭션(AFTER INSERT 알림 트리거)뿐이다.
 -- 주의: 단일 트랜잭션이라 now() 이 상수 — first_answered_at "불변"은 answered_transition=false +
 --   `where first_answered_at is null` 가드로 검증한다.
 
@@ -64,6 +67,8 @@ declare
   v_dm1 uuid; v_dm2 uuid; v_da1 uuid; v_da2 uuid; v_rm uuid;
   v_status text; v_first timestamptz;
   v_sub uuid; v_path text; v_msg_cnt bigint;
+  v_hist_msg uuid; v_hist_att uuid;
+  v_st_anon text; v_st_auth_msg text; v_st_auth_att text; v_st_svc text;
 begin
   -- ══ R1. 회귀: 학생 스레드 생성(무료 경로) — 학생 메시지는 알림 0 ══
   perform set_config('request.fixture_uid', c_s1::text, true);
@@ -114,7 +119,8 @@ begin
     ('11-3 total', pg_temp.fx_n(c_s1, '%'), 3),
     ('11-3 outbox total', pg_temp.fx_o(c_s1, '%'), 3);
 
-  -- ══ 11-4. 같은 메시지 행 재처리: 알림/outbox +0 ══
+  -- ══ 11-4. 같은 메시지 행 재처리(owner 내부 컨텍스트): 알림/outbox +0 ══
+  -- R1 이후 외부 role 은 helper 를 호출할 수 없다(R1-01/02) — 재처리 멱등은 owner 컨텍스트로 검증.
   perform public.qna_emit_answer_notification(v_t1, v_msg3, null);
   perform public.qna_emit_answer_notification(v_t1, v_msg1, null);
   insert into fx_expect values
@@ -326,6 +332,87 @@ begin
     ('DW rpc under authenticated exactly 1', pg_temp.fx_n(c_s1, 'question_answer_message:' || v_rm::text), 1),
     ('DW total', pg_temp.fx_n(c_s1, '%'), 10),
     ('DW outbox total', pg_temp.fx_o(c_s1, '%'), 10);
+
+  -- ══ R1-01. 권한 매트릭스: helper·알림 트리거 함수 외부 EXECUTE 0 ══
+  insert into fx_expect values
+    ('R1-01 anon helper execute false', case when has_function_privilege('anon',
+       'public.qna_emit_answer_notification(uuid,uuid,uuid)','EXECUTE') then 1 else 0 end, 0),
+    ('R1-01 authenticated helper execute false', case when has_function_privilege('authenticated',
+       'public.qna_emit_answer_notification(uuid,uuid,uuid)','EXECUTE') then 1 else 0 end, 0),
+    ('R1-01 service_role helper execute false', case when has_function_privilege('service_role',
+       'public.qna_emit_answer_notification(uuid,uuid,uuid)','EXECUTE') then 1 else 0 end, 0),
+    ('R1-01 helper non-owner grantees 0', (select count(*)
+       from pg_proc p cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+       where p.oid = 'public.qna_emit_answer_notification(uuid,uuid,uuid)'::regprocedure
+         and a.grantee is distinct from p.proowner), 0),
+    ('R1-01 qm notif trigger fn external execute 0', (select count(*)
+       from pg_proc p cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+       where p.oid = 'public.qm_answer_notification_after()'::regprocedure
+         and a.grantee is distinct from p.proowner), 0),
+    ('R1-01 qa notif trigger fn external execute 0', (select count(*)
+       from pg_proc p cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+       where p.oid = 'public.qa_answer_notification_after()'::regprocedure
+         and a.grantee is distinct from p.proowner), 0);
+
+  -- owner 내부 실행 허용 확인: 소유자 컨텍스트의 재처리 호출은 예외 없이 실행되고 알림은 +0(멱등).
+  perform set_config('request.fixture_uid', c_m1::text, true);
+  perform public.qna_emit_answer_notification(v_t1, v_msg1, null);
+  insert into fx_expect values
+    ('R1-01 owner internal call ok + idempotent', pg_temp.fx_n(c_s1, '%'), 10);
+
+  -- ══ R1-02/03. 과거 행 수동 소급 호출 차단 ══
+  -- 과거(알림 없는) 멘토 행 시뮬레이션: auth.uid()=NULL 상태의 owner INSERT — 전이·알림 모두 no-op
+  -- (F2 이전에 적재된 기존 행과 동일한 "알림 없는 멘토 행" 상태를 재현).
+  perform set_config('request.fixture_uid', '', true);
+  insert into public.question_messages (thread_id, author_id, body)
+  values (v_t2, c_m2, '과거 멘토 메시지(알림 없음)') returning id into v_hist_msg;
+  v_path := c_room_b::text || '/' || v_t2::text || '/' || gen_random_uuid()::text || '-hist.png';
+  insert into storage.objects (bucket_id, name, owner_id)
+  values ('question-room-attachments', v_path, c_m2::text);
+  insert into public.question_attachments (thread_id, message_id, author_id, storage_path)
+  values (v_t2, null, c_m2, v_path) returning id into v_hist_att;
+  insert into fx_expect values
+    ('R1-02 historical rows carry no notif', pg_temp.fx_n(c_s1, '%' || v_hist_msg::text)
+       + pg_temp.fx_n(c_s1, '%' || v_hist_att::text), 0);
+
+  -- 멘토 authenticated 세션의 수동 소급 호출 → permission denied(42501)
+  perform set_config('request.fixture_uid', c_m2::text, true);
+  execute 'set local role authenticated';
+  begin
+    perform public.qna_emit_answer_notification(v_t2, v_hist_msg, null);
+  exception when others then v_st_auth_msg := sqlstate;
+  end;
+  begin
+    perform public.qna_emit_answer_notification(v_t2, null, v_hist_att);
+  exception when others then v_st_auth_att := sqlstate;
+  end;
+  execute 'reset role';
+  -- service_role 단독 helper 호출 → permission denied
+  execute 'set local role service_role';
+  begin
+    perform public.qna_emit_answer_notification(v_t2, v_hist_msg, null);
+  exception when others then v_st_svc := sqlstate;
+  end;
+  execute 'reset role';
+  -- anon 직접 호출 → permission denied
+  execute 'set local role anon';
+  begin
+    perform public.qna_emit_answer_notification(v_t2, v_hist_msg, null);
+  exception when others then v_st_anon := sqlstate;
+  end;
+  execute 'reset role';
+
+  insert into fx_expect values
+    ('R1-02 authenticated msg manual call denied', case when v_st_auth_msg = '42501' then 1 else 0 end, 1),
+    ('R1-03 authenticated att manual call denied', case when v_st_auth_att = '42501' then 1 else 0 end, 1),
+    ('R1-01 service_role manual call denied', case when v_st_svc = '42501' then 1 else 0 end, 1),
+    ('R1-01 anon manual call denied', case when v_st_anon = '42501' then 1 else 0 end, 1),
+    ('R1-02/03 retro notif delta 0', pg_temp.fx_n(c_s1, '%' || v_hist_msg::text)
+       + pg_temp.fx_n(c_s1, '%' || v_hist_att::text), 0),
+    ('R1-02/03 retro outbox delta 0', pg_temp.fx_o(c_s1, '%' || v_hist_msg::text)
+       + pg_temp.fx_o(c_s1, '%' || v_hist_att::text), 0),
+    ('R1 total unchanged', pg_temp.fx_n(c_s1, '%'), 10),
+    ('R1 outbox total unchanged', pg_temp.fx_o(c_s1, '%'), 10);
 
   -- ══ 정합 총괄 ══
   insert into fx_expect values
