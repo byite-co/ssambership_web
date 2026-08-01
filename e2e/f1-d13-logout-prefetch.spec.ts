@@ -12,6 +12,42 @@ import { ACCOUNTS, login } from "./helpers/auth";
 const chromiumExecutable = process.env.F1_CHROMIUM_EXECUTABLE;
 test.use(chromiumExecutable ? { launchOptions: { executablePath: chromiumExecutable } } : {});
 
+/**
+ * 원격 실행 환경 accommodation(F1_SUPABASE_VIA_NODE=1 일 때만):
+ * 브라우저→Supabase 직결 TLS 가 egress 정책에 막히는 환경에서, Supabase 호스트
+ * 요청만 Node fetch 로 대행한다. 검증 대상인 /logout 트래픽은 localhost 동일
+ * 오리진이라 이 우회와 무관하게 실제 브라우저 동작 그대로 측정된다.
+ */
+async function routeSupabaseViaNodeIfNeeded(context: BrowserContext): Promise<void> {
+  if (process.env.F1_SUPABASE_VIA_NODE !== "1") return;
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!base) return;
+  const host = new URL(base).host;
+  await context.route((url) => url.host === host, async (route) => {
+    const req = route.request();
+    try {
+      const headers: Record<string, string> = {};
+      for (const [k, v] of Object.entries(await req.allHeaders())) {
+        if (k.startsWith(":") || k === "host" || k === "content-length") continue;
+        headers[k] = v;
+      }
+      const res = await fetch(req.url(), {
+        method: req.method(),
+        headers,
+        body: req.postDataBuffer() ?? undefined,
+      });
+      const outHeaders: Record<string, string> = {};
+      res.headers.forEach((v, k) => {
+        if (k === "content-encoding" || k === "content-length" || k === "transfer-encoding") return;
+        outHeaders[k] = v;
+      });
+      await route.fulfill({ status: res.status, headers: outHeaders, body: Buffer.from(await res.arrayBuffer()) });
+    } catch {
+      await route.abort();
+    }
+  });
+}
+
 type LogoutCounts = { get: number; post: number; other: number };
 
 function trackLogoutRequests(context: BrowserContext): LogoutCounts {
@@ -54,6 +90,7 @@ test.describe("F1 모바일 (375×812)", () => {
 
   test("메뉴·네비게이션 30회+ 에서 /logout 0건 · 명시적 로그아웃만 POST 1회", async ({ page, context }) => {
     test.setTimeout(420_000);
+    await routeSupabaseViaNodeIfNeeded(context);
     const counts = trackLogoutRequests(context);
 
     await login(page, ACCOUNTS.student);
@@ -158,6 +195,7 @@ test.describe("F1 오라우팅 보조 — 로그인 후 next 목적지 복원", 
   for (const target of PROTECTED_PATHS) {
     test(`비로그인 → ${target} → 로그인 → 원주소 복귀`, async ({ browser }) => {
       const context = await browser.newContext();
+      await routeSupabaseViaNodeIfNeeded(context);
       const counts = trackLogoutRequests(context);
       const page = await context.newPage();
 
@@ -179,6 +217,7 @@ test.describe("F1 데스크톱 회귀 (1440×900)", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
   test("학생: prefetch 0 · 로그아웃 버튼 POST 1회 · 이후 보호 화면 차단", async ({ page, context }) => {
+    await routeSupabaseViaNodeIfNeeded(context);
     const counts = trackLogoutRequests(context);
     await login(page, ACCOUNTS.student);
 
@@ -198,6 +237,7 @@ test.describe("F1 데스크톱 회귀 (1440×900)", () => {
   });
 
   test("멘토: 헤더 로그아웃 POST 1회", async ({ page, context }) => {
+    await routeSupabaseViaNodeIfNeeded(context);
     const counts = trackLogoutRequests(context);
     await login(page, ACCOUNTS.mentor);
     await page.goto("/mentor/mypage", { waitUntil: "domcontentloaded" });
@@ -210,6 +250,7 @@ test.describe("F1 데스크톱 회귀 (1440×900)", () => {
   });
 
   test("관리자: 콘솔 로그아웃 POST 1회", async ({ page, context }) => {
+    await routeSupabaseViaNodeIfNeeded(context);
     const counts = trackLogoutRequests(context);
     await login(page, ACCOUNTS.admin);
     expect(counts.get + counts.post).toBe(0);
