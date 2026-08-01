@@ -5,7 +5,12 @@ import { redirect } from "next/navigation";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireQnaActor } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
-import { draftToParam } from "@/lib/qna/draftQuery";
+import {
+  buildQuestionRoomRedirectUrl,
+  questionRoomRoomPath,
+  questionRoomThreadPath,
+  type QuestionRoomRedirectParams,
+} from "@/lib/qna/questionRoomRedirect";
 import { QUESTION_THREADS_ROOM_FK, threadRowBelongsToMentorStudentRoom } from "@/lib/qna/questionThreadRoomRef";
 import { userMatchesMentorInRoomRow, userMatchesStudentInRoomRow } from "@/lib/qna/questionRoomQueries";
 import { isQuestionThreadLockedForMessages } from "@/lib/qna/questionRoomUiLabels";
@@ -57,34 +62,19 @@ function listPathForActor(actor: "student" | "mentor"): string {
 }
 
 function detailBasePath(roomId: string, actor: "student" | "mentor"): string {
-  return actor === "mentor" ? `/mentor/question-room/${roomId}` : `/question-room/${roomId}`;
+  return questionRoomRoomPath(roomId, actor);
 }
 
+/**
+ * D-27: 경로 선택·쿼리 조립은 순수 함수(`lib/qna/questionRoomRedirect.ts`)로 분리 —
+ * 멘토 메시지/첨부(kind=message)+thread 는 정본 thread 상세 경로, 그 외 기존 계약 유지.
+ */
 function buildRedirectUrl(
   roomId: string,
   actor: "student" | "mentor",
-  p: {
-    thread?: string | null;
-    ok?: string | null;
-    error?: string | null;
-    kind?: "thread" | "message" | "note";
-    draftThread?: string;
-    draftMessage?: string;
-    draftNote?: string;
-  }
+  p: QuestionRoomRedirectParams
 ): string {
-  const basePath = detailBasePath(roomId, actor);
-  const qs = new URLSearchParams();
-  if (p.thread) qs.set("thread", p.thread);
-  if (p.ok) qs.set("ok", p.ok);
-  if (p.error) qs.set("error", p.error);
-  if (p.kind) qs.set("kind", p.kind);
-  if (p.draftThread !== undefined) qs.set("dThread", draftToParam(p.draftThread));
-  if (p.draftMessage !== undefined) qs.set("dMessage", draftToParam(p.draftMessage));
-  if (p.draftNote !== undefined) qs.set("dNote", draftToParam(p.draftNote));
-  qs.set("t", Date.now().toString());
-  const query = qs.toString();
-  return query ? `${basePath}?${query}` : basePath;
+  return buildQuestionRoomRedirectUrl(roomId, actor, p);
 }
 
 /**
@@ -344,6 +334,10 @@ export async function createQuestionMessageAction(formData: FormData) {
   }
 
   revalidatePath(detailBasePath(roomId, actor));
+  // D-27: 멘토는 정본 thread 상세 경로로 복귀하므로 그 경로도 함께 최신화한다.
+  if (actor === "mentor" && targetThread) {
+    revalidatePath(questionRoomThreadPath(roomId, targetThread, actor));
+  }
   redirect(
     buildRedirectUrl(roomId, actor, {
       thread: threadId || fallbackThread,
@@ -483,6 +477,10 @@ export async function sendQuestionAttachmentAction(formData: FormData) {
   }
 
   revalidatePath(detailBasePath(roomId, actor));
+  // D-27: 멘토는 정본 thread 상세 경로로 복귀하므로 그 경로도 함께 최신화한다.
+  if (actor === "mentor" && threadId) {
+    revalidatePath(questionRoomThreadPath(roomId, threadId, actor));
+  }
   redirect(
     buildRedirectUrl(roomId, actor, { thread: threadId, kind: "message", ok: "첨부를 전송했습니다." })
   );

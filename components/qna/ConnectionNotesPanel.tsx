@@ -337,7 +337,10 @@ export function ConnectionNotesPanel(props: {
   }
 
   return (
-    <aside className="hidden w-full shrink-0 flex-col bg-[#f8fafc] lg:flex lg:w-[420px]">
+    // min-h-0 + overflow-hidden: 높이 고정 grid/flex 부모(멘토 thread 상세) 안에서 자동 최소
+    // 높이(auto)로 늘어나지 않고 내부 overflow-y-auto 영역이 실제 높이 제한을 받게 한다(D-21).
+    // 내용 높이만큼 자라는 부모(학생 상세 등)에서는 기존 표시 그대로다.
+    <aside className="hidden min-h-0 w-full shrink-0 flex-col overflow-hidden bg-[#f8fafc] lg:flex lg:w-[420px]">
       <div className="custom-scrollbar flex min-h-0 flex-1 flex-col overflow-y-auto bg-white">
         {header}
         {columns}
