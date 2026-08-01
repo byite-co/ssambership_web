@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { LogoutButton } from "@/components/auth/LogoutButton";
 import type { AppRole } from "@/lib/types/user";
 import { isMainNavItemActive, mainNavAudience } from "@/lib/shell/mainNavActive";
 import type { ShellMainNavItem } from "@/components/shell/ShellHeaderInner";
@@ -62,13 +63,10 @@ export function ShellMobileNavMenu({ items, sessionRole, onClose }: Props) {
             </Link>
           </div>
         ) : (
-          <Link
-            href="/logout"
-            className="flex h-12 items-center justify-center rounded-xl border border-slate-100 text-[15px] font-bold text-slate-500 hover:bg-slate-50"
-            onClick={onClose}
-          >
-            로그아웃
-          </Link>
+          <LogoutButton
+            className="flex h-12 w-full items-center justify-center rounded-xl border border-slate-100 text-[15px] font-bold text-slate-500 hover:bg-slate-50"
+            onNavigate={onClose}
+          />
         )}
       </div>
     </nav>

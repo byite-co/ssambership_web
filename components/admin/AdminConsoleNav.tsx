@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { LogoutButton } from "@/components/auth/LogoutButton";
 import { UserNameWithRoleBadge } from "@/components/shell/UserNameWithRoleBadge";
 import { ADMIN_CONSOLE_NAV, adminNavItemIsActive } from "@/components/admin/adminConsoleNavConfig";
 import { BrandSymbol } from "@/components/brand/BrandLogo";
@@ -63,9 +64,7 @@ export function AdminConsoleNavSidebar() {
         </nav>
         <div className="mt-4 space-y-2 border-t border-slate-100 pt-4">
           {!collapsed ? (
-            <a href="/logout" className="block text-center text-xs font-bold text-slate-400 hover:text-slate-600">
-              로그아웃
-            </a>
+            <LogoutButton className="block w-full text-center text-xs font-bold text-slate-400 hover:text-slate-600" />
           ) : null}
           <button
             type="button"
@@ -89,9 +88,7 @@ export function AdminConsoleNavTop(props: { profile?: import("@/lib/types/user")
         <BrandBlock collapsed={false} />
         <div className="flex shrink-0 items-center gap-2">
           <UserNameWithRoleBadge profile={props.profile ?? null} role="admin" nameClassName="text-xs" />
-          <a href="/logout" className="text-xs font-bold text-slate-500 underline">
-            로그아웃
-          </a>
+          <LogoutButton className="text-xs font-bold text-slate-500 underline" />
         </div>
       </div>
       <nav className="flex gap-1 overflow-x-auto px-3 pb-3" aria-label="관리자 메뉴">

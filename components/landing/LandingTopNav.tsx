@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { usePathname } from "next/navigation";
 import { Menu, X } from "lucide-react";
+import { LogoutButton } from "@/components/auth/LogoutButton";
 import { UserNameWithRoleBadge } from "@/components/shell/UserNameWithRoleBadge";
 import type { AppRole, UserRow } from "@/lib/types/user";
 import type { User } from "@supabase/supabase-js";
@@ -84,12 +85,7 @@ export function LandingTopNav(props: { user: User | null; profile: UserRow | nul
                     className="text-sm"
                   />
                 </Link>
-                <a
-                  href="/logout"
-                  className="shrink-0 text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
-                >
-                  로그아웃
-                </a>
+                <LogoutButton className="shrink-0 text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline" />
               </>
             ) : (
               <>
@@ -176,13 +172,10 @@ export function LandingTopNav(props: { user: User | null; profile: UserRow | nul
                 </Link>
               </div>
             ) : (
-              <Link
-                href="/logout"
-                className="flex h-12 items-center justify-center rounded-xl border border-slate-100 text-[15px] font-bold text-slate-500"
-                onClick={closeMenu}
-              >
-                로그아웃
-              </Link>
+              <LogoutButton
+                className="flex h-12 w-full items-center justify-center rounded-xl border border-slate-100 text-[15px] font-bold text-slate-500"
+                onNavigate={closeMenu}
+              />
             )}
           </div>
         </nav>

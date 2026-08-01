@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { ChevronDown, User } from "lucide-react";
+import { LogoutButton } from "@/components/auth/LogoutButton";
 import { RoleBadgeOnly, UserNameWithRoleBadge } from "@/components/shell/UserNameWithRoleBadge";
 import { shellUserHeaderDisplay } from "@/lib/shell/userHeaderDisplay";
 import type { AppRole, UserRow } from "@/lib/types/user";
@@ -26,12 +27,7 @@ export function ShellHeaderActionsMobile({ sessionRole, userProfile }: HeaderAct
       >
         <User className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
       </Link>
-      <a
-        href="/logout"
-        className="shrink-0 text-[11px] font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline sm:text-xs"
-      >
-        로그아웃
-      </a>
+      <LogoutButton className="shrink-0 text-[11px] font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline sm:text-xs" />
     </>
   );
 }
@@ -55,12 +51,7 @@ export function ShellHeaderActionsDesktop({ sessionRole, userProfile }: HeaderAc
           <ChevronDown className="hidden h-4 w-4 shrink-0 text-slate-400 sm:block" aria-hidden />
         ) : null}
       </Link>
-      <a
-        href="/logout"
-        className="shrink-0 text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
-      >
-        로그아웃
-      </a>
+      <LogoutButton className="shrink-0 text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline" />
     </div>
   );
 }
@@ -88,12 +79,7 @@ export function ShellHeaderAdminActions() {
   return (
     <div className="flex items-center gap-4">
       <RoleBadgeOnly role="admin" />
-      <a
-        href="/logout"
-        className="shrink-0 text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline"
-      >
-        로그아웃
-      </a>
+      <LogoutButton className="shrink-0 text-xs font-medium text-slate-500 underline-offset-2 hover:text-slate-800 hover:underline" />
     </div>
   );
 }
