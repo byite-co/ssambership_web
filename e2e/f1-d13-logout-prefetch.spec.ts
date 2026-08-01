@@ -31,10 +31,12 @@ async function routeSupabaseViaNodeIfNeeded(context: BrowserContext): Promise<vo
         if (k.startsWith(":") || k === "host" || k === "content-length") continue;
         headers[k] = v;
       }
+      // Buffer 는 DOM fetch 의 BodyInit 에 없어 Uint8Array 로 넘긴다(내용 동일, 복사 없음).
+      const postData = req.postDataBuffer();
       const res = await fetch(req.url(), {
         method: req.method(),
         headers,
-        body: req.postDataBuffer() ?? undefined,
+        body: postData ? new Uint8Array(postData) : undefined,
       });
       const outHeaders: Record<string, string> = {};
       res.headers.forEach((v, k) => {
