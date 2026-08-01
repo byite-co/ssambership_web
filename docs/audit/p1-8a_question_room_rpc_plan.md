@@ -1,5 +1,15 @@
 # P1-8A 질문방 원자 RPC·웹 전환 — 설계 (구현 완료: 136 + 웹 전환)
 
+> **개정 2026-08-01 (F2/D-12 — 답변 알림 계약 행 단위 전환).** 본 문서의 "멘토 첫 메시지/첨부만
+> answered 전이 + `record_domain_notification` exactly-once"(§2.2·§2.5 및 위 갱신 문단)에서
+> **알림 부분은 더 이상 정본이 아니다.** 그 서술은 알림을 최초 답변 전이에 결합하고 dedup key 를
+> `question_answered:{thread_id}` 스레드 단위로 두어 후속 멘토 답변 알림이 0이 되는 운영 결함(D-12)을
+> 정답으로 고정한 것이었다. 신 정본: **첫 답변 상태 전이 = 스레드 단위 exactly-once(유지)**,
+> **답변 알림 = 멘토 답변 이벤트(메시지 행/단독 첨부 행) 단위 exactly-once**
+> (`question_answer_message:{message_id}` / `question_answer_attachment:{attachment_id}`,
+> 메시지 연결 첨부는 추가 알림 0). 정본 SQL `supabase/sql/20260801040844_qna_answer_notification_per_event.sql`,
+> 계약 상세 `docs/audit/notification_event_coverage.md` 「갱신 (F2/D-12)」. 아래 원문은 역사 기록으로 보존한다.
+
 > **갱신 2026-07-20 — 구현 완료(단일세션 검증).** 정본 SQL `supabase/sql/136_p1_8a_question_room_atomic_rpc.sql`
 > staging 적용, 웹 전환(폼 액션 create/message/attachment + API 서비스 create/confirm/wrong) 완료.
 > `qna_create_question_thread` 가 무료/활성구독 자격을 서버에서 분기하고, 무료면 `free_question_usage.thread_id`

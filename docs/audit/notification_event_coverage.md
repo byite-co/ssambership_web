@@ -6,7 +6,7 @@
 
 | # | event(type) | producer 위치 | 동일 tx? | recipient | dedup key | 상태 |
 |---|---|---|---|---|---|---|
-| 1 | question_answered | SQL 142/144 `qna_append_message`·`qna_register_attachment` | ✅ atomic | 학생 | `question_answered:{thread_id}` | 완료 |
+| 1 | question_answered | SQL 20260801040844 `qna_emit_answer_notification`(RPC 142 계열 + direct-write 트리거 144 계열 수렴) | ✅ atomic | 학생 | `question_answer_message:{message_id}` · `question_answer_attachment:{attachment_id}` (F2/D-12 — 구 `question_answered:{thread_id}` 폐기) | 완료 |
 | 2 | subscription_renewal_succeeded | `subscriptionRenewalBatch` | ❌ best-effort | 학생 | (없음) | 웹 배치 — 원자화 후속 |
 | 3 | subscription_renewal_failed_insufficient_cash | `subscriptionRenewalBatch` | ❌ best-effort | 학생 | (없음) | 웹 배치 — 원자화 후속 |
 | 4 | subscription_renewal_upcoming | `subscriptionRenewalBatch` | ❌ best-effort | 학생 | (없음) | 웹 배치 — 원자화 후속 |
@@ -80,3 +80,36 @@
 production 은 미적용 — 적용 순서는 runbook §1(SQL 먼저, 웹 나중)을 따른다.
 
 **잔여 앱 부채(WAITING_EXTERNAL_APP)**: 실기기 FCM 발송·device token 등록·앱 딥링크(변동 없음).
+
+---
+
+## 갱신 (F2/D-12 — 질문방 답변 알림 행 단위 계약 · 2026-08-01)
+
+**개정 사유(운영 QA D-12):** 구 계약은 `question_answered` 알림을 멘토 **최초 답변 상태 전이에 결합**해
+발행했고 dedup key 가 `question_answered:{thread_id}` **스레드 단위**였다. 그 결과 (1) `first_answered_at`
+이 설정된 스레드의 후속 멘토 답변은 알림 생성 함수 자체가 실행되지 않았고, (2) 최초 답변 조건만 제거해도
+후속 알림이 스레드 키 UNIQUE 에 무음 흡수됐다. **과거 문서의 "두 번째 답변 알림 미증가 = exactly-once"
+표현은 더 이상 정본이 아니다** — 그것은 스레드 단위 exactly-once(=D-12 결함)를 정답으로 고정한 서술이었다.
+
+**신 정본 계약 (`supabase/sql/20260801040844_qna_answer_notification_per_event.sql`):**
+
+| 항목 | 계약 |
+|---|---|
+| 첫 답변 상태 전이(pending/open→answered + `first_answered_at`) | **스레드 단위 exactly-once** (기존 유지) |
+| 답변 알림 | **멘토 답변 이벤트(메시지 행 / 단독 첨부 행) 단위 exactly-once** |
+| 멘토 메시지 event_key/dedup_key | `question_answer_message:{message_id}` |
+| 멘토 단독 첨부(message_id IS NULL) event_key/dedup_key | `question_answer_attachment:{attachment_id}` |
+| 메시지 연결 첨부 | 메시지 이벤트에 합류 — **추가 알림 0** (텍스트+첨부 한 답변 = 알림 1) |
+| 학생 메시지/첨부 · 거부된 쓰기 · 기존 과거 행 · 동일 행 재처리 | 알림 0 |
+| 알림 소스 단일화 | 신규 helper `qna_emit_answer_notification(thread_id, message_id, attachment_id)` — RPC 2종(`qna_append_message`/`qna_register_attachment`)과 direct-write AFTER 트리거 2종(`qm/qa_direct_answered_after`)이 모두 이 helper 로 수렴. `qna_apply_answered_transition` 은 전이 전용으로 축소 |
+| 원자성 | 132 결정 C 유지 — helper 는 도메인 트랜잭션 내 PERFORM, 실패 시 도메인 write 까지 전체 롤백 |
+| 함수 identity | `qna_append_message`/`qna_register_attachment`/`qna_apply_answered_transition` 의 시그니처·반환형·SECDEF·search_path·EXECUTE ACL 불변 |
+| 과거 데이터 | 구 `question_answered:{thread_id}` 키 행은 백필·삭제하지 않음 |
+
+**검증(2026-08-01, 로컬 스크래치 PG16 — `scripts/verify/local_qna_answer_notification_check.sh`):**
+기준선(132+136+139+141+142+144)에서 D-12 실측 재현(두 번째 답변 알림 +0) → forward 적용 후
+rollback-only fixture(`scripts/verify/fixtures/qna_answer_notification_per_event_fixture.sql`) **64 assertion
+전부 PASS**(최초/후속/3번째 답변 각 +1·행 재처리 +0·단독 첨부 +1·연결 첨부 +0·학생 이벤트 +0·비당사자/잠금
+거부·직접쓰기 경로 동일 계약·중복 키 0) + 독립 2세션 동시성(메시지 2·알림 2·outbox 2·전이 1회·중복 키 0)
++ rollback 후 카탈로그 서명(함수 def md5·ACL·트리거) 기준선 완전 복원 + 재적용 재검증 PASS.
+**staging·production 원장 미적용** — 원격 적용은 별도 승인 단계다.
