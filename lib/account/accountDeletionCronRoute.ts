@@ -37,10 +37,18 @@
  * ── 응답 카운터 ──────────────────────────────────────────────────────────────
  *   claimed   real-run 이 **lease 를 획득한** job 수(dry-run 은 0). 작업 성공 수가 아니다.
  *   previewed dry-run 이 SELECT 로 **조회만** 한 대상 수(real-run 은 0).
- *   succeeded runJob 이 결과를 돌려준 수. 부분 실패 시 claimed 보다 작다.
- *   failed    runJob 이 예외로 끝난 수. `ok` 는 failed === 0 일 때만 true.
- * claimed = succeeded + failed 가 성립한다(real-run). 셋을 분리해 두면 운영자가
- * "몇 건이 lease 를 물고 있는가"와 "몇 건이 실제로 진행됐는가"를 구분할 수 있다.
+ *   succeeded 워커가 `ok:true` 로 끝낸 수.
+ *   stopped   **예외 없이** `ok:false` 로 중단된 수(사유는 results[].stopped).
+ *   errored   runJob 이 throw 한 수(사유 코드는 errors[]).
+ *   failed    stopped + errored. `ok` 는 failed === 0 일 때만 true.
+ *
+ * stopped 를 따로 세는 이유: 워커는 실패해도 **던지지 않는 경로가 있다** —
+ * uncovered_buckets · ownership_conflict · unattributable · session_revoke ·
+ * residue · not_empty 는 전부 예외 없이 `{ ok:false, stopped:… }` 로 돌아온다.
+ * results.length 를 succeeded 로 세면 이들이 성공으로 집계되고 top-level ok 까지
+ * true 가 되어, 조용히 멈춘 job 이 정상 완료처럼 보인다.
+ *
+ * 불변식(real-run): claimed = succeeded + stopped + errored = succeeded + failed.
  */
 
 import { timingSafeEqual } from "node:crypto";
@@ -237,6 +245,8 @@ export async function handleAccountDeletionCron(
       claimed: 0,
       previewed: 0,
       succeeded: 0,
+      stopped: 0,
+      errored: 0,
       failed: 0,
     });
   }
@@ -258,6 +268,8 @@ export async function handleAccountDeletionCron(
       claimed: 0,
       previewed: 0,
       succeeded: 0,
+      stopped: 0,
+      errored: 0,
       failed: 0,
       uncoveredBuckets: deps.uncoveredBuckets,
     });
@@ -319,8 +331,17 @@ export async function handleAccountDeletionCron(
   //  알 수 없다. lease 회수·재시도 판단에 필요한 수치다.)
   const claimed = mode.dryRun ? 0 : jobs.length;
   const previewed = mode.dryRun ? jobs.length : 0;
-  const succeeded = results.length;
-  const failed = errors.length;
+
+  // ★ 워커는 실패해도 **던지지 않는 경로가 있다**: uncovered_buckets · ownership_conflict ·
+  //   unattributable · session_revoke · residue · not_empty 는 예외 없이
+  //   `{ ok:false, stopped:… }` 로 돌아온다. results.length 를 그대로 succeeded 로 세면
+  //   그 실패들이 성공으로 집계되고 top-level ok 도 true 가 된다. 반드시 result.ok 를 본다.
+  const succeeded = results.filter((r) => r.ok === true).length;
+  /** 예외 없이 ok:false 로 중단된 수 — 사유는 results[].stopped 에 있다. */
+  const stopped = results.length - succeeded;
+  /** runJob 이 throw 한 수 — 사유 코드는 errors[] 에 있다. */
+  const errored = errors.length;
+  const failed = stopped + errored;
 
   deps.log?.("account_deletion_cron_done", {
     trigger: deps.trigger,
@@ -329,10 +350,13 @@ export async function handleAccountDeletionCron(
     claimed,
     previewed,
     succeeded,
+    stopped,
+    errored,
     failed,
   });
 
   return Response.json({
+    // failed 는 예외뿐 아니라 "조용한 중단"까지 포함한다.
     ok: failed === 0,
     trigger: deps.trigger,
     mode: mode.reason,
@@ -341,9 +365,13 @@ export async function handleAccountDeletionCron(
     claimed,
     /** dry-run 이 SELECT 로 조회만 한 대상 수(real-run 은 언제나 0). */
     previewed,
-    /** runJob 이 결과를 돌려준 수 — claimed 와 다를 수 있다(부분 실패). */
+    /** 워커가 ok:true 로 끝낸 수. */
     succeeded,
-    /** runJob 이 예외로 끝난 수. */
+    /** 예외 없이 ok:false 로 중단된 수(사유는 results[].stopped). */
+    stopped,
+    /** runJob 이 throw 한 수(사유 코드는 errors[]). */
+    errored,
+    /** stopped + errored. real-run 에서 claimed = succeeded + failed 가 성립한다. */
     failed,
     results,
     errors,

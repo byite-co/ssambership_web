@@ -659,13 +659,18 @@ test("createRunner 가 던지면 500 server_config — 부분 실행으로 넘�
 
 // ── R10 응답 카운터 — claimed vs succeeded/failed ────────────────────────────
 
-/** n 건을 claim 하고, 앞에서부터 failAt 개를 runJob 예외로 만드는 fake. */
-function makePartialFailureRunner(
-  trace: Trace,
-  total: number,
-  failCount: number
-): DeletionCronRunner {
-  const pool: CronClaimedJob[] = Array.from({ length: total }, () => ({
+/**
+ * job 별 결말을 대본으로 지정하는 fake.
+ *   "ok"      → { ok:true }
+ *   "stopped" → **예외 없이** { ok:false, stopped:… }  ← 워커의 실제 실패 경로 대부분
+ *   "throw"   → runJob 이 throw
+ * 워커는 uncovered_buckets · ownership_conflict · unattributable · session_revoke ·
+ * residue · not_empty 를 전부 던지지 않고 ok:false 로 돌려준다. 그 사실을 대본으로 고정한다.
+ */
+type Outcome = "ok" | "stopped" | "throw";
+
+function makeScriptedRunner(trace: Trace, script: readonly Outcome[]): DeletionCronRunner {
+  const pool: CronClaimedJob[] = script.map(() => ({
     userId: PII.userId,
     state: "pending",
     dryRun: false,
@@ -688,8 +693,13 @@ function makePartialFailureRunner(
     },
     runJob: async (job) => {
       trace.ran.push(job);
-      // lease 는 이미 잡힌 뒤다 — 여기서 던져도 claimed 에서 빠지면 안 된다.
-      if (seen++ < failCount) throw new Error(`storage residue: ${PII.storagePath}`);
+      const outcome = script[seen++] ?? "ok";
+      // lease 는 이미 잡힌 뒤다 — 어떤 결말이든 claimed 에서 빠지면 안 된다.
+      if (outcome === "throw") throw new Error(`storage residue: ${PII.storagePath}`);
+      if (outcome === "stopped") {
+        // 워커의 non-throwing 실패: 상태 전이 없이 멈춘다.
+        return { ok: false, finalState: "purging", dryRun: job.dryRun, stopped: "residue" };
+      }
       if (!job.dryRun) trace.destructive += 1;
       return { ok: true, finalState: "completed", dryRun: job.dryRun };
     },
@@ -700,73 +710,131 @@ function realRunReq() {
   return req({ method: "POST", secret: SECRET, query: "?dryRun=false" });
 }
 
-test("R10 real-run 3건 claim · 전부 성공 → claimed 3 · succeeded 3 · failed 0", async () => {
+/** 응답 카운터 전체를 한 번에 단언한다. */
+function assertCounters(
+  json: Record<string, unknown>,
+  want: {
+    claimed: number;
+    previewed: number;
+    succeeded: number;
+    stopped: number;
+    errored: number;
+    failed: number;
+    ok: boolean;
+  },
+  label: string
+) {
+  assert.deepEqual(
+    {
+      claimed: json.claimed,
+      previewed: json.previewed,
+      succeeded: json.succeeded,
+      stopped: json.stopped,
+      errored: json.errored,
+      failed: json.failed,
+      ok: json.ok,
+    },
+    want,
+    label
+  );
+}
+
+test("R10 real-run 3건 claim · 전부 성공", async () => {
   const trace = newTrace();
   const json = await body(
     await handleAccountDeletionCron(
       realRunReq(),
-      makeDeps({ trigger: "manual", createRunner: () => makePartialFailureRunner(trace, 3, 0) })
+      makeDeps({ trigger: "manual", createRunner: () => makeScriptedRunner(trace, ["ok", "ok", "ok"]) })
     )
   );
-  assert.equal(json.claimed, 3);
-  assert.equal(json.succeeded, 3);
-  assert.equal(json.failed, 0);
-  assert.equal(json.previewed, 0);
-  assert.equal(json.ok, true);
+  assertCounters(
+    json,
+    { claimed: 3, previewed: 0, succeeded: 3, stopped: 0, errored: 0, failed: 0, ok: true },
+    "전부 성공"
+  );
 });
 
-test("R10 real-run 3건 claim · 2건 성공 1건 예외 → claimed 3 · succeeded 2 · failed 1 · ok false", async () => {
+test("R10 non-throwing 실패 — 1건 claim · result.ok=false · throw 없음 → failed 1 · ok false", async () => {
   const trace = newTrace();
   const json = await body(
     await handleAccountDeletionCron(
       realRunReq(),
-      makeDeps({ trigger: "manual", createRunner: () => makePartialFailureRunner(trace, 3, 1) })
+      makeDeps({ trigger: "manual", createRunner: () => makeScriptedRunner(trace, ["stopped"]) })
     )
   );
-  assert.equal(json.claimed, 3, "예외로 끝난 job 도 lease 는 이미 획득했다");
-  assert.equal(json.succeeded, 2);
-  assert.equal(json.failed, 1);
-  assert.equal(json.ok, false);
+  // 워커의 residue·session_revoke·uncovered 계열은 던지지 않고 ok:false 로 돌아온다.
+  // results.length 를 succeeded 로 세면 이게 성공 1건 · ok:true 로 집계됐었다.
+  assertCounters(
+    json,
+    { claimed: 1, previewed: 0, succeeded: 0, stopped: 1, errored: 0, failed: 1, ok: false },
+    "non-throwing 실패"
+  );
+  assert.deepEqual(json.errors, [], "throw 가 아니므로 errors 는 비어 있다");
+  const results = json.results as Array<Record<string, unknown>>;
+  assert.equal(results[0]!.ok, false, "사유는 results[].ok / stopped 로 확인한다");
+  assert.equal(results[0]!.stopped, "residue");
+});
+
+test("R10 혼합 — 3건 claim · ok 1 · stopped 1 · throw 1", async () => {
+  const trace = newTrace();
+  const json = await body(
+    await handleAccountDeletionCron(
+      realRunReq(),
+      makeDeps({
+        trigger: "manual",
+        createRunner: () => makeScriptedRunner(trace, ["ok", "stopped", "throw"]),
+      })
+    )
+  );
+  assertCounters(
+    json,
+    { claimed: 3, previewed: 0, succeeded: 1, stopped: 1, errored: 1, failed: 2, ok: false },
+    "혼합 결말"
+  );
   assert.equal(trace.ran.length, 3, "claim 한 3건 모두 실행을 시도한다");
+  assert.deepEqual(json.errors, ["storage_residue"], "errors 는 throw 한 것만 담는다");
 });
 
-test("R10 real-run 1건 claim · 1건 예외 → claimed 1 · succeeded 0 · failed 1", async () => {
+test("R10 real-run 1건 claim · 1건 throw → claimed 1 · errored 1", async () => {
   const trace = newTrace();
   const json = await body(
     await handleAccountDeletionCron(
       realRunReq(),
-      makeDeps({ trigger: "manual", createRunner: () => makePartialFailureRunner(trace, 1, 1) })
+      makeDeps({ trigger: "manual", createRunner: () => makeScriptedRunner(trace, ["throw"]) })
     )
   );
-  assert.equal(json.claimed, 1, "claimed 는 결과 수가 아니라 lease 획득 수다");
-  assert.equal(json.succeeded, 0);
-  assert.equal(json.failed, 1);
-  assert.equal(json.ok, false);
-  assert.deepEqual(json.results, [], "성공 결과는 없다");
+  assertCounters(
+    json,
+    { claimed: 1, previewed: 0, succeeded: 0, stopped: 0, errored: 1, failed: 1, ok: false },
+    "단건 throw"
+  );
+  assert.deepEqual(json.results, [], "결과 없음 — 사유는 errors[] 에 있다");
 });
 
-test("R10 real-run 에서 claimed = succeeded + failed 가 성립한다", async () => {
-  for (const [total, fails] of [
-    [1, 0],
-    [3, 1],
-    [5, 5],
-  ] as const) {
+test("R10 불변식 claimed = succeeded + stopped + errored = succeeded + failed", async () => {
+  const scripts: Outcome[][] = [
+    ["ok"],
+    ["stopped"],
+    ["throw"],
+    ["ok", "stopped", "throw"],
+    ["stopped", "stopped", "throw", "ok", "ok"],
+    ["throw", "throw", "throw"],
+  ];
+  for (const script of scripts) {
     const trace = newTrace();
     const json = await body(
       await handleAccountDeletionCron(
         realRunReq(),
-        makeDeps({
-          trigger: "manual",
-          createRunner: () => makePartialFailureRunner(trace, total, fails),
-        })
+        makeDeps({ trigger: "manual", createRunner: () => makeScriptedRunner(trace, script) })
       )
     );
-    assert.equal(
-      json.claimed,
-      (json.succeeded as number) + (json.failed as number),
-      `total=${total} fails=${fails}`
-    );
-    assert.equal(json.claimed, total);
+    const n = (k: string) => json[k] as number;
+    const label = script.join("+");
+    assert.equal(n("claimed"), script.length, label);
+    assert.equal(n("claimed"), n("succeeded") + n("stopped") + n("errored"), label);
+    assert.equal(n("claimed"), n("succeeded") + n("failed"), label);
+    assert.equal(n("failed"), n("stopped") + n("errored"), label);
+    assert.equal(json.ok, n("failed") === 0, `${label}: ok 는 failed 0 일 때만 true`);
   }
 });
 
@@ -775,35 +843,52 @@ test("R10 dry-run preview 3건 → claimed 0 · previewed 3 · DB write 0", asyn
   const json = await body(
     await handleAccountDeletionCron(
       req({ secret: SECRET }),
-      makeDeps({ createRunner: () => makePartialFailureRunner(trace, 3, 0) })
+      makeDeps({ createRunner: () => makeScriptedRunner(trace, ["ok", "ok", "ok"]) })
     )
   );
-  assert.equal(json.claimed, 0);
-  assert.equal(json.previewed, 3);
-  assert.equal(json.succeeded, 3, "read-only planner 는 3건 모두 돌린다");
-  assert.equal(json.failed, 0);
+  assertCounters(
+    json,
+    { claimed: 0, previewed: 3, succeeded: 3, stopped: 0, errored: 0, failed: 0, ok: true },
+    "dry-run preview 3건"
+  );
   assertZeroWrite(trace, "dry-run preview 3건");
 });
 
-test("R10 disabled → claimed 0 · previewed 0 · succeeded 0 · failed 0", async () => {
+test("R10 dry-run 도 non-throwing 실패를 성공으로 세지 않는다", async () => {
+  const trace = newTrace();
+  const json = await body(
+    await handleAccountDeletionCron(
+      req({ secret: SECRET }),
+      makeDeps({ createRunner: () => makeScriptedRunner(trace, ["ok", "stopped"]) })
+    )
+  );
+  assertCounters(
+    json,
+    { claimed: 0, previewed: 2, succeeded: 1, stopped: 1, errored: 0, failed: 1, ok: false },
+    "dry-run 혼합"
+  );
+  assertZeroWrite(trace, "dry-run 혼합");
+});
+
+test("R10 disabled → 실행 카운터 전부 0", async () => {
   for (const over of [{ workerEnabledRaw: undefined }, { featureEnabled: false }]) {
     const trace = newTrace();
     const json = await body(
       await handleAccountDeletionCron(
         req({ secret: SECRET }),
-        makeDeps({ createRunner: () => makePartialFailureRunner(trace, 3, 0), ...over })
+        makeDeps({ createRunner: () => makeScriptedRunner(trace, ["ok", "ok", "ok"]), ...over })
       )
     );
-    assert.equal(json.claimed, 0, JSON.stringify(over));
-    assert.equal(json.previewed, 0);
-    assert.equal(json.succeeded, 0);
-    assert.equal(json.failed, 0);
+    assert.equal(json.disabled, true, JSON.stringify(over));
+    for (const key of ["claimed", "previewed", "succeeded", "stopped", "errored", "failed"]) {
+      assert.equal(json[key], 0, `${JSON.stringify(over)}: ${key}`);
+    }
     assert.equal(trace.previews.length, 0);
     assertZeroWrite(trace, JSON.stringify(over));
   }
 });
 
-test("R10 uncovered bucket 차단도 카운터가 전부 0", async () => {
+test("R10 uncovered bucket route-level 차단도 실행 카운터 전부 0", async () => {
   const trace = newTrace();
   const json = await body(
     await handleAccountDeletionCron(
@@ -811,15 +896,37 @@ test("R10 uncovered bucket 차단도 카운터가 전부 0", async () => {
       makeDeps({
         trigger: "manual",
         uncoveredBuckets: ["orphan-bucket"],
-        createRunner: () => makePartialFailureRunner(trace, 3, 0),
+        createRunner: () => makeScriptedRunner(trace, ["ok", "ok", "ok"]),
       })
     )
   );
   assert.equal(json.blocked, "uncovered_buckets");
-  assert.equal(json.claimed, 0);
-  assert.equal(json.previewed, 0);
-  assert.equal(json.succeeded, 0);
-  assert.equal(json.failed, 0);
+  for (const key of ["claimed", "previewed", "succeeded", "stopped", "errored", "failed"]) {
+    assert.equal(json[key], 0, key);
+  }
+  assert.equal(trace.previews.length, 0);
+  assertZeroWrite(trace, "uncovered 차단");
+});
+
+test("R10 운영 로그에도 다섯 카운터가 모두 실린다(PII 없이)", async () => {
+  const logged: Array<{ message: string; meta: Record<string, unknown> }> = [];
+  const trace = newTrace();
+  await handleAccountDeletionCron(
+    realRunReq(),
+    makeDeps({
+      trigger: "manual",
+      createRunner: () => makeScriptedRunner(trace, ["ok", "stopped", "throw"]),
+      log: (message, meta) => logged.push({ message, meta }),
+    })
+  );
+  const done = logged.find((l) => l.message === "account_deletion_cron_done");
+  assert.ok(done, "완료 로그가 있다");
+  assert.equal(done!.meta.claimed, 3);
+  assert.equal(done!.meta.succeeded, 1);
+  assert.equal(done!.meta.stopped, 1);
+  assert.equal(done!.meta.errored, 1);
+  assert.equal(done!.meta.failed, 2);
+  assertNoPii(JSON.stringify(logged), "카운터 로그");
 });
 
 // ── 기타 ────────────────────────────────────────────────────────────────────
