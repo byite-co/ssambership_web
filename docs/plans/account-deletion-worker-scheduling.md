@@ -1,0 +1,127 @@
+# 계정 삭제 worker — 스케줄러 배선 운영 문서 (S3-A)
+
+관련 스펙: `docs/plans/account-deletion-spec.md`
+코드: `app/api/cron/account-deletion/route.ts` · `lib/account/accountDeletionCronRoute.ts`
+계약 테스트: `lib/account/__contract__/accountDeletionCronRoute.contract.test.ts`
+
+---
+
+## 1. 무엇이 바뀌었나
+
+worker 코드는 이전부터 있었지만 **자동 호출 배선이 없었다**. 이 회차에서:
+
+- `GET /api/cron/account-deletion` 추가 — Vercel Cron 이 호출하는 경로.
+- 기존 `POST /api/cron/account-deletion`(수동 운영 경로) 그대로 유지.
+- 두 메서드가 동일한 내부 실행 함수 `handleAccountDeletionCron` 을 호출한다.
+- `vercel.json` 에 매시간 cron 등록.
+
+**이 회차에서 하지 않은 것:** 운영 배포, 환경변수 실제 변경, 실제 job claim,
+실제 삭제. 현재 pending 상태인 실제 overdue job 1건은 **자동으로 처리되지 않는다**
+(아래 §5 를 밟기 전까지 러너가 disabled 로 응답하며 claim 0건).
+
+---
+
+## 2. 실행 조건 (전부 참일 때만 실삭제)
+
+| # | 관문 | 어디서 |
+|---|------|--------|
+| ① | `ACCOUNT_DELETION_WORKER_ENABLED=true` 또는 `1` | `resolveDeletionRunMode` |
+| ② | 계정 삭제 기능 플래그 ON (`NEXT_PUBLIC_FEATURE_ACCOUNT_DELETION` 이 off/0/false/no 가 **아님**) | `isAccountDeletionFeatureEnabled` |
+| ③ | 명시적 real-run 요청 — GET 은 `ACCOUNT_DELETION_SCHEDULED_REAL_RUN=true\|1`, POST 는 `?dryRun=false` | `resolveRequestedDryRun` |
+| ④ | `CRON_SECRET` 인증 성공 (`Authorization: Bearer …` 또는 `x-cron-secret`) | `isAuthorizedCronRequest` |
+| ⑤ | 미커버 버킷 0종 | `uncoveredBucketGateBlocks` + 워커 `planBlockReason` |
+| ⑥ | claim lease 획득 성공 (154 `account_deletion_claim`) | 어댑터 |
+
+하나라도 어긋나면 **job claim 0건 · Storage 삭제 0 · Auth 삭제 0 · DB 익명화 0**,
+응답은 `disabled` 또는 `dryRun: true` 다. 기본값은 언제나 fail-closed.
+
+### 왜 스케줄 real-run 스위치를 따로 뒀나
+
+`vercel.json` 의 cron path 는 저장소에 평문으로 남는다. 그 URL 에 `?dryRun=false`
+하나만 붙이면 전 사용자 실삭제가 켜지는 구조는 위험하다. 따라서 **scheduled(GET)
+경로는 쿼리스트링을 아예 읽지 않는다** — `?dryRun=false` 를 붙여도 무시되고
+dry-run 으로 남는다. 스케줄 real-run 스위치는 전용 env
+`ACCOUNT_DELETION_SCHEDULED_REAL_RUN` 뿐이며, worker env 와 **분리**돼 있어
+"워커를 켜서 스케줄 dry-run 을 관측하는 단계"와 "실제로 지우기 시작하는 단계"가
+서로 다른 env 변경으로 나뉜다.
+
+---
+
+## 3. 환경변수
+
+| 이름 | 기본 | 용도 |
+|------|------|------|
+| `CRON_SECRET` | 없음(미설정 시 **전 요청 401**) | cron 인증. Vercel Cron 이 자동으로 `Authorization: Bearer $CRON_SECRET` 을 붙인다. 기존 cron 2종과 공유. |
+| `ACCOUNT_DELETION_WORKER_ENABLED` | 미설정 = off | 워커 kill switch. `true`/`1` 만 인정. |
+| `ACCOUNT_DELETION_SCHEDULED_REAL_RUN` | 미설정 = off | **스케줄 실행**의 real-run 스위치. `true`/`1` 만 인정. |
+| `NEXT_PUBLIC_FEATURE_ACCOUNT_DELETION` | 미설정 = ON | 기능 플래그. `off`/`0`/`false`/`no` 로 긴급 차단. |
+| `SUPABASE_SERVICE_ROLE_KEY` | 필수 | 없으면 500 `server_config`(부분 실행 없음). |
+
+---
+
+## 4. cron 스케줄
+
+```json
+{ "path": "/api/cron/account-deletion", "schedule": "0 * * * *" }
+```
+
+매시간 정각 1회. `cancelable_until` 이 지난 job 을 늦어도 1시간 안에 집는다.
+
+> **배포 전 확인 필요:** Vercel Hobby 플랜은 cron 을 **1일 1회 · 최대 2개**로
+> 제한한다. 이 저장소는 이미 daily cron 2종(`subscription-renewal`,
+> `individual-question-expiry`)을 쓰고 있으므로, 매시간 cron 을 추가하면
+> **Pro 이상 플랜이 필요하다**. 현재 세션에서는 Vercel 플랜을 확인할 수 없어
+> 임의 주기로 대체하지 않고 hourly 를 그대로 두었다. Hobby 라면 배포가 실패하므로
+> 플랜 승급 또는 별도 스케줄러(Supabase `pg_cron` → HTTP 호출) 결정이 선행돼야 한다.
+
+기존 cron 2종은 이 회차에서 수정하지 않았다.
+
+---
+
+## 5. 운영 적용 전 검증 순서
+
+각 단계는 **다음 단계로 넘어가기 전에** 응답을 확인한다.
+
+1. **배포만** — env 는 아직 아무것도 켜지 않는다.
+   스케줄 GET 이 `{"disabled":true,"reason":"worker_disabled","claimed":0}` 으로
+   응답하는지 Vercel cron 로그에서 확인. claim 0건이어야 한다.
+2. **인증 회귀 확인** — 인증 없는 `GET`/`POST` 가 401 인지 확인.
+   (`curl -i https://<host>/api/cron/account-deletion` → 401)
+3. **수동 dry-run** — `POST` + `Authorization: Bearer $CRON_SECRET`, 쿼리 없음.
+   `dryRun:true`, `mode:"dry_run_default"`, `uncoveredBuckets: []` 확인.
+   `uncoveredBuckets` 가 비어 있지 않으면 **여기서 멈춘다**(⑤ 관문).
+4. **워커 ON, 스케줄은 여전히 dry-run** — `ACCOUNT_DELETION_WORKER_ENABLED=true`.
+   `ACCOUNT_DELETION_SCHEDULED_REAL_RUN` 은 **설정하지 않는다**.
+   최소 2~3 사이클(2~3시간) 동안 스케줄 GET 응답이
+   `mode:"dry_run_default"`, `claimed` ≥ 0, `errors: []` 인지 관측.
+   이 구간에서 계획 산출 결과(planCount)와 `stopped` 값이 예상과 맞는지 본다.
+5. **단건 수동 real-run** — `POST ...?dryRun=false&limit=1`.
+   대상 job 1건이 어디까지 진행되는지 확인하고 `account_deletion_jobs` 상태를 검수.
+6. **스케줄 real-run 개방** — 5 가 정상일 때만
+   `ACCOUNT_DELETION_SCHEDULED_REAL_RUN=true` 설정.
+7. **롤백** — 이상 시 `ACCOUNT_DELETION_SCHEDULED_REAL_RUN` 제거(스케줄만 정지) 또는
+   `ACCOUNT_DELETION_WORKER_ENABLED` 제거(수동 포함 전면 정지). 둘 다 즉시 fail-closed.
+
+---
+
+## 6. PII 취급
+
+응답과 운영 로그에는 **사용자 uuid · 이메일 · Storage 경로 · job id 를 싣지 않는다.**
+개수(`claimed`, `planCount`, `errorCount`)와 상태명(`finalState`, `stopped`, `mode`)만 남는다.
+
+워커/어댑터 오류 문자열은 원문에 버킷 경로와 uuid 가 섞일 수 있으므로
+`sanitizeDeletionCronError` 가 화이트리스트(`^[a-z0-9_]{1,64}$`, 긴 hex 차단)로
+**코드만** 통과시키고 나머지는 `job_failed` 로 접는다. 워커의 `log` 어댑터는
+라우트에서 **주입하지 않는다**(meta 에 Storage 경로가 실릴 수 있다).
+
+상세 진단이 필요하면 응답이 아니라 DB(`account_deletion_jobs.last_error`)를 본다.
+
+---
+
+## 7. lease 계약
+
+- 매 실행 시작에 `account_deletion_reclaim_expired` 1회 — 죽은 러너가 쥔 lease 회수.
+- claim 은 154 `account_deletion_claim`(owner + `leased_until` + `FOR UPDATE SKIP LOCKED`).
+  151 `account_deletion_worker_claim` 은 lease 를 다루지 않아 중복 처리가 가능하므로 **쓰지 않는다**.
+- 따라서 cron 이 겹쳐 실행돼도 같은 job 을 두 러너가 동시에 집지 않는다.
+- 기본 `limit=5`, `leaseSeconds=300`(쿼리로 1~20 / 60~3600 범위 내 조정 가능).

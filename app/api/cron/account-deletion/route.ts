@@ -1,5 +1,4 @@
-import { timingSafeEqual } from "node:crypto";
-import { NextResponse, type NextRequest } from "next/server";
+import { type NextRequest } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { isAccountDeletionFeatureEnabled } from "@/lib/shell/featureFlags";
 import { runAccountDeletionJob } from "@/lib/account/accountDeletionWorker";
@@ -10,119 +9,72 @@ import {
   reclaimExpiredDeletionLeases,
 } from "@/lib/account/accountDeletionAdapters";
 import {
+  ACCOUNT_DELETION_SCHEDULED_REAL_RUN_ENV,
   ACCOUNT_DELETION_WORKER_ENABLED_ENV,
-  effectiveJobDryRun,
-  parseRequestedDryRun,
-  resolveClaimParams,
-  resolveDeletionRunMode,
-} from "@/lib/account/accountDeletionRunnerConfig";
+  handleAccountDeletionCron,
+  type AccountDeletionCronDeps,
+  type DeletionCronTrigger,
+} from "@/lib/account/accountDeletionCronRoute";
 
 /**
  * 계정 삭제 saga 러너(내부 전용).
  *
- * 파괴 실행은 **세 조건이 모두** 참일 때만 한다:
- *   ① ACCOUNT_DELETION_WORKER_ENABLED=true|1  ② 기능 플래그 ON  ③ ?dryRun=false 명시
- * 하나라도 어긋나면 dry-run 으로 강등되어 계획만 만들고 아무것도 지우지 않는다.
+ * ── 호출 경로 ────────────────────────────────────────────────────────────────
+ *   GET   스케줄러(Vercel Cron, vercel.json `0 * * * *`). 쿼리스트링으로 실삭제를
+ *         켤 수 없다 — `ACCOUNT_DELETION_SCHEDULED_REAL_RUN=true|1` 만이 스위치다.
+ *   POST  기존 수동 운영 경로. `?dryRun=false` 명시로 real-run 을 요청한다(계약 유지).
+ * 둘 다 `handleAccountDeletionCron` 하나를 호출한다 — 게이트가 갈라지지 않게.
+ *
+ * ── 파괴 실행 조건(전부 참일 때만) ───────────────────────────────────────────
+ *   ① ACCOUNT_DELETION_WORKER_ENABLED=true|1
+ *   ② 계정 삭제 기능 플래그 ON
+ *   ③ 명시적 real-run 요청(GET=전용 env / POST=?dryRun=false)
+ *   ④ CRON_SECRET 인증 성공
+ *   ⑤ 미커버 버킷 0종
+ *   ⑥ claim lease 획득 성공
+ * 하나라도 어긋나면 claim 0건 · Storage/Auth/DB 무변경 · dry-run 또는 disabled 응답.
  *
  * 인증은 기존 cron 라우트 2종과 동일한 timing-safe CRON_SECRET 비교다.
  * lease 는 154 account_deletion_claim(owner·leased_until)만 쓴다 —
  * 151 account_deletion_worker_claim 은 lease 를 다루지 않아 중복 처리가 가능하므로 쓰지 않는다.
+ *
+ * 응답·로그에는 사용자 uuid·이메일·Storage 경로·job id 를 싣지 않는다(개수·상태명만).
  */
 export const dynamic = "force-dynamic";
 
-function timingSafeStringEqual(a: string, b: string): boolean {
-  const aBuffer = Buffer.from(a);
-  const bBuffer = Buffer.from(b);
-  if (aBuffer.length !== bBuffer.length) return false;
-  return timingSafeEqual(aBuffer, bBuffer);
-}
-
-function isAuthorized(req: NextRequest): boolean {
-  const secret = process.env.CRON_SECRET?.trim();
-  if (!secret) return false;
-
-  const auth = req.headers.get("authorization") ?? "";
-  const bearer = auth.startsWith("Bearer ") ? auth.slice("Bearer ".length).trim() : "";
-  const headerSecret = req.headers.get("x-cron-secret")?.trim() ?? "";
-
-  return (
-    (bearer.length > 0 && timingSafeStringEqual(bearer, secret)) ||
-    (headerSecret.length > 0 && timingSafeStringEqual(headerSecret, secret))
-  );
-}
-
-export async function POST(req: NextRequest) {
-  if (!isAuthorized(req)) {
-    return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
-  }
-
-  const url = new URL(req.url);
-  const mode = resolveDeletionRunMode({
+function buildDeps(trigger: DeletionCronTrigger): AccountDeletionCronDeps {
+  return {
+    trigger,
+    cronSecret: process.env.CRON_SECRET,
     workerEnabledRaw: process.env[ACCOUNT_DELETION_WORKER_ENABLED_ENV],
+    scheduledRealRunRaw: process.env[ACCOUNT_DELETION_SCHEDULED_REAL_RUN_ENV],
     featureEnabled: isAccountDeletionFeatureEnabled(),
-    requestedDryRun: parseRequestedDryRun(url.searchParams.get("dryRun")),
-  });
-
-  if (!mode.enabled) {
-    // kill switch — job 을 집지도 않는다.
-    return NextResponse.json({ ok: true, disabled: true, reason: mode.reason, claimed: 0 });
-  }
-
-  let admin: ReturnType<typeof createServiceRoleClient>;
-  try {
-    admin = createServiceRoleClient();
-  } catch {
-    return NextResponse.json({ ok: false, error: "server_config" }, { status: 500 });
-  }
-
-  const { limit, leaseSeconds } = resolveClaimParams({
-    limitRaw: url.searchParams.get("limit"),
-    leaseSecondsRaw: url.searchParams.get("leaseSeconds"),
-  });
-
-  const owner = `cron-${process.env.VERCEL_DEPLOYMENT_ID ?? "local"}-${Date.now()}`;
-  const results: Array<Record<string, unknown>> = [];
-  const errors: string[] = [];
-
-  try {
-    await reclaimExpiredDeletionLeases(admin);
-    const jobs = await claimDeletionJobs(admin, owner, limit, leaseSeconds);
-    const deps = buildDeletionDeps(admin);
-
-    for (const job of jobs) {
-      const dryRun = effectiveJobDryRun(job.dryRun, mode);
-      try {
-        const result = await runAccountDeletionJob(
-          { userId: job.userId, state: job.state, dryRun },
-          deps
-        );
-        // userId 는 PII 취급 — 응답에 싣지 않는다.
-        results.push({
-          finalState: result.finalState,
-          ok: result.ok,
-          dryRun: result.dryRun,
-          stopped: result.stopped,
-          planCount: result.plan?.length ?? 0,
-        });
-      } catch (cause) {
-        errors.push(cause instanceof Error ? cause.message : "job_failed");
-      }
-    }
-  } catch (cause) {
-    return NextResponse.json(
-      { ok: false, error: cause instanceof Error ? cause.message : "claim_failed" },
-      { status: 500 }
-    );
-  }
-
-  return NextResponse.json({
-    ok: errors.length === 0,
-    mode: mode.reason,
-    dryRun: mode.dryRun,
-    claimed: results.length,
-    results,
-    errors,
-    // 사용자 prefix 스캔으로 커버되지 않는 버킷을 매 응답에 드러낸다(조용한 미삭제 방지).
     uncoveredBuckets: ACCOUNT_DELETION_UNCOVERED_BUCKETS,
-  });
+    makeOwner: () => `cron-${process.env.VERCEL_DEPLOYMENT_ID ?? "local"}-${Date.now()}`,
+    createRunner: () => {
+      // 서비스 롤 키 미설정이면 여기서 던지고, 핸들러가 500 server_config 로 접는다.
+      const admin = createServiceRoleClient();
+      // log 를 주입하지 않는다 — 워커 로그 meta 에 Storage 경로가 실릴 수 있다.
+      const workerDeps = buildDeletionDeps(admin);
+      return {
+        reclaimExpiredLeases: () => reclaimExpiredDeletionLeases(admin),
+        claimJobs: (owner, limit, leaseSeconds) =>
+          claimDeletionJobs(admin, owner, limit, leaseSeconds),
+        runJob: (job) => runAccountDeletionJob(job, workerDeps),
+      };
+    },
+    log: (message, meta) => {
+      console.info(`[account-deletion-cron] ${message}`, meta);
+    },
+  };
+}
+
+/** 스케줄러(Vercel Cron)가 호출하는 경로. */
+export async function GET(req: NextRequest) {
+  return handleAccountDeletionCron(req, buildDeps("scheduled"));
+}
+
+/** 기존 수동 운영 경로 — 회귀 없이 유지한다. */
+export async function POST(req: NextRequest) {
+  return handleAccountDeletionCron(req, buildDeps("manual"));
 }
