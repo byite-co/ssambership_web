@@ -33,6 +33,14 @@
  *   dry-run   preview 1회 · reclaim 0 · claim 0 · lease/attempts/state 변경 0 ·
  *             Storage/Auth/익명화 0 · 응답은 claimed:0 + previewed:N
  *   real-run  reclaim → claim → runJob (기존 lease·중복 실행 계약 그대로)
+ *
+ * ── 응답 카운터 ──────────────────────────────────────────────────────────────
+ *   claimed   real-run 이 **lease 를 획득한** job 수(dry-run 은 0). 작업 성공 수가 아니다.
+ *   previewed dry-run 이 SELECT 로 **조회만** 한 대상 수(real-run 은 0).
+ *   succeeded runJob 이 결과를 돌려준 수. 부분 실패 시 claimed 보다 작다.
+ *   failed    runJob 이 예외로 끝난 수. `ok` 는 failed === 0 일 때만 true.
+ * claimed = succeeded + failed 가 성립한다(real-run). 셋을 분리해 두면 운영자가
+ * "몇 건이 lease 를 물고 있는가"와 "몇 건이 실제로 진행됐는가"를 구분할 수 있다.
  */
 
 import { timingSafeEqual } from "node:crypto";
@@ -228,6 +236,8 @@ export async function handleAccountDeletionCron(
       reason: mode.reason,
       claimed: 0,
       previewed: 0,
+      succeeded: 0,
+      failed: 0,
     });
   }
 
@@ -247,6 +257,8 @@ export async function handleAccountDeletionCron(
       dryRun: mode.dryRun,
       claimed: 0,
       previewed: 0,
+      succeeded: 0,
+      failed: 0,
       uncoveredBuckets: deps.uncoveredBuckets,
     });
   }
@@ -301,9 +313,14 @@ export async function handleAccountDeletionCron(
     return Response.json({ ok: false, error: sanitizeDeletionCronError(cause) }, { status: 500 });
   }
 
-  // dry-run 은 아무것도 claim 하지 않았다 — 조회한 대상 수는 previewed 로만 센다.
-  const claimed = mode.dryRun ? 0 : results.length;
+  // claimed 는 **lease 를 실제로 획득한 수** 다 — 작업 성공 수가 아니다.
+  // runJob 이 던진 job 도 lease 는 이미 잡았으므로 claimed 에 남아야 한다.
+  // (results.length 로 세면 부분 실패 시 운영자가 "몇 건이 lease 를 물고 있는가"를
+  //  알 수 없다. lease 회수·재시도 판단에 필요한 수치다.)
+  const claimed = mode.dryRun ? 0 : jobs.length;
   const previewed = mode.dryRun ? jobs.length : 0;
+  const succeeded = results.length;
+  const failed = errors.length;
 
   deps.log?.("account_deletion_cron_done", {
     trigger: deps.trigger,
@@ -311,16 +328,23 @@ export async function handleAccountDeletionCron(
     dryRun: mode.dryRun,
     claimed,
     previewed,
-    errorCount: errors.length,
+    succeeded,
+    failed,
   });
 
   return Response.json({
-    ok: errors.length === 0,
+    ok: failed === 0,
     trigger: deps.trigger,
     mode: mode.reason,
     dryRun: mode.dryRun,
+    /** real-run 이 lease 를 획득한 job 수(dry-run 은 언제나 0). */
     claimed,
+    /** dry-run 이 SELECT 로 조회만 한 대상 수(real-run 은 언제나 0). */
     previewed,
+    /** runJob 이 결과를 돌려준 수 — claimed 와 다를 수 있다(부분 실패). */
+    succeeded,
+    /** runJob 이 예외로 끝난 수. */
+    failed,
     results,
     errors,
     // 사용자 prefix 스캔으로 커버되지 않는 버킷을 매 응답에 드러낸다(조용한 미삭제 방지).

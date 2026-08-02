@@ -44,9 +44,9 @@ dry-run 을 "read-only" 라고 부르려면 **DB write 가 실제로 0** 이어�
 
 | 모드 | preview(SELECT) | reclaim(UPDATE) | claim(UPDATE) | worker | 응답 |
 |------|-----------------|-----------------|---------------|--------|------|
-| disabled | 0 | 0 | 0 | 0 | `disabled:true`, `claimed:0`, `previewed:0` |
-| dry-run | 1 | **0** | **0** | read-only planner | `dryRun:true`, `claimed:0`, `previewed:N` |
-| real-run | 0 | 1 | 1 | 전 단계 | `dryRun:false`, `claimed:N`, `previewed:0` |
+| disabled | 0 | 0 | 0 | 0 | `disabled:true` · `claimed:0` · `previewed:0` |
+| dry-run | 1 | **0** | **0** | read-only planner | `dryRun:true` · `claimed:0` · `previewed:N` |
+| real-run | 0 | 1 | 1 | 전 단계 | `dryRun:false` · `claimed:N` · `previewed:0` |
 
 dry-run 의 대상 선정은 `previewDeletionJobs`(SELECT)가 담당하며, 154 `account_deletion_claim`
 과 **동일한 술어**를 쓴다(`state` ∈ 진행 가능 상태 · `next_attempt_at` 도래 ·
@@ -61,10 +61,24 @@ service-role SELECT 로 충분하다.
 
 | 필드 | 의미 |
 |------|------|
-| `claimed` | lease 를 획득해 **실제로 집은** job 수. dry-run 에서는 언제나 `0` |
-| `previewed` | dry-run 이 SELECT 로 **조회만** 한 대상 수. real-run 에서는 언제나 `0` |
+| `claimed` | real-run 이 **lease 를 획득한** job 수 = `claimJobs` 반환 건수. dry-run 은 언제나 `0` |
+| `previewed` | dry-run 이 SELECT 로 **조회만** 한 대상 수. real-run 은 언제나 `0` |
+| `succeeded` | worker 가 결과를 돌려준 수(= `results.length`) |
+| `failed` | worker 가 예외로 끝난 수(= `errors.length`). `ok` 는 `failed === 0` 일 때만 `true` |
 | `mode` | `worker_disabled` / `feature_disabled` / `dry_run_default` / `dry_run_explicit` / `real_run` |
 | `results[].planCount` | 삭제 계획에 담긴 Storage 객체 수(경로는 싣지 않는다) |
+
+**`claimed` 는 작업 성공 수가 아니다.** worker 가 예외로 끝난 job 도 lease 는 이미 획득한
+상태이므로 `claimed` 에 남는다. real-run 에서 `claimed = succeeded + failed` 가 성립한다.
+
+```
+claimJobs 3건 → 2건 성공, 1건 예외
+  → { claimed: 3, succeeded: 2, failed: 1, ok: false }
+```
+
+셋을 분리해 두는 이유: 부분 실패 시 운영자가 **"몇 건이 lease 를 물고 있는가"**(재시도·
+lease 만료 대기 판단)와 **"몇 건이 실제로 진행됐는가"**(진척 판단)를 구분할 수 있어야 한다.
+`claimed` 를 성공 수로 세면 lease 를 물고 있는 job 이 응답에서 사라진다.
 
 ### 왜 스케줄 real-run 스위치를 따로 뒀나
 
@@ -115,7 +129,7 @@ dry-run 으로 남는다. 스케줄 real-run 스위치는 전용 env
 각 단계는 **다음 단계로 넘어가기 전에** 응답을 확인한다.
 
 1. **배포만** — env 는 아직 아무것도 켜지 않는다.
-   스케줄 GET 이 `{"disabled":true,"reason":"worker_disabled","claimed":0}` 으로
+   스케줄 GET 이 `{"disabled":true,"reason":"worker_disabled","claimed":0,"previewed":0}` 으로
    응답하는지 Vercel cron 로그에서 확인. claim 0건이어야 한다.
 2. **인증 회귀 확인** — 인증 없는 `GET`/`POST` 가 401 인지 확인.
    (`curl -i https://<host>/api/cron/account-deletion` → 401)
@@ -125,7 +139,7 @@ dry-run 으로 남는다. 스케줄 real-run 스위치는 전용 env
 4. **워커 ON, 스케줄은 여전히 dry-run** — `ACCOUNT_DELETION_WORKER_ENABLED=true`.
    `ACCOUNT_DELETION_SCHEDULED_REAL_RUN` 은 **설정하지 않는다**.
    최소 2~3 사이클(2~3시간) 동안 스케줄 GET 응답이
-   `mode:"dry_run_default"`, `claimed: 0`, `previewed` ≥ 0, `errors: []` 인지 관측.
+   `mode:"dry_run_default"`, `claimed: 0`, `previewed` ≥ 0, `failed: 0` 인지 관측.
    이 구간에서 계획 산출 결과(planCount)와 `stopped` 값이 예상과 맞는지 본다.
    **관측 중 `account_deletion_jobs` 의 `attempts`·`lease_owner`·`leased_until`·`updated_at`
    이 변하지 않아야 한다** — 변한다면 zero-write 계약이 깨진 것이므로 즉시 4를 중단한다.
@@ -141,7 +155,8 @@ dry-run 으로 남는다. 스케줄 real-run 스위치는 전용 env
 ## 6. PII 취급
 
 응답과 운영 로그에는 **사용자 uuid · 이메일 · Storage 경로 · job id 를 싣지 않는다.**
-개수(`claimed`, `planCount`, `errorCount`)와 상태명(`finalState`, `stopped`, `mode`)만 남는다.
+개수(`claimed`, `previewed`, `succeeded`, `failed`, `planCount`)와
+상태명(`finalState`, `stopped`, `mode`)만 남는다.
 
 워커/어댑터 오류 문자열은 원문에 버킷 경로와 uuid 가 섞일 수 있으므로
 `sanitizeDeletionCronError` 가 화이트리스트(`^[a-z0-9_]{1,64}$`, 긴 hex 차단)로

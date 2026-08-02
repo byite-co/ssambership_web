@@ -14,6 +14,7 @@
 //   R7 lease 를 쥔 job 은 두 번째 러너가 다시 집지 않는다.
 //   R8 응답 어디에도 uuid·이메일·Storage 경로·job id 가 없다.
 //   R9 POST 수동 경로의 기존 계약(?dryRun=false · x-cron-secret · limit/leaseSeconds)은 그대로다.
+//   R10 응답 카운터 — claimed 는 **lease 획득 수**, succeeded/failed 와 분리된다.
 //
 // ★ write seam 은 `reclaimExpiredLeases` 와 `claimJobs` 둘뿐이다(둘 다 account_deletion_jobs
 //   UPDATE). fake 는 이 둘이 불릴 때마다 trace.writes 에 흔적을 남기고, dry-run 계열
@@ -641,7 +642,7 @@ test("R8 운영 로그 meta 에도 PII 를 싣지 않는다", async () => {
   assertNoPii(JSON.stringify(logged), "운영 로그");
 });
 
-// ── 기타 ────────────────────────────────────────────────────────────────────
+// ── 러너 생성 실패 ──────────────────────────────────────────────────────────
 
 test("createRunner 가 던지면 500 server_config — 부분 실행으로 넘어가지 않는다", async () => {
   const res = await handleAccountDeletionCron(
@@ -655,6 +656,173 @@ test("createRunner 가 던지면 500 server_config — 부분 실행으로 넘�
   assert.equal(res.status, 500);
   assert.deepEqual(await body(res), { ok: false, error: "server_config" });
 });
+
+// ── R10 응답 카운터 — claimed vs succeeded/failed ────────────────────────────
+
+/** n 건을 claim 하고, 앞에서부터 failAt 개를 runJob 예외로 만드는 fake. */
+function makePartialFailureRunner(
+  trace: Trace,
+  total: number,
+  failCount: number
+): DeletionCronRunner {
+  const pool: CronClaimedJob[] = Array.from({ length: total }, () => ({
+    userId: PII.userId,
+    state: "pending",
+    dryRun: false,
+  }));
+  let seen = 0;
+  return {
+    previewJobs: async (limit) => {
+      trace.previews.push(limit);
+      return pool.slice(0, limit);
+    },
+    reclaimExpiredLeases: async () => {
+      trace.writes.push("reclaimExpiredLeases");
+      trace.reclaim += 1;
+      return 0;
+    },
+    claimJobs: async (owner, limit, leaseSeconds) => {
+      trace.writes.push("claimJobs");
+      trace.claims.push({ owner, limit, leaseSeconds });
+      return pool.slice(0, limit);
+    },
+    runJob: async (job) => {
+      trace.ran.push(job);
+      // lease 는 이미 잡힌 뒤다 — 여기서 던져도 claimed 에서 빠지면 안 된다.
+      if (seen++ < failCount) throw new Error(`storage residue: ${PII.storagePath}`);
+      if (!job.dryRun) trace.destructive += 1;
+      return { ok: true, finalState: "completed", dryRun: job.dryRun };
+    },
+  };
+}
+
+function realRunReq() {
+  return req({ method: "POST", secret: SECRET, query: "?dryRun=false" });
+}
+
+test("R10 real-run 3건 claim · 전부 성공 → claimed 3 · succeeded 3 · failed 0", async () => {
+  const trace = newTrace();
+  const json = await body(
+    await handleAccountDeletionCron(
+      realRunReq(),
+      makeDeps({ trigger: "manual", createRunner: () => makePartialFailureRunner(trace, 3, 0) })
+    )
+  );
+  assert.equal(json.claimed, 3);
+  assert.equal(json.succeeded, 3);
+  assert.equal(json.failed, 0);
+  assert.equal(json.previewed, 0);
+  assert.equal(json.ok, true);
+});
+
+test("R10 real-run 3건 claim · 2건 성공 1건 예외 → claimed 3 · succeeded 2 · failed 1 · ok false", async () => {
+  const trace = newTrace();
+  const json = await body(
+    await handleAccountDeletionCron(
+      realRunReq(),
+      makeDeps({ trigger: "manual", createRunner: () => makePartialFailureRunner(trace, 3, 1) })
+    )
+  );
+  assert.equal(json.claimed, 3, "예외로 끝난 job 도 lease 는 이미 획득했다");
+  assert.equal(json.succeeded, 2);
+  assert.equal(json.failed, 1);
+  assert.equal(json.ok, false);
+  assert.equal(trace.ran.length, 3, "claim 한 3건 모두 실행을 시도한다");
+});
+
+test("R10 real-run 1건 claim · 1건 예외 → claimed 1 · succeeded 0 · failed 1", async () => {
+  const trace = newTrace();
+  const json = await body(
+    await handleAccountDeletionCron(
+      realRunReq(),
+      makeDeps({ trigger: "manual", createRunner: () => makePartialFailureRunner(trace, 1, 1) })
+    )
+  );
+  assert.equal(json.claimed, 1, "claimed 는 결과 수가 아니라 lease 획득 수다");
+  assert.equal(json.succeeded, 0);
+  assert.equal(json.failed, 1);
+  assert.equal(json.ok, false);
+  assert.deepEqual(json.results, [], "성공 결과는 없다");
+});
+
+test("R10 real-run 에서 claimed = succeeded + failed 가 성립한다", async () => {
+  for (const [total, fails] of [
+    [1, 0],
+    [3, 1],
+    [5, 5],
+  ] as const) {
+    const trace = newTrace();
+    const json = await body(
+      await handleAccountDeletionCron(
+        realRunReq(),
+        makeDeps({
+          trigger: "manual",
+          createRunner: () => makePartialFailureRunner(trace, total, fails),
+        })
+      )
+    );
+    assert.equal(
+      json.claimed,
+      (json.succeeded as number) + (json.failed as number),
+      `total=${total} fails=${fails}`
+    );
+    assert.equal(json.claimed, total);
+  }
+});
+
+test("R10 dry-run preview 3건 → claimed 0 · previewed 3 · DB write 0", async () => {
+  const trace = newTrace();
+  const json = await body(
+    await handleAccountDeletionCron(
+      req({ secret: SECRET }),
+      makeDeps({ createRunner: () => makePartialFailureRunner(trace, 3, 0) })
+    )
+  );
+  assert.equal(json.claimed, 0);
+  assert.equal(json.previewed, 3);
+  assert.equal(json.succeeded, 3, "read-only planner 는 3건 모두 돌린다");
+  assert.equal(json.failed, 0);
+  assertZeroWrite(trace, "dry-run preview 3건");
+});
+
+test("R10 disabled → claimed 0 · previewed 0 · succeeded 0 · failed 0", async () => {
+  for (const over of [{ workerEnabledRaw: undefined }, { featureEnabled: false }]) {
+    const trace = newTrace();
+    const json = await body(
+      await handleAccountDeletionCron(
+        req({ secret: SECRET }),
+        makeDeps({ createRunner: () => makePartialFailureRunner(trace, 3, 0), ...over })
+      )
+    );
+    assert.equal(json.claimed, 0, JSON.stringify(over));
+    assert.equal(json.previewed, 0);
+    assert.equal(json.succeeded, 0);
+    assert.equal(json.failed, 0);
+    assert.equal(trace.previews.length, 0);
+    assertZeroWrite(trace, JSON.stringify(over));
+  }
+});
+
+test("R10 uncovered bucket 차단도 카운터가 전부 0", async () => {
+  const trace = newTrace();
+  const json = await body(
+    await handleAccountDeletionCron(
+      realRunReq(),
+      makeDeps({
+        trigger: "manual",
+        uncoveredBuckets: ["orphan-bucket"],
+        createRunner: () => makePartialFailureRunner(trace, 3, 0),
+      })
+    )
+  );
+  assert.equal(json.blocked, "uncovered_buckets");
+  assert.equal(json.claimed, 0);
+  assert.equal(json.previewed, 0);
+  assert.equal(json.succeeded, 0);
+  assert.equal(json.failed, 0);
+});
+
+// ── 기타 ────────────────────────────────────────────────────────────────────
 
 test("응답은 호출 출처를 밝혀 스케줄·수동 실행을 로그에서 구분할 수 있게 한다", async () => {
   for (const trigger of ["scheduled", "manual"] as DeletionCronTrigger[]) {
