@@ -22,6 +22,17 @@
  * worker env(①) + 기능 플래그(②) + 명시적 real-run 요청(③)을 모두 통과시킨 뒤,
  * 여기서 미커버 버킷 게이트(④)까지 통과해야 시작된다. 하나라도 어긋나면 dry-run
  * 또는 disabled 로 강등되며 job 을 claim 하지 않는다(fail-closed 기본값).
+ *
+ * ── dry-run zero-write 계약 ──────────────────────────────────────────────────
+ * dry-run 을 "read-only" 라고 부르려면 **DB write 가 실제로 0** 이어야 한다.
+ * `reclaimExpiredLeases` 와 `claimJobs` 는 둘 다 `account_deletion_jobs` 를 UPDATE 한다
+ * (lease_owner·leased_until·updated_at). 따라서 dry-run 은 이 둘을 부르지 않고,
+ * 같은 술어의 SELECT 인 `previewJobs` 로만 대상을 고른 뒤 워커의 read-only planner 를 돌린다.
+ *
+ *   disabled  runner 호출 0 (preview 포함) · DB/Storage/Auth 변경 0
+ *   dry-run   preview 1회 · reclaim 0 · claim 0 · lease/attempts/state 변경 0 ·
+ *             Storage/Auth/익명화 0 · 응답은 claimed:0 + previewed:N
+ *   real-run  reclaim → claim → runJob (기존 lease·중복 실행 계약 그대로)
  */
 
 import { timingSafeEqual } from "node:crypto";
@@ -142,11 +153,19 @@ export type CronJobRunResult = {
 /**
  * DB 에 닿는 부분 전부. 라우트는 Supabase service-role 클라이언트로 이걸 만들고,
  * 테스트는 fake 로 만든다 — 계약 테스트가 실제 job 에 절대 닿지 않는 경계다.
+ *
+ * ★ write seam 은 `reclaimExpiredLeases` 와 `claimJobs` **둘뿐**이다.
+ *   dry-run 은 이 둘을 호출하지 않는다(§ dry-run zero-write).
  */
 export type DeletionCronRunner = {
-  /** 만료 lease 회수 — 죽은 러너가 잡고 있던 job 을 다시 집을 수 있게 한다. */
+  /**
+   * dry-run 전용 **read-only** 조회. claim 과 같은 술어로 "real-run 이라면 집었을 job" 을
+   * SELECT 만으로 보여 준다. lease·attempts·state·updated_at 어느 것도 바꾸지 않는다.
+   */
+  previewJobs: (limit: number) => Promise<CronClaimedJob[]>;
+  /** [WRITE] 만료 lease 회수 — 죽은 러너가 잡고 있던 job 을 다시 집을 수 있게 한다. */
   reclaimExpiredLeases: () => Promise<number>;
-  /** 154 account_deletion_claim — lease(owner·leased_until) + SKIP LOCKED 중복 claim 방지. */
+  /** [WRITE] 154 account_deletion_claim — lease(owner·leased_until) + SKIP LOCKED 중복 claim 방지. */
   claimJobs: (owner: string, limit: number, leaseSeconds: number) => Promise<CronClaimedJob[]>;
   runJob: (job: CronClaimedJob) => Promise<CronJobRunResult>;
 };
@@ -208,6 +227,7 @@ export async function handleAccountDeletionCron(
       disabled: true,
       reason: mode.reason,
       claimed: 0,
+      previewed: 0,
     });
   }
 
@@ -226,6 +246,7 @@ export async function handleAccountDeletionCron(
       mode: mode.reason,
       dryRun: mode.dryRun,
       claimed: 0,
+      previewed: 0,
       uncoveredBuckets: deps.uncoveredBuckets,
     });
   }
@@ -244,10 +265,20 @@ export async function handleAccountDeletionCron(
 
   const results: Array<Record<string, unknown>> = [];
   const errors: string[] = [];
+  let jobs: CronClaimedJob[];
 
   try {
-    await runner.reclaimExpiredLeases();
-    const jobs = await runner.claimJobs(deps.makeOwner(), limit, leaseSeconds);
+    // ── dry-run zero-write 경계 ────────────────────────────────────────────────
+    // reclaim 과 claim 은 account_deletion_jobs 를 UPDATE 한다(lease_owner·leased_until·
+    // updated_at, 그리고 claim 은 재시도 회계에 영향을 준다). dry-run 이 이들을 부르면
+    // "삭제는 안 했지만 job 행은 건드렸다"가 되어, 운영 관측(스케줄 dry-run 여러 사이클)이
+    // 관측 대상 자체를 오염시킨다. 그래서 write seam 은 real-run 에서만 열린다.
+    if (mode.dryRun) {
+      jobs = await runner.previewJobs(limit);
+    } else {
+      await runner.reclaimExpiredLeases();
+      jobs = await runner.claimJobs(deps.makeOwner(), limit, leaseSeconds);
+    }
 
     for (const job of jobs) {
       const dryRun = effectiveJobDryRun(job.dryRun, mode);
@@ -266,15 +297,20 @@ export async function handleAccountDeletionCron(
       }
     }
   } catch (cause) {
-    // claim/reclaim 실패도 원문을 흘리지 않는다(어댑터 오류에 RPC 인자가 섞일 수 있다).
+    // preview/claim/reclaim 실패도 원문을 흘리지 않는다(어댑터 오류에 RPC 인자가 섞일 수 있다).
     return Response.json({ ok: false, error: sanitizeDeletionCronError(cause) }, { status: 500 });
   }
+
+  // dry-run 은 아무것도 claim 하지 않았다 — 조회한 대상 수는 previewed 로만 센다.
+  const claimed = mode.dryRun ? 0 : results.length;
+  const previewed = mode.dryRun ? jobs.length : 0;
 
   deps.log?.("account_deletion_cron_done", {
     trigger: deps.trigger,
     mode: mode.reason,
     dryRun: mode.dryRun,
-    claimed: results.length,
+    claimed,
+    previewed,
     errorCount: errors.length,
   });
 
@@ -283,7 +319,8 @@ export async function handleAccountDeletionCron(
     trigger: deps.trigger,
     mode: mode.reason,
     dryRun: mode.dryRun,
-    claimed: results.length,
+    claimed,
+    previewed,
     results,
     errors,
     // 사용자 prefix 스캔으로 커버되지 않는 버킷을 매 응답에 드러낸다(조용한 미삭제 방지).

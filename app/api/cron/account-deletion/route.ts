@@ -6,6 +6,7 @@ import {
   ACCOUNT_DELETION_UNCOVERED_BUCKETS,
   buildDeletionDeps,
   claimDeletionJobs,
+  previewDeletionJobs,
   reclaimExpiredDeletionLeases,
 } from "@/lib/account/accountDeletionAdapters";
 import {
@@ -34,6 +35,11 @@ import {
  *   ⑥ claim lease 획득 성공
  * 하나라도 어긋나면 claim 0건 · Storage/Auth/DB 무변경 · dry-run 또는 disabled 응답.
  *
+ * ── dry-run zero-write ───────────────────────────────────────────────────────
+ * dry-run 은 `previewDeletionJobs`(SELECT)로만 대상을 고른다. reclaim·claim 은
+ * `account_deletion_jobs` 를 UPDATE 하므로 real-run 에서만 호출한다.
+ * 응답은 `claimed: 0` + `previewed: N` 으로 둘을 구분한다.
+ *
  * 인증은 기존 cron 라우트 2종과 동일한 timing-safe CRON_SECRET 비교다.
  * lease 는 154 account_deletion_claim(owner·leased_until)만 쓴다 —
  * 151 account_deletion_worker_claim 은 lease 를 다루지 않아 중복 처리가 가능하므로 쓰지 않는다.
@@ -57,6 +63,8 @@ function buildDeps(trigger: DeletionCronTrigger): AccountDeletionCronDeps {
       // log 를 주입하지 않는다 — 워커 로그 meta 에 Storage 경로가 실릴 수 있다.
       const workerDeps = buildDeletionDeps(admin);
       return {
+        // dry-run 전용 read-only SELECT — job 행을 UPDATE 하지 않는다.
+        previewJobs: (limit) => previewDeletionJobs(admin, limit),
         reclaimExpiredLeases: () => reclaimExpiredDeletionLeases(admin),
         claimJobs: (owner, limit, leaseSeconds) =>
           claimDeletionJobs(admin, owner, limit, leaseSeconds),

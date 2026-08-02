@@ -7,13 +7,17 @@
 // 고정하는 계약:
 //   R1 인증 fail-closed — 비밀 미설정·무인증·오답 bearer 는 GET/POST 모두 401.
 //   R2 스케줄(GET) real-run 은 **쿼리스트링으로 켜지지 않는다** — 전용 env 만이 스위치.
-//   R3 worker env OFF / 기능 플래그 OFF → disabled · claim 0 (job 을 집지도 않는다).
-//   R4 기본값은 dry-run — 실삭제 0.
+//   R3 worker env OFF / 기능 플래그 OFF → disabled · runner 호출 0(preview 포함).
+//   R4 dry-run 은 **zero-write** — preview 1회 · reclaim 0 · claim 0 · 실삭제 0.
 //   R5 미커버 버킷이 있으면 real-run 시작 0(claim 0).
-//   R6 만료 lease 회수는 claim 이전에 항상 1회.
+//   R6 real-run 만 write seam 을 연다 — 만료 lease 회수는 claim 이전에 1회.
 //   R7 lease 를 쥔 job 은 두 번째 러너가 다시 집지 않는다.
 //   R8 응답 어디에도 uuid·이메일·Storage 경로·job id 가 없다.
 //   R9 POST 수동 경로의 기존 계약(?dryRun=false · x-cron-secret · limit/leaseSeconds)은 그대로다.
+//
+// ★ write seam 은 `reclaimExpiredLeases` 와 `claimJobs` 둘뿐이다(둘 다 account_deletion_jobs
+//   UPDATE). fake 는 이 둘이 불릴 때마다 trace.writes 에 흔적을 남기고, dry-run 계열
+//   테스트는 그 배열이 **비어 있음**을 요구한다 — "삭제는 안 했지만 job 행은 건드렸다"를 막는다.
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -45,15 +49,19 @@ const PII = {
 };
 
 type Trace = {
+  /** [READ] preview 호출 인자 — dry-run 이 대상을 고르는 유일한 경로. */
+  previews: number[];
   reclaim: number;
   claims: Array<{ owner: string; limit: number; leaseSeconds: number }>;
+  /** account_deletion_jobs 를 UPDATE 하는 seam 이 불린 흔적. dry-run 에서는 반드시 비어 있다. */
+  writes: string[];
   ran: Array<CronClaimedJob>;
   /** dryRun=false 로 실제 파괴 단계에 들어간 job 수 — 0 이어야 하는 테스트가 대부분이다. */
   destructive: number;
 };
 
 function newTrace(): Trace {
-  return { reclaim: 0, claims: [], ran: [], destructive: 0 };
+  return { previews: [], reclaim: 0, claims: [], writes: [], ran: [], destructive: 0 };
 }
 
 /** lease 를 흉내내는 fake — 같은 job 을 두 번 집지 않고, 만료 회수 후에만 다시 집는다. */
@@ -64,11 +72,18 @@ function makeRunner(
   const pool = opts.jobs ?? [{ userId: PII.userId, state: "pending", dryRun: false }];
   let leased = opts.leaseHeld ?? false;
   return {
+    // read-only: lease 상태를 읽기만 하고 바꾸지 않는다(실어댑터의 SELECT 대응).
+    previewJobs: async (limit) => {
+      trace.previews.push(limit);
+      return leased ? [] : pool.slice(0, limit);
+    },
     reclaimExpiredLeases: async () => {
+      trace.writes.push("reclaimExpiredLeases");
       trace.reclaim += 1;
       return 0;
     },
     claimJobs: async (owner, limit, leaseSeconds) => {
+      trace.writes.push("claimJobs");
       trace.claims.push({ owner, limit, leaseSeconds });
       if (leased) return []; // 다른 러너가 lease 를 쥐고 있다 — SKIP LOCKED.
       leased = true;
@@ -80,6 +95,14 @@ function makeRunner(
       return { ok: true, finalState: job.dryRun ? job.state : "completed", dryRun: job.dryRun };
     },
   };
+}
+
+/** dry-run 계열 공통 단언 — job 행을 건드리는 seam 이 하나도 불리지 않았는가. */
+function assertZeroWrite(trace: Trace, label: string) {
+  assert.deepEqual(trace.writes, [], `${label}: DB write seam 0`);
+  assert.equal(trace.reclaim, 0, `${label}: reclaim 0`);
+  assert.equal(trace.claims.length, 0, `${label}: claim 0`);
+  assert.equal(trace.destructive, 0, `${label}: 파괴 실행 0`);
 }
 
 function makeDeps(over: Partial<AccountDeletionCronDeps> = {}): AccountDeletionCronDeps {
@@ -180,7 +203,7 @@ test("R1 인증 판별 단위 — 두 헤더 형태만 인정하고 나머지는
 
 // ── R2 스케줄 경로는 쿼리스트링으로 실삭제되지 않는다 ────────────────────────
 
-test("R2 scheduled GET 은 ?dryRun=false 를 무시한다 — 실삭제 0", async () => {
+test("R2 scheduled GET 은 ?dryRun=false 를 무시한다 — 실삭제 0 · write 0", async () => {
   const trace = newTrace();
   const res = await handleAccountDeletionCron(
     req({ secret: SECRET, query: "?dryRun=false" }),
@@ -189,7 +212,7 @@ test("R2 scheduled GET 은 ?dryRun=false 를 무시한다 — 실삭제 0", asyn
   const json = await body(res);
   assert.equal(json.dryRun, true);
   assert.equal(json.mode, "dry_run_default");
-  assert.equal(trace.destructive, 0, "쿼리스트링만으로 파괴 실행이 시작되면 안 된다");
+  assertZeroWrite(trace, "쿼리스트링만으로 파괴 실행·claim 이 시작되면 안 된다");
 });
 
 test("R2 scheduled GET 의 real-run 스위치는 전용 env 뿐이다", () => {
@@ -232,7 +255,10 @@ test("R2 scheduled real-run env 가 켜지고 나머지 조건이 모두 참일 
   assert.equal(json.mode, "real_run");
   assert.equal(json.dryRun, false);
   assert.equal(json.claimed, 1);
+  assert.equal(json.previewed, 0, "real-run 은 preview 를 쓰지 않는다");
+  assert.equal(trace.previews.length, 0);
   assert.equal(trace.destructive, 1, "네 관문을 모두 통과했을 때만 claim·실행이 일어난다");
+  assert.deepEqual(trace.writes, ["reclaimExpiredLeases", "claimJobs"], "real-run 만 write seam 을 연다");
 });
 
 test("R2 env 는 켜져 있어도 worker env 나 기능 플래그가 꺼져 있으면 claim 0", async () => {
@@ -245,14 +271,14 @@ test("R2 env 는 켜져 있어도 worker env 나 기능 플래그가 꺼져 있�
     const json = await body(res);
     assert.equal(json.disabled, true, JSON.stringify(over));
     assert.equal(json.claimed, 0);
-    assert.equal(trace.claims.length, 0);
-    assert.equal(trace.destructive, 0);
+    assertZeroWrite(trace, JSON.stringify(over));
+    assert.equal(trace.previews.length, 0, "disabled 는 preview 조차 하지 않는다");
   }
 });
 
 // ── R3 kill switch ──────────────────────────────────────────────────────────
 
-test("R3 worker env OFF → disabled · claimed 0 · reclaim 도 하지 않는다", async () => {
+test("R3 worker env OFF → disabled · preview 포함 모든 runner 호출 0", async () => {
   const trace = newTrace();
   const res = await handleAccountDeletionCron(
     req({ secret: SECRET }),
@@ -263,12 +289,13 @@ test("R3 worker env OFF → disabled · claimed 0 · reclaim 도 하지 않는�
   assert.equal(json.disabled, true);
   assert.equal(json.reason, "worker_disabled");
   assert.equal(json.claimed, 0);
-  assert.equal(trace.reclaim, 0);
-  assert.equal(trace.claims.length, 0);
+  assert.equal(json.previewed, 0);
+  assertZeroWrite(trace, "worker OFF");
+  assert.equal(trace.previews.length, 0, "preview 도 하지 않는다");
   assert.equal(trace.ran.length, 0);
 });
 
-test("R3 기능 플래그 OFF → disabled · claimed 0", async () => {
+test("R3 기능 플래그 OFF → disabled · preview 포함 모든 runner 호출 0", async () => {
   const trace = newTrace();
   const res = await handleAccountDeletionCron(
     req({ secret: SECRET }),
@@ -278,7 +305,10 @@ test("R3 기능 플래그 OFF → disabled · claimed 0", async () => {
   assert.equal(json.disabled, true);
   assert.equal(json.reason, "feature_disabled");
   assert.equal(json.claimed, 0);
-  assert.equal(trace.claims.length, 0);
+  assert.equal(json.previewed, 0);
+  assertZeroWrite(trace, "feature OFF");
+  assert.equal(trace.previews.length, 0, "preview 도 하지 않는다");
+  assert.equal(trace.ran.length, 0);
 });
 
 test("R3 env 이름은 문서·라우트가 같은 상수를 본다", () => {
@@ -286,32 +316,64 @@ test("R3 env 이름은 문서·라우트가 같은 상수를 본다", () => {
   assert.equal(ACCOUNT_DELETION_SCHEDULED_REAL_RUN_ENV, "ACCOUNT_DELETION_SCHEDULED_REAL_RUN");
 });
 
-// ── R4 기본 dry-run ─────────────────────────────────────────────────────────
+// ── R4 dry-run zero-write ───────────────────────────────────────────────────
 
-test("R4 파라미터 없는 기본 요청은 GET·POST 모두 dry-run — 실삭제 0", async () => {
-  for (const trigger of ["scheduled", "manual"] as const) {
-    const trace = newTrace();
-    const res = await handleAccountDeletionCron(
-      req({ method: trigger === "scheduled" ? "GET" : "POST", secret: SECRET }),
-      makeDeps({ trigger, createRunner: () => makeRunner(trace) })
-    );
-    const json = await body(res);
-    assert.equal(json.mode, "dry_run_default", trigger);
-    assert.equal(json.dryRun, true, trigger);
-    assert.equal(trace.destructive, 0, trigger);
-    assert.equal(trace.ran.length, 1, `${trigger}: 계획 산출은 수행한다`);
-    assert.equal(trace.ran[0]!.dryRun, true, trigger);
-  }
+test("R4 scheduled 기본 dry-run — preview 1회 · reclaim 0 · claim 0 · write seam 0", async () => {
+  const trace = newTrace();
+  const res = await handleAccountDeletionCron(
+    req({ secret: SECRET }),
+    makeDeps({ trigger: "scheduled", createRunner: () => makeRunner(trace) })
+  );
+  const json = await body(res);
+  assert.equal(json.mode, "dry_run_default");
+  assert.equal(json.dryRun, true);
+  assert.equal(json.claimed, 0, "dry-run 은 아무것도 claim 하지 않는다");
+  assert.equal(json.previewed, 1, "조회한 대상 수는 previewed 로 센다");
+  assert.deepEqual(trace.previews, [5], "preview 정확히 1회(기본 limit)");
+  assertZeroWrite(trace, "scheduled 기본 dry-run");
 });
 
-test("R4 명시적 dry-run 요청도 실삭제 0", async () => {
+test("R4 manual 명시적 dry-run — preview 1회 · reclaim 0 · claim 0 · write seam 0", async () => {
   const trace = newTrace();
   const res = await handleAccountDeletionCron(
     req({ method: "POST", secret: SECRET, query: "?dryRun=true" }),
     makeDeps({ trigger: "manual", createRunner: () => makeRunner(trace) })
   );
-  assert.equal((await body(res)).dryRun, true);
-  assert.equal(trace.destructive, 0);
+  const json = await body(res);
+  assert.equal(json.dryRun, true);
+  assert.equal(json.mode, "dry_run_explicit", "명시 요청은 기본값과 구분된다");
+  assert.equal(json.claimed, 0);
+  assert.equal(json.previewed, 1);
+  assert.equal(trace.previews.length, 1);
+  assertZeroWrite(trace, "manual 명시적 dry-run");
+});
+
+test("R4 manual 기본 요청(파라미터 없음)도 dry-run zero-write", async () => {
+  const trace = newTrace();
+  const res = await handleAccountDeletionCron(
+    req({ method: "POST", secret: SECRET }),
+    makeDeps({ trigger: "manual", createRunner: () => makeRunner(trace) })
+  );
+  const json = await body(res);
+  assert.equal(json.mode, "dry_run_default");
+  assert.equal(json.claimed, 0);
+  assert.equal(json.previewed, 1);
+  assertZeroWrite(trace, "manual 기본 dry-run");
+});
+
+test("R4 dry-run 은 preview 한 대상에 대해 read-only planner 를 돌린다(전부 dryRun=true)", async () => {
+  const trace = newTrace();
+  // job 행이 dry_run=false 여도 러너가 dry 면 dry 로 내려간다.
+  await handleAccountDeletionCron(
+    req({ secret: SECRET }),
+    makeDeps({
+      createRunner: () =>
+        makeRunner(trace, { jobs: [{ userId: PII.userId, state: "pending", dryRun: false }] }),
+    })
+  );
+  assert.equal(trace.ran.length, 1, "미리보기 계획은 산출한다");
+  assert.equal(trace.ran[0]!.dryRun, true, "러너가 dry 면 job 도 dry — 파괴 단계 진입 0");
+  assertZeroWrite(trace, "dry-run planner");
 });
 
 test("R4 job 행이 dry_run 이면 러너가 real-run 이어도 그 job 은 dry 로 남는다", async () => {
@@ -351,9 +413,8 @@ test("R5 미커버 버킷이 있으면 real-run 은 claim 조차 하지 않는�
     assert.equal(json.ok, false, trigger);
     assert.equal(json.blocked, "uncovered_buckets", trigger);
     assert.equal(json.claimed, 0, trigger);
-    assert.equal(trace.claims.length, 0, `${trigger}: claim 0`);
-    assert.equal(trace.reclaim, 0, `${trigger}: 게이트가 claim 이전이다`);
-    assert.equal(trace.destructive, 0, trigger);
+    assertZeroWrite(trace, `${trigger}: 게이트가 claim 이전이다`);
+    assert.equal(trace.previews.length, 0, `${trigger}: 조회조차 하지 않는다`);
   }
 });
 
@@ -366,7 +427,8 @@ test("R5 dry-run 은 미커버 버킷이 있어도 계획 산출을 계속한다
   const json = await body(res);
   assert.equal(json.blocked, undefined);
   assert.deepEqual(json.uncoveredBuckets, ["orphan-bucket"], "매 응답에 드러낸다");
-  assert.equal(trace.destructive, 0);
+  assert.equal(trace.previews.length, 1, "진단은 preview 로만 한다");
+  assertZeroWrite(trace, "미커버 + dry-run");
 });
 
 test("R5 게이트 판정 단위 — real-run 이면서 미커버가 있을 때만 막는다", () => {
@@ -381,23 +443,27 @@ test("R5 게이트 판정 단위 — real-run 이면서 미커버가 있을 때�
 
 // ── R6·R7 lease ─────────────────────────────────────────────────────────────
 
-test("R6 만료 lease 회수는 claim 이전에 정확히 1회 일어난다", async () => {
+test("R6 real-run 에서 만료 lease 회수는 claim 이전에 정확히 1회 일어난다", async () => {
   const trace = newTrace();
   await handleAccountDeletionCron(
-    req({ secret: SECRET }),
-    makeDeps({ createRunner: () => makeRunner(trace) })
+    req({ method: "POST", secret: SECRET, query: "?dryRun=false" }),
+    makeDeps({ trigger: "manual", createRunner: () => makeRunner(trace) })
   );
   assert.equal(trace.reclaim, 1);
   assert.equal(trace.claims.length, 1);
+  assert.deepEqual(trace.writes, ["reclaimExpiredLeases", "claimJobs"], "순서도 고정한다");
+  assert.equal(trace.previews.length, 0);
 });
 
 test("R7 lease 를 쥔 job 은 두 번째 러너가 다시 집지 않는다(중복 claim 방지)", async () => {
   const trace = newTrace();
   const runner = makeRunner(trace); // 두 호출이 같은 fake lease 상태를 공유한다.
-  const deps = makeDeps({ createRunner: () => runner });
+  const deps = makeDeps({ trigger: "manual", createRunner: () => runner });
+  const realRun = () =>
+    handleAccountDeletionCron(req({ method: "POST", secret: SECRET, query: "?dryRun=false" }), deps);
 
-  const first = await body(await handleAccountDeletionCron(req({ secret: SECRET }), deps));
-  const second = await body(await handleAccountDeletionCron(req({ secret: SECRET }), deps));
+  const first = await body(await realRun());
+  const second = await body(await realRun());
 
   assert.equal(first.claimed, 1);
   assert.equal(second.claimed, 0, "lease 가 살아 있는 동안 같은 job 을 다시 집지 않는다");
@@ -410,12 +476,18 @@ test("R7 만료 lease 는 회수 후 다시 집힌다", async () => {
   // 회수 이전에는 claim 이 비고, 회수 이후에만 job 이 나온다.
   let reclaimed = false;
   const runner: DeletionCronRunner = {
+    previewJobs: async (limit) => {
+      trace.previews.push(limit);
+      return [];
+    },
     reclaimExpiredLeases: async () => {
+      trace.writes.push("reclaimExpiredLeases");
       trace.reclaim += 1;
       reclaimed = true;
       return 1;
     },
     claimJobs: async (owner, limit, leaseSeconds) => {
+      trace.writes.push("claimJobs");
       trace.claims.push({ owner, limit, leaseSeconds });
       return reclaimed ? [{ userId: PII.userId, state: "pending", dryRun: false }] : [];
     },
@@ -427,7 +499,10 @@ test("R7 만료 lease 는 회수 후 다시 집힌다", async () => {
   };
 
   const res = await body(
-    await handleAccountDeletionCron(req({ secret: SECRET }), makeDeps({ createRunner: () => runner }))
+    await handleAccountDeletionCron(
+      req({ method: "POST", secret: SECRET, query: "?dryRun=false" }),
+      makeDeps({ trigger: "manual", createRunner: () => runner })
+    )
   );
   assert.equal(trace.reclaim, 1);
   assert.equal(res.claimed, 1, "만료 회수 뒤에는 다시 집을 수 있어야 한다");
@@ -436,10 +511,20 @@ test("R7 만료 lease 는 회수 후 다시 집힌다", async () => {
 test("R9 limit·leaseSeconds 쿼리 정규화는 기존 계약대로 claim 에 전달된다", async () => {
   const trace = newTrace();
   await handleAccountDeletionCron(
-    req({ method: "POST", secret: SECRET, query: "?limit=99&leaseSeconds=10" }),
+    req({ method: "POST", secret: SECRET, query: "?dryRun=false&limit=99&leaseSeconds=10" }),
     makeDeps({ trigger: "manual", createRunner: () => makeRunner(trace) })
   );
   assert.deepEqual(trace.claims[0], { owner: "cron-test-owner", limit: 20, leaseSeconds: 60 });
+});
+
+test("R9 dry-run 의 limit 정규화도 동일하게 preview 로 전달된다", async () => {
+  const trace = newTrace();
+  await handleAccountDeletionCron(
+    req({ method: "POST", secret: SECRET, query: "?limit=99" }),
+    makeDeps({ trigger: "manual", createRunner: () => makeRunner(trace) })
+  );
+  assert.deepEqual(trace.previews, [20], "상한 20 — claim 과 같은 정규화");
+  assertZeroWrite(trace, "dry-run limit 정규화");
 });
 
 // ── R8 PII 무유출 ───────────────────────────────────────────────────────────
@@ -478,6 +563,7 @@ test("R8 job 오류 메시지가 PII 를 담고 있어도 응답에는 코드만
     req({ secret: SECRET }),
     makeDeps({
       createRunner: () => ({
+        previewJobs: async () => [{ userId: PII.userId, state: "purging", dryRun: true }],
         reclaimExpiredLeases: async () => 0,
         claimJobs: async () => [{ userId: PII.userId, state: "purging", dryRun: true }],
         runJob: async () => {
@@ -493,9 +579,11 @@ test("R8 job 오류 메시지가 PII 를 담고 있어도 응답에는 코드만
 
 test("R8 claim 실패 500 응답도 원문을 흘리지 않는다", async () => {
   const res = await handleAccountDeletionCron(
-    req({ secret: SECRET }),
+    req({ method: "POST", secret: SECRET, query: "?dryRun=false" }),
     makeDeps({
+      trigger: "manual",
       createRunner: () => ({
+        previewJobs: async () => [],
         reclaimExpiredLeases: async () => 0,
         claimJobs: async () => {
           throw new Error(`claim failed: row ${PII.jobId} for ${PII.email}`);
@@ -508,6 +596,26 @@ test("R8 claim 실패 500 응답도 원문을 흘리지 않는다", async () => 
   const text = await res.text();
   assertNoPii(text, "claim 실패 응답");
   assert.equal((JSON.parse(text) as { error: string }).error, "claim_failed");
+});
+
+test("R8 preview 실패 500 응답도 원문을 흘리지 않는다", async () => {
+  const res = await handleAccountDeletionCron(
+    req({ secret: SECRET }),
+    makeDeps({
+      createRunner: () => ({
+        previewJobs: async () => {
+          throw new Error(`preview failed: ${PII.storagePath} / ${PII.userId}`);
+        },
+        reclaimExpiredLeases: async () => 0,
+        claimJobs: async () => [],
+        runJob: async () => ({ ok: true, finalState: "pending", dryRun: true }),
+      }),
+    })
+  );
+  assert.equal(res.status, 500);
+  const text = await res.text();
+  assertNoPii(text, "preview 실패 응답");
+  assert.equal((JSON.parse(text) as { error: string }).error, "preview_failed");
 });
 
 test("R8 오류 축약 단위 — 안전 코드만 통과시키고 나머지는 job_failed 로 접는다", () => {

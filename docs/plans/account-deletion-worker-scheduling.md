@@ -35,6 +35,37 @@ worker 코드는 이전부터 있었지만 **자동 호출 배선이 없었다**
 하나라도 어긋나면 **job claim 0건 · Storage 삭제 0 · Auth 삭제 0 · DB 익명화 0**,
 응답은 `disabled` 또는 `dryRun: true` 다. 기본값은 언제나 fail-closed.
 
+## 2-1. dry-run zero-write 계약
+
+dry-run 을 "read-only" 라고 부르려면 **DB write 가 실제로 0** 이어야 한다.
+`account_deletion_reclaim_expired` 와 `account_deletion_claim` 은 둘 다
+`account_deletion_jobs` 를 UPDATE 한다(`lease_owner` · `leased_until` · `updated_at`).
+따라서 dry-run 은 이 둘을 **호출하지 않는다**.
+
+| 모드 | preview(SELECT) | reclaim(UPDATE) | claim(UPDATE) | worker | 응답 |
+|------|-----------------|-----------------|---------------|--------|------|
+| disabled | 0 | 0 | 0 | 0 | `disabled:true`, `claimed:0`, `previewed:0` |
+| dry-run | 1 | **0** | **0** | read-only planner | `dryRun:true`, `claimed:0`, `previewed:N` |
+| real-run | 0 | 1 | 1 | 전 단계 | `dryRun:false`, `claimed:N`, `previewed:0` |
+
+dry-run 의 대상 선정은 `previewDeletionJobs`(SELECT)가 담당하며, 154 `account_deletion_claim`
+과 **동일한 술어**를 쓴다(`state` ∈ 진행 가능 상태 · `next_attempt_at` 도래 ·
+`leased_until` 없음/만료 · `requested_at asc`). 술어가 갈라지면 dry-run 이 real-run 을
+예측하지 못하므로, 둘 중 하나를 바꾸면 다른 하나도 함께 바꿔야 한다.
+
+새 RPC·마이그레이션은 만들지 않았다 — 151 이 이미
+`grant select, insert, update on public.account_deletion_jobs to service_role` 를 부여하므로
+service-role SELECT 로 충분하다.
+
+### 응답 필드 의미
+
+| 필드 | 의미 |
+|------|------|
+| `claimed` | lease 를 획득해 **실제로 집은** job 수. dry-run 에서는 언제나 `0` |
+| `previewed` | dry-run 이 SELECT 로 **조회만** 한 대상 수. real-run 에서는 언제나 `0` |
+| `mode` | `worker_disabled` / `feature_disabled` / `dry_run_default` / `dry_run_explicit` / `real_run` |
+| `results[].planCount` | 삭제 계획에 담긴 Storage 객체 수(경로는 싣지 않는다) |
+
 ### 왜 스케줄 real-run 스위치를 따로 뒀나
 
 `vercel.json` 의 cron path 는 저장소에 평문으로 남는다. 그 URL 에 `?dryRun=false`
@@ -67,12 +98,13 @@ dry-run 으로 남는다. 스케줄 real-run 스위치는 전용 env
 
 매시간 정각 1회. `cancelable_until` 이 지난 job 을 늦어도 1시간 안에 집는다.
 
-> **배포 전 확인 필요:** Vercel Hobby 플랜은 cron 을 **1일 1회 · 최대 2개**로
-> 제한한다. 이 저장소는 이미 daily cron 2종(`subscription-renewal`,
-> `individual-question-expiry`)을 쓰고 있으므로, 매시간 cron 을 추가하면
-> **Pro 이상 플랜이 필요하다**. 현재 세션에서는 Vercel 플랜을 확인할 수 없어
-> 임의 주기로 대체하지 않고 hourly 를 그대로 두었다. Hobby 라면 배포가 실패하므로
-> 플랜 승급 또는 별도 스케줄러(Supabase `pg_cron` → HTTP 호출) 결정이 선행돼야 한다.
+> **배포 전 확인 필요 — 프로젝트 플랜 UNVERIFIED:** 이 저장소의 Vercel 플랜은
+> 현재 세션에서 확인되지 않았고(배포 설정 접근 금지 범위), **추정하지 않는다**.
+> Vercel 플랜에 따라 cron 빈도·개수 제한이 다르므로, hourly cron 3번째 항목이
+> 현 플랜에서 허용되는지는 **병합 전에 사람이 확인해야 한다**.
+> 확인 결과 허용되지 않는다면, 임의 주기로 낮추지 말고 플랜 승급 또는 별도
+> 스케줄러(Supabase `pg_cron` → HTTP 호출)를 결정한다. 이 회차에서는 목표 주기인
+> hourly 를 그대로 두었다.
 
 기존 cron 2종은 이 회차에서 수정하지 않았다.
 
@@ -88,13 +120,15 @@ dry-run 으로 남는다. 스케줄 real-run 스위치는 전용 env
 2. **인증 회귀 확인** — 인증 없는 `GET`/`POST` 가 401 인지 확인.
    (`curl -i https://<host>/api/cron/account-deletion` → 401)
 3. **수동 dry-run** — `POST` + `Authorization: Bearer $CRON_SECRET`, 쿼리 없음.
-   `dryRun:true`, `mode:"dry_run_default"`, `uncoveredBuckets: []` 확인.
+   `dryRun:true`, `mode:"dry_run_default"`, `claimed:0`, `uncoveredBuckets: []` 확인.
    `uncoveredBuckets` 가 비어 있지 않으면 **여기서 멈춘다**(⑤ 관문).
 4. **워커 ON, 스케줄은 여전히 dry-run** — `ACCOUNT_DELETION_WORKER_ENABLED=true`.
    `ACCOUNT_DELETION_SCHEDULED_REAL_RUN` 은 **설정하지 않는다**.
    최소 2~3 사이클(2~3시간) 동안 스케줄 GET 응답이
-   `mode:"dry_run_default"`, `claimed` ≥ 0, `errors: []` 인지 관측.
+   `mode:"dry_run_default"`, `claimed: 0`, `previewed` ≥ 0, `errors: []` 인지 관측.
    이 구간에서 계획 산출 결과(planCount)와 `stopped` 값이 예상과 맞는지 본다.
+   **관측 중 `account_deletion_jobs` 의 `attempts`·`lease_owner`·`leased_until`·`updated_at`
+   이 변하지 않아야 한다** — 변한다면 zero-write 계약이 깨진 것이므로 즉시 4를 중단한다.
 5. **단건 수동 real-run** — `POST ...?dryRun=false&limit=1`.
    대상 job 1건이 어디까지 진행되는지 확인하고 `account_deletion_jobs` 상태를 검수.
 6. **스케줄 real-run 개방** — 5 가 정상일 때만
@@ -118,9 +152,10 @@ dry-run 으로 남는다. 스케줄 real-run 스위치는 전용 env
 
 ---
 
-## 7. lease 계약
+## 7. lease 계약 (real-run 에만 적용)
 
-- 매 실행 시작에 `account_deletion_reclaim_expired` 1회 — 죽은 러너가 쥔 lease 회수.
+- **real-run** 실행 시작에 `account_deletion_reclaim_expired` 1회 — 죽은 러너가 쥔 lease 회수.
+  dry-run 은 회수도 claim 도 하지 않는다(§2-1).
 - claim 은 154 `account_deletion_claim`(owner + `leased_until` + `FOR UPDATE SKIP LOCKED`).
   151 `account_deletion_worker_claim` 은 lease 를 다루지 않아 중복 처리가 가능하므로 **쓰지 않는다**.
 - 따라서 cron 이 겹쳐 실행돼도 같은 job 을 두 러너가 동시에 집지 않는다.
