@@ -15,9 +15,10 @@
 //   - S2 forward 각각에 supabase/rollback/<TS>_<STEM>_rollback.sql 정확히 1개 —
 //     단 M10(contract_permission_assertions)은 상태 0 checkpoint 로 rollback 없음(정확히 0개).
 //   - rollback 은 supabase/sql/ 아래 금지·clean-install 수에 불포함.
-//   - 레거시 190개·제외 15개 불변 / MC(S2-4 baseline convergence)·F2(D-12) 편입 후
-//     supabase/sql/*.sql 총 208개(190+18) / 정규 clean-install 175+18=193 ·
-//     rollback 17개(M10 없음·M2/M3 retired).
+//   - 레거시 190개·제외 15개 불변 / MC(S2-4 baseline convergence)·F2(D-12)·
+//     S3C(build13 DB contract convergence) 편입 후
+//     supabase/sql/*.sql 총 209개(190+19) / 정규 clean-install 175+19=194 ·
+//     rollback 18개(M10 없음·M2/M3 retired).
 //   - MC(20260730095436_comments_author_label_baseline_convergence)는 S2-3 P0 D-1
 //     해소 계약이 지정한 과거 삽입 슬롯(M1<MC<M13)의 일회성 고정 timestamp 예외다
 //     — timestamp 정책 일반 변경이 아니다(S2-4 감사 문서 참조).
@@ -142,6 +143,7 @@ const S2_BATCH_F = [
 // POST-S2 forward (S2 프로그램 밖 — 동일 물리 정책, 전건 S2 뒤 timestamp)
 const POST_S2 = [
   { id: "F2-D12", stem: "qna_answer_notification_per_event" }, // 2026-08-01 질문방 답변 알림 행 단위 계약
+  { id: "S3-C", stem: "build13_db_contract_convergence" }, // 2026-08-02 Build 13 DB 계약 수렴(범위 A~E)
 ];
 const S2_EXPECTED = [...S2_BATCH_A, ...S2_BATCH_B, ...S2_BATCH_C, ...S2_BATCH_D, ...S2_BATCH_E, ...S2_BATCH_F, ...POST_S2];
 const S2_NO_ROLLBACK_STEMS = new Set(S2_EXPECTED.filter((x) => x.noRollback).map((x) => x.stem));
@@ -260,8 +262,8 @@ if (files.length !== EXPECTED_TOTAL) {
   fail(`supabase/sql/*.sql 총수 ${EXPECTED_TOTAL}개 기대, 현재 ${files.length}개`);
 }
 const cleanInstallNow = LEGACY_TOTAL - LEGACY_EXCLUDED.length + s2Parsed.length; // 175 + S2 forward
-const CLEAN_INSTALL_EXPECTED_NOW = 193; // MC·F2 편입 — timestamp forward 18 전건(175+18 = 190-15+18)
-const EXPECTED_ROLLBACK_TOTAL = 17; // timestamp forward 18 − M10(rollback 없음). M2·M3 retired — 파일 자체 없음
+const CLEAN_INSTALL_EXPECTED_NOW = 194; // MC·F2·S3-C 편입 — timestamp forward 19 전건(175+19 = 190-15+19)
+const EXPECTED_ROLLBACK_TOTAL = 18; // timestamp forward 19 − M10(rollback 없음). M2·M3 retired — 파일 자체 없음
 if (cleanInstallNow !== CLEAN_INSTALL_EXPECTED_NOW) {
   fail(`정규 clean-install 수 ${CLEAN_INSTALL_EXPECTED_NOW} 기대, 계산값 ${cleanInstallNow} (rollback 은 불포함)`);
 }
@@ -271,7 +273,7 @@ if (rollbackFiles.length !== EXPECTED_ROLLBACK_TOTAL) {
 
 console.log(`\n[S2] forward files: ${s2Parsed.length} (${s2Parsed.map((s) => s.file).join(", ")})`);
 console.log(`[S2] rollback files: ${rollbackFiles.length} (${rollbackFiles.join(", ")})`);
-console.log(`[S2] legacy ${legacyFiles.length} (제외 ${LEGACY_EXCLUDED.length}) + timestamp forward ${s2Parsed.length} → 정규 clean-install ${cleanInstallNow} (S2 17 전건 = 기존 16 + MC · POST-S2 F2-D12 1건)`);
+console.log(`[S2] legacy ${legacyFiles.length} (제외 ${LEGACY_EXCLUDED.length}) + timestamp forward ${s2Parsed.length} → 정규 clean-install ${cleanInstallNow} (S2 17 전건 = 기존 16 + MC · POST-S2 F2-D12·S3-C 2건)`);
 console.log(`[S2] rollback ${rollbackFiles.length}/${EXPECTED_ROLLBACK_TOTAL} (M10 은 상태 0 checkpoint — rollback 없음 · M2/M3 retired)`);
 
 if (failed) {
