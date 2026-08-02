@@ -8,18 +8,26 @@
 --
 -- ⚠️ staging/production 에 절대 적용 금지 — 실 DB 에는 정본 migration 으로 이미 존재한다.
 --
--- 재현 범위(범위 A~E 가 건드리는 표면만 발췌):
+-- 재현 범위(범위 A~I 가 건드리는 표면만 발췌):
 --   - Supabase role 3종 · auth.uid() 스텁(GUC request.jwt.claim.sub)
---   - public: users · mentor_profiles · community_posts(+멱등 UNIQUE) ·
---     account_deletion_jobs · comments · community_comments · post_reactions ·
---     shortform_reactions · content_reports · user_blocks ·
+--   - public: users(+RLS 자기 행 한정) · mentor_profiles · community_posts(+멱등
+--     UNIQUE) · account_deletion_jobs · comments · community_comments ·
+--     post_reactions · shortform_reactions · content_reports · user_blocks ·
 --     custom_request_orders · custom_order_deliverables · custom_order_messages ·
---     custom_request_posts · custom_request_applications
+--     custom_request_posts · custom_request_applications ·
+--     mentor_student_rooms · question_threads · question_messages ·
+--     question_attachments · subscriptions · refunds · notifications
+--   - storage.objects 스텁(question-room-attachments 소유권 검증용)
 --   - 함수: is_admin() · individual_question_user_is_approved_mentor(uuid) ·
---     account_deletion_write_blocked(uuid)  ← 151 원문
---   - core_private: community_image_refs_validate · community_post_create_impl
---     ← M7(20260730105252) 원문(승인 멘토 전용)
---   - api_web_v1 / api_app_v1: community_post_create wrapper ← M7 / M17 원문
+--     account_deletion_write_blocked(uuid) ← 151 원문 ·
+--     qna_users_blocked(uuid,uuid) · qna_subscription_has_live_refund(uuid)
+--   - core_private: community_image_refs_validate · community_post_create_impl ·
+--     community_post_update_impl ← M7(20260730105252) 원문(승인 멘토 전용)
+--   - api_web_v1 / api_app_v1: community_post_create·community_post_update
+--     wrapper ← M7 / M17 원문
+--   - public qna RPC 2종: qna_append_message · qna_register_attachment
+--     ← 2026-08-02 운영 실측 원문(상호 차단·계정 상태 게이트 부재 상태)
+--   - 답변 알림 트리거 대리 재현(멘토 행 1건 = 알림 1건) — 차단 시 알림 0 검증용
 --   - RLS 정책: 운영 실측 정의 그대로(한글명 대시보드 정책 포함)
 --   - community_posts M16 잠금 상태(anon·authenticated SELECT 만 · 쓰기 정책 0)
 -- =============================================================================
@@ -593,3 +601,341 @@ to authenticated;
 
 revoke all on public.community_posts from anon, authenticated;
 grant select on public.community_posts to anon, authenticated;
+
+-- =============================================================================
+-- [보정] users RLS + 질문방(qna) 표면 — 2026-08-02 운영 실측 재현
+-- =============================================================================
+
+-- public.users RLS (운영 실측: authenticated 는 자기 행만 SELECT · admin 은 전체).
+-- report_target_user_valid / ugc_write_allowed 가 SECURITY DEFINER 여야 하는 근거를
+-- 로컬에서도 그대로 재현한다.
+alter table public.users enable row level security;
+drop policy if exists "users_select_own" on public.users;
+create policy "users_select_own" on public.users
+  for select to authenticated using (id = (select auth.uid()));
+drop policy if exists "users_admin_select_all" on public.users;
+create policy "users_admin_select_all" on public.users
+  for select to authenticated using ((select public.is_admin()) = true);
+
+-- storage 스텁 (question-room-attachments 소유권 검증용)
+create schema if not exists storage;
+create table if not exists storage.objects (
+  id uuid primary key default gen_random_uuid(),
+  bucket_id text not null,
+  name text not null,
+  owner uuid,
+  owner_id text,
+  metadata jsonb
+);
+
+create table if not exists public.mentor_student_rooms (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null,
+  mentor_id uuid not null
+);
+
+create table if not exists public.question_threads (
+  id uuid primary key default gen_random_uuid(),
+  mentor_student_room_id uuid not null references public.mentor_student_rooms (id) on delete cascade,
+  title text,
+  status text not null default 'open',
+  first_answered_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.question_messages (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null references public.question_threads (id) on delete cascade,
+  author_id uuid not null,
+  body text not null,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.question_attachments (
+  id uuid primary key default gen_random_uuid(),
+  thread_id uuid not null references public.question_threads (id) on delete cascade,
+  message_id uuid references public.question_messages (id) on delete set null,
+  author_id uuid not null,
+  storage_path text not null,
+  file_name text,
+  mime_type text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.subscriptions (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null,
+  mentor_id uuid not null,
+  status text not null default 'active',
+  last_billing_event_id uuid
+);
+
+create table if not exists public.refunds (
+  id uuid primary key default gen_random_uuid(),
+  subscription_id uuid references public.subscriptions (id) on delete cascade,
+  status text not null default 'pending',
+  request_type text,
+  billing_event_id uuid
+);
+
+-- 알림 계약 대리 관찰용(F2 D-12 트리거 의미 재현 — 행 1건 = 알림 1건).
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid,
+  kind text,
+  created_at timestamptz not null default now()
+);
+
+-- 검증 편의: 알림 대리 테이블은 authenticated 도 읽을 수 있게 둔다(스텁 전용).
+grant select on public.notifications to authenticated;
+grant select on public.question_messages, public.question_attachments, public.question_threads to authenticated;
+
+create or replace function public.qna_stub_answer_notification()
+returns trigger language plpgsql security definer set search_path to 'public' as $$
+declare v_room uuid; v_student uuid; v_mentor uuid;
+begin
+  select t.mentor_student_room_id into v_room from public.question_threads t where t.id = new.thread_id;
+  select r.student_id, r.mentor_id into v_student, v_mentor from public.mentor_student_rooms r where r.id = v_room;
+  if new.author_id = v_mentor then
+    insert into public.notifications (user_id, kind) values (v_student, TG_ARGV[0]);
+  end if;
+  return new;
+end $$;
+
+drop trigger if exists trg_qm_answer_notification_after on public.question_messages;
+create trigger trg_qm_answer_notification_after after insert on public.question_messages
+  for each row execute function public.qna_stub_answer_notification('question_answer_message');
+drop trigger if exists trg_qa_answer_notification_after on public.question_attachments;
+create trigger trg_qa_answer_notification_after after insert on public.question_attachments
+  for each row execute function public.qna_stub_answer_notification('question_answer_attachment');
+
+-- qna helper (운영 실측 정의)
+create or replace function public.qna_users_blocked(p_a uuid, p_b uuid) returns boolean
+language sql stable security definer set search_path to 'public' as $$
+  select exists (select 1 from public.user_blocks where (blocker_id=p_a and blocked_id=p_b) or (blocker_id=p_b and blocked_id=p_a));
+$$;
+revoke all on function public.qna_users_blocked(uuid, uuid) from public, anon;
+grant execute on function public.qna_users_blocked(uuid, uuid) to authenticated, service_role;
+
+create or replace function public.qna_subscription_has_live_refund(p_subscription_id uuid) returns boolean
+language sql stable security definer set search_path to 'public' as $$
+  select exists (
+    select 1
+    from public.refunds r
+    join public.subscriptions s on s.id = r.subscription_id
+    where r.subscription_id = p_subscription_id
+      and r.status = 'pending'
+      and r.request_type in ('subscription_prorated','subscription_mentor_suspended')
+      and (r.billing_event_id is null or r.billing_event_id = s.last_billing_event_id)
+  );
+$$;
+revoke all on function public.qna_subscription_has_live_refund(uuid) from public, anon;
+grant execute on function public.qna_subscription_has_live_refund(uuid) to authenticated, service_role;
+
+-- 질문방 정본 RPC 2종 — 2026-08-02 운영 pg_get_functiondef 실측 본문 그대로
+-- (S3-C forward 가 차단·계정 상태 게이트를 얹을 대상)
+create or replace function public.qna_append_message(p_thread_id uuid, p_body text)
+returns jsonb language plpgsql security definer set search_path to 'public' as $function$
+declare
+  v_uid uuid := auth.uid(); v_room uuid; v_student uuid; v_mentor uuid; v_status text; v_thread_status text;
+  v_first_answered timestamptz; v_message_id uuid; v_is_mentor boolean; v_transitioned boolean := false; v_sub_id uuid;
+begin
+  if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
+  if p_body is null or btrim(p_body)='' then raise exception 'BODY_REQUIRED'; end if;
+  select t.mentor_student_room_id, t.status, t.first_answered_at into v_room, v_thread_status, v_first_answered
+    from public.question_threads t where t.id=p_thread_id for update;
+  if not found then raise exception 'THREAD_NOT_FOUND'; end if;
+  select student_id, mentor_id into v_student, v_mentor from public.mentor_student_rooms where id=v_room;
+  if v_uid=v_mentor then v_is_mentor:=true; elsif v_uid=v_student then v_is_mentor:=false; else raise exception 'NOT_ROOM_PARTY'; end if;
+  select status into v_status from public.users where id=v_uid;
+  if lower(coalesce(v_status,'active'))='banned' then raise exception 'ACCOUNT_BANNED'; end if;
+  if v_thread_status in ('confirmed','closed','archived') then raise exception 'THREAD_LOCKED'; end if;
+  if v_is_mentor and not public.individual_question_user_is_approved_mentor(v_mentor) then raise exception 'MENTOR_NOT_APPROVED'; end if;
+  if not v_is_mentor then
+    select id into v_sub_id from public.subscriptions where student_id=v_student and mentor_id=v_mentor and lower(coalesce(status,''))='active' for update;
+    if v_sub_id is not null and public.qna_subscription_has_live_refund(v_sub_id) then raise exception 'SUBSCRIPTION_REFUND_PENDING'; end if;
+  end if;
+
+  insert into public.question_messages (thread_id, author_id, body) values (p_thread_id, v_uid, btrim(p_body)) returning id into v_message_id;
+  if v_is_mentor and v_first_answered is null then
+    update public.question_threads set status='answered', first_answered_at=now(), updated_at=now() where id=p_thread_id and first_answered_at is null;
+    v_transitioned := true;
+  end if;
+  return jsonb_build_object('ok',true,'message_id',v_message_id,'answered_transition',v_transitioned);
+end; $function$;
+revoke all on function public.qna_append_message(uuid, text) from public, anon;
+grant execute on function public.qna_append_message(uuid, text) to authenticated, service_role;
+
+create or replace function public.qna_register_attachment(
+  p_thread_id uuid, p_storage_path text, p_file_name text default null::text,
+  p_mime_type text default null::text, p_message_id uuid default null::uuid
+) returns jsonb language plpgsql security definer set search_path to 'public' as $function$
+declare
+  v_uid uuid := auth.uid(); v_room uuid; v_student uuid; v_mentor uuid; v_thread_status text;
+  v_first_answered timestamptz; v_att_id uuid; v_is_mentor boolean; v_transitioned boolean := false; v_sub_id uuid;
+begin
+  if v_uid is null then raise exception 'AUTH_REQUIRED'; end if;
+  if p_storage_path is null or btrim(p_storage_path)='' then raise exception 'STORAGE_PATH_REQUIRED'; end if;
+  select t.mentor_student_room_id, t.status, t.first_answered_at into v_room, v_thread_status, v_first_answered
+    from public.question_threads t where t.id=p_thread_id for update;
+  if not found then raise exception 'THREAD_NOT_FOUND'; end if;
+  select student_id, mentor_id into v_student, v_mentor from public.mentor_student_rooms where id=v_room;
+  if v_uid=v_mentor then v_is_mentor:=true; elsif v_uid=v_student then v_is_mentor:=false; else raise exception 'NOT_ROOM_PARTY'; end if;
+  if v_thread_status in ('confirmed','closed','archived') then raise exception 'THREAD_LOCKED'; end if;
+  if p_storage_path not like (v_room::text || '/' || p_thread_id::text || '/%') then raise exception 'STORAGE_PATH_MISMATCH'; end if;
+  if not exists (select 1 from storage.objects o where o.bucket_id='question-room-attachments' and o.name = btrim(p_storage_path) and o.owner_id = v_uid::text) then raise exception 'STORAGE_OBJECT_NOT_OWNED'; end if;
+  if p_message_id is not null and not exists (select 1 from public.question_messages m where m.id=p_message_id and m.thread_id=p_thread_id) then raise exception 'MESSAGE_THREAD_MISMATCH'; end if;
+  if not v_is_mentor then
+    select id into v_sub_id from public.subscriptions where student_id=v_student and mentor_id=v_mentor and lower(coalesce(status,''))='active' for update;
+    if v_sub_id is not null and public.qna_subscription_has_live_refund(v_sub_id) then raise exception 'SUBSCRIPTION_REFUND_PENDING'; end if;
+  end if;
+
+  insert into public.question_attachments (thread_id, message_id, author_id, storage_path, file_name, mime_type)
+  values (p_thread_id, p_message_id, v_uid, btrim(p_storage_path), p_file_name, p_mime_type) returning id into v_att_id;
+  if v_is_mentor and v_first_answered is null then
+    update public.question_threads set status='answered', first_answered_at=now(), updated_at=now() where id=p_thread_id and first_answered_at is null;
+    v_transitioned := true;
+  end if;
+  return jsonb_build_object('ok',true,'attachment_id',v_att_id,'answered_transition',v_transitioned);
+end; $function$;
+revoke all on function public.qna_register_attachment(uuid, text, text, text, uuid) from public, anon;
+grant execute on function public.qna_register_attachment(uuid, text, text, text, uuid) to authenticated, service_role;
+
+-- -----------------------------------------------------------------------------
+-- [보정] community_post_update_impl + update wrapper — M7/M17 원문(승인 멘토 전용)
+-- -----------------------------------------------------------------------------
+create or replace function core_private.community_post_update_impl(
+  p_author_id uuid, p_post_id uuid, p_title text, p_body text, p_category text,
+  p_image_refs text[], p_status text, p_expected_updated_at timestamptz
+) returns jsonb
+language plpgsql security invoker set search_path = '' as $fn$
+DECLARE
+  v_role       text;
+  v_status     text;
+  v_susp       timestamptz;
+  v_post       record;
+  v_title      text;
+  v_body       text;
+  v_val        jsonb;
+  v_removed    text[];
+  v_updated_at timestamptz;
+BEGIN
+  IF p_author_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'AUTH_REQUIRED');
+  END IF;
+  IF p_post_id IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'POST_NOT_FOUND_OR_NOT_OWNED');
+  END IF;
+
+  SELECT cp.id, cp.image_urls, cp.updated_at INTO v_post
+    FROM public.community_posts cp
+   WHERE cp.id = p_post_id AND cp.author_id = p_author_id AND cp.deleted_at IS NULL
+   FOR UPDATE;
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'POST_NOT_FOUND_OR_NOT_OWNED');
+  END IF;
+
+  SELECT u.role, u.status, u.suspended_until INTO v_role, v_status, v_susp
+    FROM public.users u WHERE u.id = p_author_id;
+  IF NOT FOUND OR v_role IS DISTINCT FROM 'mentor' THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'ROLE_NOT_MENTOR');
+  END IF;
+  IF NOT public.individual_question_user_is_approved_mentor(p_author_id) THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'MENTOR_NOT_APPROVED');
+  END IF;
+  IF lower(coalesce(v_status, 'active')) = 'banned' THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'ACCOUNT_BANNED');
+  END IF;
+  IF lower(coalesce(v_status, 'active')) = 'suspended' AND (v_susp IS NULL OR v_susp > now()) THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'ACCOUNT_SUSPENDED');
+  END IF;
+  IF public.account_deletion_write_blocked(p_author_id) THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'ACCOUNT_DELETION_IN_PROGRESS');
+  END IF;
+
+  IF v_post.updated_at IS DISTINCT FROM p_expected_updated_at THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'UPDATE_CONFLICT');
+  END IF;
+
+  IF p_status NOT IN ('draft', 'published') THEN
+    RAISE EXCEPTION 'p_status must be draft|published';
+  END IF;
+  v_title := btrim(coalesce(p_title, ''));
+  IF v_title = '' THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'TITLE_REQUIRED');
+  END IF;
+  IF p_category IS NULL OR p_category NOT IN ('study', 'school', 'career', 'college', 'free') THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'CATEGORY_INVALID');
+  END IF;
+  v_body := btrim(coalesce(p_body, ''));
+  IF p_status = 'published' AND char_length(v_body) < 10 THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'BODY_TOO_SHORT');
+  END IF;
+
+  v_title := regexp_replace(v_title, '(^|[^0-9])(\+82[-._\s]?0?1[0-9][-._\s]?[0-9]{3,4}[-._\s]?[0-9]{4}|0(?:10|11|16|17|18|19|2|[3-6][1-5]|50|70|80)[-._\s]?[0-9]{3,4}[-._\s]?[0-9]{4})(?![0-9])', '\1[연락처 비공개]', 'g');
+  v_body  := regexp_replace(v_body,  '(^|[^0-9])(\+82[-._\s]?0?1[0-9][-._\s]?[0-9]{3,4}[-._\s]?[0-9]{4}|0(?:10|11|16|17|18|19|2|[3-6][1-5]|50|70|80)[-._\s]?[0-9]{3,4}[-._\s]?[0-9]{4})(?![0-9])', '\1[연락처 비공개]', 'g');
+  v_title := regexp_replace(v_title, '\y[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\y', '[연락처 비공개]', 'gi');
+  v_body  := regexp_replace(v_body,  '\y[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\y', '[연락처 비공개]', 'gi');
+
+  v_val := core_private.community_image_refs_validate(p_author_id, coalesce(p_image_refs, '{}'::text[]));
+  IF NOT coalesce((v_val ->> 'ok')::boolean, false) THEN
+    RETURN v_val;
+  END IF;
+
+  v_removed := ARRAY(SELECT unnest(coalesce(v_post.image_urls, '{}'::text[]))
+                     EXCEPT
+                     SELECT unnest(coalesce(p_image_refs, '{}'::text[])));
+
+  UPDATE public.community_posts cp
+     SET title = v_title, body = v_body, content = v_body, category = p_category,
+         image_urls = coalesce(p_image_refs, '{}'::text[]), status = p_status,
+         updated_at = now()
+   WHERE cp.id = p_post_id
+   RETURNING cp.updated_at INTO v_updated_at;
+
+  RETURN jsonb_build_object('ok', true, 'post_id', p_post_id, 'updated_at', v_updated_at,
+                            'removed_image_refs', to_jsonb(coalesce(v_removed, '{}'::text[])));
+END $fn$;
+revoke all on function core_private.community_post_update_impl(uuid, uuid, text, text, text, text[], text, timestamptz)
+  from public, anon, authenticated, service_role;
+
+create or replace function api_web_v1.community_post_update(
+  p_post_id uuid, p_title text, p_body text, p_category text,
+  p_expected_updated_at timestamptz,
+  p_image_refs text[] default '{}', p_status text default 'published'
+) returns jsonb
+language plpgsql security definer set search_path = '' as $fn$
+DECLARE
+  v_uid uuid := (SELECT auth.uid());
+BEGIN
+  IF v_uid IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'contract_version', 1, 'code', 'AUTH_REQUIRED');
+  END IF;
+  RETURN core_private.community_post_update_impl(
+           v_uid, p_post_id, p_title, p_body, p_category,
+           coalesce(p_image_refs, '{}'::text[]), p_status, p_expected_updated_at)
+         || jsonb_build_object('contract_version', 1);
+END $fn$;
+revoke all on function api_web_v1.community_post_update(uuid, text, text, text, timestamptz, text[], text) from public, anon;
+grant execute on function api_web_v1.community_post_update(uuid, text, text, text, timestamptz, text[], text) to authenticated, service_role;
+
+create or replace function api_app_v1.community_post_update(
+  p_post_id uuid, p_title text, p_body text, p_category text,
+  p_expected_updated_at timestamptz,
+  p_image_refs text[] default '{}', p_status text default 'published'
+) returns jsonb
+language plpgsql security definer set search_path = '' as $fn$
+DECLARE
+  v_uid uuid := (SELECT auth.uid());
+BEGIN
+  IF v_uid IS NULL THEN
+    RETURN jsonb_build_object('ok', false, 'contract_version', 1, 'code', 'AUTH_REQUIRED');
+  END IF;
+  RETURN core_private.community_post_update_impl(
+           v_uid, p_post_id, p_title, p_body, p_category,
+           coalesce(p_image_refs, '{}'::text[]), p_status, p_expected_updated_at)
+         || jsonb_build_object('contract_version', 1);
+END $fn$;
+revoke all on function api_app_v1.community_post_update(uuid, text, text, text, timestamptz, text[], text) from public, anon;
+grant execute on function api_app_v1.community_post_update(uuid, text, text, text, timestamptz, text[], text) to authenticated;
