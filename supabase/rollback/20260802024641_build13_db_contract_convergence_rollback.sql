@@ -477,7 +477,8 @@ BEGIN
   IF v_src IS NULL
      OR position('ROLE_NOT_MENTOR' IN v_src) = 0
      OR position('MENTOR_NOT_APPROVED' IN v_src) = 0
-     OR position('ROLE_NOT_ALLOWED' IN v_src) > 0 THEN
+     OR position('ROLE_NOT_ALLOWED' IN v_src) > 0
+     OR position('ACCOUNT_NOT_ACTIVE' IN v_src) > 0 THEN
     RAISE EXCEPTION 'S3C_ROLLBACK_MISMATCH: create_impl 원형 복원 실패';
   END IF;
 
@@ -506,7 +507,8 @@ BEGIN
   IF v_src IS NULL
      OR position('ROLE_NOT_MENTOR' IN v_src) = 0
      OR position('MENTOR_NOT_APPROVED' IN v_src) = 0
-     OR position('ROLE_NOT_ALLOWED' IN v_src) > 0 THEN
+     OR position('ROLE_NOT_ALLOWED' IN v_src) > 0
+     OR position('ACCOUNT_NOT_ACTIVE' IN v_src) > 0 THEN
     RAISE EXCEPTION 'S3C_ROLLBACK_MISMATCH: update_impl 원형 복원 실패';
   END IF;
 
@@ -525,6 +527,8 @@ BEGIN
   IF v_src IS NULL
      OR position('qna_users_blocked' IN v_src) > 0
      OR position('ACCOUNT_NOT_ACTIVE' IN v_src) > 0
+     -- 원형에는 첨부 경로 멘토 승인 게이트가 없다(보정 2차 §2 이전 상태)
+     OR position('MENTOR_NOT_APPROVED' IN v_src) > 0
      OR position('STORAGE_OBJECT_NOT_OWNED' IN v_src) = 0 THEN
     RAISE EXCEPTION 'S3C_ROLLBACK_MISMATCH: qna_register_attachment 원형 복원 실패';
   END IF;

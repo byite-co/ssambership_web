@@ -369,6 +369,7 @@ DECLARE
   v_body     text;
   v_val      jsonb;
   v_id       uuid;
+  v_norm     text;
 BEGIN
   IF p_author_id IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'code', 'AUTH_REQUIRED');
@@ -394,11 +395,20 @@ BEGIN
   IF NOT FOUND OR v_role IS NULL OR v_role NOT IN ('student', 'mentor') THEN
     RETURN jsonb_build_object('ok', false, 'code', 'ROLE_NOT_ALLOWED');
   END IF;
-  IF lower(coalesce(v_status, 'active')) = 'banned' THEN
+  -- [보정 2차 §1] 계정 상태는 **positive allowlist** 다(fail-open 금지).
+  --   허용: 'active' | ('suspended' 이고 suspended_until <= now() = 정지 만료)
+  --   그 외(deleted·dormant·빈 문자열·NULL·미지 값)는 ACCOUNT_NOT_ACTIVE.
+  --   banned·유효 suspended 는 기존 전용 코드를 유지한다(먼저 판정).
+  v_norm := lower(btrim(coalesce(v_status, '')));
+  IF v_norm = 'banned' THEN
     RETURN jsonb_build_object('ok', false, 'code', 'ACCOUNT_BANNED');
   END IF;
-  IF lower(coalesce(v_status, 'active')) = 'suspended' AND (v_susp IS NULL OR v_susp > now()) THEN
+  IF v_norm = 'suspended' AND (v_susp IS NULL OR v_susp > now()) THEN
     RETURN jsonb_build_object('ok', false, 'code', 'ACCOUNT_SUSPENDED');
+  END IF;
+  IF NOT (v_norm = 'active'
+          OR (v_norm = 'suspended' AND v_susp IS NOT NULL AND v_susp <= now())) THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'ACCOUNT_NOT_ACTIVE');
   END IF;
   IF public.account_deletion_write_blocked(p_author_id) THEN
     RETURN jsonb_build_object('ok', false, 'code', 'ACCOUNT_DELETION_IN_PROGRESS');
@@ -496,6 +506,7 @@ DECLARE
   v_val        jsonb;
   v_removed    text[];
   v_updated_at timestamptz;
+  v_norm       text;
 BEGIN
   IF p_author_id IS NULL THEN
     RETURN jsonb_build_object('ok', false, 'code', 'AUTH_REQUIRED');
@@ -513,17 +524,23 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'code', 'POST_NOT_FOUND_OR_NOT_OWNED');
   END IF;
 
-  -- 역할·계정 (S3-C 보정 §2: 학생 글 수정 거부 규칙 폐기 — create 와 동일 계약)
+  -- 역할·계정 (S3-C 보정 §2: 학생 글 수정 거부 규칙 폐기 — create 와 **문자 그대로 동일** 계약)
   SELECT u.role, u.status, u.suspended_until INTO v_role, v_status, v_susp
     FROM public.users u WHERE u.id = p_author_id;
   IF NOT FOUND OR v_role IS NULL OR v_role NOT IN ('student', 'mentor') THEN
     RETURN jsonb_build_object('ok', false, 'code', 'ROLE_NOT_ALLOWED');
   END IF;
-  IF lower(coalesce(v_status, 'active')) = 'banned' THEN
+  -- [보정 2차 §1] create 와 동일한 positive allowlist (fail-open 금지)
+  v_norm := lower(btrim(coalesce(v_status, '')));
+  IF v_norm = 'banned' THEN
     RETURN jsonb_build_object('ok', false, 'code', 'ACCOUNT_BANNED');
   END IF;
-  IF lower(coalesce(v_status, 'active')) = 'suspended' AND (v_susp IS NULL OR v_susp > now()) THEN
+  IF v_norm = 'suspended' AND (v_susp IS NULL OR v_susp > now()) THEN
     RETURN jsonb_build_object('ok', false, 'code', 'ACCOUNT_SUSPENDED');
+  END IF;
+  IF NOT (v_norm = 'active'
+          OR (v_norm = 'suspended' AND v_susp IS NOT NULL AND v_susp <= now())) THEN
+    RETURN jsonb_build_object('ok', false, 'code', 'ACCOUNT_NOT_ACTIVE');
   END IF;
   IF public.account_deletion_write_blocked(p_author_id) THEN
     RETURN jsonb_build_object('ok', false, 'code', 'ACCOUNT_DELETION_IN_PROGRESS');
@@ -687,6 +704,10 @@ begin
   if public.qna_users_blocked(v_student, v_mentor) then raise exception 'BLOCKED'; end if;
 
   if v_thread_status in ('confirmed','closed','archived') then raise exception 'THREAD_LOCKED'; end if;
+  -- [S3-C 보정 2차 §2] 미승인 멘토가 **첨부-only 답변**으로 승인 게이트를 우회하지 못하게 한다.
+  --   attachment INSERT · answered 전이 · first_answered_at 기록 · 알림 트리거보다 앞이며,
+  --   append 와 동일한 코드·동일한 판정기를 쓴다(THREAD_LOCKED 우선순위는 유지).
+  if v_is_mentor and not public.individual_question_user_is_approved_mentor(v_mentor) then raise exception 'MENTOR_NOT_APPROVED'; end if;
   if p_storage_path not like (v_room::text || '/' || p_thread_id::text || '/%') then raise exception 'STORAGE_PATH_MISMATCH'; end if;
   if not exists (select 1 from storage.objects o where o.bucket_id='question-room-attachments' and o.name = btrim(p_storage_path) and o.owner_id = v_uid::text) then raise exception 'STORAGE_OBJECT_NOT_OWNED'; end if;
   if p_message_id is not null and not exists (select 1 from public.question_messages m where m.id=p_message_id and m.thread_id=p_thread_id) then raise exception 'MESSAGE_THREAD_MISMATCH'; end if;
@@ -706,7 +727,7 @@ begin
 end; $function$;
 
 COMMENT ON FUNCTION public.qna_register_attachment(uuid, text, text, text, uuid) IS
-  'S3-C 보정 §3: 질문방 첨부 등록 — 당사자 확정 직후 계정 상태 + 상호 차단 게이트(종전 계정 검사 전무). 그 외 thread lock·storage path/소유권·message 정합·구독/환불·알림 트리거 의미 전부 보존.';
+  'S3-C 보정 §3+2차 §2: 질문방 첨부 등록 — 당사자 확정 직후 계정 상태 + 상호 차단 게이트(종전 계정 검사 전무) + 미승인 멘토 첨부-only 답변 차단(MENTOR_NOT_APPROVED). 그 외 thread lock·storage path/소유권·message 정합·구독/환불·알림 트리거 의미 전부 보존.';
 
 REVOKE ALL ON FUNCTION public.qna_register_attachment(uuid, text, text, text, uuid) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.qna_register_attachment(uuid, text, text, text, uuid) TO authenticated, service_role;
@@ -841,6 +862,10 @@ BEGIN
      OR position('ACCOUNT_BANNED' IN v_src) = 0
      OR position('ACCOUNT_SUSPENDED' IN v_src) = 0
      OR position('ACCOUNT_DELETION_IN_PROGRESS' IN v_src) = 0
+     -- [보정 2차 §1] 계정 상태 positive allowlist (fail-open 잔재 0)
+     OR position('ACCOUNT_NOT_ACTIVE' IN v_src) = 0
+     OR position('v_norm = ''active''' IN v_src) = 0
+     OR position('coalesce(v_status, ''active'')' IN v_src) > 0
      OR position('TITLE_REQUIRED' IN v_src) = 0
      OR position('CATEGORY_INVALID' IN v_src) = 0
      OR position('BODY_TOO_SHORT' IN v_src) = 0
@@ -886,8 +911,12 @@ BEGIN
      OR position('community_image_refs_validate' IN v_src) = 0
      OR position('ACCOUNT_BANNED' IN v_src) = 0
      OR position('ACCOUNT_SUSPENDED' IN v_src) = 0
-     OR position('ACCOUNT_DELETION_IN_PROGRESS' IN v_src) = 0 THEN
-    RAISE EXCEPTION 'S3C_SELFCHECK: update_impl 보존 불변 손실';
+     OR position('ACCOUNT_DELETION_IN_PROGRESS' IN v_src) = 0
+     -- [보정 2차 §1] create 와 동일한 positive allowlist
+     OR position('ACCOUNT_NOT_ACTIVE' IN v_src) = 0
+     OR position('v_norm = ''active''' IN v_src) = 0
+     OR position('coalesce(v_status, ''active'')' IN v_src) > 0 THEN
+    RAISE EXCEPTION 'S3C_SELFCHECK: update_impl 보존 불변·allowlist 손실';
   END IF;
   IF (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
        WHERE n.nspname IN ('api_web_v1', 'api_app_v1') AND p.proname = 'community_post_update'
@@ -940,11 +969,15 @@ BEGIN
      OR position('MESSAGE_THREAD_MISMATCH' IN v_src) = 0
      OR position('SUBSCRIPTION_REFUND_PENDING' IN v_src) = 0
      OR position('insert into public.question_attachments' IN v_src) = 0
-     OR position('answered_transition' IN v_src) = 0 THEN
+     OR position('answered_transition' IN v_src) = 0
+     -- [보정 2차 §2] 첨부-only 답변의 멘토 승인 게이트
+     OR position('MENTOR_NOT_APPROVED' IN v_src) = 0
+     OR position('individual_question_user_is_approved_mentor' IN v_src) = 0 THEN
     RAISE EXCEPTION 'S3C_SELFCHECK: qna_register_attachment 게이트·보존 불변 불일치';
   END IF;
-  IF position('qna_users_blocked' IN v_src) > position('insert into public.question_attachments' IN v_src) THEN
-    RAISE EXCEPTION 'S3C_SELFCHECK: qna_register_attachment 차단 게이트가 INSERT 뒤에 있다';
+  IF position('qna_users_blocked' IN v_src) > position('insert into public.question_attachments' IN v_src)
+     OR position('MENTOR_NOT_APPROVED' IN v_src) > position('insert into public.question_attachments' IN v_src) THEN
+    RAISE EXCEPTION 'S3C_SELFCHECK: qna_register_attachment 차단·승인 게이트가 INSERT 뒤에 있다';
   END IF;
   -- 두 RPC 의 SECDEF·search_path·ACL 불변
   IF (SELECT count(*) FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace

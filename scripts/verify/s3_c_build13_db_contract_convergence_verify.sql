@@ -1210,4 +1210,226 @@ BEGIN
 END $$;
 rollback;
 
+
+-- =============================================================================
+-- 보정 2차 §1 — community create/update 계정 상태 positive allowlist
+-- =============================================================================
+
+-- J-01~J-03 deleted / dormant(unknown) / 빈 status → create 는 ACCOUNT_NOT_ACTIVE
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '88888888-8888-8888-8888-888888888888', true);
+do $$ BEGIN perform pg_temp.expect_code(
+  api_app_v1.community_post_create('t', '본문은 열 글자를 넘도록 충분히 길게', 'free',
+    '00000061-0000-0000-0000-000000000061'::uuid) ->> 'code',
+  'ACCOUNT_NOT_ACTIVE', 'J-01 deleted student create → ACCOUNT_NOT_ACTIVE'); END $$;
+rollback;
+
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-9999-9999-9999-999999999999', true);
+do $$ BEGIN perform pg_temp.expect_code(
+  api_app_v1.community_post_create('t', '본문은 열 글자를 넘도록 충분히 길게', 'free',
+    '00000062-0000-0000-0000-000000000062'::uuid) ->> 'code',
+  'ACCOUNT_NOT_ACTIVE', 'J-02 dormant(unknown) student create → ACCOUNT_NOT_ACTIVE'); END $$;
+rollback;
+
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'aaaaaaaa-1111-1111-1111-111111111111', true);
+do $$ BEGIN perform pg_temp.expect_code(
+  api_app_v1.community_post_create('t', '본문은 열 글자를 넘도록 충분히 길게', 'free',
+    '00000063-0000-0000-0000-000000000063'::uuid) ->> 'code',
+  'ACCOUNT_NOT_ACTIVE', 'J-03 빈 status create → ACCOUNT_NOT_ACTIVE'); END $$;
+rollback;
+
+-- J-04 NULL status create (운영 NOT NULL 을 일시 해제해 재현 — rollback)
+begin;
+alter table public.users alter column status drop not null;
+update public.users set status = null where id = '99999999-9999-9999-9999-999999999999';
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '99999999-9999-9999-9999-999999999999', true);
+do $$ BEGIN perform pg_temp.expect_code(
+  api_app_v1.community_post_create('t', '본문은 열 글자를 넘도록 충분히 길게', 'free',
+    '00000064-0000-0000-0000-000000000064'::uuid) ->> 'code',
+  'ACCOUNT_NOT_ACTIVE', 'J-04 NULL status create → ACCOUNT_NOT_ACTIVE'); END $$;
+rollback;
+
+-- J-05 위 네 상태의 own-post update → ACCOUNT_NOT_ACTIVE
+begin;
+insert into public.community_posts (id, author_id, title, body, content, category, status, updated_at) values
+  ('00000065-0000-0000-0000-000000000065', '88888888-8888-8888-8888-888888888888', 'd', '본문 충분히 길다 열자', '본문 충분히 길다 열자', 'free', 'published', now()),
+  ('00000066-0000-0000-0000-000000000066', '99999999-9999-9999-9999-999999999999', 'u', '본문 충분히 길다 열자', '본문 충분히 길다 열자', 'free', 'published', now()),
+  ('00000067-0000-0000-0000-000000000067', 'aaaaaaaa-1111-1111-1111-111111111111', 'e', '본문 충분히 길다 열자', '본문 충분히 길다 열자', 'free', 'published', now());
+do $$
+DECLARE v_up timestamptz;
+BEGIN
+  select updated_at into v_up from public.community_posts where id = '00000065-0000-0000-0000-000000000065';
+  perform set_config('request.jwt.claim.sub', '88888888-8888-8888-8888-888888888888', true);
+  perform pg_temp.expect_code(
+    core_private.community_post_update_impl('88888888-8888-8888-8888-888888888888',
+      '00000065-0000-0000-0000-000000000065', 't', '본문 충분히 길다 열자', 'free', '{}', 'published', v_up) ->> 'code',
+    'ACCOUNT_NOT_ACTIVE', 'J-05 deleted own-post update → ACCOUNT_NOT_ACTIVE');
+  select updated_at into v_up from public.community_posts where id = '00000066-0000-0000-0000-000000000066';
+  perform set_config('request.jwt.claim.sub', '99999999-9999-9999-9999-999999999999', true);
+  perform pg_temp.expect_code(
+    core_private.community_post_update_impl('99999999-9999-9999-9999-999999999999',
+      '00000066-0000-0000-0000-000000000066', 't', '본문 충분히 길다 열자', 'free', '{}', 'published', v_up) ->> 'code',
+    'ACCOUNT_NOT_ACTIVE', 'J-06 dormant own-post update → ACCOUNT_NOT_ACTIVE');
+  select updated_at into v_up from public.community_posts where id = '00000067-0000-0000-0000-000000000067';
+  perform set_config('request.jwt.claim.sub', 'aaaaaaaa-1111-1111-1111-111111111111', true);
+  perform pg_temp.expect_code(
+    core_private.community_post_update_impl('aaaaaaaa-1111-1111-1111-111111111111',
+      '00000067-0000-0000-0000-000000000067', 't', '본문 충분히 길다 열자', 'free', '{}', 'published', v_up) ->> 'code',
+    'ACCOUNT_NOT_ACTIVE', 'J-07 빈 status own-post update → ACCOUNT_NOT_ACTIVE');
+END $$;
+rollback;
+
+begin;
+alter table public.users alter column status drop not null;
+update public.users set status = null where id = '99999999-9999-9999-9999-999999999999';
+insert into public.community_posts (id, author_id, title, body, content, category, status, updated_at)
+values ('00000068-0000-0000-0000-000000000068', '99999999-9999-9999-9999-999999999999',
+        'n', '본문 충분히 길다 열자', '본문 충분히 길다 열자', 'free', 'published', now());
+do $$
+DECLARE v_up timestamptz;
+BEGIN
+  select updated_at into v_up from public.community_posts where id = '00000068-0000-0000-0000-000000000068';
+  perform set_config('request.jwt.claim.sub', '99999999-9999-9999-9999-999999999999', true);
+  perform pg_temp.expect_code(
+    core_private.community_post_update_impl('99999999-9999-9999-9999-999999999999',
+      '00000068-0000-0000-0000-000000000068', 't', '본문 충분히 길다 열자', 'free', '{}', 'published', v_up) ->> 'code',
+    'ACCOUNT_NOT_ACTIVE', 'J-08 NULL status own-post update → ACCOUNT_NOT_ACTIVE');
+END $$;
+rollback;
+
+-- J-09 정지 만료 계정은 create·update 모두 성공(allowlist 통과 — 과잉 차단 없음)
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '77777777-7777-7777-7777-777777777777', true);
+do $$
+DECLARE r jsonb; v_up timestamptz; v_pid uuid;
+BEGIN
+  r := api_app_v1.community_post_create('만료', '정지 만료 계정 본문 충분히 길다', 'free',
+                                        '00000069-0000-0000-0000-000000000069'::uuid);
+  perform pg_temp.expect_true(coalesce((r->>'ok')::boolean, false), 'J-09 expired suspension create 성공');
+  v_pid := (r->>'post_id')::uuid;
+  select updated_at into v_up from public.community_posts where id = v_pid;
+  r := api_app_v1.community_post_update(v_pid, '만료 수정', '정지 만료 계정 수정 본문 충분히 길다', 'study', v_up);
+  perform pg_temp.expect_true(coalesce((r->>'ok')::boolean, false), 'J-10 expired suspension update 성공');
+END $$;
+rollback;
+
+-- J-11 기존 상태 코드 회귀 없음 — banned/유효 suspended/deletion 은 전용 코드 유지
+begin;
+insert into public.community_posts (id, author_id, title, body, content, category, status, updated_at) values
+  ('00000070-0000-0000-0000-000000000070', '33333333-3333-3333-3333-333333333333', 'b', '본문 충분히 길다 열자', '본문 충분히 길다 열자', 'free', 'published', now()),
+  ('00000071-0000-0000-0000-000000000071', '44444444-4444-4444-4444-444444444444', 's', '본문 충분히 길다 열자', '본문 충분히 길다 열자', 'free', 'published', now()),
+  ('00000072-0000-0000-0000-000000000072', '55555555-5555-5555-5555-555555555555', 'd', '본문 충분히 길다 열자', '본문 충분히 길다 열자', 'free', 'published', now());
+do $$
+DECLARE v_up timestamptz;
+BEGIN
+  perform set_config('request.jwt.claim.sub', '33333333-3333-3333-3333-333333333333', true);
+  perform pg_temp.expect_code(
+    api_app_v1.community_post_create('t', '본문은 열 글자를 넘도록 충분히', 'free',
+      '00000073-0000-0000-0000-000000000073'::uuid) ->> 'code',
+    'ACCOUNT_BANNED', 'J-11 banned create 코드 회귀 없음');
+  select updated_at into v_up from public.community_posts where id = '00000070-0000-0000-0000-000000000070';
+  perform pg_temp.expect_code(
+    core_private.community_post_update_impl('33333333-3333-3333-3333-333333333333',
+      '00000070-0000-0000-0000-000000000070', 't', '본문 충분히 길다 열자', 'free', '{}', 'published', v_up) ->> 'code',
+    'ACCOUNT_BANNED', 'J-12 banned update 코드 회귀 없음');
+  perform set_config('request.jwt.claim.sub', '44444444-4444-4444-4444-444444444444', true);
+  select updated_at into v_up from public.community_posts where id = '00000071-0000-0000-0000-000000000071';
+  perform pg_temp.expect_code(
+    core_private.community_post_update_impl('44444444-4444-4444-4444-444444444444',
+      '00000071-0000-0000-0000-000000000071', 't', '본문 충분히 길다 열자', 'free', '{}', 'published', v_up) ->> 'code',
+    'ACCOUNT_SUSPENDED', 'J-13 유효 suspended update 코드 회귀 없음');
+  perform set_config('request.jwt.claim.sub', '55555555-5555-5555-5555-555555555555', true);
+  select updated_at into v_up from public.community_posts where id = '00000072-0000-0000-0000-000000000072';
+  perform pg_temp.expect_code(
+    core_private.community_post_update_impl('55555555-5555-5555-5555-555555555555',
+      '00000072-0000-0000-0000-000000000072', 't', '본문 충분히 길다 열자', 'free', '{}', 'published', v_up) ->> 'code',
+    'ACCOUNT_DELETION_IN_PROGRESS', 'J-14 deletion update 코드 회귀 없음');
+END $$;
+rollback;
+
+-- J-15 users 행 부재는 계속 ROLE_NOT_ALLOWED (ACCOUNT_NOT_ACTIVE 로 바뀌지 않는다)
+begin;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', 'ffffffff-ffff-ffff-ffff-ffffffffffff', true);
+do $$ BEGIN perform pg_temp.expect_code(
+  api_app_v1.community_post_create('t', '본문은 열 글자를 넘도록 충분히 길게', 'free',
+    '00000074-0000-0000-0000-000000000074'::uuid) ->> 'code',
+  'ROLE_NOT_ALLOWED', 'J-15 users 행 부재 create → ROLE_NOT_ALLOWED 보존'); END $$;
+rollback;
+
+-- =============================================================================
+-- 보정 2차 §2 — qna_register_attachment 멘토 승인 게이트
+-- =============================================================================
+
+-- K-01 미승인 멘토: append·attachment 양쪽 MENTOR_NOT_APPROVED + 부수효과 0
+begin;
+delete from public.mentor_profiles where user_id = 'bbbbbbbb-2222-2222-2222-222222222222';
+do $$ BEGIN perform pg_temp.assert_qna_blocked('MENTOR_NOT_APPROVED',
+  'K-01 미승인 멘토 append·attachment', 'bbbbbbbb-2222-2222-2222-222222222222'); END $$;
+rollback;
+
+-- K-02 미승인 멘토 attachment-only 시도의 first_answered_at·알림 변화 0(명시 단언)
+begin;
+delete from public.mentor_profiles where user_id = 'bbbbbbbb-2222-2222-2222-222222222222';
+do $$
+DECLARE v_fa0 timestamptz; v_fa1 timestamptz; v_n0 int; v_n1 int; v_a0 int; v_a1 int;
+BEGIN
+  select first_answered_at into v_fa0 from public.question_threads where id = 'eeeeeeee-0000-0000-0000-00000000000e';
+  select count(*) into v_n0 from public.notifications;
+  select count(*) into v_a0 from public.question_attachments;
+  perform set_config('request.jwt.claim.sub', 'bbbbbbbb-2222-2222-2222-222222222222', true);
+  BEGIN
+    perform public.qna_register_attachment('eeeeeeee-0000-0000-0000-00000000000e',
+      'dddddddd-0000-0000-0000-00000000000d/eeeeeeee-0000-0000-0000-00000000000e/m.png');
+    raise exception 'FAIL[K-02]: 미승인 멘토 attachment 가 허용됐다';
+  EXCEPTION WHEN raise_exception THEN
+    IF SQLERRM <> 'MENTOR_NOT_APPROVED' THEN raise exception 'FAIL[K-02]: % (기대 MENTOR_NOT_APPROVED)', SQLERRM; END IF;
+  END;
+  select first_answered_at into v_fa1 from public.question_threads where id = 'eeeeeeee-0000-0000-0000-00000000000e';
+  select count(*) into v_n1 from public.notifications;
+  select count(*) into v_a1 from public.question_attachments;
+  perform pg_temp.expect_true(
+    v_fa1 is not distinct from v_fa0 and v_n1 = v_n0 and v_a1 = v_a0,
+    'K-02 미승인 멘토 attachment 차단 시 attachment·first_answered_at·알림 변화 0');
+END $$;
+rollback;
+
+-- K-03 승인 멘토의 attachment-only 답변은 정상 — answered 전이·알림 회귀 없음
+begin;
+do $$
+DECLARE r jsonb;
+BEGIN
+  perform set_config('request.jwt.claim.sub', 'bbbbbbbb-2222-2222-2222-222222222222', true);
+  r := public.qna_register_attachment('eeeeeeee-0000-0000-0000-00000000000e',
+        'dddddddd-0000-0000-0000-00000000000d/eeeeeeee-0000-0000-0000-00000000000e/m.png');
+  perform pg_temp.expect_true(coalesce((r->>'ok')::boolean, false), 'K-03 승인 멘토 attachment-only 답변 성공');
+  perform pg_temp.expect_true((r->>'answered_transition')::boolean, 'K-03b answered 전이 회귀 없음');
+  perform pg_temp.expect_true(
+    (select status = 'answered' and first_answered_at is not null
+       from public.question_threads where id = 'eeeeeeee-0000-0000-0000-00000000000e'),
+    'K-03c first_answered_at 기록 회귀 없음');
+  perform pg_temp.expect_true((select count(*) from public.notifications) = 1, 'K-03d 알림 1건 회귀 없음');
+END $$;
+rollback;
+
+-- K-04 학생은 멘토 승인 게이트의 영향을 받지 않는다(미승인 멘토 방에서도 첨부 가능)
+begin;
+delete from public.mentor_profiles where user_id = 'bbbbbbbb-2222-2222-2222-222222222222';
+do $$
+BEGIN
+  perform set_config('request.jwt.claim.sub', '11111111-1111-1111-1111-111111111111', true);
+  perform pg_temp.expect_true(
+    coalesce((public.qna_register_attachment('eeeeeeee-0000-0000-0000-00000000000e',
+      'dddddddd-0000-0000-0000-00000000000d/eeeeeeee-0000-0000-0000-00000000000e/s.png') ->> 'ok')::boolean, false),
+    'K-04 학생 attachment 는 멘토 승인 게이트 무관(과잉 차단 없음)');
+END $$;
+rollback;
+
 \echo '=== S3-C FORWARD VERIFY: ALL PASS ==='

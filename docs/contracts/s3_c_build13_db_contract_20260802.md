@@ -62,7 +62,14 @@ api_app_v1.community_post_create(
 | banned | 거부 — `ACCOUNT_BANNED` |
 | 유효 suspended (`suspended_until` NULL 또는 미래) | 거부 — `ACCOUNT_SUSPENDED` |
 | suspended 만료 (`suspended_until` 과거) | **허용** |
+| `deleted` · unknown status · 빈 문자열 · NULL status | 거부 — `ACCOUNT_NOT_ACTIVE` |
 | 계정 삭제 write-blocked | 거부 — `ACCOUNT_DELETION_IN_PROGRESS` |
+
+**계정 상태는 positive allowlist** 다(보정 2차 §1 — fail-open 금지). 통과 조건은
+`status = 'active'` **또는** (`status = 'suspended'` 이고 `suspended_until IS NOT NULL`
+이고 `suspended_until <= now()`). 그 외 값은 전부 `ACCOUNT_NOT_ACTIVE` 로 거부한다.
+`banned` · 유효 `suspended` 는 먼저 판정해 전용 코드를 유지한다.
+`coalesce(status,'active')` 형태의 fail-open 기본값은 제거했다.
 
 > **폐지:** 종전 "승인 멘토 전용" 제한. `MENTOR_NOT_APPROVED` 는 create 경로에서 더 이상
 > 발생하지 않는다.
@@ -75,6 +82,7 @@ api_app_v1.community_post_create(
 | `ROLE_NOT_ALLOWED` | role ∉ {student, mentor} (admin·unknown·users 행 부재) | **신설** |
 | `ACCOUNT_BANNED` | `users.status = 'banned'` | — |
 | `ACCOUNT_SUSPENDED` | 유효 정지 | — |
+| `ACCOUNT_NOT_ACTIVE` | status ∉ {active, 만료된 suspended} — deleted·unknown·빈값·NULL | **신설** |
 | `ACCOUNT_DELETION_IN_PROGRESS` | 삭제 job 진행 중 | — |
 | `TITLE_REQUIRED` | 제목 공백 | — |
 | `CATEGORY_INVALID` | category ∉ {study, school, career, college, free} | — |
@@ -128,6 +136,7 @@ best-effort 로 스토리지에서 지운다.
 | 글 없음 / 타인 글 / 삭제된 글 | `POST_NOT_FOUND_OR_NOT_OWNED` (단일 코드 — 존재 여부를 흘리지 않는다) |
 | admin · unknown role · users 행 부재 | `ROLE_NOT_ALLOWED` |
 | banned / 유효 suspended / 삭제 진행 | `ACCOUNT_BANNED` / `ACCOUNT_SUSPENDED` / `ACCOUNT_DELETION_IN_PROGRESS` |
+| deleted · unknown · 빈값 · NULL status | `ACCOUNT_NOT_ACTIVE` (create 와 동일 allowlist) |
 | `p_expected_updated_at` 불일치 | `UPDATE_CONFLICT` |
 | 제목·카테고리·본문·이미지 | create 와 동일 코드 집합 |
 
@@ -196,12 +205,10 @@ authenticated 정책의 진부분집합이라 정당 사용자 권한 손실은 
 
 클라이언트 관점 실패 코드: RLS 위반이므로 PostgREST `42501`.
 
-> **잔여 비대칭(오너 인지 사항):** 위 fail-closed 허용 목록은 helper 를 쓰는 7개 정책에만
-> 적용된다. 게시판 글 RPC(create/update)의 계정 게이트는 지시서가 열거한
-> banned / 유효 suspended / 삭제 진행 3상태만 거부하므로, 이론상 `status='deleted'` 같은
-> 값이면 댓글은 못 달아도 글은 쓸 수 있다. 운영 `public.users.status` 는 `NOT NULL
-> DEFAULT 'active'` 이고 CHECK 제약이 없으며 현재 실존 값이 `active` 뿐이라 **현시점
-> 도달 불가**다. 게시판 RPC 까지 허용 목록으로 통일하려면 별도 판단이 필요하다.
+> **게시판 RPC 와 동일 기준(보정 2차 §1):** `community_post_create` / `community_post_update`
+> 구현부도 같은 positive allowlist 로 닫혀 있다. 직접 UGC 정책만 fail-closed 이고 게시글
+> RPC 는 fail-open 이던 비대칭은 해소됐다. 차이는 코드 표현뿐이다 — 정책 경로는 RLS 위반
+> `42501`, RPC 경로는 envelope `ACCOUNT_NOT_ACTIVE`.
 
 ---
 
@@ -312,8 +319,15 @@ approval · 구독/환불 · storage 검증 · 모든 INSERT·상태 전이보�
 학생이 멘토를 차단하든 멘토가 학생을 차단하든 **양쪽 모두** append·attachment 가 막힌다.
 차단 해제 즉시 정상 복귀한다.
 
+**멘토 승인 게이트(보정 2차 §2):** `MENTOR_NOT_APPROVED` 는 이제 **append 와 attachment
+양쪽**에 있다. 종전에는 attachment 경로에 없어서 미승인 멘토가 **첨부-only 답변**으로
+`answered` 전이 · `first_answered_at` 기록 · 알림 발화를 우회할 수 있었다. 게이트 위치는
+당사자 확인 → 계정 상태·차단 게이트 → `THREAD_LOCKED` → **멘토 승인** → storage 검증 →
+INSERT 순이며, 차단 시 attachment 0 · `first_answered_at` 변화 0 · 알림 0 이다.
+학생 첨부는 이 게이트의 영향을 받지 않는다.
+
 **보존 불변(회귀 검증 완료):** thread `FOR UPDATE` · `THREAD_NOT_FOUND` ·
-`NOT_ROOM_PARTY` · `THREAD_LOCKED` · `MENTOR_NOT_APPROVED` ·
+`NOT_ROOM_PARTY` · `THREAD_LOCKED` · `MENTOR_NOT_APPROVED`(양 경로) ·
 `SUBSCRIPTION_REFUND_PENDING`(활성 구독 `FOR UPDATE` + live pending refund) ·
 `STORAGE_PATH_REQUIRED` · `STORAGE_PATH_MISMATCH` · `STORAGE_OBJECT_NOT_OWNED` ·
 `MESSAGE_THREAD_MISMATCH` · `BODY_REQUIRED` · INSERT · `answered` 전이 ·
@@ -342,7 +356,7 @@ approval · 구독/환불 · storage 검증 · 모든 INSERT·상태 전이보�
 | 파일 | 역할 |
 |---|---|
 | `scripts/verify/fixtures/s3_c_build13_contract_baseline_fixture.sql` | 2026-08-02 운영 read-only 실측을 재현한 오프라인 baseline 스텁 |
-| `scripts/verify/s3_c_build13_db_contract_convergence_verify.sql` | forward 행위 검증 117 assertion |
+| `scripts/verify/s3_c_build13_db_contract_convergence_verify.sql` | forward 행위 검증 139 assertion |
 | `scripts/verify/s3_c_build13_db_contract_convergence_rollback_verify.sql` | rollback 복원 검증 18 assertion |
 | `scripts/verify/s3_c_local_roundtrip.sh` | fixture → forward → 재적용 → rollback → 재적용 → forward → clean-install 왕복 러너 |
 
@@ -357,7 +371,23 @@ approval · 구독/환불 · storage 검증 · 모든 INSERT·상태 전이보�
 ```
 DATA_API_EXPOSURE_REQUIRED: YES
 DATA_API_EXPOSURE_VERIFIED: NO
+ACCOUNT_NOT_ACTIVE_SERVER_CONTRACT: YES
+ACCOUNT_NOT_ACTIVE_APP_MAPPING_VERIFIED: NO
 ```
+
+### 8.1 `ACCOUNT_NOT_ACTIVE` 앱 매핑 게이트
+
+`ACCOUNT_NOT_ACTIVE` 는 **신규 서버 오류코드**다. S3-C 는 앱 저장소를 수정하지 않으며,
+Build 13 통합 단계에서 다음 두 표면의 매핑을 확인해야 한다.
+
+1. 질문방 `qna_error_mapper`
+2. 커뮤니티 create/update 오류 mapper
+
+두 곳 모두 **명시적인 사용자 문구**로 매핑해야 한다. 최소 문구 의미:
+
+> 현재 계정 상태에서는 이 기능을 사용할 수 없어요.
+
+미지 코드 generic fallback 만 존재하는 상태는 **최종 연동 PASS 로 처리하지 않는다.**
 
 운영 적용 시 순서: ① forward migration 적용 → ② `api_app_v1` Data API 노출 확인/설정 →
 ③ 앱에서 RPC 호출 검증. ②를 건너뛰면 게시판 작성은 계속 실패한다(원인이 SQL 이 아님).
@@ -369,9 +399,9 @@ DATA_API_EXPOSURE_VERIFIED: NO
 | code | 상태 | 발생 지점 |
 |---|---|---|
 | `ROLE_NOT_ALLOWED` | **신설** | community_post_create · community_post_update |
-| `ACCOUNT_NOT_ACTIVE` | **신설** | qna_append_message · qna_register_attachment |
+| `ACCOUNT_NOT_ACTIVE` | **신설** | community_post_create · community_post_update · qna_append_message · qna_register_attachment |
 | `BLOCKED` | 질문방 append/attachment 로 **확대** | qna RPC 2종 (기존 thread 생성 경로에만 존재) |
 | `ACCOUNT_SUSPENDED` | qna append/attachment 로 **확대** | qna RPC 2종 |
 | `ACCOUNT_DELETION_IN_PROGRESS` | qna append/attachment 로 **확대** | qna RPC 2종 |
 | `ROLE_NOT_MENTOR` | **폐지** | 커뮤니티 create·update 어디서도 발생하지 않음 |
-| `MENTOR_NOT_APPROVED` | 커뮤니티 경로에서 **폐지** | 질문방 mentor approval 게이트에서는 계속 유효 |
+| `MENTOR_NOT_APPROVED` | 커뮤니티 경로에서 **폐지** · 질문방 attachment 경로로 **확대** | qna_append_message + qna_register_attachment |
