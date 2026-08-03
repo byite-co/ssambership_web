@@ -5,11 +5,8 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { logAdminAction } from "@/lib/admin/adminActionLog";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
-import {
-  applyAccountStatus,
-  WARNING_AUTO_SUSPEND_THRESHOLD,
-  WARNING_AUTO_SUSPEND_DAYS,
-} from "@/lib/admin/accountStatusCore";
+import { createClient } from "@/lib/supabase/server";
+import { mapDataErrorMessage } from "@/lib/utils/mapDataError";
 
 const PATH = "/admin/users";
 
@@ -117,34 +114,24 @@ export async function issueUserWarningAction(formData: FormData) {
     redirect(errUrl("서버 설정 오류로 처리할 수 없습니다."));
   }
 
-  const { error: insErr } = await admin.from("user_warnings").insert({
-    user_id: targetUserId,
-    issued_by: user.id,
-    reason,
-    severity,
-    source: "admin",
+  // 경고 INSERT → 활성 카운트 → 3회 자동정지(7일)를 DB 단일 트랜잭션으로 수행하는
+  // 원자 RPC(수렴 §18.3). 관리자 세션 클라이언트로 호출해 issued_by=관리자를 기록한다
+  // (부분 성공 — 경고만 들어가고 정지가 빠지는 상태 — 이 구조적으로 불가능).
+  const session = await createClient();
+  const { data: rpcData, error: rpcErr } = await session.rpc("admin_issue_user_warning", {
+    p_user_id: targetUserId,
+    p_reason: reason,
+    p_severity: severity,
   });
-  if (insErr) redirect(errUrl(`경고 발급 실패: ${insErr.message}`));
-
-  // 활성 경고 누적 카운트
-  const { count } = await admin
-    .from("user_warnings")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", targetUserId)
-    .eq("is_active", true);
-  const warnings = count ?? 0;
-
-  let autoSuspended = false;
-  if (warnings >= WARNING_AUTO_SUSPEND_THRESHOLD) {
-    const res = await applyAccountStatus(admin, {
-      targetUserId,
-      nextStatus: "suspended",
-      durationDays: WARNING_AUTO_SUSPEND_DAYS,
-      reason: `경고 ${warnings}회 누적 자동 정지`,
-      adminId: user.id,
-    });
-    autoSuspended = res.ok;
-  }
+  if (rpcErr) redirect(errUrl(`경고 발급 실패: ${mapDataErrorMessage(rpcErr.message)}`));
+  const envelope = (rpcData ?? {}) as {
+    ok?: boolean;
+    active_warning_count?: number;
+    auto_suspended?: boolean;
+  };
+  if (envelope.ok !== true) redirect(errUrl("경고 발급 실패: 서버 응답이 계약과 다릅니다."));
+  const warnings = Number(envelope.active_warning_count ?? 0);
+  const autoSuspended = envelope.auto_suspended === true;
 
   await logAdminAction(admin, {
     adminId: user.id,

@@ -5,8 +5,6 @@ import { revalidateCommunityPaths } from "@/lib/community/communityRevalidate";
 import { getServerAuthUser } from "@/lib/auth/getCurrentUser";
 import { createClient } from "@/lib/supabase/server";
 import { insertCommunityComment } from "@/lib/community/communityMutations";
-import { authorStoredLabelFromProfile } from "@/lib/community/communityAuthorLabels";
-import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
 import { TRUST_SAFETY_COMMUNITY_ERROR_CODE, sanitizeTrustSafetyText } from "@/lib/safety/trustSafetyText";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -51,14 +49,12 @@ export async function submitCommunityCommentAction(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const { data: profile } = await getUserProfileById(supabase, user.id);
-  const authorLabel = authorStoredLabelFromProfile(profile);
 
+  // author_label 은 서버 트리거가 users 정본에서 파생한다(수렴 §10.6) — 전송 0.
   const r = await insertCommunityComment(supabase, user.id, {
     postType,
     postId,
     body: safety.text,
-    authorLabel,
   });
 
   if (!r.ok) {

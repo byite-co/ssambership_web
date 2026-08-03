@@ -45,7 +45,7 @@ export function mapReviewDbRow(raw: Record<string, unknown>): ReviewDbRow {
   };
 }
 
-/** 공개 목록용 필터 (RLS와 동일 기준) */
+/** 공개 목록용 필터 (RLS·집계와 동일한 정본 predicate — 수렴 §11.2) */
 export function isPubliclyVisibleReview(row: ReviewDbRow): boolean {
-  return !row.is_hidden && !row.is_blinded;
+  return row.moderation_state === "visible" && !row.is_hidden && !row.is_blinded;
 }

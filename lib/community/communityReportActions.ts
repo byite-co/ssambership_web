@@ -62,7 +62,9 @@ export async function submitCommunityContentReportAction(formData: FormData) {
   const desc = descTrim.length > 500 ? descTrim.slice(0, 500) : descTrim;
   const descriptionOut = desc.length > 0 ? desc : null;
 
-  const target_type = variant === "board" ? "community_post" : "shortform";
+  // 신고 target 정본 어휘(수렴 M2): 숏폼 글은 shortform_post — 모호한 legacy
+  // 'shortform' 은 서버 allowlist 에서 제거됐다.
+  const target_type = variant === "board" ? "community_post" : "shortform_post";
 
   const supabase = await createClient();
   const { error } = await supabase.from(TABLE).insert({

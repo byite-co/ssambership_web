@@ -2,49 +2,32 @@
 
 import { revalidatePath } from "next/cache";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
-import { isNotificationReadRow } from "@/lib/notifications/notificationsHubQueries";
 import { createClient } from "@/lib/supabase/server";
 
 type Row = Record<string, unknown>;
 
-const TABLE = "notifications";
-// W4(C10): 수신자 FK 프로빙(6종 순회)·읽음 컬럼 프로빙(7종 순회) 제거 —
-// 정본 고정: 수신자 user_id + 읽음 is_read/read_at (133 정본 술어·132 정본 writer, 187 baseline 실측).
-const USER_COLUMN = "user_id";
-const READ_COLUMN = "is_read";
-
 /**
- * 수신자 본인 알림 1건 읽음 처리 — 정본 갱신(133 RPC 패턴의 단건판):
- * is_read = true, read_at = coalesce(read_at, now()).
+ * 수신자 본인 알림 1건 읽음 처리 — canonical mark RPC(수렴 §14.3).
+ * direct UPDATE 대신 mark_notification_read 가 수신자 판정·멱등·미러 수렴을 서버에서
+ * 수행한다. NOTIFICATION_NOT_FOUND/NOT_RECIPIENT 는 not_found 로 수렴(기존 호출부 계약 유지).
  */
 async function markNotificationRead(notificationId: string): Promise<{ ok: boolean; reason: string | null }> {
   const { user } = await getServerUserWithProfile();
   if (!user) return { ok: false, reason: "not_authenticated" };
 
   const supabase = await createClient();
-  const { data: row, error: fe } = await supabase
-    .from(TABLE)
-    .select("id, is_read, read_at")
-    .eq("id", notificationId)
-    .eq(USER_COLUMN, user.id)
-    .maybeSingle();
-
-  if (fe) return { ok: false, reason: fe.message };
-  if (!row) return { ok: false, reason: "not_found" };
-
-  const r = row as Row;
-  if (isNotificationReadRow(r, READ_COLUMN)) {
-    revalidatePath("/notifications");
-    return { ok: true, reason: null };
+  const { data, error } = await supabase.rpc("mark_notification_read", {
+    p_notification_id: notificationId,
+  });
+  if (error) {
+    const msg = String(error.message ?? "");
+    if (msg.includes("NOTIFICATION_NOT_FOUND") || msg.includes("NOT_RECIPIENT")) {
+      return { ok: false, reason: "not_found" };
+    }
+    return { ok: false, reason: msg };
   }
-
-  const readAt = typeof r.read_at === "string" && r.read_at ? r.read_at : new Date().toISOString();
-  const { error: ue } = await supabase
-    .from(TABLE)
-    .update({ is_read: true, read_at: readAt })
-    .eq("id", notificationId)
-    .eq(USER_COLUMN, user.id);
-  if (ue) return { ok: false, reason: ue.message };
+  const envelope = (data ?? {}) as Row;
+  if (envelope.ok !== true) return { ok: false, reason: "contract_mismatch" };
 
   revalidatePath("/notifications");
   return { ok: true, reason: null };

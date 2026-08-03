@@ -75,7 +75,6 @@ export type InsertCommunityCommentInput = {
   postType: "board" | "shortform";
   postId: string;
   body: string;
-  authorLabel: string;
 };
 
 /**
@@ -86,17 +85,17 @@ export async function insertCommunityComment(
   userId: string,
   input: InsertCommunityCommentInput
 ): Promise<{ ok: true } | { ok: false; error: "validation" | "db" }> {
-  const { postType, postId, body, authorLabel } = input;
+  const { postType, postId, body } = input;
   const trimmed = body.trim();
   if (trimmed.length < 1 || trimmed.length > 1000) {
     return { ok: false, error: "validation" };
   }
-  const label = authorLabel.trim() || "쌤버십 회원";
+  // author_label 은 클라이언트가 보내지 않는다 — 서버 트리거가 users 정본에서
+  // 파생한다(board·shortform 공통, 수렴 §10.6).
   const { error } = await supabase.from("community_comments").insert({
     post_type: postType,
     post_id: postId,
     author_id: userId,
-    author_label: label,
     body: trimmed,
     status: "visible",
   });

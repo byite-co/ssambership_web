@@ -1,7 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { normalizeModerationTargetType } from "@/lib/admin/communityModerationCore";
+import { normalizeModerationTargetType, resolveLegacyCommentTargetType } from "@/lib/admin/communityModerationCore";
 import { resolveCommunityImageUrls } from "@/lib/community/communityImageStorage";
 import {
   resolveShortformThumbnailUrl,
@@ -58,8 +58,13 @@ export async function loadAdminReportEvidence(
   targetTypeRaw: string | null | undefined,
   targetIdRaw: string | null | undefined
 ): Promise<AdminReportEvidence> {
-  const targetType = normalizeModerationTargetType(targetTypeRaw);
+  let targetType = normalizeModerationTargetType(targetTypeRaw);
   const targetId = String(targetIdRaw ?? "").trim();
+  // legacy 'comment' 행은 실제 댓글 테이블 실재 여부로만 수렴한다(수렴 §9.3).
+  // 판정 불가면 unsupported → 자동 조치 없이 수동 검토.
+  if (!targetType && String(targetTypeRaw ?? "").trim().toLowerCase() === "comment" && targetId) {
+    targetType = await resolveLegacyCommentTargetType(targetId);
+  }
   if (!targetType) return { kind: "unsupported" };
   if (!targetId) return { kind: "missing" };
 
