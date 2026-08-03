@@ -2,7 +2,13 @@ import type { ReactNode } from "react";
 import { BUSINESS_NO, COMPANY } from "@/lib/legal/companyInfo";
 
 /** 법률 문서(약관·방침·정책) 공통 레이아웃 — 제목·시행일·본문·사업자 정보 블록. */
-export function LegalDocLayout(props: { title: string; intro?: ReactNode; children: ReactNode }) {
+export function LegalDocLayout(props: {
+  title: string;
+  intro?: ReactNode;
+  children: ReactNode;
+  /** 문서별 시행일 override — 미지정 시 공용 시행일(COMPANY.effectiveDate). */
+  effectiveDate?: string;
+}) {
   return (
     <article className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
       <header className="border-b border-slate-200 pb-6">
@@ -10,7 +16,9 @@ export function LegalDocLayout(props: { title: string; intro?: ReactNode; childr
         {props.intro ? (
           <p className="mt-3 text-sm leading-relaxed text-slate-600">{props.intro}</p>
         ) : null}
-        <p className="mt-3 text-xs font-semibold text-slate-500">시행일: {COMPANY.effectiveDate}</p>
+        <p className="mt-3 text-xs font-semibold text-slate-500">
+          시행일: {props.effectiveDate ?? COMPANY.effectiveDate}
+        </p>
       </header>
       <div className="mt-8 space-y-8">{props.children}</div>
       <LegalCompanyInfo />

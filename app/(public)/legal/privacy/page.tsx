@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { LegalDocLayout, LegalList, LegalSection } from "@/components/legal/LegalDocLayout";
-import { COMPANY, PROCESSORS } from "@/lib/legal/companyInfo";
+import {
+  COMPANY,
+  PRIVACY_ANNOUNCED_DATE,
+  PRIVACY_EFFECTIVE_DATE,
+  PROCESSORS,
+} from "@/lib/legal/companyInfo";
 
 export const metadata = {
   title: "개인정보처리방침",
@@ -11,6 +16,7 @@ export default function LegalPrivacyPage() {
   return (
     <LegalDocLayout
       title="개인정보처리방침"
+      effectiveDate={PRIVACY_EFFECTIVE_DATE}
       intro={
         <>
           {COMPANY.name}(이하 &lsquo;회사&rsquo;)은 「개인정보 보호법」 등 관련 법령을 준수하며, 이용자의 개인정보를 보호하기
@@ -25,8 +31,10 @@ export default function LegalPrivacyPage() {
             <><strong>회원 공통(필수)</strong>: 이메일, 비밀번호(암호화 저장), 닉네임, 역할(학생/멘토), 서비스 이용기록</>,
             <><strong>학생(선택)</strong>: 학년 등 학습 지원에 필요한 정보</>,
             <><strong>멘토(필수)</strong>: 대학명·학과·담당 과목 등 프로필 정보, 재학 확인을 위한 학생증 이미지</>,
+            <><strong>이용자 작성 콘텐츠(필수)</strong>: 게시글, 질문, 답변, 첨부파일 등 이용자가 서비스에 작성·업로드하는 콘텐츠</>,
+            <><strong>사진·카메라 접근(선택)</strong>: 이미지 업로드 시 이용자가 직접 선택하거나 촬영한 사진(권한을 거부해도 이미지 업로드 외의 기능은 이용할 수 있습니다)</>,
             <><strong>결제 시</strong>: 결제 승인 정보·결제 내역(카드번호 등 민감 결제정보는 결제대행사가 처리하며 회사는 저장하지 않습니다)</>,
-            <><strong>자동 생성·수집</strong>: 접속 로그, 기기·브라우저 정보, 서비스 이용 중 생성되는 질문·답변·정산·캐시 원장 등 거래기록</>,
+            <><strong>자동 생성·수집</strong>: 접속 로그, 기기·브라우저 정보, 서비스 이용 중 생성되는 정산·캐시 원장 등 거래기록</>,
           ]}
         />
       </LegalSection>
@@ -35,7 +43,8 @@ export default function LegalPrivacyPage() {
         <LegalList
           items={[
             "회원 식별·인증 및 계정 관리, 멘토 자격 검증",
-            "질문방·개별질문·맞춤의뢰·커뮤니티 등 서비스 제공 및 멘토-학생 연결",
+            "질문방·개별질문·맞춤의뢰·커뮤니티 등 서비스 제공, 학생·멘토 간 매칭 및 연결",
+            "이용자가 작성한 게시글·질문·답변의 저장 및 표시",
             "캐시 충전·결제·환불·정산 등 요금 처리",
             "고객 문의 대응, 공지·중요 안내 전달",
             "부정 이용 방지, 분쟁 조정, 서비스 안정성 확보 및 관련 법령상 의무 이행",
@@ -45,9 +54,16 @@ export default function LegalPrivacyPage() {
 
       <LegalSection title="제3조 (개인정보의 보유 및 이용기간)">
         <p>
-          회사는 원칙적으로 회원 탈퇴 시 개인정보를 지체 없이 파기하거나 익명화합니다. 다만 관련 법령에 따라 보존이 필요한
-          경우 아래 기간 동안 해당 정보를 보관합니다.
+          회사는 원칙적으로 회원 탈퇴 시 개인정보를 지체 없이 파기하거나 익명화합니다. 이용자 작성 콘텐츠는 탈퇴 시 다음과
+          같이 처리됩니다.
         </p>
+        <LegalList
+          items={[
+            "첨부파일·이미지: 탈퇴 처리 완료 시 지체 없이 삭제합니다 (탈퇴 요청 후 30분 이내에는 탈퇴를 취소할 수 있습니다)",
+            "게시글·질문·답변 본문: 작성자 정보를 익명 처리하여 작성자를 식별할 수 없는 상태로 보존됩니다",
+          ]}
+        />
+        <p>다만 관련 법령에 따라 보존이 필요한 경우 아래 기간 동안 해당 정보를 보관합니다.</p>
         <LegalList
           items={[
             "계약 또는 청약철회 등에 관한 기록: 5년 (전자상거래 등에서의 소비자보호에 관한 법률)",
@@ -150,7 +166,8 @@ export default function LegalPrivacyPage() {
 
       <LegalSection title="제12조 (개인정보처리방침의 변경)">
         <p>
-          본 방침은 {COMPANY.effectiveDate}부터 적용되며, 법령·서비스의 변경에 따라 내용이 추가·삭제·수정되는 경우 변경 사항을
+          본 방침은 {PRIVACY_ANNOUNCED_DATE} 공지되어 {PRIVACY_EFFECTIVE_DATE}부터 적용되며, 시행일 전까지는 종전 방침(
+          {COMPANY.effectiveDate} 시행)이 적용됩니다. 법령·서비스의 변경에 따라 내용이 추가·삭제·수정되는 경우 변경 사항을
           시행 최소 7일 전부터 공지사항을 통해 고지합니다.
         </p>
       </LegalSection>

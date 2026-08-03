@@ -22,6 +22,14 @@ export const COMPANY = {
   effectiveDate: "2026년 7월 12일",
 } as const;
 
+/**
+ * 개인정보처리방침 개정판 시행일 — 방침만 독립적으로 개정하므로
+ * COMPANY.effectiveDate(다른 법률 문서 공용)와 분리한다.
+ */
+export const PRIVACY_EFFECTIVE_DATE = "2026년 8월 10일";
+/** 개인정보처리방침 개정 공지일 */
+export const PRIVACY_ANNOUNCED_DATE = "2026년 8월 3일";
+
 /** 개인정보 처리위탁 업체 (개인정보처리방침 위탁 고지용) */
 export const PROCESSORS: ReadonlyArray<{ name: string; purpose: string }> = [
   { name: "토스페이먼츠(주) (㈜비바리퍼블리카)", purpose: "신용카드·간편결제 등 결제 처리 및 결제 도용 방지" },
