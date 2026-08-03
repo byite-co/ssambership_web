@@ -51,7 +51,7 @@ function isAuthorized(req: NextRequest): boolean {
   );
 }
 
-export async function POST(req: NextRequest) {
+async function handleRun(req: NextRequest) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ ok: false, error: "unauthorized" }, { status: 401 });
   }
@@ -125,4 +125,17 @@ export async function POST(req: NextRequest) {
     // 사용자 prefix 스캔으로 커버되지 않는 버킷을 매 응답에 드러낸다(조용한 미삭제 방지).
     uncoveredBuckets: ACCOUNT_DELETION_UNCOVERED_BUCKETS,
   });
+}
+
+export async function POST(req: NextRequest) {
+  return handleRun(req);
+}
+
+/**
+ * GET 도 동일 규약으로 받는다 — Vercel cron 은 GET 으로만 호출하므로
+ * (기존 라이브 크론 2종과 동일), GET 부재 시 스케줄러 연결 자체가 불가능했다.
+ * 인증·쿼리 규약(dryRun/limit/leaseSeconds)·3중 안전장치는 POST 와 완전히 같다.
+ */
+export async function GET(req: NextRequest) {
+  return handleRun(req);
 }

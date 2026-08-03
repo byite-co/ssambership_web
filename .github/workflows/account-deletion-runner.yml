@@ -1,0 +1,44 @@
+# 계정 삭제 saga 러너 드라이버.
+#
+# 왜 GitHub Actions 인가: Vercel Hobby 플랜은 크론 2개(일 1회)가 상한이라
+# vercel.json 의 기존 크론 2종에 더해 등록할 수 없고, 등록 시도 자체가 배포를
+# 깨뜨릴 수 있다. Supabase pg_cron 은 CRON_SECRET 을 DB 에 저장해야 해 배제했다.
+#
+# 실삭제는 라우트의 3중 안전장치를 그대로 통과해야 한다:
+#   ① Vercel env ACCOUNT_DELETION_WORKER_ENABLED=true
+#   ② 기능 플래그(NEXT_PUBLIC_FEATURE_ACCOUNT_DELETION, 기본 ON)
+#   ③ 아래 호출의 명시적 ?dryRun=false
+# 이 중 하나라도 어긋나면 dry-run 으로 강등된다(아무것도 지우지 않음).
+#
+# 필요한 저장소 시크릿: CRON_SECRET (Vercel env 의 CRON_SECRET 과 동일 값).
+# schedule 워크플로는 기본 브랜치에 머지된 뒤부터 동작한다.
+name: account-deletion-runner
+
+on:
+  schedule:
+    # 30분 주기. GitHub Actions 스케줄은 수 분 지연될 수 있으나 탈퇴 처리에는 충분하다.
+    - cron: "7,37 * * * *"
+  workflow_dispatch: {}
+
+permissions: {}
+
+concurrency:
+  group: account-deletion-runner
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Invoke account deletion saga runner
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$CRON_SECRET" ]; then
+            echo "CRON_SECRET repository secret is not set" >&2
+            exit 1
+          fi
+          curl -sS --fail-with-body -X POST \
+            -H "Authorization: Bearer $CRON_SECRET" \
+            "https://www.ssambership.com/api/cron/account-deletion?dryRun=false"
