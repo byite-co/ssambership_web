@@ -1,5 +1,6 @@
 import type { Locator, Page } from "@playwright/test";
 import { loadEnvLocal } from "./env";
+import { getE2EAdminCredentials } from "./adminCredentials";
 
 /** 입력값이 실제 반영될 때까지 재시도(하이드레이션 타이밍 보정). */
 async function expectFilled(locator: Locator, value: string): Promise<void> {
@@ -21,10 +22,31 @@ function cred(role: "STUDENT" | "MENTOR" | "ADMIN"): { email: string; pw: string
   };
 }
 
+// 학생/멘토: cloud 계약은 E2E_<ROLE>_PASSWORD, 로컬 legacy 는 E2E_<ROLE>_PW —
+// 어느 쪽이든 완전한 비밀번호이며 suffix 보정은 하지 않는다(관리자 전용 보정 — §30).
+function credWithPasswordVar(role: "STUDENT" | "MENTOR"): { email: string; pw: string } {
+  const base = cred(role);
+  return {
+    email: base.email,
+    pw: base.pw || env[`E2E_${role}_PASSWORD`] || process.env[`E2E_${role}_PASSWORD`] || "",
+  };
+}
+
+// 관리자: 단일 helper 경로(getE2EAdminCredentials) — E2E_ADMIN_PASSWORD base 에
+// 런타임 메모리에서만 '#' suffix 를 복원한다. 자격 부재 시 login() 에서 실패 처리.
+function adminCred(): { email: string; pw: string } {
+  try {
+    const { email, password } = getE2EAdminCredentials();
+    return { email, pw: password };
+  } catch {
+    return { email: "", pw: "" };
+  }
+}
+
 export const ACCOUNTS = {
-  student: { ...cred("STUDENT"), role: "student" as const },
-  mentor: { ...cred("MENTOR"), role: "mentor" as const },
-  admin: { ...cred("ADMIN"), role: "admin" as const },
+  student: { ...credWithPasswordVar("STUDENT"), role: "student" as const },
+  mentor: { ...credWithPasswordVar("MENTOR"), role: "mentor" as const },
+  admin: { ...adminCred(), role: "admin" as const },
 };
 
 export async function login(
