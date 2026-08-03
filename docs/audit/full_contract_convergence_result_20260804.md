@@ -14,7 +14,7 @@
 | 신규 migration | M1 `20260803162257_security_identity_profile_lockdown` · M2 `20260803162808_domain_contract_convergence` · M3 `20260803163322_realtime_notification_convergence` |
 | 적용 ledger(신규) | M1 `20260803170552` · M2 `20260803170916` · M3 `20260803171053` (정확히 3행) |
 | Build 13 ledger | `20260802054930` — 1행 불변, 재적용 0 |
-| 복원한 drift 소스 | `20260803142534_iq_append_message_v1` · `20260803142559_iq_attachment_author_v1` (ledger 본문 md5 byte-exact) |
+| 복원한 drift 소스 | `20260803142534_iq_append_message_v1` · `20260803142559_iq_attachment_author_v1` — 적용 ledger 에 저장된 **실행 SQL 본문과 md5 가 일치**하도록 재현 가능한 migration 소스를 복원했으며 재적용하지 않았다. 원래 파일의 주석·헤더·서식까지 동일하다는 의미는 아니다(원본 파일 SHA-256/retained artifact 비교 아님 — ledger statements md5 대조). |
 
 ### migration 파일 SHA-256
 
@@ -86,7 +86,10 @@ staging 실측 전후: users 8·community_posts 10·payments 2·cash_ledger 15·
 - 계약 CI: query/export/verify 스크립트 3 + snapshot 1 + guard 테스트 1
 - E2E: admin credential helper(`e2e/helpers/adminCredentials.ts`) + auth 배선
 
-## G. 잔여 blocker
+## G. 잔여 운영 단계 (코드 아님)
+
+코드 구현·DB 수렴·정적/계약 검증은 완료됐다. **실환경 브라우저 E2E, 실기기 QA,
+release AAB 생성, PR 병합 및 production rollout 은 아직 수행되지 않았다.**
 
 - **BLOCKED_ENV — 웹 E2E 실행**: staging Supabase(`lbeqxarxothkmzqvpudy.supabase.co:443`) 로의
   outbound HTTPS 가 이 세션의 egress 정책에서 403(CONNECT 거부)로 차단된다. E2E 는 live
@@ -96,26 +99,74 @@ staging 실측 전후: users 8·community_posts 10·payments 2·cash_ledger 15·
   - 관리자 비밀번호는 `getE2EAdminCredentials()` 단일 helper 가 base+'#' 를 메모리에서만 조립
     (파일·로그·리포트 노출 0). 학생/멘토는 suffix 보정 없음.
   - 복구 후 실행 명령: `npm run start` + `npx playwright test` (또는 preview config).
-- **코드 blocker 아님**: production Vercel cron plan 확인·실기기 QA·운영 worker real-run 은
+- **production Vercel cron plan 확인·실기기 QA·운영 worker dry-run/real-run 승인**은
   코드 밖 운영 단계다(BLOCKED_EXTERNAL / NOT_RUN_DEVICE / OUT_OF_SCOPE_POLICY).
+  계정 삭제 worker 는 코드·자동화 테스트는 통과했으나 dry-run/real-run 운영 실행은 미수행이다.
 - 계약 스냅샷 온라인 diff(`SUPABASE_DB_URL` 필요)는 동일 egress 차단으로 미실행 — 단, 스냅샷 자체는
   MCP 경로로 DB 실측에서 생성했고 offline parity 는 통과.
 
-## H. 최종 판정 (웹 범위)
+## G-1. 보안 advisor 예외 정본
 
 ```
-SOURCE_CONVERGENCE: PASS
+ADVISOR_EXCEPTION_ID: SECDEF-MENTOR-DIRECTORY-001
+OBJECT: api_web_v1.mentor_directory_v1
+STATUS: ACCEPTED_WITH_GUARDS
+```
+
+Supabase security advisor 는 `api_web_v1.mentor_directory_v1` 이 `security_invoker=false`
+(SECURITY DEFINER view)라는 이유로 ERROR 를 남긴다. 이는 **수용된 예외**이며 신규 회귀가 아니다
+(M2 이전에도 이미 `security_invoker=false` — 수렴 지시서가 "이미 노출·검증된 안전 표면을 재사용"
+하라 지정한 뷰).
+
+근거(base table RLS 를 그대로 노출하지 않고 제한된 공개 projection 만 제공):
+- role=mentor · status=active 인 멘토만
+- verification_status ∈ approved/verified/active 인 mentor profile 만
+- account_deletion_jobs active state 계정 제외
+- projection 에 `full_name` 없음 · `email` 없음 · `birth_date` 없음
+- 내부 moderation 필드 없음 · payout 필드 없음
+- 읽기 전용(anon/authenticated 에 INSERT/UPDATE/DELETE grant 없음)
+- contract snapshot(`contracts/snapshots/staging_contract.json`)이 view 컬럼·definer 옵션·grant 를
+  감시하고, `lib/contracts/__contract__/mentorDirectoryView.contract.test.ts` 가 view 존재·
+  `full_name`/`email` 부재·`mentor_id` 존재·쓰기 grant 부재를 소스로 잠근다.
+
+재검토 조건(하나라도 해당하면 예외 재평가): projection 변경 · WHERE gate 변경 ·
+base table 개인정보 컬럼 추가 · view owner/security option 변경 · anon/authenticated grant 변경.
+
+그 외 advisor WARN(`*_security_definer_function_executable` 185×)은 `api_app_v1`/`api_web_v1`
+정본 RPC 패턴 전반에 적용되는 것으로 프로젝트 전역(기존 함수 포함) 공통이며, INFO
+`rls_enabled_no_policy`(신규 `notification_transport_config`·`shortform_view_events`)는 RLS on +
+클라이언트 정책 0 = RPC/서버 경로 전용의 **의도된 fail-closed** 상태다.
+
+## H. 최종 판정 (웹 범위)
+
+의미론: `PASS` 는 코드/정적/자동화 테스트 통과를 뜻하며, 실환경 E2E·실기기·AAB·운영 실행은
+별도 플래그로 분리한다(runtime 미실행을 PASS 로 표기하지 않는다).
+
+```
+SOURCE_CODE_CONVERGENCE: PASS
+DOCUMENTATION_CONVERGENCE: PASS
 STAGING_DB_CONVERGENCE: PASS
-WEB_CONTRACTS: PASS
-SECURITY_P0: PASS
-FUNCTIONAL_P1: PASS
-REALTIME_IN_APP_NOTIFICATIONS: PASS (DB·웹 소비자)
+WEB_CONTRACTS_STATIC: PASS
+SECURITY_P0_STATIC_AND_DB: PASS
+FUNCTIONAL_P1_AUTOMATED: PASS
+
+STAGING_BROWSER_E2E: BLOCKED_ENV
+REALTIME_IN_APP_NOTIFICATIONS_CODE: PASS (DB·웹 소비자)
+REALTIME_IN_APP_NOTIFICATIONS_AUTOMATED_TESTS: PASS
+REALTIME_IN_APP_NOTIFICATIONS_RUNTIME: NOT_RUN_DEVICE
+
 ACCOUNT_DELETION_WORKER_CODE_READY: YES
+ACCOUNT_DELETION_WORKER_AUTOMATED_TESTS: PASS
+ACCOUNT_DELETION_WORKER_DRY_RUN_RUNTIME: BLOCKED_ENV
 ACCOUNT_DELETION_REAL_RUN_ENABLED: NO
+ACCOUNT_DELETION_REAL_RUN_VERIFIED: NO
+
 OS_PUSH_POLICY: EXCLUDED_APP_F0
 CONTRACT_SNAPSHOT_CI: PASS
+ADVISOR_EXCEPTION_SECDEF_MENTOR_DIRECTORY: ACCEPTED_WITH_GUARDS
+
 PRODUCTION_DEPLOYED: NO
 PLAY_UPLOADED: NO
-WEB_E2E: BLOCKED_ENV (egress 정책 — 코드·자격 준비 완료)
-READY_FOR_PRODUCTION: NO (production migration·실기기 QA·운영 worker 단계 잔존)
+READY_FOR_REVIEW: YES
+READY_FOR_PRODUCTION: NO (production migration·실환경 E2E·실기기 QA·운영 worker 단계 잔존)
 ```
