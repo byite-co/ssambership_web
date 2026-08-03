@@ -52,6 +52,21 @@ export function resolveDeletionRunMode(input: {
   return { enabled: true, dryRun: false, reason: "real_run" };
 }
 
+export const ACCOUNT_DELETION_CRON_REAL_RUN_ENV = "ACCOUNT_DELETION_CRON_REAL_RUN";
+
+/**
+ * 스케줄러(Vercel cron 등) 경유 호출의 real-run 신호 — env 가 주 경로다.
+ * Vercel cron path 의 쿼리스트링 지원이 버전별로 미묘해 쿼리에 의존하지 않는다.
+ * "true"/"1" 일 때만 dryRun=false 를 요청한 것으로 본다(그 외는 undefined
+ * → dry-run 기본 유지). 쿼리 `?dryRun=` 이 오면 쿼리가 우선한다.
+ * 이 신호가 켜져도 worker enabled(①)·기능 플래그(②) 게이트는 그대로 거친다.
+ */
+export function parseCronRealRunEnv(raw: string | undefined): boolean | undefined {
+  const value = raw ?? "";
+  if (value === "true" || value === "1") return false;
+  return undefined;
+}
+
 /**
  * `?dryRun=` 파싱. 실제 삭제로 내려가는 값은 정확히 "false"/"0" 뿐이며,
  * 파라미터가 없으면 undefined(=dry-run 기본)로 남긴다.

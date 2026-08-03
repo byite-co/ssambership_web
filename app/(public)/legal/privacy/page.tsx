@@ -1,11 +1,6 @@
 import Link from "next/link";
 import { LegalDocLayout, LegalList, LegalSection } from "@/components/legal/LegalDocLayout";
-import {
-  COMPANY,
-  PRIVACY_ANNOUNCED_DATE,
-  PRIVACY_EFFECTIVE_DATE,
-  PROCESSORS,
-} from "@/lib/legal/companyInfo";
+import { COMPANY, PRIVACY_EFFECTIVE_DATE, PROCESSORS } from "@/lib/legal/companyInfo";
 
 export const metadata = {
   title: "개인정보처리방침",
@@ -166,9 +161,8 @@ export default function LegalPrivacyPage() {
 
       <LegalSection title="제12조 (개인정보처리방침의 변경)">
         <p>
-          본 방침은 {PRIVACY_ANNOUNCED_DATE} 공지되어 {PRIVACY_EFFECTIVE_DATE}부터 적용되며, 시행일 전까지는 종전 방침(
-          {COMPANY.effectiveDate} 시행)이 적용됩니다. 법령·서비스의 변경에 따라 내용이 추가·삭제·수정되는 경우 변경 사항을
-          시행 최소 7일 전부터 공지사항을 통해 고지합니다.
+          본 방침은 {PRIVACY_EFFECTIVE_DATE}부터 적용됩니다(종전 방침: {COMPANY.effectiveDate} 시행). 법령·서비스의 변경에
+          따라 내용이 추가·삭제·수정되는 경우 변경 사항을 시행 최소 7일 전부터 공지사항을 통해 고지합니다.
         </p>
       </LegalSection>
     </LegalDocLayout>

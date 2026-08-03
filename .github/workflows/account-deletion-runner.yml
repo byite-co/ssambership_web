@@ -1,23 +1,18 @@
-# 계정 삭제 saga 러너 드라이버.
+# 계정 삭제 saga 러너 — 수동 백업 트리거.
 #
-# 왜 GitHub Actions 인가: Vercel Hobby 플랜은 크론 2개(일 1회)가 상한이라
-# vercel.json 의 기존 크론 2종에 더해 등록할 수 없고, 등록 시도 자체가 배포를
-# 깨뜨릴 수 있다. Supabase pg_cron 은 CRON_SECRET 을 DB 에 저장해야 해 배제했다.
+# 주 드라이버는 vercel.json 의 크론(/api/cron/account-deletion, 매일 18:25 UTC)이다.
+# 이 워크플로는 스케줄 없이 workflow_dispatch 전용으로 남겨, 크론 사이클을
+# 기다리지 않고 러너를 즉시 한 번 돌려야 할 때(배포 검증·잔여 잡 소화) 쓴다.
 #
-# 실삭제는 라우트의 3중 안전장치를 그대로 통과해야 한다:
-#   ① Vercel env ACCOUNT_DELETION_WORKER_ENABLED=true
-#   ② 기능 플래그(NEXT_PUBLIC_FEATURE_ACCOUNT_DELETION, 기본 ON)
-#   ③ 아래 호출의 명시적 ?dryRun=false
-# 이 중 하나라도 어긋나면 dry-run 으로 강등된다(아무것도 지우지 않음).
+# real-run 신호는 Vercel env ACCOUNT_DELETION_CRON_REAL_RUN 이 주 경로다 —
+# 여기서는 쿼리스트링을 싣지 않는다. 실삭제는 라우트의 3중 안전장치
+# (① ACCOUNT_DELETION_WORKER_ENABLED ② 기능 플래그 ③ real-run 신호)를
+# 그대로 거치며, 하나라도 어긋나면 dry-run 으로 강등된다.
 #
 # 필요한 저장소 시크릿: CRON_SECRET (Vercel env 의 CRON_SECRET 과 동일 값).
-# schedule 워크플로는 기본 브랜치에 머지된 뒤부터 동작한다.
 name: account-deletion-runner
 
 on:
-  schedule:
-    # 30분 주기. GitHub Actions 스케줄은 수 분 지연될 수 있으나 탈퇴 처리에는 충분하다.
-    - cron: "7,37 * * * *"
   workflow_dispatch: {}
 
 permissions: {}
@@ -41,4 +36,4 @@ jobs:
           fi
           curl -sS --fail-with-body -X POST \
             -H "Authorization: Bearer $CRON_SECRET" \
-            "https://www.ssambership.com/api/cron/account-deletion?dryRun=false"
+            "https://www.ssambership.com/api/cron/account-deletion"

@@ -25,10 +25,10 @@ export const COMPANY = {
 /**
  * 개인정보처리방침 개정판 시행일 — 방침만 독립적으로 개정하므로
  * COMPANY.effectiveDate(다른 법률 문서 공용)와 분리한다.
+ * 이번 개정은 실제 처리 내용을 정확히 기재하는 성격(이용자 권리 축소 아님)이라
+ * 7일 사전 공지 없이 즉시 시행한다.
  */
-export const PRIVACY_EFFECTIVE_DATE = "2026년 8월 10일";
-/** 개인정보처리방침 개정 공지일 */
-export const PRIVACY_ANNOUNCED_DATE = "2026년 8월 3일";
+export const PRIVACY_EFFECTIVE_DATE = "2026년 8월 3일";
 
 /** 개인정보 처리위탁 업체 (개인정보처리방침 위탁 고지용) */
 export const PROCESSORS: ReadonlyArray<{ name: string; purpose: string }> = [

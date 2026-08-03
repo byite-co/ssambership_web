@@ -8,6 +8,7 @@ import {
   DEFAULT_DELETION_LEASE_SECONDS,
   effectiveJobDryRun,
   isAccountDeletionWorkerEnabled,
+  parseCronRealRunEnv,
   parseRequestedDryRun,
   resolveClaimParams,
   resolveDeletionRunMode,
@@ -69,6 +70,25 @@ test("dryRun 파라미터 파싱 — false/0 만 실제 삭제로 내려간다",
   assert.equal(parseRequestedDryRun(null), undefined);
   assert.equal(parseRequestedDryRun("maybe"), undefined);
   assert.equal(parseRequestedDryRun(""), undefined);
+});
+
+test("cron real-run env 파싱 — true/1 만 dryRun=false, 그 외는 dry-run 기본 유지", () => {
+  assert.equal(parseCronRealRunEnv("true"), false);
+  assert.equal(parseCronRealRunEnv("1"), false);
+  // 미설정·빈 값·오타·대문자는 전부 undefined → dry-run 기본. kill switch(①)와 동일 파싱 관례.
+  for (const raw of [undefined, "", " ", "TRUE", "True", "yes", "on", "false", "0"]) {
+    assert.equal(parseCronRealRunEnv(raw), undefined, JSON.stringify(raw));
+  }
+});
+
+test("cron real-run env 가 켜져도 worker·기능 플래그 게이트는 그대로다", () => {
+  // env 신호는 requestedDryRun 으로만 흘러들어온다 — ①②가 꺼져 있으면 실행 자체가 없다.
+  const mode = resolveDeletionRunMode({
+    workerEnabledRaw: undefined,
+    featureEnabled: true,
+    requestedDryRun: parseCronRealRunEnv("true"),
+  });
+  assert.deepEqual(mode, { enabled: false, dryRun: true, reason: "worker_disabled" });
 });
 
 test("job.dry_run=true 는 러너가 real_run 이어도 뒤집히지 않는다", () => {

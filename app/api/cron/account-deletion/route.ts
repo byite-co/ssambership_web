@@ -10,8 +10,10 @@ import {
   reclaimExpiredDeletionLeases,
 } from "@/lib/account/accountDeletionAdapters";
 import {
+  ACCOUNT_DELETION_CRON_REAL_RUN_ENV,
   ACCOUNT_DELETION_WORKER_ENABLED_ENV,
   effectiveJobDryRun,
+  parseCronRealRunEnv,
   parseRequestedDryRun,
   resolveClaimParams,
   resolveDeletionRunMode,
@@ -21,7 +23,9 @@ import {
  * 계정 삭제 saga 러너(내부 전용).
  *
  * 파괴 실행은 **세 조건이 모두** 참일 때만 한다:
- *   ① ACCOUNT_DELETION_WORKER_ENABLED=true|1  ② 기능 플래그 ON  ③ ?dryRun=false 명시
+ *   ① ACCOUNT_DELETION_WORKER_ENABLED=true|1  ② 기능 플래그 ON
+ *   ③ 명시적 real-run 신호 — env ACCOUNT_DELETION_CRON_REAL_RUN=true|1 (주 경로,
+ *      Vercel cron 은 쿼리를 못 싣는다) 또는 ?dryRun=false (수동 호출·점검용, 쿼리 우선)
  * 하나라도 어긋나면 dry-run 으로 강등되어 계획만 만들고 아무것도 지우지 않는다.
  *
  * 인증은 기존 cron 라우트 2종과 동일한 timing-safe CRON_SECRET 비교다.
@@ -60,7 +64,11 @@ async function handleRun(req: NextRequest) {
   const mode = resolveDeletionRunMode({
     workerEnabledRaw: process.env[ACCOUNT_DELETION_WORKER_ENABLED_ENV],
     featureEnabled: isAccountDeletionFeatureEnabled(),
-    requestedDryRun: parseRequestedDryRun(url.searchParams.get("dryRun")),
+    // real-run 신호의 주 경로는 env — Vercel cron path 쿼리스트링에 의존하지 않는다.
+    // 쿼리 ?dryRun= 이 명시되면 쿼리가 우선한다(수동 dry-run 점검용).
+    requestedDryRun:
+      parseRequestedDryRun(url.searchParams.get("dryRun")) ??
+      parseCronRealRunEnv(process.env[ACCOUNT_DELETION_CRON_REAL_RUN_ENV]),
   });
 
   if (!mode.enabled) {
