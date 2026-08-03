@@ -312,3 +312,32 @@
 | logical_id | forward_file | rollback_file | forward_sha256 | rollback_sha256 | rollback_preconditions | rollback_order | verification_assertion |
 |---|---|---|---|---|---|---:|---|
 | F2-D12 | `supabase/sql/20260801040844_qna_answer_notification_per_event.sql` | `supabase/rollback/20260801040844_qna_answer_notification_per_event_rollback.sql` | `9e2a13c3e0838205806ef1deb7801fe3e3a30fe6b85ad6830754ecdbc8dbd21a` | `e7119f1a62c6fd4f5f3d900b747e9b95595397e91198ec295e33b5070f51a50b` | 독립 — 후행 의존 없음. 142/144 정본 본문·ACL 문자 그대로 복원 + R1 알림 트리거 2종(`trg_qm/qa_answer_notification_after`)·트리거 함수 2종·`qna_emit_answer_notification` DROP. **forward 기간 생성 알림 데이터(`question_answer_message:%`/`question_answer_attachment:%`) 삭제 금지**(데이터 롤백 없음 — 로컬 PG16 왕복 검증 PASS: 카탈로그 서명 diff 0) | 1 | rollback 후 대상 함수 def md5·ACL 이 forward 적용 전 기준선과 일치하고 helper·알림 트리거(함수 2종·트리거 2종)가 부재함을 카탈로그 서명 diff 로 확인 |
+
+## S3-C — Build 13 DB 계약 수렴 (2026-08-02)
+
+> 물리 정책은 S2 정본(`docs/audit/s2_2_migration_physical_policy_20260730.md`)을 그대로 따른다.
+> **timestamp 채번 예외 기록:** 본 세션 실행 환경에 Supabase CLI 가 없어 `supabase migration new`
+> 대신 `date -u +%Y%m%d%H%M%S`(= `20260802024641`)로 기계 채번했다. 사람 임의 입력이 아니며
+> 사전순 = 적용 순서(직전 forward `20260801040844` < `20260802024641`)를 충족한다.
+> `supabase/migrations/` 잔존 0 · 정본 경로 `supabase/sql/` · rollback `supabase/rollback/`.
+> **교차세션 보정(2026-08-02, PR #57 미적용 상태에서 같은 파일 보정):** 범위 F~I 추가 —
+> ugc_write_allowed fail-closed 전환 · community_post_update 역할 수렴 · 질문방 RPC 2종
+> 차단/계정 게이트 · user 신고 대상 무결성. **migration 파일 수는 1개 그대로**이므로
+> forward/rollback/clean-install 산식(19/18/194)은 불변이다. SHA-256 만 갱신했다.
+> **2차 보정(동일 파일):** ① community create/update 계정 상태를 positive allowlist 로
+> 전환(`ACCOUNT_NOT_ACTIVE` — deleted·unknown·빈값·NULL 거부, `coalesce(status,'active')`
+> fail-open 제거) ② `qna_register_attachment` 에 멘토 승인 게이트 추가(첨부-only 답변
+> 우회 차단). 파일 수·산식 여전히 불변, SHA-256 재갱신.
+> **기록 규율(invent 금지):** 원격 적용 전에는 ledger version/name 을 기입하지 않는다.
+
+### S3-C 환경별 적용 대조표 (ledger mapping)
+
+| logical_id | file_path | file_basename | sha256 | environment | ledger_version | ledger_name | applied_at | verification_result |
+|---|---|---|---|---|---|---|---|---|
+| S3-C | `supabase/sql/20260802024641_build13_db_contract_convergence.sql` | `20260802024641_build13_db_contract_convergence.sql` | `9ae989a77b2a0de89ba761ea302cfae88a2e92007d05ce0710105a1fb1996453` | local | 미적용 | 미적용 | 2026-08-02 UTC (로컬 PG16 검증) | 오프라인 스크래치 PG16 왕복(`scripts/verify/s3_c_local_roundtrip.sh`): baseline fixture(2026-08-02 운영 read-only 실측 재현 — users RLS·질문방·storage 포함) → forward → **행위 검증 139 assertion 전건 PASS** → forward 재적용(재실행 안전) 139/139 PASS → rollback → **복원 검증 18 assertion 전건 PASS** → rollback 재적용 → forward 재수렴 139/139 PASS → 별도 clean DB 에 fixture+forward 1회 적용 139/139 PASS. 범위 A~I 전건(게시판 create·update 역할 계약 + **계정 상태 positive allowlist** · UGC fail-closed 게이트 · 질문방 차단/계정 게이트 + **attachment 멘토 승인 게이트** 부수효과 0 · user 신고 대상 무결성 · deletion self probe · custom_* 공개 정책 제거). 원격 미적용 — ledger 채번 없음 |
+
+### S3-C rollback 인벤토리 (clean-install 불포함 — `supabase/rollback/`)
+
+| logical_id | forward_file | rollback_file | forward_sha256 | rollback_sha256 | rollback_preconditions | rollback_order | verification_assertion |
+|---|---|---|---|---|---|---:|---|
+| S3-C | `supabase/sql/20260802024641_build13_db_contract_convergence.sql` | `supabase/rollback/20260802024641_build13_db_contract_convergence_rollback.sql` | `9ae989a77b2a0de89ba761ea302cfae88a2e92007d05ce0710105a1fb1996453` | `ebfe061bd7e9af7a5d768378e6b049be72eaf833d4455712f87ef02d22368e00` | 독립 — 후행 의존 없음. M7 `community_post_create_impl`·`community_post_update_impl` 본문 · 151 `account_deletion_write_blocked` 본문 · 2026-08-02 운영 실측 `qna_append_message`·`qna_register_attachment` 본문 · 정책 11종 · custom_* 공개 SELECT 4종을 문자 그대로 복원하고 `ugc_write_allowed()`·`report_target_user_valid(uuid)` 를 DROP 한다. **M16 직접 쓰기 잠금은 복구하지 않는다.** 실행 시 게시판 학생 작성이 다시 실패(ROLLBACK = 회귀)하므로 오너 승인 필수. forward 기간 생성 게시글·신고 데이터는 삭제하지 않는다(데이터 롤백 없음) | 1 | rollback 후 helper 2종(`ugc_write_allowed`·`report_target_user_valid`) 부재 · 참조 정책 0 · `create_impl`/`update_impl` 에 `MENTOR_NOT_APPROVED` 재실재 · qna RPC 2종에 `qna_users_blocked`·`ACCOUNT_NOT_ACTIVE` 부재 · `account_deletion_write_blocked` 에 probe 가드 부재 · custom_* 공개 SELECT 4종 복원 · post_reactions 쓰기 정책 4종 복원 · community_posts 쓰기 권한 여전히 0 |
