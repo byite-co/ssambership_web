@@ -46,6 +46,10 @@ export function resolveDeletionRunMode(input: {
   if (!input.featureEnabled) {
     return { enabled: false, dryRun: true, reason: "feature_disabled" };
   }
+  if (input.requestedDryRun === true) {
+    // 명시적 dry-run 요청 — 미지정 기본값과 구분해 응답·로그에 남긴다.
+    return { enabled: true, dryRun: true, reason: "dry_run_explicit" };
+  }
   if (input.requestedDryRun !== false) {
     return { enabled: true, dryRun: true, reason: "dry_run_default" };
   }

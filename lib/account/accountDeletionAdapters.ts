@@ -510,6 +510,50 @@ export async function claimDeletionJobs(
     .filter((job) => job.userId !== "" && job.state !== "");
 }
 
+/** 154 claim 이 집을 수 있는 상태 — preview 와 claim 이 같은 목록을 봐야 한다. */
+const CLAIMABLE_DELETION_STATES = [
+  "pending",
+  "locked",
+  "purging",
+  "storage_purged",
+  "finalized",
+  "auth_soft_deleted",
+] as const;
+
+/**
+ * dry-run 전용 **read-only** 조회 — 154 `account_deletion_claim` 의 술어를 그대로 흉내내되
+ * UPDATE 를 하지 않는다. lease·attempts·updated_at 어느 것도 건드리지 않는다.
+ *
+ * 왜 RPC 가 아니라 SELECT 인가: `account_deletion_jobs` 는 151 에서
+ * `grant select, insert, update … to service_role` 이므로 service-role SELECT 로 충분하다.
+ * read-only 조회를 위해 새 RPC/DDL 을 만들 이유가 없다(이 회차는 마이그레이션 금지).
+ *
+ * 술어는 claim 과 동일하게 유지해야 한다 — 갈라지면 dry-run 이 real-run 을 예측하지 못한다:
+ *   state ∈ 진행 가능 상태 · next_attempt_at 도래 · lease 없음 또는 만료 · requested_at asc.
+ */
+export async function previewDeletionJobs(
+  admin: SupabaseClient,
+  limit: number
+): Promise<ClaimedDeletionJob[]> {
+  const nowIso = new Date().toISOString();
+  const { data, error } = await admin
+    .from("account_deletion_jobs")
+    .select("user_id,state,dry_run")
+    .in("state", [...CLAIMABLE_DELETION_STATES])
+    .or(`next_attempt_at.is.null,next_attempt_at.lte.${nowIso}`)
+    .or(`leased_until.is.null,leased_until.lt.${nowIso}`)
+    .order("requested_at", { ascending: true })
+    .limit(Math.max(1, limit));
+  if (error) throw new Error(`preview failed: ${error.message}`);
+  return ((data ?? []) as Array<Record<string, unknown>>)
+    .map((row) => ({
+      userId: typeof row.user_id === "string" ? row.user_id : "",
+      state: typeof row.state === "string" ? row.state : "",
+      dryRun: row.dry_run !== false,
+    }))
+    .filter((job) => job.userId !== "" && job.state !== "");
+}
+
 /** 만료 lease 회수 — 죽은 러너가 잡고 있던 job 을 다시 집을 수 있게 한다. */
 export async function reclaimExpiredDeletionLeases(admin: SupabaseClient): Promise<number> {
   const { data, error } = await admin.rpc("account_deletion_reclaim_expired");
