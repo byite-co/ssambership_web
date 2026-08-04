@@ -1406,7 +1406,8 @@
       ],
       "schema": "public",
       "execute": [
-        "-"
+        "authenticated",
+        "service_role"
       ],
       "returns": "jsonb",
       "body_md5": "81aa22313dc8ad3054c2a25310f75e7c",
@@ -6012,6 +6013,10 @@
     {
       "name": "20260803163322_realtime_notification_convergence",
       "version": "20260803171053"
+    },
+    {
+      "name": "20260804035019_iq_append_message_execute_acl_hardening",
+      "version": "20260804040019"
     }
   ]
 }
