@@ -1,0 +1,8 @@
+[
+ {
+  "schema": "public",
+  "name": "individual_question_escrow_result",
+  "kind": "composite",
+  "definition": "ok boolean, code text, message text, question_id uuid, status text, ledger_id uuid, wallet_balance_cents bigint"
+ }
+]

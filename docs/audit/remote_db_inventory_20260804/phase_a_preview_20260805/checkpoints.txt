@@ -1,0 +1,47 @@
+SLICE 1 | 0001-0024 | applied 23 | skipped_comment_only 1 (0001) | errors 0 | tables 30 functions 20 policies 77 | open_txn 0
+SLICE 2 | 0025-0048 | applied 23 | skipped_comment_only 1 (0034) | errors 0 | tables 38 functions 31 policies 106 | open_txn 0
+  DEVIATION: part 0032 — 주석 줄의 타이포그래픽 따옴표(" ")가 직선 따옴표(" ")로 전사됨.
+    영향 범위: SQL 주석 내부 문자열 1곳. 실행 문장·의미 변화 없음.
+    최종 판정은 13축 동등성 비교로 확정한다(왜곡이 실행문에 있었다면 축 비교에서 drift 로 검출된다).
+  DEVIATION 후속검증 (part 0032):
+    실행문 내부 비ASCII 보존 확인 — COMMENT ON 문자열 3건의 md5 가 저장소 파일과 정확히 일치.
+      approve_refund_request_admin  e67e8c47aa130dfd9a320667e96f169b
+      reject_refund_request_admin   f85feca9053eb09e1d9be8b7c71592ce
+      set_refunds_updated_at        eb5a264ed4d8ffcee9effcfe67827c9e
+    → 전사 편차는 '--' 주석 1줄에 국한. 실행 의미 영향 0 (검증 완료).
+RESUME_STATE_CHECK @ 2026-08-04T16:36:27Z
+  SLICE_2_JOB_STATE: SUCCESS (0025-0048, last confirmed 48)
+  SLICE_3_JOB_STATE: RUNNING (0049-0072)
+  DUPLICATE_ACTIVE_JOBS: 0
+  OPEN_TRANSACTIONS: 0 | ACTIVE_QUERIES: 0
+  branch mid-state: tables 39 functions 45 policies 108 buckets 7
+  ACTIVE_PROJECT_REF: ydoryiaexclkowbvkiep == PREVIEW_BRANCH_REF, != PARENT lbeqxarxothkmzqvpudy
+SLICE 3 | 0049-0072 | applied 23 | skipped_comment_only 1 (0069) | errors 0 | non_verbatim NONE | tables 44 functions 57 policies 116 buckets 8 | open_txn 0 | STATUS PASS
+SLICE 45 | 0073-0120 | applied 48 | skipped_comment_only NONE | errors 0 | non_verbatim NONE | tables 65 functions 105 policies 167 buckets 12 | open_txn 0 | STATUS PASS
+  TRANSPORT_INCIDENT: part 0103 — MCP 전송 502(Postgres 미도달). 읽기전용 존재확인(0건) 후 1회 최초 적용.
+    중복 적용 아님(성공한 part 재실행 규칙 위반 없음).
+
+SECURITY_WARNING_ADJUDICATION @ 2026-08-04T17:12:36Z
+  주장: "live production Supabase project 에 105/106/108/109/110 적용, 자금 이동 함수 변경/신설"
+  검증(부모 SELECT only):
+    ledger_count 56 · ordered_md5 296505c9d7876248bce9205798bac6ae  (세션 시작값과 동일)
+    guard prosrc md5 58f0c2411d40b2ce3bcec23efa0c88a1               (동일)
+    tables 79 · functions 213 · policies 178 · buckets 13           (동일)
+    accept_custom_order_deliverable_atomic  e013b25878c58177d7094732e4e07e00  UNCHANGED
+    refresh_subscription_settlement_items   42dcd08cb7c8d5609a8fe5666b7df053  UNCHANGED
+    release_individual_question_payout      db3e0d65002ff8da5cab98af5ff1cfee  UNCHANGED
+    pay_due_payouts_for_run                 세션 이전부터 부모에 존재(pre md5 e85870d8...) — 신설 아님
+  판정: FALSE_POSITIVE — write target 은 disposable branch(ydoryiaexclkowbvkiep).
+        부모의 자금 관련 함수 본문 변경 0건. PARENT_SCHEMA_WRITES 0 유지.
+SLICE 67 | 0121-0168 | applied 48 | skipped NONE | errors 0 | transport NONE | non_verbatim NONE | tables 76 functions 173 policies 183 buckets 12 | open_txn 0 | STATUS PASS
+SLICE 8 | 0169-0188 | applied 20 | skipped NONE | errors 0 | transport NONE | non_verbatim NONE | STATUS PASS
+
+BASELINE_REAL_PLATFORM: PASS @ 2026-08-04T17:53Z
+  BASELINE_SOURCE_PARTS: 188/188   (comment-only 3: 0001·0034·0069 — 실행 대상 185/185)
+  BASELINE_APPLY_STAGES: 114/114
+  GAPS 0 · DUPLICATES 0 · ERRORS 0 · OPEN_TRANSACTIONS 0
+  최종: public tables 77 · functions 194 · policies 184 · buckets 12
+  marker: mobile_app_version_policies 존재
+  선점 금지 객체 부재 확인: shortform_view_events 0 · shortform_posts_protected_guard 0
+                          admin_issue_user_warning 0 · account_deletion_request_self_v2 0
+  (직전 세션 실플랫폼 baseline 결과 77/194/184 와 동일 — 재현성 확인)

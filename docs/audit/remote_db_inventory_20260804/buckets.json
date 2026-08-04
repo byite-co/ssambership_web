@@ -1,0 +1,161 @@
+[
+ {
+  "id": "community-post-images",
+  "name": "community-post-images",
+  "public": false,
+  "file_size_limit": 5242880,
+  "allowed_mime_types": [
+   "image/jpeg",
+   "image/png",
+   "image/webp",
+   "image/gif"
+  ]
+ },
+ {
+  "id": "connection-note-ink",
+  "name": "connection-note-ink",
+  "public": false,
+  "file_size_limit": null,
+  "allowed_mime_types": null
+ },
+ {
+  "id": "custom-order-deliverables",
+  "name": "custom-order-deliverables",
+  "public": false,
+  "file_size_limit": 20971520,
+  "allowed_mime_types": [
+   "application/pdf",
+   "image/png",
+   "image/jpeg",
+   "image/webp",
+   "application/zip",
+   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+   "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  ]
+ },
+ {
+  "id": "custom-order-message-attachments",
+  "name": "custom-order-message-attachments",
+  "public": false,
+  "file_size_limit": 20971520,
+  "allowed_mime_types": [
+   "application/pdf",
+   "image/png",
+   "image/jpeg",
+   "image/webp",
+   "application/zip",
+   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+   "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  ]
+ },
+ {
+  "id": "custom-request-application-attachments",
+  "name": "custom-request-application-attachments",
+  "public": false,
+  "file_size_limit": 20971520,
+  "allowed_mime_types": [
+   "application/pdf",
+   "image/png",
+   "image/jpeg",
+   "image/webp",
+   "application/zip",
+   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+   "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  ]
+ },
+ {
+  "id": "custom-request-post-attachments",
+  "name": "custom-request-post-attachments",
+  "public": false,
+  "file_size_limit": 20971520,
+  "allowed_mime_types": [
+   "application/pdf",
+   "image/png",
+   "image/jpeg",
+   "image/webp",
+   "application/zip",
+   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+   "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  ]
+ },
+ {
+  "id": "individual-question-attachments",
+  "name": "individual-question-attachments",
+  "public": false,
+  "file_size_limit": 20971520,
+  "allowed_mime_types": [
+   "image/png",
+   "image/jpeg",
+   "image/webp",
+   "image/gif",
+   "application/pdf",
+   "application/zip",
+   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+   "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+   "application/json"
+  ]
+ },
+ {
+  "id": "profile-avatars",
+  "name": "profile-avatars",
+  "public": true,
+  "file_size_limit": 5242880,
+  "allowed_mime_types": [
+   "image/jpeg",
+   "image/png",
+   "image/webp"
+  ]
+ },
+ {
+  "id": "question-room-attachments",
+  "name": "question-room-attachments",
+  "public": false,
+  "file_size_limit": 20971520,
+  "allowed_mime_types": [
+   "image/png",
+   "image/jpeg",
+   "image/webp",
+   "image/gif",
+   "application/pdf",
+   "application/zip",
+   "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+   "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+  ]
+ },
+ {
+  "id": "scan-annotations",
+  "name": "scan-annotations",
+  "public": false,
+  "file_size_limit": null,
+  "allowed_mime_types": null
+ },
+ {
+  "id": "shortform-thumbnails",
+  "name": "shortform-thumbnails",
+  "public": false,
+  "file_size_limit": 5242880,
+  "allowed_mime_types": [
+   "image/jpeg",
+   "image/png",
+   "image/webp"
+  ]
+ },
+ {
+  "id": "shortform-videos",
+  "name": "shortform-videos",
+  "public": false,
+  "file_size_limit": 524288000,
+  "allowed_mime_types": [
+   "video/mp4",
+   "video/quicktime",
+   "video/webm"
+  ]
+ },
+ {
+  "id": "student-id-images",
+  "name": "student-id-images",
+  "public": false,
+  "file_size_limit": null,
+  "allowed_mime_types": null
+ }
+]

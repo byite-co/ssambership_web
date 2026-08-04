@@ -1,0 +1,572 @@
+[
+{
+"schema": "public",
+"table": "app_notices",
+"tgname": "trg_app_notices_set_updated",
+"definition": "CREATE TRIGGER trg_app_notices_set_updated BEFORE UPDATE ON public.app_notices FOR EACH ROW EXECUTE FUNCTION set_admin_content_updated_at()"
+},
+{
+"schema": "public",
+"table": "cash_ledger",
+"tgname": "adg_cash_ledger",
+"definition": "CREATE TRIGGER adg_cash_ledger BEFORE INSERT ON public.cash_ledger FOR EACH ROW EXECUTE FUNCTION account_deletion_write_guard('user_id')"
+},
+{
+"schema": "public",
+"table": "cash_wallets",
+"tgname": "adg_cash_wallets",
+"definition": "CREATE TRIGGER adg_cash_wallets BEFORE INSERT OR UPDATE ON public.cash_wallets FOR EACH ROW EXECUTE FUNCTION account_deletion_write_guard('user_id')"
+},
+{
+"schema": "public",
+"table": "cash_wallets",
+"tgname": "trg_cw_set_updated",
+"definition": "CREATE TRIGGER trg_cw_set_updated BEFORE UPDATE ON public.cash_wallets FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "comments",
+"tgname": "trg_comments_mirror_delete",
+"definition": "CREATE TRIGGER trg_comments_mirror_delete AFTER DELETE ON public.comments FOR EACH ROW EXECUTE FUNCTION comments_mirror_delete_to_legacy()"
+},
+{
+"schema": "public",
+"table": "comments",
+"tgname": "trg_comments_mirror_to_legacy",
+"definition": "CREATE TRIGGER trg_comments_mirror_to_legacy AFTER INSERT OR UPDATE ON public.comments FOR EACH ROW EXECUTE FUNCTION comments_mirror_to_legacy()"
+},
+{
+"schema": "public",
+"table": "comments",
+"tgname": "trg_comments_refresh_count",
+"definition": "CREATE TRIGGER trg_comments_refresh_count AFTER INSERT OR DELETE OR UPDATE OF is_deleted ON public.comments FOR EACH ROW EXECUTE FUNCTION community_refresh_post_comment_count()"
+},
+{
+"schema": "public",
+"table": "comments",
+"tgname": "trg_comments_set_author_label_ins",
+"definition": "CREATE TRIGGER trg_comments_set_author_label_ins BEFORE INSERT ON public.comments FOR EACH ROW EXECUTE FUNCTION comments_set_author_label()"
+},
+{
+"schema": "public",
+"table": "comments",
+"tgname": "trg_comments_set_author_label_upd",
+"definition": "CREATE TRIGGER trg_comments_set_author_label_upd BEFORE UPDATE OF author_label, author_role ON public.comments FOR EACH ROW EXECUTE FUNCTION comments_set_author_label()"
+},
+{
+"schema": "public",
+"table": "comments",
+"tgname": "trg_comments_write_guard",
+"definition": "CREATE TRIGGER trg_comments_write_guard BEFORE INSERT OR DELETE OR UPDATE ON public.comments FOR EACH ROW EXECUTE FUNCTION comments_write_guard()"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"tgname": "trg_cc_set_author_label_shortform_ins",
+"definition": "CREATE TRIGGER trg_cc_set_author_label_shortform_ins BEFORE INSERT ON public.community_comments FOR EACH ROW WHEN ((new.post_type = 'shortform'::text)) EXECUTE FUNCTION community_comments_set_author_label()"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"tgname": "trg_cc_set_author_label_shortform_upd",
+"definition": "CREATE TRIGGER trg_cc_set_author_label_shortform_upd BEFORE UPDATE OF author_label ON public.community_comments FOR EACH ROW WHEN ((old.post_type = 'shortform'::text)) EXECUTE FUNCTION community_comments_set_author_label()"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"tgname": "trg_cc_sync_board_delete",
+"definition": "CREATE TRIGGER trg_cc_sync_board_delete AFTER DELETE ON public.community_comments FOR EACH ROW WHEN ((old.post_type = 'board'::text)) EXECUTE FUNCTION cc_sync_board_delete_to_canonical()"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"tgname": "trg_cc_sync_board_to_canonical",
+"definition": "CREATE TRIGGER trg_cc_sync_board_to_canonical AFTER INSERT OR UPDATE ON public.community_comments FOR EACH ROW WHEN ((new.post_type = 'board'::text)) EXECUTE FUNCTION cc_sync_board_to_canonical()"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"tgname": "trg_cc_write_guard",
+"definition": "CREATE TRIGGER trg_cc_write_guard BEFORE INSERT OR UPDATE ON public.community_comments FOR EACH ROW EXECUTE FUNCTION cc_write_guard()"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"tgname": "trg_community_comments_set_author_label_ins",
+"definition": "CREATE TRIGGER trg_community_comments_set_author_label_ins BEFORE INSERT ON public.community_comments FOR EACH ROW WHEN ((new.post_type = 'board'::text)) EXECUTE FUNCTION community_comments_set_author_label()"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"tgname": "trg_community_comments_set_author_label_upd",
+"definition": "CREATE TRIGGER trg_community_comments_set_author_label_upd BEFORE UPDATE OF author_label ON public.community_comments FOR EACH ROW WHEN ((old.post_type = 'board'::text)) EXECUTE FUNCTION community_comments_set_author_label()"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"tgname": "trg_community_comments_set_updated",
+"definition": "CREATE TRIGGER trg_community_comments_set_updated BEFORE UPDATE ON public.community_comments FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "community_posts",
+"tgname": "adg_community_posts",
+"definition": "CREATE TRIGGER adg_community_posts BEFORE INSERT ON public.community_posts FOR EACH ROW EXECUTE FUNCTION account_deletion_write_guard('author_id')"
+},
+{
+"schema": "public",
+"table": "community_posts",
+"tgname": "trg_cp_sync_hashtags",
+"definition": "CREATE TRIGGER trg_cp_sync_hashtags AFTER INSERT OR DELETE OR UPDATE OF hashtags ON public.community_posts FOR EACH ROW EXECUTE FUNCTION community_sync_hashtags()"
+},
+{
+"schema": "public",
+"table": "connection_notes",
+"tgname": "trg_cn_set_updated",
+"definition": "CREATE TRIGGER trg_cn_set_updated BEFORE UPDATE ON public.connection_notes FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "content_reports",
+"tgname": "trg_content_reports_set_updated",
+"definition": "CREATE TRIGGER trg_content_reports_set_updated BEFORE UPDATE ON public.content_reports FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "custom_order_messages",
+"tgname": "trg_com_notify_new_order_message",
+"definition": "CREATE TRIGGER trg_com_notify_new_order_message AFTER INSERT ON public.custom_order_messages FOR EACH ROW EXECUTE FUNCTION com_notify_new_order_message()"
+},
+{
+"schema": "public",
+"table": "custom_order_settlement_items",
+"tgname": "trg_cosi_prevent_active_dispute",
+"definition": "CREATE TRIGGER trg_cosi_prevent_active_dispute BEFORE INSERT ON public.custom_order_settlement_items FOR EACH ROW EXECUTE FUNCTION trg_block_settlement_on_active_dispute()"
+},
+{
+"schema": "public",
+"table": "custom_order_settlement_items",
+"tgname": "trg_cosi_set_updated",
+"definition": "CREATE TRIGGER trg_cosi_set_updated BEFORE UPDATE ON public.custom_order_settlement_items FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "custom_request_applications",
+"tgname": "trg_cra_backfill",
+"definition": "CREATE TRIGGER trg_cra_backfill BEFORE INSERT ON public.custom_request_applications FOR EACH ROW EXECUTE FUNCTION cra_backfill_post_fk()"
+},
+{
+"schema": "public",
+"table": "custom_request_applications",
+"tgname": "trg_cra_notify_new_application",
+"definition": "CREATE TRIGGER trg_cra_notify_new_application AFTER INSERT ON public.custom_request_applications FOR EACH ROW EXECUTE FUNCTION cra_notify_new_application()"
+},
+{
+"schema": "public",
+"table": "custom_request_applications",
+"tgname": "trg_cra_set_updated",
+"definition": "CREATE TRIGGER trg_cra_set_updated BEFORE UPDATE ON public.custom_request_applications FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"tgname": "trg_cro_backfill",
+"definition": "CREATE TRIGGER trg_cro_backfill BEFORE INSERT ON public.custom_request_orders FOR EACH ROW EXECUTE FUNCTION cro_backfill_fks()"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"tgname": "trg_cro_set_updated",
+"definition": "CREATE TRIGGER trg_cro_set_updated BEFORE UPDATE ON public.custom_request_orders FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "custom_request_posts",
+"tgname": "trg_crp_set_updated",
+"definition": "CREATE TRIGGER trg_crp_set_updated BEFORE UPDATE ON public.custom_request_posts FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "free_question_usage",
+"tgname": "trg_fqu_legacy_standalone_noop",
+"definition": "CREATE TRIGGER trg_fqu_legacy_standalone_noop BEFORE INSERT ON public.free_question_usage FOR EACH ROW EXECUTE FUNCTION fqu_legacy_standalone_noop()"
+},
+{
+"schema": "public",
+"table": "free_question_usage",
+"tgname": "trg_free_question_usage_limits",
+"definition": "CREATE TRIGGER trg_free_question_usage_limits BEFORE INSERT ON public.free_question_usage FOR EACH ROW EXECUTE FUNCTION check_free_question_usage_limits()"
+},
+{
+"schema": "public",
+"table": "individual_question_messages",
+"tgname": "trg_iqm_notify_message",
+"definition": "CREATE TRIGGER trg_iqm_notify_message AFTER INSERT ON public.individual_question_messages FOR EACH ROW EXECUTE FUNCTION iqm_notify_message()"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"tgname": "trg_individual_questions_set_updated",
+"definition": "CREATE TRIGGER trg_individual_questions_set_updated BEFORE UPDATE ON public.individual_questions FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"tgname": "trg_iq_notify_assigned",
+"definition": "CREATE TRIGGER trg_iq_notify_assigned AFTER INSERT ON public.individual_questions FOR EACH ROW EXECUTE FUNCTION iq_notify_assigned()"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"tgname": "trg_iq_notify_status",
+"definition": "CREATE TRIGGER trg_iq_notify_status AFTER UPDATE ON public.individual_questions FOR EACH ROW WHEN ((old.status IS DISTINCT FROM new.status)) EXECUTE FUNCTION iq_notify_status_transition()"
+},
+{
+"schema": "public",
+"table": "major_category_catalog",
+"tgname": "trg_major_category_catalog_set_updated_at",
+"definition": "CREATE TRIGGER trg_major_category_catalog_set_updated_at BEFORE UPDATE ON public.major_category_catalog FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "mentor_academic_record_change_requests",
+"tgname": "trg_mentor_acad_change_guard_self_review",
+"definition": "CREATE TRIGGER trg_mentor_acad_change_guard_self_review BEFORE INSERT OR UPDATE ON public.mentor_academic_record_change_requests FOR EACH ROW EXECUTE FUNCTION mentor_acad_change_guard_self_review()"
+},
+{
+"schema": "public",
+"table": "mentor_academic_record_change_requests",
+"tgname": "trg_mentor_acad_change_set_updated_at",
+"definition": "CREATE TRIGGER trg_mentor_acad_change_set_updated_at BEFORE UPDATE ON public.mentor_academic_record_change_requests FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "mentor_individual_question_pricing",
+"tgname": "trg_miqp_set_updated",
+"definition": "CREATE TRIGGER trg_miqp_set_updated BEFORE UPDATE ON public.mentor_individual_question_pricing FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "mentor_plans",
+"tgname": "trg_mp_set_updated",
+"definition": "CREATE TRIGGER trg_mp_set_updated BEFORE UPDATE ON public.mentor_plans FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "mentor_plans",
+"tgname": "trg_mplan_notify_price_insert",
+"definition": "CREATE TRIGGER trg_mplan_notify_price_insert AFTER INSERT ON public.mentor_plans FOR EACH ROW EXECUTE FUNCTION mplan_notify_price_changed()"
+},
+{
+"schema": "public",
+"table": "mentor_plans",
+"tgname": "trg_mplan_notify_price_update",
+"definition": "CREATE TRIGGER trg_mplan_notify_price_update AFTER UPDATE ON public.mentor_plans FOR EACH ROW WHEN ((old.amount_cents IS DISTINCT FROM new.amount_cents)) EXECUTE FUNCTION mplan_notify_price_changed()"
+},
+{
+"schema": "public",
+"table": "mentor_profiles",
+"tgname": "trg_mentor_profile_privileged_guard_ins",
+"definition": "CREATE TRIGGER trg_mentor_profile_privileged_guard_ins BEFORE INSERT ON public.mentor_profiles FOR EACH ROW WHEN (((new.verification_status IS DISTINCT FROM 'pending'::text) OR (new.cap_limit IS DISTINCT FROM (28)::numeric))) EXECUTE FUNCTION enforce_mentor_profile_privileged_guard()"
+},
+{
+"schema": "public",
+"table": "mentor_profiles",
+"tgname": "trg_mentor_profile_privileged_guard_upd",
+"definition": "CREATE TRIGGER trg_mentor_profile_privileged_guard_upd BEFORE UPDATE ON public.mentor_profiles FOR EACH ROW WHEN (((old.verification_status IS DISTINCT FROM new.verification_status) OR (old.cap_limit IS DISTINCT FROM new.cap_limit))) EXECUTE FUNCTION enforce_mentor_profile_privileged_guard()"
+},
+{
+"schema": "public",
+"table": "mentor_profiles",
+"tgname": "trg_mentor_profiles_set_updated",
+"definition": "CREATE TRIGGER trg_mentor_profiles_set_updated BEFORE UPDATE ON public.mentor_profiles FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "mentor_profiles",
+"tgname": "trg_mp_notify_activity",
+"definition": "CREATE TRIGGER trg_mp_notify_activity AFTER UPDATE ON public.mentor_profiles FOR EACH ROW WHEN (((old.activity_status IS DISTINCT FROM new.activity_status) AND (new.activity_status = ANY (ARRAY['terminating'::text, 'paused'::text])))) EXECUTE FUNCTION mp_notify_activity_transition()"
+},
+{
+"schema": "public",
+"table": "mentor_profiles",
+"tgname": "trg_mp_seed_default_plans",
+"definition": "CREATE TRIGGER trg_mp_seed_default_plans AFTER UPDATE ON public.mentor_profiles FOR EACH ROW WHEN (((new.verification_status = 'approved'::text) AND (old.verification_status IS DISTINCT FROM 'approved'::text))) EXECUTE FUNCTION mp_seed_default_plans_on_approval()"
+},
+{
+"schema": "public",
+"table": "mentor_school_verifications",
+"tgname": "trg_mentor_school_verifications_guard_self_review",
+"definition": "CREATE TRIGGER trg_mentor_school_verifications_guard_self_review BEFORE INSERT OR UPDATE ON public.mentor_school_verifications FOR EACH ROW EXECUTE FUNCTION mentor_school_verifications_guard_self_review()"
+},
+{
+"schema": "public",
+"table": "mentor_school_verifications",
+"tgname": "trg_mentor_school_verifications_set_updated_at",
+"definition": "CREATE TRIGGER trg_mentor_school_verifications_set_updated_at BEFORE UPDATE ON public.mentor_school_verifications FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "mentor_student_rooms",
+"tgname": "trg_msr_set_updated",
+"definition": "CREATE TRIGGER trg_msr_set_updated BEFORE UPDATE ON public.mentor_student_rooms FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "mobile_app_version_policies",
+"tgname": "trg_mavp_set_updated",
+"definition": "CREATE TRIGGER trg_mavp_set_updated BEFORE UPDATE ON public.mobile_app_version_policies FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "notification_outbox",
+"tgname": "trg_notification_outbox_set_updated",
+"definition": "CREATE TRIGGER trg_notification_outbox_set_updated BEFORE UPDATE ON public.notification_outbox FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "notifications",
+"tgname": "trg_notif_set_updated",
+"definition": "CREATE TRIGGER trg_notif_set_updated BEFORE UPDATE ON public.notifications FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "notifications",
+"tgname": "trg_notifications_read_state_sync",
+"definition": "CREATE TRIGGER trg_notifications_read_state_sync BEFORE INSERT OR UPDATE ON public.notifications FOR EACH ROW EXECUTE FUNCTION notifications_read_state_sync()"
+},
+{
+"schema": "public",
+"table": "payments",
+"tgname": "adg_payments",
+"definition": "CREATE TRIGGER adg_payments BEFORE INSERT ON public.payments FOR EACH ROW EXECUTE FUNCTION account_deletion_write_guard('user_id')"
+},
+{
+"schema": "public",
+"table": "payments",
+"tgname": "trg_payments_set_updated",
+"definition": "CREATE TRIGGER trg_payments_set_updated BEFORE UPDATE ON public.payments FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "payout_run_items",
+"tgname": "trg_pri_no_delete",
+"definition": "CREATE TRIGGER trg_pri_no_delete BEFORE DELETE ON public.payout_run_items FOR EACH ROW EXECUTE FUNCTION payout_run_items_block_mutation()"
+},
+{
+"schema": "public",
+"table": "payout_run_items",
+"tgname": "trg_pri_no_update",
+"definition": "CREATE TRIGGER trg_pri_no_update BEFORE UPDATE ON public.payout_run_items FOR EACH ROW EXECUTE FUNCTION payout_run_items_block_mutation()"
+},
+{
+"schema": "public",
+"table": "payout_runs",
+"tgname": "trg_payout_runs_set_updated",
+"definition": "CREATE TRIGGER trg_payout_runs_set_updated BEFORE UPDATE ON public.payout_runs FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "post_reactions",
+"tgname": "trg_post_reactions_like_count",
+"definition": "CREATE TRIGGER trg_post_reactions_like_count AFTER INSERT OR DELETE ON public.post_reactions FOR EACH ROW EXECUTE FUNCTION community_refresh_post_like_count()"
+},
+{
+"schema": "public",
+"table": "promotion_campaigns",
+"tgname": "trg_promotion_campaigns_set_updated",
+"definition": "CREATE TRIGGER trg_promotion_campaigns_set_updated BEFORE UPDATE ON public.promotion_campaigns FOR EACH ROW EXECUTE FUNCTION set_admin_content_updated_at()"
+},
+{
+"schema": "public",
+"table": "question_attachments",
+"tgname": "trg_qa_answer_notification_after",
+"definition": "CREATE TRIGGER trg_qa_answer_notification_after AFTER INSERT ON public.question_attachments FOR EACH ROW EXECUTE FUNCTION qa_answer_notification_after()"
+},
+{
+"schema": "public",
+"table": "question_attachments",
+"tgname": "trg_qa_direct_answered_after",
+"definition": "CREATE TRIGGER trg_qa_direct_answered_after AFTER INSERT ON public.question_attachments FOR EACH ROW EXECUTE FUNCTION qa_direct_answered_after()"
+},
+{
+"schema": "public",
+"table": "question_attachments",
+"tgname": "trg_qa_direct_write_guard",
+"definition": "CREATE TRIGGER trg_qa_direct_write_guard BEFORE INSERT ON public.question_attachments FOR EACH ROW EXECUTE FUNCTION qa_direct_write_guard()"
+},
+{
+"schema": "public",
+"table": "question_messages",
+"tgname": "adg_question_messages",
+"definition": "CREATE TRIGGER adg_question_messages BEFORE INSERT ON public.question_messages FOR EACH ROW EXECUTE FUNCTION account_deletion_write_guard('author_id')"
+},
+{
+"schema": "public",
+"table": "question_messages",
+"tgname": "trg_qm_answer_notification_after",
+"definition": "CREATE TRIGGER trg_qm_answer_notification_after AFTER INSERT ON public.question_messages FOR EACH ROW EXECUTE FUNCTION qm_answer_notification_after()"
+},
+{
+"schema": "public",
+"table": "question_messages",
+"tgname": "trg_qm_direct_answered_after",
+"definition": "CREATE TRIGGER trg_qm_direct_answered_after AFTER INSERT ON public.question_messages FOR EACH ROW EXECUTE FUNCTION qm_direct_answered_after()"
+},
+{
+"schema": "public",
+"table": "question_messages",
+"tgname": "trg_qm_direct_write_guard",
+"definition": "CREATE TRIGGER trg_qm_direct_write_guard BEFORE INSERT ON public.question_messages FOR EACH ROW EXECUTE FUNCTION qm_direct_write_guard()"
+},
+{
+"schema": "public",
+"table": "question_threads",
+"tgname": "trg_qt_direct_consume_free_usage",
+"definition": "CREATE TRIGGER trg_qt_direct_consume_free_usage AFTER INSERT ON public.question_threads FOR EACH ROW EXECUTE FUNCTION qt_direct_consume_free_usage()"
+},
+{
+"schema": "public",
+"table": "question_threads",
+"tgname": "trg_qt_direct_write_guard",
+"definition": "CREATE TRIGGER trg_qt_direct_write_guard BEFORE INSERT OR UPDATE ON public.question_threads FOR EACH ROW EXECUTE FUNCTION qt_direct_write_guard()"
+},
+{
+"schema": "public",
+"table": "question_threads",
+"tgname": "trg_qt_set_updated",
+"definition": "CREATE TRIGGER trg_qt_set_updated BEFORE UPDATE ON public.question_threads FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "refunds",
+"tgname": "trg_refund_notify_mentor_termination",
+"definition": "CREATE TRIGGER trg_refund_notify_mentor_termination AFTER INSERT ON public.refunds FOR EACH ROW WHEN ((new.request_type = 'subscription_mentor_suspended'::text)) EXECUTE FUNCTION refund_notify_mentor_termination()"
+},
+{
+"schema": "public",
+"table": "refunds",
+"tgname": "trg_refunds_set_updated",
+"definition": "CREATE TRIGGER trg_refunds_set_updated BEFORE UPDATE ON public.refunds FOR EACH ROW EXECUTE FUNCTION set_refunds_updated_at()"
+},
+{
+"schema": "public",
+"table": "refunds",
+"tgname": "trg_refunds_sync_subscription_refunded",
+"definition": "CREATE TRIGGER trg_refunds_sync_subscription_refunded AFTER UPDATE OF status ON public.refunds FOR EACH ROW WHEN ((new.status = 'succeeded'::text)) EXECUTE FUNCTION sync_subscription_refunded_from_refund()"
+},
+{
+"schema": "public",
+"table": "reviews",
+"tgname": "trg_reviews_enforce_update",
+"definition": "CREATE TRIGGER trg_reviews_enforce_update BEFORE UPDATE ON public.reviews FOR EACH ROW EXECUTE FUNCTION reviews_enforce_update()"
+},
+{
+"schema": "public",
+"table": "scan_annotations",
+"tgname": "trg_scan_annotations_updated_at",
+"definition": "CREATE TRIGGER trg_scan_annotations_updated_at BEFORE UPDATE ON public.scan_annotations FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "school_tier_catalog",
+"tgname": "trg_school_tier_catalog_set_updated_at",
+"definition": "CREATE TRIGGER trg_school_tier_catalog_set_updated_at BEFORE UPDATE ON public.school_tier_catalog FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "school_tier_mappings",
+"tgname": "trg_school_tier_mappings_set_updated_at",
+"definition": "CREATE TRIGGER trg_school_tier_mappings_set_updated_at BEFORE UPDATE ON public.school_tier_mappings FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "shortform_posts",
+"tgname": "adg_shortform_posts",
+"definition": "CREATE TRIGGER adg_shortform_posts BEFORE INSERT ON public.shortform_posts FOR EACH ROW EXECUTE FUNCTION account_deletion_write_guard('author_id')"
+},
+{
+"schema": "public",
+"table": "shortform_posts",
+"tgname": "trg_shortform_posts_protected",
+"definition": "CREATE TRIGGER trg_shortform_posts_protected BEFORE UPDATE ON public.shortform_posts FOR EACH ROW EXECUTE FUNCTION shortform_posts_protected_guard()"
+},
+{
+"schema": "public",
+"table": "shortform_reactions",
+"tgname": "trg_shortform_reactions_like_count",
+"definition": "CREATE TRIGGER trg_shortform_reactions_like_count AFTER INSERT OR DELETE ON public.shortform_reactions FOR EACH ROW EXECUTE FUNCTION community_refresh_shortform_like_count()"
+},
+{
+"schema": "public",
+"table": "subscription_billing_events",
+"tgname": "trg_sbe_notify_insert",
+"definition": "CREATE TRIGGER trg_sbe_notify_insert AFTER INSERT ON public.subscription_billing_events FOR EACH ROW EXECUTE FUNCTION sbe_notify_billing_event()"
+},
+{
+"schema": "public",
+"table": "subscription_billing_events",
+"tgname": "trg_sbe_notify_update",
+"definition": "CREATE TRIGGER trg_sbe_notify_update AFTER UPDATE ON public.subscription_billing_events FOR EACH ROW WHEN (((old.status IS DISTINCT FROM new.status) OR (old.event_type IS DISTINCT FROM new.event_type))) EXECUTE FUNCTION sbe_notify_billing_event()"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"tgname": "trg_ssi_set_updated",
+"definition": "CREATE TRIGGER trg_ssi_set_updated BEFORE UPDATE ON public.subscription_settlement_items FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "subscriptions",
+"tgname": "trg_enforce_mentor_cap",
+"definition": "CREATE TRIGGER trg_enforce_mentor_cap BEFORE INSERT OR UPDATE OF status, plan_tier ON public.subscriptions FOR EACH ROW EXECUTE FUNCTION enforce_mentor_cap()"
+},
+{
+"schema": "public",
+"table": "subscriptions",
+"tgname": "trg_sub_notify_expired",
+"definition": "CREATE TRIGGER trg_sub_notify_expired AFTER UPDATE ON public.subscriptions FOR EACH ROW WHEN (((old.status IS DISTINCT FROM new.status) AND (new.status = 'expired'::text))) EXECUTE FUNCTION sub_notify_expired()"
+},
+{
+"schema": "public",
+"table": "subscriptions",
+"tgname": "trg_subs_set_updated",
+"definition": "CREATE TRIGGER trg_subs_set_updated BEFORE UPDATE ON public.subscriptions FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "subscriptions",
+"tgname": "trg_subscriptions_keep_refunded_status",
+"definition": "CREATE TRIGGER trg_subscriptions_keep_refunded_status BEFORE UPDATE OF status ON public.subscriptions FOR EACH ROW EXECUTE FUNCTION keep_subscription_refunded_status()"
+},
+{
+"schema": "public",
+"table": "users",
+"tgname": "trg_users_protected_columns",
+"definition": "CREATE TRIGGER trg_users_protected_columns BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION users_protected_columns_guard()"
+},
+{
+"schema": "public",
+"table": "users",
+"tgname": "trg_users_role_guard",
+"definition": "CREATE TRIGGER trg_users_role_guard BEFORE UPDATE ON public.users FOR EACH ROW WHEN ((old.role IS DISTINCT FROM new.role)) EXECUTE FUNCTION enforce_users_role_guard()"
+},
+{
+"schema": "public",
+"table": "users",
+"tgname": "trg_users_role_insert_guard",
+"definition": "CREATE TRIGGER trg_users_role_insert_guard BEFORE INSERT ON public.users FOR EACH ROW WHEN ((new.role = 'admin'::text)) EXECUTE FUNCTION enforce_users_role_insert_guard()"
+},
+{
+"schema": "public",
+"table": "users",
+"tgname": "trg_users_set_updated",
+"definition": "CREATE TRIGGER trg_users_set_updated BEFORE UPDATE ON public.users FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+},
+{
+"schema": "public",
+"table": "withdrawals",
+"tgname": "trg_withdrawals_updated_at",
+"definition": "CREATE TRIGGER trg_withdrawals_updated_at BEFORE UPDATE ON public.withdrawals FOR EACH ROW EXECUTE FUNCTION set_updated_at()"
+}
+]

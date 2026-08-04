@@ -1,0 +1,31 @@
+{
+ "context": "PHASE A — Supabase Preview Branch ydoryiaexclkowbvkiep (PostgreSQL 17.6), 2026-08-04",
+ "critical_step": {
+   "replay_step": 38,
+   "ledger_version": "20260731100540",
+   "ledger_name": "20260730095438_comments_author_label_denormalize",
+   "note": "replay 파일명은 <ledger version>_<ledger name>.sql 형식이다. 파일 헤더의 20260730095438 은 name 부분이며 version 과의 불일치가 아니다.",
+   "previous_session_result": "FAILED — S2_M13_SELFCHECK: trigger functions hardening mismatch (matched=0)",
+   "this_session_result": "APPLIED_OK"
+ },
+ "hardening_interleave": {
+   "replay_step": 33,
+   "version": "20260729000000",
+   "file": "20260729000000_public_defacl_functions_hardening.sql",
+   "before": {"defaclrole": "postgres", "objtype": "f",
+              "defaclacl": "{postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres}"},
+   "after":  {"defaclrole": "postgres", "objtype": "f",
+              "defaclacl": "{postgres=X/postgres}"},
+   "parent_reference": "{postgres=X/postgres}  (부모 실측과 일치)"
+ },
+ "m13_trigger_functions_after": [
+   {"fn": "comments_set_author_label", "proacl": "{postgres=X/postgres}",
+    "public_execute": false, "anon_execute": false, "authenticated_execute": false,
+    "service_role_execute": false, "postgres_execute": true},
+   {"fn": "community_comments_set_author_label", "proacl": "{postgres=X/postgres}",
+    "public_execute": false, "anon_execute": false, "authenticated_execute": false,
+    "service_role_execute": false, "postgres_execute": true}
+ ],
+ "conclusion": "step 33 은 step 38 통과에 필요충분했다. 함수 소유자가 postgres 이므로 postgres-grantor defacl 행이 적용되고, 그 결과 트리거 함수가 {postgres=X} 로 생성되어 M13 자체검사 ③ 이 matched=2 로 통과한다. 20260729000000 파일의 UNVERIFIED_ON_REAL_PLATFORM 경고는 이로써 실플랫폼 검증됨.",
+ "residual_risk": "supabase_admin-grantor defacl(f) 행은 계속 permissive 하다. 마이그레이션이 만드는 함수의 소유자가 postgres 인 동안에만 무해하다 — 다른 소유자로 생성되는 함수는 여전히 permissive 부여를 받는다."
+}

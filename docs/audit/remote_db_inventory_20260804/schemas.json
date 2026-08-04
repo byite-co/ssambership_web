@@ -1,0 +1,6 @@
+[
+  {"schema": "api_app_v1", "owner": "postgres"},
+  {"schema": "api_web_v1", "owner": "postgres"},
+  {"schema": "core_private", "owner": "postgres"},
+  {"schema": "public", "owner": "pg_database_owner"}
+]

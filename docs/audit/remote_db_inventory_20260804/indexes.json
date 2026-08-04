@@ -1,0 +1,1442 @@
+[
+{
+"schemaname": "public",
+"tablename": "account_deletion_jobs",
+"indexname": "account_deletion_jobs_pkey",
+"indexdef": "CREATE UNIQUE INDEX account_deletion_jobs_pkey ON public.account_deletion_jobs USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "account_deletion_jobs",
+"indexname": "idx_adj_state_next",
+"indexdef": "CREATE INDEX idx_adj_state_next ON public.account_deletion_jobs USING btree (state, next_attempt_at)"
+},
+{
+"schemaname": "public",
+"tablename": "account_deletion_jobs",
+"indexname": "idx_adj_user_requested",
+"indexdef": "CREATE INDEX idx_adj_user_requested ON public.account_deletion_jobs USING btree (user_id, requested_at DESC, id DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "account_deletion_jobs",
+"indexname": "uq_adj_active_user",
+"indexdef": "CREATE UNIQUE INDEX uq_adj_active_user ON public.account_deletion_jobs USING btree (user_id) WHERE (state = ANY (ARRAY['pending'::text, 'locked'::text, 'purging'::text, 'storage_purged'::text, 'finalized'::text, 'auth_soft_deleted'::text]))"
+},
+{
+"schemaname": "public",
+"tablename": "admin_action_logs",
+"indexname": "admin_action_logs_pkey",
+"indexdef": "CREATE UNIQUE INDEX admin_action_logs_pkey ON public.admin_action_logs USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "admin_action_logs",
+"indexname": "idx_admin_action_logs_admin",
+"indexdef": "CREATE INDEX idx_admin_action_logs_admin ON public.admin_action_logs USING btree (admin_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "admin_action_logs",
+"indexname": "idx_admin_action_logs_created",
+"indexdef": "CREATE INDEX idx_admin_action_logs_created ON public.admin_action_logs USING btree (created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "admin_case_notes",
+"indexname": "admin_case_notes_pkey",
+"indexdef": "CREATE UNIQUE INDEX admin_case_notes_pkey ON public.admin_case_notes USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "admin_case_notes",
+"indexname": "idx_admin_case_notes_admin_created",
+"indexdef": "CREATE INDEX idx_admin_case_notes_admin_created ON public.admin_case_notes USING btree (admin_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "admin_case_notes",
+"indexname": "idx_admin_case_notes_dispute_created",
+"indexdef": "CREATE INDEX idx_admin_case_notes_dispute_created ON public.admin_case_notes USING btree (dispute_id, created_at DESC) WHERE (dispute_id IS NOT NULL)"
+},
+{
+"schemaname": "public",
+"tablename": "admin_case_notes",
+"indexname": "idx_admin_case_notes_report_created",
+"indexdef": "CREATE INDEX idx_admin_case_notes_report_created ON public.admin_case_notes USING btree (report_id, created_at DESC) WHERE (report_id IS NOT NULL)"
+},
+{
+"schemaname": "public",
+"tablename": "ai_drafts",
+"indexname": "ai_drafts_pkey",
+"indexdef": "CREATE UNIQUE INDEX ai_drafts_pkey ON public.ai_drafts USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "app_notices",
+"indexname": "app_notices_active_window_idx",
+"indexdef": "CREATE INDEX app_notices_active_window_idx ON public.app_notices USING btree (is_active, starts_at, ends_at)"
+},
+{
+"schemaname": "public",
+"tablename": "app_notices",
+"indexname": "app_notices_created_at_idx",
+"indexdef": "CREATE INDEX app_notices_created_at_idx ON public.app_notices USING btree (created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "app_notices",
+"indexname": "app_notices_pkey",
+"indexdef": "CREATE UNIQUE INDEX app_notices_pkey ON public.app_notices USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "cash_ledger",
+"indexname": "cash_ledger_idempotency_key_key",
+"indexdef": "CREATE UNIQUE INDEX cash_ledger_idempotency_key_key ON public.cash_ledger USING btree (idempotency_key)"
+},
+{
+"schemaname": "public",
+"tablename": "cash_ledger",
+"indexname": "cash_ledger_pkey",
+"indexdef": "CREATE UNIQUE INDEX cash_ledger_pkey ON public.cash_ledger USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "cash_ledger",
+"indexname": "idx_cl_idem",
+"indexdef": "CREATE INDEX idx_cl_idem ON public.cash_ledger USING btree (idempotency_key)"
+},
+{
+"schemaname": "public",
+"tablename": "cash_ledger",
+"indexname": "idx_cl_user_created",
+"indexdef": "CREATE INDEX idx_cl_user_created ON public.cash_ledger USING btree (user_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "cash_topup_packages",
+"indexname": "cash_topup_packages_pkey",
+"indexdef": "CREATE UNIQUE INDEX cash_topup_packages_pkey ON public.cash_topup_packages USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "cash_wallets",
+"indexname": "cash_wallets_pkey",
+"indexdef": "CREATE UNIQUE INDEX cash_wallets_pkey ON public.cash_wallets USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "cash_wallets",
+"indexname": "cash_wallets_user_id_key",
+"indexdef": "CREATE UNIQUE INDEX cash_wallets_user_id_key ON public.cash_wallets USING btree (user_id)"
+},
+{
+"schemaname": "public",
+"tablename": "comments",
+"indexname": "comments_legacy_comment_id_key",
+"indexdef": "CREATE UNIQUE INDEX comments_legacy_comment_id_key ON public.comments USING btree (legacy_comment_id) WHERE (legacy_comment_id IS NOT NULL)"
+},
+{
+"schemaname": "public",
+"tablename": "comments",
+"indexname": "comments_pkey",
+"indexdef": "CREATE UNIQUE INDEX comments_pkey ON public.comments USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "comments",
+"indexname": "idx_comments_parent",
+"indexdef": "CREATE INDEX idx_comments_parent ON public.comments USING btree (parent_id)"
+},
+{
+"schemaname": "public",
+"tablename": "comments",
+"indexname": "idx_comments_post_created",
+"indexdef": "CREATE INDEX idx_comments_post_created ON public.comments USING btree (post_id, created_at)"
+},
+{
+"schemaname": "public",
+"tablename": "community_comments",
+"indexname": "community_comments_author_idx",
+"indexdef": "CREATE INDEX community_comments_author_idx ON public.community_comments USING btree (author_id)"
+},
+{
+"schemaname": "public",
+"tablename": "community_comments",
+"indexname": "community_comments_canonical_id_key",
+"indexdef": "CREATE UNIQUE INDEX community_comments_canonical_id_key ON public.community_comments USING btree (canonical_comment_id) WHERE (canonical_comment_id IS NOT NULL)"
+},
+{
+"schemaname": "public",
+"tablename": "community_comments",
+"indexname": "community_comments_pkey",
+"indexdef": "CREATE UNIQUE INDEX community_comments_pkey ON public.community_comments USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "community_comments",
+"indexname": "community_comments_post_list_idx",
+"indexdef": "CREATE INDEX community_comments_post_list_idx ON public.community_comments USING btree (post_type, post_id, created_at)"
+},
+{
+"schemaname": "public",
+"tablename": "community_hashtags",
+"indexname": "community_hashtags_pkey",
+"indexdef": "CREATE UNIQUE INDEX community_hashtags_pkey ON public.community_hashtags USING btree (tag)"
+},
+{
+"schemaname": "public",
+"tablename": "community_posts",
+"indexname": "community_posts_author_idem_key",
+"indexdef": "CREATE UNIQUE INDEX community_posts_author_idem_key ON public.community_posts USING btree (author_id, create_idempotency_key)"
+},
+{
+"schemaname": "public",
+"tablename": "community_posts",
+"indexname": "community_posts_pkey",
+"indexdef": "CREATE UNIQUE INDEX community_posts_pkey ON public.community_posts USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "community_posts",
+"indexname": "idx_cp_active_created",
+"indexdef": "CREATE INDEX idx_cp_active_created ON public.community_posts USING btree (created_at DESC) WHERE (deleted_at IS NULL)"
+},
+{
+"schemaname": "public",
+"tablename": "community_posts",
+"indexname": "idx_cp_cat",
+"indexdef": "CREATE INDEX idx_cp_cat ON public.community_posts USING btree (category, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "community_posts",
+"indexname": "idx_cp_category_created",
+"indexdef": "CREATE INDEX idx_cp_category_created ON public.community_posts USING btree (category, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "community_posts",
+"indexname": "idx_cp_status_created",
+"indexdef": "CREATE INDEX idx_cp_status_created ON public.community_posts USING btree (status, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "connection_notes",
+"indexname": "connection_notes_pkey",
+"indexdef": "CREATE UNIQUE INDEX connection_notes_pkey ON public.connection_notes USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "connection_notes",
+"indexname": "idx_cn_author",
+"indexdef": "CREATE INDEX idx_cn_author ON public.connection_notes USING btree (mentor_student_room_id, author_id)"
+},
+{
+"schemaname": "public",
+"tablename": "connection_notes",
+"indexname": "idx_cn_msr",
+"indexdef": "CREATE INDEX idx_cn_msr ON public.connection_notes USING btree (mentor_student_room_id, updated_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "content_reports",
+"indexname": "content_reports_pkey",
+"indexdef": "CREATE UNIQUE INDEX content_reports_pkey ON public.content_reports USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "content_reports",
+"indexname": "content_reports_reporter_id_idx",
+"indexdef": "CREATE INDEX content_reports_reporter_id_idx ON public.content_reports USING btree (reporter_id)"
+},
+{
+"schemaname": "public",
+"tablename": "content_reports",
+"indexname": "content_reports_status_created_idx",
+"indexdef": "CREATE INDEX content_reports_status_created_idx ON public.content_reports USING btree (status, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "content_reports",
+"indexname": "content_reports_target_idx",
+"indexdef": "CREATE INDEX content_reports_target_idx ON public.content_reports USING btree (target_type, target_id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_deliverables",
+"indexname": "custom_order_deliverables_pkey",
+"indexdef": "CREATE UNIQUE INDEX custom_order_deliverables_pkey ON public.custom_order_deliverables USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_deliverables",
+"indexname": "deliverables_order_version_unique",
+"indexdef": "CREATE UNIQUE INDEX deliverables_order_version_unique ON public.custom_order_deliverables USING btree (custom_request_order_id, version) WHERE ((custom_request_order_id IS NOT NULL) AND (version IS NOT NULL))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_deliverables",
+"indexname": "idx_cdel_order",
+"indexdef": "CREATE INDEX idx_cdel_order ON public.custom_order_deliverables USING btree (custom_request_order_id, version, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_deliverables",
+"indexname": "idx_cdel_order_storage",
+"indexdef": "CREATE INDEX idx_cdel_order_storage ON public.custom_order_deliverables USING btree (custom_request_order_id, storage_path) WHERE (storage_path IS NOT NULL)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_message_attachments",
+"indexname": "custom_order_message_attachments_pkey",
+"indexdef": "CREATE UNIQUE INDEX custom_order_message_attachments_pkey ON public.custom_order_message_attachments USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_message_attachments",
+"indexname": "custom_order_message_attachments_storage_path_unique",
+"indexdef": "CREATE UNIQUE INDEX custom_order_message_attachments_storage_path_unique ON public.custom_order_message_attachments USING btree (storage_path)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_message_attachments",
+"indexname": "idx_custom_order_message_attachments_message",
+"indexdef": "CREATE INDEX idx_custom_order_message_attachments_message ON public.custom_order_message_attachments USING btree (message_id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_message_attachments",
+"indexname": "idx_custom_order_message_attachments_order",
+"indexdef": "CREATE INDEX idx_custom_order_message_attachments_order ON public.custom_order_message_attachments USING btree (order_id, created_at)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_messages",
+"indexname": "custom_order_messages_pkey",
+"indexdef": "CREATE UNIQUE INDEX custom_order_messages_pkey ON public.custom_order_messages USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_messages",
+"indexname": "idx_cmsg_order",
+"indexdef": "CREATE INDEX idx_cmsg_order ON public.custom_order_messages USING btree (custom_request_order_id, created_at)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_revisions",
+"indexname": "custom_order_revisions_pkey",
+"indexdef": "CREATE UNIQUE INDEX custom_order_revisions_pkey ON public.custom_order_revisions USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_revisions",
+"indexname": "idx_crev_order",
+"indexdef": "CREATE INDEX idx_crev_order ON public.custom_order_revisions USING btree (custom_request_order_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_settlement_items",
+"indexname": "custom_order_settlement_items_pkey",
+"indexdef": "CREATE UNIQUE INDEX custom_order_settlement_items_pkey ON public.custom_order_settlement_items USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_settlement_items",
+"indexname": "idx_cosi_mentor_created",
+"indexdef": "CREATE INDEX idx_cosi_mentor_created ON public.custom_order_settlement_items USING btree (mentor_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_settlement_items",
+"indexname": "idx_cosi_student",
+"indexdef": "CREATE INDEX idx_cosi_student ON public.custom_order_settlement_items USING btree (student_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_settlement_items",
+"indexname": "uq_cosi_one_per_order",
+"indexdef": "CREATE UNIQUE INDEX uq_cosi_one_per_order ON public.custom_order_settlement_items USING btree (custom_request_order_id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_application_attachments",
+"indexname": "custom_request_application_attachments_pkey",
+"indexdef": "CREATE UNIQUE INDEX custom_request_application_attachments_pkey ON public.custom_request_application_attachments USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_application_attachments",
+"indexname": "idx_craa_application_created",
+"indexdef": "CREATE INDEX idx_craa_application_created ON public.custom_request_application_attachments USING btree (application_id, created_at)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_applications",
+"indexname": "custom_request_applications_pkey",
+"indexdef": "CREATE UNIQUE INDEX custom_request_applications_pkey ON public.custom_request_applications USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_applications",
+"indexname": "idx_cra_mentor",
+"indexdef": "CREATE INDEX idx_cra_mentor ON public.custom_request_applications USING btree (mentor_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_applications",
+"indexname": "idx_cra_post",
+"indexdef": "CREATE INDEX idx_cra_post ON public.custom_request_applications USING btree (post_id, status)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_orders",
+"indexname": "custom_request_orders_pkey",
+"indexdef": "CREATE UNIQUE INDEX custom_request_orders_pkey ON public.custom_request_orders USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_orders",
+"indexname": "idx_cro_mentor",
+"indexdef": "CREATE INDEX idx_cro_mentor ON public.custom_request_orders USING btree (mentor_id, status)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_orders",
+"indexname": "idx_cro_post",
+"indexdef": "CREATE INDEX idx_cro_post ON public.custom_request_orders USING btree (post_id, status)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_orders",
+"indexname": "idx_cro_student",
+"indexdef": "CREATE INDEX idx_cro_student ON public.custom_request_orders USING btree (student_id, status)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_orders",
+"indexname": "ux_cro_active_application_once",
+"indexdef": "CREATE UNIQUE INDEX ux_cro_active_application_once ON public.custom_request_orders USING btree (COALESCE(selected_application_id, application_id, custom_request_application_id)) WHERE ((COALESCE(selected_application_id, application_id, custom_request_application_id) IS NOT NULL) AND (lower(COALESCE(payment_status, ''::text)) <> ALL (ARRAY['cancelled'::text, 'canceled'::text, 'refunded'::text])) AND (lower(COALESCE(status, ''::text)) <> ALL (ARRAY['cancelled'::text, 'canceled'::text, 'refunded'::text, 'rejected'::text])) AND (lower(COALESCE(state, ''::text)) <> ALL (ARRAY['cancelled'::text, 'canceled'::text, 'refunded'::text, 'rejected'::text])) AND (lower(COALESCE(order_status, ''::text)) <> ALL (ARRAY['cancelled'::text, 'canceled'::text, 'refunded'::text, 'rejected'::text])))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_post_attachments",
+"indexname": "custom_request_post_attachments_pkey",
+"indexdef": "CREATE UNIQUE INDEX custom_request_post_attachments_pkey ON public.custom_request_post_attachments USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_post_attachments",
+"indexname": "idx_crpa_post_created",
+"indexdef": "CREATE INDEX idx_crpa_post_created ON public.custom_request_post_attachments USING btree (custom_request_post_id, created_at)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_posts",
+"indexname": "custom_request_posts_pkey",
+"indexdef": "CREATE UNIQUE INDEX custom_request_posts_pkey ON public.custom_request_posts USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_posts",
+"indexname": "idx_crp_author",
+"indexdef": "CREATE INDEX idx_crp_author ON public.custom_request_posts USING btree (author_id, status, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_posts",
+"indexname": "idx_crp_status",
+"indexdef": "CREATE INDEX idx_crp_status ON public.custom_request_posts USING btree (status, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_posts",
+"indexname": "idx_crp_user",
+"indexdef": "CREATE INDEX idx_crp_user ON public.custom_request_posts USING btree (user_id, status, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "device_tokens",
+"indexname": "device_tokens_pkey",
+"indexdef": "CREATE UNIQUE INDEX device_tokens_pkey ON public.device_tokens USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "device_tokens",
+"indexname": "device_tokens_token_key",
+"indexdef": "CREATE UNIQUE INDEX device_tokens_token_key ON public.device_tokens USING btree (token)"
+},
+{
+"schemaname": "public",
+"tablename": "device_tokens",
+"indexname": "idx_device_tokens_user",
+"indexdef": "CREATE INDEX idx_device_tokens_user ON public.device_tokens USING btree (user_id) WHERE (revoked_at IS NULL)"
+},
+{
+"schemaname": "public",
+"tablename": "disputes",
+"indexname": "disputes_order_active_unique",
+"indexdef": "CREATE UNIQUE INDEX disputes_order_active_unique ON public.disputes USING btree (custom_request_order_id) WHERE (status = ANY (ARRAY['open'::text, 'under_review'::text, 'escalated'::text]))"
+},
+{
+"schemaname": "public",
+"tablename": "disputes",
+"indexname": "disputes_pkey",
+"indexdef": "CREATE UNIQUE INDEX disputes_pkey ON public.disputes USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "favorites",
+"indexname": "favorites_mentor_id_idx",
+"indexdef": "CREATE INDEX favorites_mentor_id_idx ON public.favorites USING btree (mentor_id)"
+},
+{
+"schemaname": "public",
+"tablename": "favorites",
+"indexname": "favorites_pkey",
+"indexdef": "CREATE UNIQUE INDEX favorites_pkey ON public.favorites USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "favorites",
+"indexname": "favorites_user_id_idx",
+"indexdef": "CREATE INDEX favorites_user_id_idx ON public.favorites USING btree (user_id)"
+},
+{
+"schemaname": "public",
+"tablename": "favorites",
+"indexname": "favorites_user_id_mentor_id_key",
+"indexdef": "CREATE UNIQUE INDEX favorites_user_id_mentor_id_key ON public.favorites USING btree (user_id, mentor_id)"
+},
+{
+"schemaname": "public",
+"tablename": "free_question_usage",
+"indexname": "free_question_usage_pkey",
+"indexdef": "CREATE UNIQUE INDEX free_question_usage_pkey ON public.free_question_usage USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "free_question_usage",
+"indexname": "free_question_usage_thread_id_idx",
+"indexdef": "CREATE INDEX free_question_usage_thread_id_idx ON public.free_question_usage USING btree (thread_id)"
+},
+{
+"schemaname": "public",
+"tablename": "free_question_usage",
+"indexname": "free_question_usage_thread_id_key",
+"indexdef": "CREATE UNIQUE INDEX free_question_usage_thread_id_key ON public.free_question_usage USING btree (thread_id)"
+},
+{
+"schemaname": "public",
+"tablename": "free_question_usage",
+"indexname": "idx_fqu_student_created",
+"indexdef": "CREATE INDEX idx_fqu_student_created ON public.free_question_usage USING btree (student_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "free_question_usage",
+"indexname": "idx_fqu_student_mentor",
+"indexdef": "CREATE INDEX idx_fqu_student_mentor ON public.free_question_usage USING btree (student_id, mentor_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_question_attachments",
+"indexname": "idx_iqa_message",
+"indexdef": "CREATE INDEX idx_iqa_message ON public.individual_question_attachments USING btree (message_id)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_question_attachments",
+"indexname": "idx_iqa_question_created",
+"indexdef": "CREATE INDEX idx_iqa_question_created ON public.individual_question_attachments USING btree (question_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_question_attachments",
+"indexname": "individual_question_attachments_pkey",
+"indexdef": "CREATE UNIQUE INDEX individual_question_attachments_pkey ON public.individual_question_attachments USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_question_attachments",
+"indexname": "uq_iqa_question_storage_path",
+"indexdef": "CREATE UNIQUE INDEX uq_iqa_question_storage_path ON public.individual_question_attachments USING btree (question_id, storage_path)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_question_messages",
+"indexname": "idx_iqm_question_created",
+"indexdef": "CREATE INDEX idx_iqm_question_created ON public.individual_question_messages USING btree (question_id, created_at)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_question_messages",
+"indexname": "individual_question_messages_id_question_unique",
+"indexdef": "CREATE UNIQUE INDEX individual_question_messages_id_question_unique ON public.individual_question_messages USING btree (id, question_id)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_question_messages",
+"indexname": "individual_question_messages_pkey",
+"indexdef": "CREATE UNIQUE INDEX individual_question_messages_pkey ON public.individual_question_messages USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_question_transfers",
+"indexname": "idx_iqt_student_mentor",
+"indexdef": "CREATE INDEX idx_iqt_student_mentor ON public.individual_question_transfers USING btree (student_id, mentor_id)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_question_transfers",
+"indexname": "individual_question_transfers_pkey",
+"indexdef": "CREATE UNIQUE INDEX individual_question_transfers_pkey ON public.individual_question_transfers USING btree (individual_question_id)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_questions",
+"indexname": "idx_iq_claimed_mentor_status",
+"indexdef": "CREATE INDEX idx_iq_claimed_mentor_status ON public.individual_questions USING btree (claimed_mentor_id, status, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_questions",
+"indexname": "idx_iq_designated_mentor_status",
+"indexdef": "CREATE INDEX idx_iq_designated_mentor_status ON public.individual_questions USING btree (designated_mentor_id, status, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_questions",
+"indexname": "idx_iq_open_list",
+"indexdef": "CREATE INDEX idx_iq_open_list ON public.individual_questions USING btree (question_type, status, created_at DESC) WHERE (status = 'open'::text)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_questions",
+"indexname": "idx_iq_open_required_qualification",
+"indexdef": "CREATE INDEX idx_iq_open_required_qualification ON public.individual_questions USING btree (required_school_tier, required_major_category, created_at DESC) WHERE ((question_type = 'open'::text) AND (status = 'open'::text))"
+},
+{
+"schemaname": "public",
+"tablename": "individual_questions",
+"indexname": "idx_iq_status_expires",
+"indexdef": "CREATE INDEX idx_iq_status_expires ON public.individual_questions USING btree (status, expires_at)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_questions",
+"indexname": "idx_iq_student_created",
+"indexdef": "CREATE INDEX idx_iq_student_created ON public.individual_questions USING btree (student_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_questions",
+"indexname": "individual_questions_create_idempotency_key_key",
+"indexdef": "CREATE UNIQUE INDEX individual_questions_create_idempotency_key_key ON public.individual_questions USING btree (create_idempotency_key)"
+},
+{
+"schemaname": "public",
+"tablename": "individual_questions",
+"indexname": "individual_questions_pkey",
+"indexdef": "CREATE UNIQUE INDEX individual_questions_pkey ON public.individual_questions USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "major_category_catalog",
+"indexname": "major_category_catalog_active_order_idx",
+"indexdef": "CREATE INDEX major_category_catalog_active_order_idx ON public.major_category_catalog USING btree (is_active, display_order, code)"
+},
+{
+"schemaname": "public",
+"tablename": "major_category_catalog",
+"indexname": "major_category_catalog_pkey",
+"indexdef": "CREATE UNIQUE INDEX major_category_catalog_pkey ON public.major_category_catalog USING btree (code)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_academic_record_change_requests",
+"indexname": "idx_mentor_acad_change_mentor_id",
+"indexdef": "CREATE INDEX idx_mentor_acad_change_mentor_id ON public.mentor_academic_record_change_requests USING btree (mentor_id)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_academic_record_change_requests",
+"indexname": "idx_mentor_acad_change_status",
+"indexdef": "CREATE INDEX idx_mentor_acad_change_status ON public.mentor_academic_record_change_requests USING btree (status)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_academic_record_change_requests",
+"indexname": "mentor_academic_record_change_requests_pkey",
+"indexdef": "CREATE UNIQUE INDEX mentor_academic_record_change_requests_pkey ON public.mentor_academic_record_change_requests USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_activity_events",
+"indexname": "mentor_activity_events_mentor_idx",
+"indexdef": "CREATE INDEX mentor_activity_events_mentor_idx ON public.mentor_activity_events USING btree (mentor_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_activity_events",
+"indexname": "mentor_activity_events_pkey",
+"indexdef": "CREATE UNIQUE INDEX mentor_activity_events_pkey ON public.mentor_activity_events USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_activity_events",
+"indexname": "mentor_activity_events_review_idx",
+"indexdef": "CREATE INDEX mentor_activity_events_review_idx ON public.mentor_activity_events USING btree (status) WHERE (status = 'pending_review'::text)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_individual_question_pricing",
+"indexname": "mentor_individual_question_pricing_pkey",
+"indexdef": "CREATE UNIQUE INDEX mentor_individual_question_pricing_pkey ON public.mentor_individual_question_pricing USING btree (mentor_id)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_plans",
+"indexname": "idx_mp_mentor",
+"indexdef": "CREATE INDEX idx_mp_mentor ON public.mentor_plans USING btree (mentor_id, plan_tier)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_plans",
+"indexname": "mentor_plans_pkey",
+"indexdef": "CREATE UNIQUE INDEX mentor_plans_pkey ON public.mentor_plans USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_plans",
+"indexname": "uq_mentor_plans_mentor_tier",
+"indexdef": "CREATE UNIQUE INDEX uq_mentor_plans_mentor_tier ON public.mentor_plans USING btree (mentor_id, plan_tier)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_profiles",
+"indexname": "mentor_profiles_pkey",
+"indexdef": "CREATE UNIQUE INDEX mentor_profiles_pkey ON public.mentor_profiles USING btree (user_id)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_school_verifications",
+"indexname": "idx_mentor_school_verifications_mentor_id",
+"indexdef": "CREATE INDEX idx_mentor_school_verifications_mentor_id ON public.mentor_school_verifications USING btree (mentor_id)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_school_verifications",
+"indexname": "idx_mentor_school_verifications_status",
+"indexdef": "CREATE INDEX idx_mentor_school_verifications_status ON public.mentor_school_verifications USING btree (status)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_school_verifications",
+"indexname": "mentor_school_verifications_pkey",
+"indexdef": "CREATE UNIQUE INDEX mentor_school_verifications_pkey ON public.mentor_school_verifications USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_school_verifications",
+"indexname": "uq_msv_one_approved_per_mentor",
+"indexdef": "CREATE UNIQUE INDEX uq_msv_one_approved_per_mentor ON public.mentor_school_verifications USING btree (mentor_id) WHERE (status = 'approved'::text)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_student_rooms",
+"indexname": "mentor_student_rooms_pkey",
+"indexdef": "CREATE UNIQUE INDEX mentor_student_rooms_pkey ON public.mentor_student_rooms USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_student_rooms",
+"indexname": "uq_msr_pair",
+"indexdef": "CREATE UNIQUE INDEX uq_msr_pair ON public.mentor_student_rooms USING btree (student_id, mentor_id)"
+},
+{
+"schemaname": "public",
+"tablename": "mobile_app_version_policies",
+"indexname": "mobile_app_version_policies_pkey",
+"indexdef": "CREATE UNIQUE INDEX mobile_app_version_policies_pkey ON public.mobile_app_version_policies USING btree (platform)"
+},
+{
+"schemaname": "public",
+"tablename": "notification_deliveries",
+"indexname": "idx_notif_deliveries_outbox",
+"indexdef": "CREATE INDEX idx_notif_deliveries_outbox ON public.notification_deliveries USING btree (outbox_id)"
+},
+{
+"schemaname": "public",
+"tablename": "notification_deliveries",
+"indexname": "notification_deliveries_pkey",
+"indexdef": "CREATE UNIQUE INDEX notification_deliveries_pkey ON public.notification_deliveries USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "notification_deliveries",
+"indexname": "notification_deliveries_uq",
+"indexdef": "CREATE UNIQUE INDEX notification_deliveries_uq ON public.notification_deliveries USING btree (outbox_id, device_token_id)"
+},
+{
+"schemaname": "public",
+"tablename": "notification_outbox",
+"indexname": "idx_notification_outbox_claim",
+"indexdef": "CREATE INDEX idx_notification_outbox_claim ON public.notification_outbox USING btree (status, next_attempt_at) WHERE (status = ANY (ARRAY['pending'::text, 'failed'::text]))"
+},
+{
+"schemaname": "public",
+"tablename": "notification_outbox",
+"indexname": "notification_outbox_pkey",
+"indexdef": "CREATE UNIQUE INDEX notification_outbox_pkey ON public.notification_outbox USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "notification_outbox",
+"indexname": "notification_outbox_recipient_dedup_uq",
+"indexdef": "CREATE UNIQUE INDEX notification_outbox_recipient_dedup_uq ON public.notification_outbox USING btree (recipient_user_id, dedup_key)"
+},
+{
+"schemaname": "public",
+"tablename": "notification_settings",
+"indexname": "notification_settings_pkey",
+"indexdef": "CREATE UNIQUE INDEX notification_settings_pkey ON public.notification_settings USING btree (user_id)"
+},
+{
+"schemaname": "public",
+"tablename": "notification_transport_config",
+"indexname": "notification_transport_config_pkey",
+"indexdef": "CREATE UNIQUE INDEX notification_transport_config_pkey ON public.notification_transport_config USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "notifications",
+"indexname": "idx_notif_recipient",
+"indexdef": "CREATE INDEX idx_notif_recipient ON public.notifications USING btree (recipient_id, is_read, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "notifications",
+"indexname": "idx_notif_user_unread",
+"indexdef": "CREATE INDEX idx_notif_user_unread ON public.notifications USING btree (user_id, is_read, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "notifications",
+"indexname": "idx_notifications_recipient_user",
+"indexdef": "CREATE INDEX idx_notifications_recipient_user ON public.notifications USING btree (recipient_user_id) WHERE (recipient_user_id IS NOT NULL)"
+},
+{
+"schemaname": "public",
+"tablename": "notifications",
+"indexname": "notifications_pkey",
+"indexdef": "CREATE UNIQUE INDEX notifications_pkey ON public.notifications USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "notifications",
+"indexname": "uq_notifications_recipient_event",
+"indexdef": "CREATE UNIQUE INDEX uq_notifications_recipient_event ON public.notifications USING btree (recipient_user_id, event_key) WHERE ((recipient_user_id IS NOT NULL) AND (event_key IS NOT NULL))"
+},
+{
+"schemaname": "public",
+"tablename": "order_events",
+"indexname": "idx_oev_order",
+"indexdef": "CREATE INDEX idx_oev_order ON public.order_events USING btree (custom_request_order_id, created_at)"
+},
+{
+"schemaname": "public",
+"tablename": "order_events",
+"indexname": "order_events_pkey",
+"indexdef": "CREATE UNIQUE INDEX order_events_pkey ON public.order_events USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "order_payments",
+"indexname": "idx_order_payments_order",
+"indexdef": "CREATE INDEX idx_order_payments_order ON public.order_payments USING btree (custom_request_order_id)"
+},
+{
+"schemaname": "public",
+"tablename": "order_payments",
+"indexname": "idx_order_payments_pay",
+"indexdef": "CREATE INDEX idx_order_payments_pay ON public.order_payments USING btree (payment_id)"
+},
+{
+"schemaname": "public",
+"tablename": "order_payments",
+"indexname": "order_payments_pkey",
+"indexdef": "CREATE UNIQUE INDEX order_payments_pkey ON public.order_payments USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "order_payments",
+"indexname": "uq_order_payments_pair",
+"indexdef": "CREATE UNIQUE INDEX uq_order_payments_pair ON public.order_payments USING btree (custom_request_order_id, payment_id)"
+},
+{
+"schemaname": "public",
+"tablename": "payments",
+"indexname": "idx_payments_mentor",
+"indexdef": "CREATE INDEX idx_payments_mentor ON public.payments USING btree (mentor_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "payments",
+"indexname": "idx_payments_status",
+"indexdef": "CREATE INDEX idx_payments_status ON public.payments USING btree (status, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "payments",
+"indexname": "idx_payments_user",
+"indexdef": "CREATE INDEX idx_payments_user ON public.payments USING btree (user_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "payments",
+"indexname": "payments_idempotency_key_key",
+"indexdef": "CREATE UNIQUE INDEX payments_idempotency_key_key ON public.payments USING btree (idempotency_key)"
+},
+{
+"schemaname": "public",
+"tablename": "payments",
+"indexname": "payments_pkey",
+"indexdef": "CREATE UNIQUE INDEX payments_pkey ON public.payments USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "payout_run_items",
+"indexname": "idx_pri_mentor",
+"indexdef": "CREATE INDEX idx_pri_mentor ON public.payout_run_items USING btree (mentor_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "payout_run_items",
+"indexname": "idx_pri_run",
+"indexdef": "CREATE INDEX idx_pri_run ON public.payout_run_items USING btree (payout_run_id)"
+},
+{
+"schemaname": "public",
+"tablename": "payout_run_items",
+"indexname": "idx_pri_source",
+"indexdef": "CREATE INDEX idx_pri_source ON public.payout_run_items USING btree (source_type, source_id)"
+},
+{
+"schemaname": "public",
+"tablename": "payout_run_items",
+"indexname": "payout_run_items_pkey",
+"indexdef": "CREATE UNIQUE INDEX payout_run_items_pkey ON public.payout_run_items USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "payout_run_items",
+"indexname": "payout_run_items_source_global_uq",
+"indexdef": "CREATE UNIQUE INDEX payout_run_items_source_global_uq ON public.payout_run_items USING btree (source_type, source_id)"
+},
+{
+"schemaname": "public",
+"tablename": "payout_run_items",
+"indexname": "payout_run_items_unique",
+"indexdef": "CREATE UNIQUE INDEX payout_run_items_unique ON public.payout_run_items USING btree (payout_run_id, source_type, source_id)"
+},
+{
+"schemaname": "public",
+"tablename": "payout_runs",
+"indexname": "idx_payout_runs_run_date",
+"indexdef": "CREATE INDEX idx_payout_runs_run_date ON public.payout_runs USING btree (run_date DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "payout_runs",
+"indexname": "payout_runs_idem_unique",
+"indexdef": "CREATE UNIQUE INDEX payout_runs_idem_unique ON public.payout_runs USING btree (idempotency_key)"
+},
+{
+"schemaname": "public",
+"tablename": "payout_runs",
+"indexname": "payout_runs_pkey",
+"indexdef": "CREATE UNIQUE INDEX payout_runs_pkey ON public.payout_runs USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "payout_settings",
+"indexname": "payout_settings_pkey",
+"indexdef": "CREATE UNIQUE INDEX payout_settings_pkey ON public.payout_settings USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "post_reactions",
+"indexname": "idx_post_reactions_post",
+"indexdef": "CREATE INDEX idx_post_reactions_post ON public.post_reactions USING btree (post_id, type)"
+},
+{
+"schemaname": "public",
+"tablename": "post_reactions",
+"indexname": "post_reactions_pkey",
+"indexdef": "CREATE UNIQUE INDEX post_reactions_pkey ON public.post_reactions USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "post_reactions",
+"indexname": "post_reactions_user_id_post_id_type_key",
+"indexdef": "CREATE UNIQUE INDEX post_reactions_user_id_post_id_type_key ON public.post_reactions USING btree (user_id, post_id, type)"
+},
+{
+"schemaname": "public",
+"tablename": "promotion_campaigns",
+"indexname": "promotion_campaigns_active_window_idx",
+"indexdef": "CREATE INDEX promotion_campaigns_active_window_idx ON public.promotion_campaigns USING btree (is_active, starts_at, ends_at)"
+},
+{
+"schemaname": "public",
+"tablename": "promotion_campaigns",
+"indexname": "promotion_campaigns_created_at_idx",
+"indexdef": "CREATE INDEX promotion_campaigns_created_at_idx ON public.promotion_campaigns USING btree (created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "promotion_campaigns",
+"indexname": "promotion_campaigns_pkey",
+"indexdef": "CREATE UNIQUE INDEX promotion_campaigns_pkey ON public.promotion_campaigns USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "question_attachments",
+"indexname": "idx_question_attachments_message",
+"indexdef": "CREATE INDEX idx_question_attachments_message ON public.question_attachments USING btree (message_id)"
+},
+{
+"schemaname": "public",
+"tablename": "question_attachments",
+"indexname": "idx_question_attachments_thread_created",
+"indexdef": "CREATE INDEX idx_question_attachments_thread_created ON public.question_attachments USING btree (thread_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "question_attachments",
+"indexname": "question_attachments_pkey",
+"indexdef": "CREATE UNIQUE INDEX question_attachments_pkey ON public.question_attachments USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "question_attachments",
+"indexname": "question_attachments_storage_path_key",
+"indexdef": "CREATE UNIQUE INDEX question_attachments_storage_path_key ON public.question_attachments USING btree (storage_path)"
+},
+{
+"schemaname": "public",
+"tablename": "question_messages",
+"indexname": "idx_qm_thread",
+"indexdef": "CREATE INDEX idx_qm_thread ON public.question_messages USING btree (thread_id, created_at)"
+},
+{
+"schemaname": "public",
+"tablename": "question_messages",
+"indexname": "question_messages_pkey",
+"indexdef": "CREATE UNIQUE INDEX question_messages_pkey ON public.question_messages USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "question_threads",
+"indexname": "idx_qt_msr",
+"indexdef": "CREATE INDEX idx_qt_msr ON public.question_threads USING btree (mentor_student_room_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "question_threads",
+"indexname": "question_threads_pkey",
+"indexdef": "CREATE UNIQUE INDEX question_threads_pkey ON public.question_threads USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "refunds",
+"indexname": "idx_refunds_billing_event",
+"indexdef": "CREATE INDEX idx_refunds_billing_event ON public.refunds USING btree (billing_event_id) WHERE (billing_event_id IS NOT NULL)"
+},
+{
+"schemaname": "public",
+"tablename": "refunds",
+"indexname": "idx_refunds_subscription_prorated_pending",
+"indexdef": "CREATE INDEX idx_refunds_subscription_prorated_pending ON public.refunds USING btree (subscription_id, created_at DESC) WHERE ((subscription_id IS NOT NULL) AND (status = 'pending'::text) AND (request_type = 'subscription_prorated'::text))"
+},
+{
+"schemaname": "public",
+"tablename": "refunds",
+"indexname": "idx_refunds_subscription_status",
+"indexdef": "CREATE INDEX idx_refunds_subscription_status ON public.refunds USING btree (subscription_id, status, created_at DESC) WHERE (subscription_id IS NOT NULL)"
+},
+{
+"schemaname": "public",
+"tablename": "refunds",
+"indexname": "idx_refunds_user",
+"indexdef": "CREATE INDEX idx_refunds_user ON public.refunds USING btree (user_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "refunds",
+"indexname": "refunds_pkey",
+"indexdef": "CREATE UNIQUE INDEX refunds_pkey ON public.refunds USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "reviews",
+"indexname": "idx_rev_mentor",
+"indexdef": "CREATE INDEX idx_rev_mentor ON public.reviews USING btree (mentor_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "reviews",
+"indexname": "idx_reviews_author",
+"indexdef": "CREATE INDEX idx_reviews_author ON public.reviews USING btree (author_id)"
+},
+{
+"schemaname": "public",
+"tablename": "reviews",
+"indexname": "idx_reviews_mentor_created",
+"indexdef": "CREATE INDEX idx_reviews_mentor_created ON public.reviews USING btree (mentor_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "reviews",
+"indexname": "reviews_pkey",
+"indexdef": "CREATE UNIQUE INDEX reviews_pkey ON public.reviews USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "reviews",
+"indexname": "uq_reviews_mentor_author",
+"indexdef": "CREATE UNIQUE INDEX uq_reviews_mentor_author ON public.reviews USING btree (mentor_id, author_id)"
+},
+{
+"schemaname": "public",
+"tablename": "reviews_duplicates_archive",
+"indexname": "reviews_duplicates_archive_pkey",
+"indexdef": "CREATE UNIQUE INDEX reviews_duplicates_archive_pkey ON public.reviews_duplicates_archive USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "reviews_quarantine_archive",
+"indexname": "reviews_quarantine_archive_pkey",
+"indexdef": "CREATE UNIQUE INDEX reviews_quarantine_archive_pkey ON public.reviews_quarantine_archive USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "scan_annotations",
+"indexname": "idx_scan_annotations_room_created",
+"indexdef": "CREATE INDEX idx_scan_annotations_room_created ON public.scan_annotations USING btree (mentor_student_room_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "scan_annotations",
+"indexname": "scan_annotations_pkey",
+"indexdef": "CREATE UNIQUE INDEX scan_annotations_pkey ON public.scan_annotations USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "school_tier_catalog",
+"indexname": "school_tier_catalog_active_order_idx",
+"indexdef": "CREATE INDEX school_tier_catalog_active_order_idx ON public.school_tier_catalog USING btree (is_active, display_order, code)"
+},
+{
+"schemaname": "public",
+"tablename": "school_tier_catalog",
+"indexname": "school_tier_catalog_pkey",
+"indexdef": "CREATE UNIQUE INDEX school_tier_catalog_pkey ON public.school_tier_catalog USING btree (code)"
+},
+{
+"schemaname": "public",
+"tablename": "school_tier_mappings",
+"indexname": "school_tier_mappings_active_order_idx",
+"indexdef": "CREATE INDEX school_tier_mappings_active_order_idx ON public.school_tier_mappings USING btree (is_active, school_tier_code, school_name)"
+},
+{
+"schemaname": "public",
+"tablename": "school_tier_mappings",
+"indexname": "school_tier_mappings_pkey",
+"indexdef": "CREATE UNIQUE INDEX school_tier_mappings_pkey ON public.school_tier_mappings USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "school_tier_mappings",
+"indexname": "school_tier_mappings_school_name_unique",
+"indexdef": "CREATE UNIQUE INDEX school_tier_mappings_school_name_unique ON public.school_tier_mappings USING btree (lower(TRIM(BOTH FROM school_name)))"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_posts",
+"indexname": "idx_sf_cat",
+"indexdef": "CREATE INDEX idx_sf_cat ON public.shortform_posts USING btree (category, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_posts",
+"indexname": "idx_sf_category_created",
+"indexdef": "CREATE INDEX idx_sf_category_created ON public.shortform_posts USING btree (category, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_posts",
+"indexname": "idx_sf_status_created",
+"indexdef": "CREATE INDEX idx_sf_status_created ON public.shortform_posts USING btree (status, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_posts",
+"indexname": "shortform_posts_author_idem_key",
+"indexdef": "CREATE UNIQUE INDEX shortform_posts_author_idem_key ON public.shortform_posts USING btree (author_id, create_idempotency_key)"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_posts",
+"indexname": "shortform_posts_pkey",
+"indexdef": "CREATE UNIQUE INDEX shortform_posts_pkey ON public.shortform_posts USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_reactions",
+"indexname": "idx_shortform_reactions_shortform",
+"indexdef": "CREATE INDEX idx_shortform_reactions_shortform ON public.shortform_reactions USING btree (shortform_id, type)"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_reactions",
+"indexname": "idx_shortform_reactions_user",
+"indexdef": "CREATE INDEX idx_shortform_reactions_user ON public.shortform_reactions USING btree (user_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_reactions",
+"indexname": "shortform_reactions_pkey",
+"indexdef": "CREATE UNIQUE INDEX shortform_reactions_pkey ON public.shortform_reactions USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_reactions",
+"indexname": "shortform_reactions_user_id_shortform_id_type_key",
+"indexdef": "CREATE UNIQUE INDEX shortform_reactions_user_id_shortform_id_type_key ON public.shortform_reactions USING btree (user_id, shortform_id, type)"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_view_events",
+"indexname": "shortform_view_events_pkey",
+"indexdef": "CREATE UNIQUE INDEX shortform_view_events_pkey ON public.shortform_view_events USING btree (post_id, event_key)"
+},
+{
+"schemaname": "public",
+"tablename": "subjects",
+"indexname": "subjects_pkey",
+"indexdef": "CREATE UNIQUE INDEX subjects_pkey ON public.subjects USING btree (code)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_billing_events",
+"indexname": "idx_subscription_billing_events_pair_status",
+"indexdef": "CREATE INDEX idx_subscription_billing_events_pair_status ON public.subscription_billing_events USING btree (student_id, mentor_id, status)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_billing_events",
+"indexname": "idx_subscription_billing_events_pending_billing_at",
+"indexdef": "CREATE INDEX idx_subscription_billing_events_pending_billing_at ON public.subscription_billing_events USING btree (billing_at) WHERE (status = 'pending'::text)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_billing_events",
+"indexname": "idx_subscription_billing_events_subscription_period",
+"indexdef": "CREATE INDEX idx_subscription_billing_events_subscription_period ON public.subscription_billing_events USING btree (subscription_id, period_start)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_billing_events",
+"indexname": "subscription_billing_events_idempotency_key_key",
+"indexdef": "CREATE UNIQUE INDEX subscription_billing_events_idempotency_key_key ON public.subscription_billing_events USING btree (idempotency_key)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_billing_events",
+"indexname": "subscription_billing_events_pkey",
+"indexdef": "CREATE UNIQUE INDEX subscription_billing_events_pkey ON public.subscription_billing_events USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_checkout_anomalies",
+"indexname": "subscription_checkout_anomalies_pkey",
+"indexdef": "CREATE UNIQUE INDEX subscription_checkout_anomalies_pkey ON public.subscription_checkout_anomalies USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_settlement_items",
+"indexname": "idx_ssi_billing_at",
+"indexdef": "CREATE INDEX idx_ssi_billing_at ON public.subscription_settlement_items USING btree (billing_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_settlement_items",
+"indexname": "idx_ssi_mentor_created",
+"indexdef": "CREATE INDEX idx_ssi_mentor_created ON public.subscription_settlement_items USING btree (mentor_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_settlement_items",
+"indexname": "idx_ssi_mentor_status_created",
+"indexdef": "CREATE INDEX idx_ssi_mentor_status_created ON public.subscription_settlement_items USING btree (mentor_id, status, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_settlement_items",
+"indexname": "idx_ssi_subscription_period",
+"indexdef": "CREATE INDEX idx_ssi_subscription_period ON public.subscription_settlement_items USING btree (subscription_id, period_start, period_end)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_settlement_items",
+"indexname": "ssi_unique_billing_event",
+"indexdef": "CREATE UNIQUE INDEX ssi_unique_billing_event ON public.subscription_settlement_items USING btree (billing_event_id)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_settlement_items",
+"indexname": "subscription_settlement_items_idempotency_key_key",
+"indexdef": "CREATE UNIQUE INDEX subscription_settlement_items_idempotency_key_key ON public.subscription_settlement_items USING btree (idempotency_key)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_settlement_items",
+"indexname": "subscription_settlement_items_pkey",
+"indexdef": "CREATE UNIQUE INDEX subscription_settlement_items_pkey ON public.subscription_settlement_items USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "subscription_settlement_items",
+"indexname": "uq_ssi_billing_event",
+"indexdef": "CREATE UNIQUE INDEX uq_ssi_billing_event ON public.subscription_settlement_items USING btree (billing_event_id)"
+},
+{
+"schemaname": "public",
+"tablename": "subscriptions",
+"indexname": "idx_subs_status",
+"indexdef": "CREATE INDEX idx_subs_status ON public.subscriptions USING btree (status, updated_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "subscriptions",
+"indexname": "subscriptions_pkey",
+"indexdef": "CREATE UNIQUE INDEX subscriptions_pkey ON public.subscriptions USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "subscriptions",
+"indexname": "uq_subscriptions_pair",
+"indexdef": "CREATE UNIQUE INDEX uq_subscriptions_pair ON public.subscriptions USING btree (student_id, mentor_id)"
+},
+{
+"schemaname": "public",
+"tablename": "user_blocks",
+"indexname": "idx_user_blocks_blocker",
+"indexdef": "CREATE INDEX idx_user_blocks_blocker ON public.user_blocks USING btree (blocker_id)"
+},
+{
+"schemaname": "public",
+"tablename": "user_blocks",
+"indexname": "user_blocks_pkey",
+"indexdef": "CREATE UNIQUE INDEX user_blocks_pkey ON public.user_blocks USING btree (blocker_id, blocked_id)"
+},
+{
+"schemaname": "public",
+"tablename": "user_consent_records",
+"indexname": "idx_ucr_user_created",
+"indexdef": "CREATE INDEX idx_ucr_user_created ON public.user_consent_records USING btree (user_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "user_consent_records",
+"indexname": "idx_ucr_user_type_created",
+"indexdef": "CREATE INDEX idx_ucr_user_type_created ON public.user_consent_records USING btree (user_id, consent_type, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "user_consent_records",
+"indexname": "user_consent_records_idempotency_key_key",
+"indexdef": "CREATE UNIQUE INDEX user_consent_records_idempotency_key_key ON public.user_consent_records USING btree (idempotency_key)"
+},
+{
+"schemaname": "public",
+"tablename": "user_consent_records",
+"indexname": "user_consent_records_pkey",
+"indexdef": "CREATE UNIQUE INDEX user_consent_records_pkey ON public.user_consent_records USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "user_deletion_log",
+"indexname": "user_deletion_log_pkey",
+"indexdef": "CREATE UNIQUE INDEX user_deletion_log_pkey ON public.user_deletion_log USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "user_deletion_log",
+"indexname": "user_deletion_log_user_id_key",
+"indexdef": "CREATE UNIQUE INDEX user_deletion_log_user_id_key ON public.user_deletion_log USING btree (user_id)"
+},
+{
+"schemaname": "public",
+"tablename": "user_warnings",
+"indexname": "user_warnings_active_idx",
+"indexdef": "CREATE INDEX user_warnings_active_idx ON public.user_warnings USING btree (user_id) WHERE (is_active = true)"
+},
+{
+"schemaname": "public",
+"tablename": "user_warnings",
+"indexname": "user_warnings_pkey",
+"indexdef": "CREATE UNIQUE INDEX user_warnings_pkey ON public.user_warnings USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "user_warnings",
+"indexname": "user_warnings_user_idx",
+"indexdef": "CREATE INDEX user_warnings_user_idx ON public.user_warnings USING btree (user_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "users",
+"indexname": "users_email_idx",
+"indexdef": "CREATE INDEX users_email_idx ON public.users USING btree (email)"
+},
+{
+"schemaname": "public",
+"tablename": "users",
+"indexname": "users_pkey",
+"indexdef": "CREATE UNIQUE INDEX users_pkey ON public.users USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "users",
+"indexname": "users_status_blocked_idx",
+"indexdef": "CREATE INDEX users_status_blocked_idx ON public.users USING btree (status, suspended_until) WHERE (status <> 'active'::text)"
+},
+{
+"schemaname": "public",
+"tablename": "verification_logs",
+"indexname": "verification_logs_pkey",
+"indexdef": "CREATE UNIQUE INDEX verification_logs_pkey ON public.verification_logs USING btree (id)"
+},
+{
+"schemaname": "public",
+"tablename": "verification_logs",
+"indexname": "verification_logs_user_id_idx",
+"indexdef": "CREATE INDEX verification_logs_user_id_idx ON public.verification_logs USING btree (user_id)"
+},
+{
+"schemaname": "public",
+"tablename": "withdrawals",
+"indexname": "idx_withdrawals_mentor_created",
+"indexdef": "CREATE INDEX idx_withdrawals_mentor_created ON public.withdrawals USING btree (mentor_id, created_at DESC)"
+},
+{
+"schemaname": "public",
+"tablename": "withdrawals",
+"indexname": "withdrawals_pkey",
+"indexdef": "CREATE UNIQUE INDEX withdrawals_pkey ON public.withdrawals USING btree (id)"
+}
+]
