@@ -94,5 +94,7 @@ $$
   )
 $$;
 
+-- 삭제 진행 차단 스텁 — 마커 uid(…0009)만 true (fixture 의 삭제 진행 케이스용).
 create or replace function public.account_deletion_write_blocked(p_user_id uuid)
-returns boolean language sql stable as $$ select false $$;
+returns boolean language sql stable as
+$$ select p_user_id = '00000000-0000-4000-8000-000000000009'::uuid $$;

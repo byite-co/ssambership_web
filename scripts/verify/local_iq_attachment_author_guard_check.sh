@@ -63,11 +63,18 @@ awk '/^create or replace function public.add_individual_question_attachment/,/^\
 "${PSQL[@]}" -c "revoke all on function public.add_individual_question_attachment(uuid,text,text,text,uuid) from public, anon;
 grant execute on function public.add_individual_question_attachment(uuid,text,text,text,uuid) to authenticated, service_role;"
 
-echo "[3/8] 기준선 본문 md5 = 배포 실측 일치 확인"
+echo "[3/8] 기준선 본문 md5 = 배포 실측 일치 확인 + ACL 서명 채취"
 GOT_MD5="$("${PSQL[@]}" -At -c "select md5(prosrc) from pg_proc where oid = to_regprocedure('public.add_individual_question_attachment(uuid,text,text,text,uuid)')::oid")"
 if [[ "$GOT_MD5" != "$BASELINE_MD5" ]]; then
   echo "FAIL: 기준선 md5 불일치 (expected $BASELINE_MD5, got $GOT_MD5)"; exit 1
 fi
+# ACL 서명: grantee/privilege 정렬 목록 — 일반론('CREATE OR REPLACE 는 ACL 보존')
+# 대신 왕복 각 단계에서 실제 대조한다.
+ACL_QUERY="select string_agg(coalesce(g.rolname,'PUBLIC') || ':' || a.privilege_type, ',' order by 1)
+  from pg_proc p, aclexplode(p.proacl) a left join pg_roles g on g.oid = a.grantee
+ where p.oid = to_regprocedure('public.add_individual_question_attachment(uuid,text,text,text,uuid)')::oid"
+ACL_BASELINE="$("${PSQL[@]}" -At -c "$ACL_QUERY")"
+echo "  baseline ACL: $ACL_BASELINE"
 
 echo "[4/8] [결함 재현] 기준선: 상대방 메시지 연결이 허용됨을 실측"
 "${PSQL[@]}" <<'SQL'
@@ -98,19 +105,27 @@ end $$;
 rollback;
 SQL
 
-echo "[5/8] forward 적용"
+echo "[5/8] forward 적용 + ACL 불변 실대조"
 "${PSQL[@]}" -f "$FORWARD"
+ACL_AFTER_FWD="$("${PSQL[@]}" -At -c "$ACL_QUERY")"
+if [[ "$ACL_AFTER_FWD" != "$ACL_BASELINE" ]]; then
+  echo "FAIL: forward 후 ACL 변동 (baseline=$ACL_BASELINE, after=$ACL_AFTER_FWD)"; exit 1
+fi
 
 echo "[6/8] 계약 fixture 실행"
 OUT="$("${PSQL[@]}" -f "$FIXTURE" 2>&1)" || { echo "$OUT"; exit 1; }
 grep -q "IQ_ATTACHMENT_AUTHOR_GUARD FIXTURE PASS" <<<"$OUT" || { echo "FAIL: fixture PASS 마커 없음"; echo "$OUT"; exit 1; }
 
-echo "[7/8] rollback 적용(내장 md5 자가 검증 = 기준선 복원 증명)"
+echo "[7/8] rollback 적용(내장 md5 자가 검증 = 기준선 복원 증명) + ACL 불변 실대조"
 "${PSQL[@]}" -f "$ROLLBACK"
+ACL_AFTER_RB="$("${PSQL[@]}" -At -c "$ACL_QUERY")"
+if [[ "$ACL_AFTER_RB" != "$ACL_BASELINE" ]]; then
+  echo "FAIL: rollback 후 ACL 변동 (baseline=$ACL_BASELINE, after=$ACL_AFTER_RB)"; exit 1
+fi
 
 echo "[8/8] forward 재적용 + fixture 재실행"
 "${PSQL[@]}" -f "$FORWARD"
 OUT="$("${PSQL[@]}" -f "$FIXTURE" 2>&1)" || { echo "$OUT"; exit 1; }
 grep -q "IQ_ATTACHMENT_AUTHOR_GUARD FIXTURE PASS" <<<"$OUT" || { echo "FAIL: 재적용 fixture PASS 마커 없음"; echo "$OUT"; exit 1; }
 
-echo "PASS: iq attachment message-author guard forward/rollback roundtrip verified"
+echo "PASS: iq attachment message-author guard forward/rollback roundtrip verified (ACL invariant)"

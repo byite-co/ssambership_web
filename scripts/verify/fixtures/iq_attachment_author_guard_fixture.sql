@@ -11,6 +11,11 @@
 --   7. 자기 메시지 연결 정상(멘토·학생) + p_message_id null 경로 불변
 --   8. 멱등 재등록 유지(existing 봉투·중복 행 0·message_id_mismatch 신호)
 --   9. storage 객체 미소유 거부(STORAGE_OBJECT_NOT_OWNED)
+--  10. MIME 불일치 거부(MIME_MISMATCH)
+--  11. 크기 초과 거부(SIZE_EXCEEDED)
+--  12. 계정 banned/suspended/삭제 진행 거부(ACCOUNT_*)
+--  13. 레거시(message_id=null·author=null) 행의 구버전 재시도 — 가드 영향 0
+--  14. 상대방 기존 첨부 경로 재등록으로 귀속 뒤집기 불가(행 불변·mismatch 신호만)
 -- (당사자 SELECT RLS 공존 검증은 staging fixture 로 대체 — local_stub 규약과 동일)
 --
 -- 기대 종료: 마지막 NOTICE 'IQ_ATTACHMENT_AUTHOR_GUARD FIXTURE PASS'
@@ -23,6 +28,37 @@ insert into public.users (id, role) values
   ('00000000-0000-4000-8000-000000000002', 'mentor'),   -- m1 (q1 담당 멘토)
   ('00000000-0000-4000-8000-000000000003', 'student'),  -- outsider (당사자 아님)
   ('00000000-0000-4000-8000-000000000004', 'student')   -- s2 (q2 학생)
+on conflict do nothing;
+
+-- 계정 상태 케이스용 당사자(각각 자기 질문의 학생 — 당사자 게이트는 통과시키고
+-- 계정 게이트에서 걸리게 한다).
+insert into public.users (id, role, status, suspended_until) values
+  ('00000000-0000-4000-8000-000000000007', 'student', 'banned', null),
+  ('00000000-0000-4000-8000-000000000008', 'student', 'suspended', now() + interval '1 day'),
+  ('00000000-0000-4000-8000-000000000009', 'student', 'active', null) -- 삭제 진행 마커
+on conflict do nothing;
+
+insert into public.individual_questions (id, student_id, status, title, body) values
+  ('10000000-0000-4000-8000-000000000007', '00000000-0000-4000-8000-000000000007', 'escrowed', 'q7', 'b'),
+  ('10000000-0000-4000-8000-000000000008', '00000000-0000-4000-8000-000000000008', 'escrowed', 'q8', 'b'),
+  ('10000000-0000-4000-8000-000000000009', '00000000-0000-4000-8000-000000000009', 'escrowed', 'q9', 'b')
+on conflict do nothing;
+
+insert into storage.objects (bucket_id, name, owner_id, metadata) values
+  ('individual-question-attachments', '10000000-0000-4000-8000-000000000007/a.png',
+   '00000000-0000-4000-8000-000000000007', '{"mimetype":"image/png","size":"10"}'),
+  ('individual-question-attachments', '10000000-0000-4000-8000-000000000008/a.png',
+   '00000000-0000-4000-8000-000000000008', '{"mimetype":"image/png","size":"10"}'),
+  ('individual-question-attachments', '10000000-0000-4000-8000-000000000009/a.png',
+   '00000000-0000-4000-8000-000000000009', '{"mimetype":"image/png","size":"10"}'),
+  -- MIME 불일치·크기 초과 케이스(소유는 s1 — q1 경로).
+  ('individual-question-attachments', '10000000-0000-4000-8000-000000000001/mime-bad.png',
+   '00000000-0000-4000-8000-000000000001', '{"mimetype":"image/png","size":"10"}'),
+  ('individual-question-attachments', '10000000-0000-4000-8000-000000000001/too-big.png',
+   '00000000-0000-4000-8000-000000000001', '{"mimetype":"image/png","size":"20971521"}'),
+  -- 레거시 행 재시도용 객체(레거시 행이 이미 등록돼 있어 검증은 선조회에서 끝난다).
+  ('individual-question-attachments', '10000000-0000-4000-8000-000000000001/legacy.png',
+   '00000000-0000-4000-8000-000000000001', '{"mimetype":"image/png","size":"10"}')
 on conflict do nothing;
 
 insert into public.individual_questions (id, student_id, claimed_mentor_id, status, title, body) values
@@ -53,6 +89,15 @@ insert into storage.objects (bucket_id, name, owner_id, metadata) values
    '00000000-0000-4000-8000-000000000001', '{"mimetype":"image/png","size":"100"}'),
   ('individual-question-attachments', '10000000-0000-4000-8000-000000000001/owned-by-other.png',
    '00000000-0000-4000-8000-000000000003', '{"mimetype":"image/png","size":"100"}')
+on conflict do nothing;
+
+-- 레거시 행(message_id=null·author_id=null) — 구버전 앱 시대 등록분 시뮬레이션.
+-- (q1 시드 이후에 삽입해야 한다 — FK.)
+insert into public.individual_question_attachments
+  (id, question_id, message_id, storage_path, file_name, mime_type, author_id)
+values
+  ('30000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', null,
+   '10000000-0000-4000-8000-000000000001/legacy.png', 'legacy.png', 'image/png', null)
 on conflict do nothing;
 
 do $fixture$
@@ -196,6 +241,90 @@ begin
     end if;
   end;
   if not v_failed then raise exception 'case9: unowned object must be rejected'; end if;
+
+  -- 10. MIME 불일치 → MIME_MISMATCH ---------------------------------------------
+  perform set_config('request.jwt.claim.sub', c_s1, true);
+  v_failed := false;
+  begin
+    v := public.add_individual_question_attachment(c_q1, c_q1::text || '/mime-bad.png', 'a.pdf', 'application/pdf', null);
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'MIME_MISMATCH%' then
+      raise exception 'case10: expected MIME_MISMATCH, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'case10: mime mismatch must be rejected'; end if;
+
+  -- 11. 크기 초과(20MB) → SIZE_EXCEEDED -----------------------------------------
+  v_failed := false;
+  begin
+    v := public.add_individual_question_attachment(c_q1, c_q1::text || '/too-big.png', 'a.png', 'image/png', null);
+  exception when others then
+    v_failed := true;
+    if sqlerrm not like 'SIZE_EXCEEDED%' then
+      raise exception 'case11: expected SIZE_EXCEEDED, got %', sqlerrm;
+    end if;
+  end;
+  if not v_failed then raise exception 'case11: oversized object must be rejected'; end if;
+
+  -- 12. 계정 상태 게이트: banned / suspended / 삭제 진행 -------------------------
+  declare
+    v_case record;
+  begin
+    for v_case in
+      select * from (values
+        ('00000000-0000-4000-8000-000000000007', '10000000-0000-4000-8000-000000000007'::uuid, 'ACCOUNT_BANNED'),
+        ('00000000-0000-4000-8000-000000000008', '10000000-0000-4000-8000-000000000008'::uuid, 'ACCOUNT_SUSPENDED'),
+        ('00000000-0000-4000-8000-000000000009', '10000000-0000-4000-8000-000000000009'::uuid, 'ACCOUNT_DELETION_IN_PROGRESS')
+      ) as t(uid, qid, code)
+    loop
+      perform set_config('request.jwt.claim.sub', v_case.uid, true);
+      v_failed := false;
+      begin
+        v := public.add_individual_question_attachment(
+          v_case.qid, v_case.qid::text || '/a.png', 'a.png', 'image/png', null);
+      exception when others then
+        v_failed := true;
+        if sqlerrm not like v_case.code || '%' then
+          raise exception 'case12: expected %, got %', v_case.code, sqlerrm;
+        end if;
+      end;
+      if not v_failed then
+        raise exception 'case12: % account must be rejected', v_case.code;
+      end if;
+    end loop;
+  end;
+
+  -- 13. 레거시 행(message_id·author 모두 null) 구버전 재시도 — 가드 영향 0 -------
+  perform set_config('request.jwt.claim.sub', c_s1, true);
+  v := public.add_individual_question_attachment(c_q1, c_q1::text || '/legacy.png', 'legacy.png', 'image/png', null);
+  if v->>'status' <> 'existing' or (v->>'idempotent_hit')::boolean is not true then
+    raise exception 'case13: legacy null-message retry envelope broken, got %', v;
+  end if;
+  select author_id into v_author from public.individual_question_attachments
+   where id = '30000000-0000-4000-8000-000000000001';
+  if v_author is not null then
+    raise exception 'case13: legacy row author_id must remain null (no backfill), got %', v_author;
+  end if;
+
+  -- 14. 상대방 기존 첨부 경로를 내 메시지로 재등록 → 귀속 뒤집기 불가 -----------
+  -- s1-a.png 는 case7 에서 s1 이 c_msg_s1 로 등록했다. m1 이 자기 메시지로
+  -- 재호출해도 기존 행은 UPDATE 되지 않는다(mismatch 신호만).
+  perform set_config('request.jwt.claim.sub', c_m1, true);
+  v := public.add_individual_question_attachment(c_q1, c_q1::text || '/s1-a.png', 'a.png', 'image/png', c_msg_m1);
+  if v->>'status' <> 'existing' or (v->>'message_id_mismatch')::boolean is not true then
+    raise exception 'case14: cross-party re-register must be idempotent-mismatch, got %', v;
+  end if;
+  select message_id into v_author from public.individual_question_attachments
+   where question_id = c_q1 and storage_path = c_q1::text || '/s1-a.png';
+  if v_author is distinct from c_msg_s1 then
+    raise exception 'case14: stored message_id flipped (%) — attribution must be immutable', v_author;
+  end if;
+  select author_id into v_author from public.individual_question_attachments
+   where question_id = c_q1 and storage_path = c_q1::text || '/s1-a.png';
+  if v_author is distinct from c_s1::uuid then
+    raise exception 'case14: stored author_id flipped (%) — attribution must be immutable', v_author;
+  end if;
 
   raise notice 'IQ_ATTACHMENT_AUTHOR_GUARD FIXTURE PASS';
 end
