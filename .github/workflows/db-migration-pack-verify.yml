@@ -53,15 +53,12 @@ jobs:
           python3 -m pip install --quiet 'pyyaml==6.0.2'
           python3 scripts/verify/baseline/validate_db_workflows.py
           python3 scripts/verify/baseline/validate_db_workflows.py --selftest
-      - name: secret scan (값 기준)
+      - name: secret scan (값 기준, + 규칙 자체 시험)
         shell: bash
         run: |
           set -euo pipefail
-          if grep -rInE '(sbp_[A-Za-z0-9]{20,}|eyJhbGciOi[A-Za-z0-9_-]{10,}|postgres(ql)?://[^ ]*:[^ ]*@)' \
-               supabase/migrations supabase/baseline scripts/verify 2>/dev/null; then
-            echo "::error::secret 값 형태가 검출됐다"; exit 1
-          fi
-          echo "SECRET_SCAN: PASS"
+          python3 scripts/verify/baseline/scan_repo_secrets.py --selftest
+          python3 scripts/verify/baseline/scan_repo_secrets.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:

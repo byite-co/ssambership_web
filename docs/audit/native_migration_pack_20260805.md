@@ -157,7 +157,7 @@ reapply → FIXTURE PASS
 
 | job | 하는 일 |
 |---|---|
-| `static` | 생성기 재실행 후 `git diff --quiet`(비결정론/직접편집 탐지) · pack validator · replay manifest validator · workflow validator(+selftest) · secret 스캔 · 산출물 artifact |
+| `static` | 생성기 재실행 후 `git diff --quiet`(비결정론/직접편집 탐지) · pack validator · replay manifest validator · workflow validator(+selftest) · secret 스캔(+selftest) · 산출물 artifact |
 | `pg17-cli-replay` | pinned `supabase/setup-cli@v1` (버전 `2.111.0`) · `--help` 캡처(명령을 기억으로 추측하지 않는다) · `config.toml major_version=17` 확인 · `supabase start` · `supabase migration list` · `verify_local_stack_state.sh` · `supabase stop` · artifact |
 
 `permissions: contents: read`, secret 참조 0. PR 마다 자동 실행된다.
@@ -291,6 +291,41 @@ DB_WORKFLOW_SELFTEST:   PASS (변형 12/12 검출 + 워크플로 삭제 검출)
 R9 는 토큰 수준 금지라서, 해당 워크플로에는 그 토큰이 **부정문으로도** 등장하지 않는다
 (문서화는 이 파일과 워크플로 주석에서 우회 표현으로 한다).
 
+### 7-1. secret 스캔도 규칙을 시험한다 — `scan_repo_secrets.py`
+
+첫 CI 실행에서 인라인 grep 기반 secret 스캔이 **오탐으로 실패**했다. 걸린 문자열은
+`verify_local_stack_state.sh` 의 로컬 스택 기본 접속 문자열이었다:
+
+```text
+DB_URL="${LOCAL_DB_URL:-postgresql://postgres:postgres@127.0.0.1:54322/postgres}"
+```
+
+이것은 `supabase start` 가 모든 개발자 머신에 동일하게 띄우는 문서화된 루프백 기본값이지
+비밀이 아니다. 문자열을 조립해 숨기는 대신 **규칙을 정확하게** 고쳤다.
+
+허용 예외는 하나뿐이다 — 자격증명이 `postgres:postgres` 이고 호스트가 루프백
+(`127.0.0.1` / `localhost` / `[::1]`)인 경우. 비밀번호가 다르거나 호스트가 원격이면 차단된다.
+`${{ secrets.X }}` 나 `$VAR` 같은 **참조**도 값이 아니므로 통과시킨다.
+
+```text
+SECRET_SCAN_SELFTEST: PASS — 11 케이스
+  허용: 루프백 기본값(2) · secret 참조(2) · 환경변수 참조 · project ref 주석 언급
+  차단: 다른 비밀번호 · 원격 호스트 · access token · JWT 형태 · 비밀값 대입
+SECRET_SCAN: PASS (186 파일)
+```
+
+같은 실행에서 R12 도 오탐을 냈다(`scan_repo_secrets.py` 파일명이 `secrets.` 로 매칭).
+GitHub 의 실제 참조 형태 `${{ secrets.NAME }}` 만 보도록 좁혔다.
+
+### 7-2. selftest 표본은 리터럴로 두지 않는다
+
+처음에는 selftest 표본을 문자열 리터럴로 넣었다. push 가 **GitHub push protection 에
+거부**됐다 — 합성 `sbp_…` 표본을 실제 Supabase Personal Access Token 으로 판정했기 때문이다
+(`GH013`). 예외 허용 URL 로 뚫는 대신 표본을 **런타임에 조립**하도록 바꿨다.
+
+그 결과 이 스캐너 파일 자체도 스캔 대상에 그대로 남는다(제외 규칙 불필요). 토큰 모양
+리터럴이 저장소 어디에도 없으므로 push protection 과 자체 스캔이 서로 충돌하지 않는다.
+
 ---
 
 ## 8. PR #60 쪽 변경
@@ -362,4 +397,5 @@ WORKFLOW_ACTUAL_EXECUTION:           NOT_RUN   (정적 검증만 수행)
 | `run_local_stack_emulation.sh` | 위 스크립트 자체를 PG16 으로 시험 + fingerprint 모델 검증 |
 | `parent_schema_fingerprint.sh` | 읽기 전용 15축 schema 지문(무해성 강제) |
 | `validate_db_workflows.py` | 워크플로 R1~R12 정적 검증 + `--selftest` |
+| `scan_repo_secrets.py` | 값 기준 secret 스캔(루프백 로컬 기본값만 허용) + `--selftest` |
 | `check_pr60_native_migration_sync.sh` (PR #60) | source↔migration 바이트 동기화 강제 |

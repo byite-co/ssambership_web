@@ -169,8 +169,10 @@ def check_common(name: str, text: str, doc: dict, r: Result):
 
 def check_verify(name: str, text: str, doc: dict, r: Result):
     p = f'{name}: '
-    # R12 — 검증 전용 워크플로는 어떤 secret 도 참조하지 않는다
-    hits = re.findall(r'secrets\.[A-Za-z_]+', text)
+    # R12 — 검증 전용 워크플로는 어떤 secret 도 참조하지 않는다.
+    # GitHub 의 실제 참조 형태(`${{ secrets.NAME }}`)만 본다. 파일명에 우연히 들어간
+    # "secrets." 문자열(예: scan_repo_secrets.py)을 secret 참조로 오인하지 않기 위해서다.
+    hits = re.findall(r'\$\{\{[^}]*\bsecrets\.([A-Za-z_][A-Za-z0-9_]*)', text)
     if hits:
         r.bad(p + f'R12 검증 워크플로가 secret 을 참조한다: {sorted(set(hits))}')
     on = norm_on(doc)
