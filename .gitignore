@@ -20,6 +20,10 @@ generate_report.mjs
 scripts/*
 # 검증 harness 는 정본(추적) — scripts/ 전체 ignore 가 이전 세션 검증 스크립트 커밋 누락 원인이었다
 !scripts/verify/
+# 계약 스냅샷 도구(export/verify/query)도 정본(추적) — scripts/* 만으로는 미추적되어
+# contracts:export·contracts:verify 가 모듈 부재로 실패하던 원인(WEB-TOOLING-001)이었다
+!scripts/contracts/
+!scripts/contracts/**
 # 보고서 생성 스크립트는 기존부터 추적됨
 !scripts/generate-review-report.mjs
 
