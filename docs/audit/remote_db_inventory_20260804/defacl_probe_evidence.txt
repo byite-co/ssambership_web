@@ -1,0 +1,51 @@
+# defacl 프로브 실측 (로컬 PG16, run_roundtrip.sh PROBE=1)
+# 생성: scripts/verify/baseline/defacl_probe.sql — 프로브 함수는 캡처 후 DROP 됨
+
+## phase=before (20260729000000 하드닝 직전)
+ phase_set 
+-----------
+ before
+(1 row)
+
+         tag          | phase  | creator_role | defaclrole | schema_name | defaclobjtype |                                      defaclacl                                       | grantor  |    grantee    | privilege_type 
+----------------------+--------+--------------+------------+-------------+---------------+--------------------------------------------------------------------------------------+----------+---------------+----------------
+ DEFAULT_ACL_EVIDENCE | before | postgres     | postgres   | public      | f             | postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres | postgres | anon          | EXECUTE
+ DEFAULT_ACL_EVIDENCE | before | postgres     | postgres   | public      | f             | postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres | postgres | authenticated | EXECUTE
+ DEFAULT_ACL_EVIDENCE | before | postgres     | postgres   | public      | f             | postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres | postgres | postgres      | EXECUTE
+ DEFAULT_ACL_EVIDENCE | before | postgres     | postgres   | public      | f             | postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres | postgres | service_role  | EXECUTE
+(4 rows)
+
+           tag           | created_at_stage |    probe_function_name    | creator_role |                                 proacl_immediately_after_create                                  | public_execute | anon_execute | authenticated_execute | service_role_execute | postgres_execute 
+-------------------------+------------------+---------------------------+--------------+--------------------------------------------------------------------------------------------------+----------------+--------------+-----------------------+----------------------+------------------
+ PROBE_FUNCTION_EVIDENCE | before           | public.zzz_defacl_probe() | postgres     | =X/postgres,postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres | t              | t            | t                     | t                    | t
+(1 row)
+
+            tag            | created_at_stage |                           proacl_after_revoke_from_public                            | public_execute | anon_execute | authenticated_execute | service_role_execute | m13_proacl_condition 
+---------------------------+------------------+--------------------------------------------------------------------------------------+----------------+--------------+-----------------------+----------------------+----------------------
+ PROBE_AFTER_REVOKE_PUBLIC | before           | postgres=X/postgres,anon=X/postgres,authenticated=X/postgres,service_role=X/postgres | f              | t            | t                     | t                    | t
+(1 row)
+
+psql:/workspace/ssambership_web/scripts/verify/baseline/defacl_probe.sql:119: NOTICE:  DEFACL_PROBE_BEFORE: PASS (permissive defacl 재현 — FROM PUBLIC 회수 후에도 역할 EXECUTE 잔존, M13 게이트 실패 조건 성립)
+
+## phase=after (20260729000000 하드닝 직후)
+ phase_set 
+-----------
+ after
+(1 row)
+
+         tag          | phase | creator_role | defaclrole | schema_name | defaclobjtype |      defaclacl      | grantor  | grantee  | privilege_type 
+----------------------+-------+--------------+------------+-------------+---------------+---------------------+----------+----------+----------------
+ DEFAULT_ACL_EVIDENCE | after | postgres     | postgres   | public      | f             | postgres=X/postgres | postgres | postgres | EXECUTE
+(1 row)
+
+           tag           | created_at_stage |    probe_function_name    | creator_role | proacl_immediately_after_create | public_execute | anon_execute | authenticated_execute | service_role_execute | postgres_execute 
+-------------------------+------------------+---------------------------+--------------+---------------------------------+----------------+--------------+-----------------------+----------------------+------------------
+ PROBE_FUNCTION_EVIDENCE | after            | public.zzz_defacl_probe() | postgres     | (null=implicit PUBLIC)          | t              | t            | t                     | t                    | t
+(1 row)
+
+            tag            | created_at_stage | proacl_after_revoke_from_public | public_execute | anon_execute | authenticated_execute | service_role_execute | m13_proacl_condition 
+---------------------------+------------------+---------------------------------+----------------+--------------+-----------------------+----------------------+----------------------
+ PROBE_AFTER_REVOKE_PUBLIC | after            | postgres=X/postgres             | f              | f            | f                     | f                    | t
+(1 row)
+
+psql:/workspace/ssambership_web/scripts/verify/baseline/defacl_probe.sql:119: NOTICE:  DEFACL_PROBE_AFTER: PASS (하드닝 확인 — FROM PUBLIC 회수로 역할 EXECUTE 소멸, M13 proacl 조건 충족)

@@ -1,0 +1,8 @@
+order	version	kind	source_path	expected_current_status	requested_status	ddl_executed	schema_change_expected	notes
+1	20260701000000	baseline	supabase/baseline/apply_order.txt	absent	applied	no	no	synthetic pre-ledger baseline (114 apply stages / 188 source parts); version < first ledger 20260702065122
+2	20260715000000	interleave	supabase/baseline/interleaves/20260715000000_168_iq_attachment_register_rpc_idempotent.sql	absent	applied	no	no	historical ordering record — after ledger 20260712060717 / before ledger 20260717044250
+3	20260729000000	interleave	supabase/baseline/interleaves/20260729000000_public_defacl_functions_hardening.sql	absent	applied	no	no	historical ordering record — after ledger 20260720091401 / before ledger 20260731095050
+4	20260802000000	interleave	supabase/baseline/interleaves/20260802000000_public_defacl_hardening.sql	absent	applied	no	no	historical ordering record — after ledger 20260801054636 / before ledger 20260802054930
+5	20260804100000	interleave	supabase/baseline/interleaves/20260804100000_post_ledger_acl_convergence.sql	absent	applied	no	no	historical ordering record — after ledger 20260804040019 / before ledger (none)
+6	20260804100001	interleave	supabase/baseline/interleaves/20260804100001_post_ledger_attr_convergence.sql	absent	applied	no	no	historical ordering record — after ledger 20260804040019 / before ledger (none)
+7	20260804100002	interleave	supabase/baseline/interleaves/20260804100002_as_applied_function_bodies.sql	absent	applied	no	no	historical ordering record — after ledger 20260804040019 / before ledger (none)

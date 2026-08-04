@@ -18,9 +18,14 @@ grant usage on schema public to anon, authenticated, service_role;
 -- ⚠️ 이전 스텁은 함수 defacl 을 비워 뒀고(proacl NULL = PUBLIC implicit), 그 때문에
 --    원장 M13(20260730095438)의 `REVOKE ALL ... FROM PUBLIC` 만으로 게이트가 통과했다.
 --    실제 플랫폼에서는 명시 역할 부여가 남아 게이트가 실패한다(브랜치 실측으로 확인).
-alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
-alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
-alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
+-- ⚠️ postgres(=객체 소유자)를 반드시 포함해야 한다. 소유자를 빼고 세 역할에만 부여하면
+--    하드닝 interleave 가 그 세 역할을 회수할 때 defacl 행 자체가 사라지고, PostgreSQL
+--    내장 기본값(PUBLIC EXECUTE)으로 되돌아가 **여전히 permissive** 가 된다.
+--    실측 부모 행은 postgres 를 포함하므로 회수 후 {postgres=X} 로 남아 hardened 다.
+--    (defacl_probe.sql 의 after 단계가 이 조건을 상시 검증한다.)
+alter default privileges in schema public grant all     on tables    to postgres, anon, authenticated, service_role;
+alter default privileges in schema public grant all     on sequences to postgres, anon, authenticated, service_role;
+alter default privileges in schema public grant execute on functions to postgres, anon, authenticated, service_role;
 
 -- auth 스텁
 create schema if not exists auth;

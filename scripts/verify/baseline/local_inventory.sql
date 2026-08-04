@@ -100,6 +100,14 @@ typs as (
      or (t.typtype='c' and exists (select 1 from pg_class c where c.oid=t.typrelid and c.relkind='c'))
   order by 1,2
 ),
+defacl as (
+  select pg_get_userbyid(d.defaclrole) as owner_role, n.nspname as sch,
+         d.defaclobjtype::text as objtype,
+         coalesce(array_to_string(d.defaclacl::text[], ','), '') as defaclacl
+  from pg_default_acl d join pg_namespace n on n.oid = d.defaclnamespace
+  where n.nspname in (select nspname from app_schemas)
+  order by 1,2,3
+),
 pubs as (
   select p.pubname,
          coalesce((select string_agg(pt.schemaname||'.'||pt.tablename, ',' order by pt.schemaname||'.'||pt.tablename)
@@ -119,5 +127,6 @@ select json_build_object(
   'table_grants', (select json_agg(row_to_json(x)) from tgrants x),
   'buckets', (select json_agg(row_to_json(x)) from bkt x),
   'types', (select json_agg(row_to_json(x)) from typs x),
-  'publications', (select json_agg(row_to_json(x)) from pubs x)
+  'publications', (select json_agg(row_to_json(x)) from pubs x),
+  'default_privileges', (select json_agg(row_to_json(x)) from defacl x)
 );

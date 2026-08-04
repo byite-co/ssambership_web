@@ -228,6 +228,41 @@ def main():
         None if p['tbls'] == (l.get('tbls') or '') else f"membership {p['tbls']!r}!={l.get('tbls')!r}",
         report, allowed_missing_local=lambda k, r: k in ALLOWED_PUB_PLATFORM)
 
+    # default privileges (pg_default_acl) — public 스키마 기본 권한의 as-applied 상태.
+    # 부모 grants_tables.json 의 default_privileges 축과 대조한다.
+    # 허용 diff: owner_role='supabase_admin' 행은 플랫폼이 관리(로컬 스텁에 없음).
+    pdp = load(pdir/'grants_tables.json')
+    pdp = pdp.get('default_privileges', []) if isinstance(pdp, dict) else []
+    P = {}
+    for r in pdp:
+        acl = r.get('defaclacl') or []
+        P[(r['owner_role'], r['schema'], r['objtype'])] = ','.join(sorted(acl))
+    Q = {(r['owner_role'], r['sch'], r['objtype']): ','.join(sorted(x for x in (r.get('defaclacl') or '').split(',') if x))
+         for r in (L.get('default_privileges') or [])}
+    # PG17 의 MAINTAIN('m') 권한은 PG16 에 없다 — views deparse 와 같은 엔진 버전 아티팩트.
+    # 'm' 을 제거해도 일치하면 실질 drift 가 아니라 엔진 차이로 계상한다.
+    maintain_only = []
+    def strip_m(acl):
+        out = []
+        for e in acl.split(','):
+            if '=' in e and '/' in e:
+                role, rest = e.split('=', 1)
+                privs, grantor = rest.split('/', 1)
+                out.append(f"{role}={privs.replace('m', '')}/{grantor}")
+            else:
+                out.append(e)
+        return ','.join(out)
+    def cmp_defacl(p, l):
+        if p == l:
+            return None
+        if strip_m(p) == strip_m(l):
+            maintain_only.append(p)
+            return None   # PG16_NO_MAINTAIN_PRIVILEGE — 엔진 버전 허용 diff
+        return f"defaclacl {p!r} != {l!r}"
+    ok_all &= diff_axis('default_privileges', P, Q, cmp_defacl,
+        report, allowed_missing_local=lambda k, r: k[0] == 'supabase_admin')
+    report['default_privileges']['engine_maintain_flag_allowed'] = len(maintain_only)
+
     # extensions (로컬 미설치 허용 목록)
     P = key_rows(load(pdir/'extensions.json'), lambda r: r['extname'])
     Q = {}  # 로컬 인벤토리에 축 없음 — 허용 목록 외 부모 확장만 검사

@@ -62,12 +62,30 @@ fi
 LEDGER_ORDER="${LEDGER_ORDER:-$BW/supabase/baseline/replay_order_augmented.txt}"
 [ -f "$LEDGER_ORDER" ] || LEDGER_ORDER="$BW/supabase/baseline/replay_order_augmented.txt"
 echo "[3] ledger replay ($(grep -c . "$LEDGER_ORDER") entries, order=$LEDGER_ORDER)"
+
+# 함수 default ACL 시점 회귀 프로브 (PROBE=0 으로 끌 수 있음).
+# 20260729000000(함수 defacl 하드닝) 직전/직후에 프로브 함수를 만들어 실측 ACL 을 단언한다.
+FN_HARDENING_VERSION=20260729000000
+probe(){ # probe <before|after>
+  [ "${PROBE:-1}" = "1" ] || return 0
+  if ! "${PSQL[@]}" -v phase="$1" -f "$BW/scripts/verify/baseline/defacl_probe.sql" >"$WORK/logs/defacl_probe_$1.log" 2>&1; then
+    echo "DEFACL_PROBE_FAILED ($1)"; grep -m4 -E "ERROR|DEFACL_PROBE" "$WORK/logs/defacl_probe_$1.log"; return 1
+  fi
+  grep -q "DEFACL_PROBE_${1^^}: PASS" "$WORK/logs/defacl_probe_$1.log" || { echo "DEFACL_PROBE_NO_PASS_MARKER ($1)"; return 1; }
+  echo "  defacl probe $1: PASS"
+}
+
 j=0
 while IFS= read -r f; do
   [ -z "$f" ] && continue
   j=$((j+1))
   case "$f" in /*) p="$f" ;; *) p="$BW/$f" ;; esac
+  case "$(basename "$f")" in "${FN_HARDENING_VERSION}"_*) probe before || exit 9 ;; esac
   apply "$(printf 'lg_%02d' $j)_$(basename "${f%.sql}")" "$p" || { echo "LEDGER_STEP_FAILED: $f"; exit 3; }
+  case "$(basename "$f")" in
+    "${FN_HARDENING_VERSION}"_*) probe after || exit 9 ;;
+    20260731100540_*) echo "  M13_SELFCHECK: PASS (20260731100540 적용 성공 — 자체 검사 ③ 통과)" ;;
+  esac
 done < "$LEDGER_ORDER"
 echo "ledger steps applied: $j"
 
@@ -75,28 +93,46 @@ echo "[4] local inventory dump"
 "${RUN[@]}" $PGBIN/psql -h "$WORK" -U postgres -d postgres -v ON_ERROR_STOP=1 -At -f "$BW/scripts/verify/baseline/local_inventory.sql" > "$WORK/logs/local_inventory.json" 2>"$WORK/logs/local_inventory.err" || { echo "INVENTORY_DUMP_FAILED"; cat "$WORK/logs/local_inventory.err" | head; exit 4; }
 cp "$WORK/logs/local_inventory.json" "$WORK/last_local_inventory.json"
 
-PR60_SQL="$WEB/supabase/sql/20260804113000_iq_attachment_message_author_guard.sql"
-if [ "${PR60:-1}" = "1" ] && [ ! -f "$PR60_SQL" ]; then
-  echo "PR60_SKIPPED_FILE_ABSENT ($PR60_SQL — PR #60 브랜치에만 존재)"
+# PR #60 의 guard SQL 은 PR #60 브랜치에만 있다. 이 브랜치에서 검증하려면
+# PR60_SQL/PR60_ROLLBACK 로 경로를 넘긴다(예: git show 로 추출한 임시 파일).
+PR60_SQL="${PR60_SQL:-$WEB/supabase/sql/20260804113000_iq_attachment_message_author_guard.sql}"
+PR60_ROLLBACK="${PR60_ROLLBACK:-$WEB/supabase/rollback/20260804113000_iq_attachment_message_author_guard_rollback.sql}"
+if [ "${PR60:-1}" = "1" ] && { [ ! -f "$PR60_SQL" ] || [ ! -f "$PR60_ROLLBACK" ]; }; then
+  echo "PR60_SKIPPED_FILE_ABSENT ($PR60_SQL — PR #60 브랜치에만 존재; PR60_SQL/PR60_ROLLBACK 로 경로 지정 가능)"
   PR60=0
 fi
+fn_acl(){ # add_individual_question_attachment 의 4역할 EXECUTE ACL 을 정규 문자열로
+  "${RUN[@]}" $PGBIN/psql -h "$WORK" -U postgres -d postgres -At -c \
+    "select coalesce((select string_agg(coalesce(g.rolname,'PUBLIC')||':'||a.privilege_type, ',' order by 1)
+       from pg_proc p join pg_namespace n on n.oid=p.pronamespace,
+            aclexplode(p.proacl) a left join pg_roles g on g.oid=a.grantee
+      where n.nspname='public' and p.proname='add_individual_question_attachment'
+        and coalesce(g.rolname,'PUBLIC') in ('PUBLIC','anon','authenticated','service_role')), '(none)')"
+}
+
 if [ "${PR60:-1}" = "1" ]; then
-  echo "[5] PR60 forward"
-  apply pr60_forward "$WEB/supabase/sql/20260804113000_iq_attachment_message_author_guard.sql" || exit 5
+  ACL_BASE=$(fn_acl)
+  echo "[5] PR60 forward (baseline acl: $ACL_BASE)"
+  apply pr60_forward "$PR60_SQL" || exit 5
+  ACL_FWD=$(fn_acl)
+  [ "$ACL_FWD" = "$ACL_BASE" ] || { echo "PR60_FORWARD_ACL_DRIFT: '$ACL_FWD' != '$ACL_BASE'"; exit 5; }
   echo "[6] PR60 fullschema fixture (15 cases)"
   if ! "${PSQL[@]}" -f "$BW/scripts/verify/baseline/iq_guard_fullschema_fixture.sql" >"$WORK/logs/pr60_fixture.log" 2>&1; then
     echo "PR60_FIXTURE_FAILED"; grep -m4 ERROR "$WORK/logs/pr60_fixture.log"; exit 6
   fi
   grep -q "IQ_ATTACHMENT_AUTHOR_GUARD FULLSCHEMA FIXTURE PASS" "$WORK/logs/pr60_fixture.log" || { echo "PR60_FIXTURE_NO_PASS_MARKER"; exit 6; }
   echo "[7] PR60 rollback"
-  apply pr60_rollback "$WEB/supabase/rollback/20260804113000_iq_attachment_message_author_guard_rollback.sql" || exit 7
+  apply pr60_rollback "$PR60_ROLLBACK" || exit 7
   RB_MD5=$("${RUN[@]}" $PGBIN/psql -h "$WORK" -U postgres -d postgres -At -c "select md5(prosrc) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and p.proname='add_individual_question_attachment'")
   if [ "$RB_MD5" != "58f0c2411d40b2ce3bcec23efa0c88a1" ]; then
     echo "PR60_ROLLBACK_MD5_MISMATCH: $RB_MD5 (expected 58f0c2411d40b2ce3bcec23efa0c88a1)"; exit 7
   fi
   echo "rollback md5 exact: $RB_MD5"
+  ACL_RB=$(fn_acl)
+  [ "$ACL_RB" = "$ACL_BASE" ] || { echo "PR60_ROLLBACK_ACL_DRIFT: '$ACL_RB' != '$ACL_BASE'"; exit 7; }
+  echo "rollback acl exact: $ACL_RB"
   echo "[8] PR60 reapply + fixture"
-  apply pr60_reapply "$WEB/supabase/sql/20260804113000_iq_attachment_message_author_guard.sql" || exit 8
+  apply pr60_reapply "$PR60_SQL" || exit 8
   if ! "${PSQL[@]}" -f "$BW/scripts/verify/baseline/iq_guard_fullschema_fixture.sql" >"$WORK/logs/pr60_fixture2.log" 2>&1; then
     echo "PR60_FIXTURE2_FAILED"; grep -m4 ERROR "$WORK/logs/pr60_fixture2.log"; exit 8
   fi
