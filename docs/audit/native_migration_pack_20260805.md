@@ -195,10 +195,32 @@ BATCH_F_M11_BASELINE_ACL_MISMATCH:
 M11 은 `public.mentor_profiles` 에 `anon`·`authenticated` 의 테이블 권한 7종이 모두 있어야
 통과한다. 그 권한은 명시적 GRANT 가 아니라 **테이블 생성 시점의 default privilege** 로 붙는다.
 
-| 환경 | public default ACL (테이블) | M11 |
+2차 실행에서 그 초기 상태를 **실측했다**. 로컬 스택은 permissive 도 restrictive 도 아닌
+**부분 부여** 상태였다 — 이 값은 추측이 아니라 러너에서 채취한 것이다.
+
+```text
+# supabase start 직후, grantor=postgres, schema=public, objtype=r(테이블)
+{postgres=arwdDxtm/postgres, anon=Dxtm/postgres,
+ authenticated=Dxtm/postgres, service_role=Dxtm/postgres}
+
+  D=TRUNCATE  x=REFERENCES  t=TRIGGER  m=MAINTAIN   → 부여됨
+  r=SELECT    a=INSERT      w=UPDATE   d=DELETE     → 없음  ← M11 이 요구하는 4종
+
+PROBE_MISSING_PRIVILEGES: 12   (4 권한 × 3 role)
+```
+
+즉 `anon`/`authenticated` 는 새 테이블에 TRUNCATE·REFERENCES·TRIGGER·MAINTAIN 은 받지만
+**SELECT·INSERT·UPDATE·DELETE 는 받지 못한다.** M11 이 요구하는 것이 정확히 그 4종이다.
+
+같은 덤프에서 `grantor=supabase_admin` 의 public 행은 완전 permissive(`arwdDxtm`)였다.
+grantor 가 다르면 적용되지 않으므로, `postgres` 로 실행되는 migration 에는 도움이 되지 않는다.
+이는 §5-2(재구성 정본 문서)에서 함수 defacl 에 대해 관측했던 `supabase_admin` 잔존 permissive
+행과 같은 구조다.
+
+| 환경 | public default ACL (테이블, grantor=postgres) | M11 |
 |---|---|---|
 | 부모 프로젝트 / Preview Branch (PHASE A 실측, PG17.6) | permissive | 통과 (replay 38/62 지점까지 확인) |
-| `supabase start` 로컬 스택 (PG17) | **동일하지 않다** | **실패** |
+| `supabase start` 로컬 스택 (PG17.6) | **부분 부여 — `Dxtm` 만** | **실패** |
 | PG16 + `platform_stub.sql` | permissive (모델) | 통과 |
 
 즉 `platform_stub.sql` 이 모델링해 온 "permissive 초기 상태" 는 호스팅 프로젝트의 사실이지
@@ -241,11 +263,36 @@ STACK_EMULATION: PASS
 
 **한계(중요):** 이것으로 증명된 것은 *"검사 스크립트가 올바로 판정한다"* 뿐이다.
 서버는 PG16 이고 history 는 CLI 가 아니라 이 스크립트가 채웠다.
-PostgreSQL 17 + 실제 CLI runner 검증은 아직 실행되지 않았다.
+
+### 5-5. PG17 + 실제 Supabase CLI runner 실측 (run 30945706709 · head `790b539`)
+
+이 컨테이너에서는 불가능했던 검증이 러너에서 **실행됐고 통과했다.**
 
 ```text
-PG17_CLI_RUNNER_VERIFICATION: NOT_RUN_IN_THIS_ENVIRONMENT (러너에서 실행 필요)
+PG17_CLI_RUNNER_VERIFICATION: PASS
+  server_version: 17.6                      (Preview Branch 실측과 동일한 마이너)
+  supabase CLI: 2.111.0 (pinned)
+  적용: supabase migration up --local        ← 실제 migration runner
+  Applying migration … × 63, 마지막 "Local database is up to date."
+
+  supabase migration list: 63행, 20260701000000 … 20260804100002
+  migration files=63 · applied=63 · version 집합 정확히 일치
+  첫 version = 20260701000000 (baseline)
+  open_transactions: 0
+
+  구조: tables=79  functions=213  policies=178  buckets=13
+  M13 trigger fn 2/2: proacl={postgres=X/postgres} · anon=false · auth=false
+  mentor fn 3/3: anon=false · auth=false · service_role=true
+  add_individual_question_attachment md5=58f0c2411d40b2ce3bcec23efa0c88a1
+
+LOCAL_STACK_STATE: PASS (8개 검사군 전부)
 ```
+
+**PG16 psql replay 와 PG17 실제 CLI runner 의 구조 카운트가 완전히 같다**
+(79 / 213 / 178 / 13). 두 경로는 독립적으로 구현됐고 서로를 참조하지 않는다.
+
+여전히 해소되지 않은 것: 이것은 **로컬 스택** 검증이다. 부모 프로젝트의 history repair 도,
+Preview Branch 재현(PHASE B)도 아니다. §10 참조.
 
 ---
 
@@ -410,8 +457,8 @@ PR #61 이 main 에 병합된 뒤에야 같은 디렉터리에서 합쳐진다.
 2. PR #60 리뷰·병합            (64본이 된다)
 3. GitHub Environment `supabase-db-adoption` 생성 + 승인자 지정
    secret: SUPABASE_DB_URL
-4. db-migration-pack-verify.yml 실행 → PG17 + 실제 CLI runner 결과 확인
-   ← 여기가 PG17_CLI_RUNNER_VERIFICATION 을 NOT_RUN 에서 벗어나게 하는 지점이다
+4. db-migration-pack-verify.yml — PR 마다 자동 실행된다. head 790b539 에서 이미 PASS.
+   (§5-5. 병합 후 main 에서도 통과하는지 다시 확인한다)
 5. db-adoption-repair.yml  mode=dry-run        → 출력 검토
 6. db-adoption-repair.yml  mode=execute-repair → ledger 56 → 63
 7. PHASE B: 신규 Preview Branch 를 만들어 repair 된 원장이 실제로 재현되는지 실측
@@ -427,7 +474,7 @@ PR #61 이 main 에 병합된 뒤에야 같은 디렉터리에서 합쳐진다.
 ## 10. 아직 확인되지 않은 것 (PASS 로 표기하지 않는다)
 
 ```text
-PG17_CLI_RUNNER_VERIFICATION:        NOT_RUN   (러너 필요)
+PG17_CLI_RUNNER_VERIFICATION:        PASS      (run 30945706709 — §5-5)
 PARENT_REPAIR_EXECUTION:             NOT_RUN   (승인 필요)
 PHASE_B_BRANCH_REPRODUCTION:         NOT_RUN   (repair 이후에만 가능)
 REPAIR_RECORD_CONTAINS_STATEMENTS:   UNKNOWN   (문서 NOT_COVERED · PHASE B 로만 판정)

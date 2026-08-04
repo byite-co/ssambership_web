@@ -496,6 +496,16 @@ replay 자산(`supabase/baseline/**`)은 어떤 migration 러너도 읽지 않�
 뒤 두 개는 `workflow_dispatch` 전용 · Environment 승인 · `dry-run` 기본값 · confirmation
 문자열 정확 일치의 4중 게이트다.
 
-> 이 컨테이너에서 **아직 실행되지 않은 것**:
-> `PG17_CLI_RUNNER_VERIFICATION: NOT_RUN` · `PARENT_REPAIR_EXECUTION: NOT_RUN` ·
-> `PHASE_B_BRANCH_REPRODUCTION: NOT_RUN` · `WORKFLOW_ACTUAL_EXECUTION: NOT_RUN`.
+**2026-08-05 실측 추가**: `db-migration-pack-verify.yml` 이 GitHub 러너에서 실행돼
+PostgreSQL **17.6** + pinned Supabase CLI **2.111.0** 의 실제 migration runner 로
+pack 63본을 적용했다 — `PG17_CLI_RUNNER_VERIFICATION: PASS`. 원장 63행이 파일 집합과
+정확히 일치했고, 구조 카운트(tables 79 · functions 213 · policies 178 · buckets 13)가
+PG16 psql replay 실측과 **완전히 같았다**. 상세는 pack 문서 §5-5.
+
+같은 실행이 새 사실도 드러냈다 — `supabase start` 로컬 스택의 public 테이블 default ACL 은
+`grantor=postgres` 기준 `anon/authenticated = Dxtm` 뿐이어서 SELECT·INSERT·UPDATE·DELETE 가
+없다. 부모/Preview Branch 의 permissive 초기 상태와 다르다(pack 문서 §5-3).
+
+> 아직 실행되지 않은 것:
+> `PARENT_REPAIR_EXECUTION: NOT_RUN` · `PHASE_B_BRANCH_REPRODUCTION: NOT_RUN` ·
+> 게이트된 두 원격 워크플로의 `WORKFLOW_ACTUAL_EXECUTION: NOT_RUN`.
