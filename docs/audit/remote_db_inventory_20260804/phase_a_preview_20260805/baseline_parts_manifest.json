@@ -1,0 +1,1506 @@
+[
+{
+"part": 1,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "preamble",
+"bytes": 2502,
+"md5": "5016c3094fee1729f86828184864b5d0",
+"executable": false
+},
+{
+"part": 2,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "001_initial_auth_profile.sql",
+"bytes": 11310,
+"md5": "32c53744d24b27c68d32537c1420d0cc",
+"executable": true
+},
+{
+"part": 3,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "002_p0_subscriptions_questions_draft.sql",
+"bytes": 19468,
+"md5": "82ffe636b8f6c81339037faf39a8e69c",
+"executable": true
+},
+{
+"part": 4,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "003_p0_custom_request_draft.sql",
+"bytes": 23728,
+"md5": "a5aa8ba37748abceb707b062bd035ffc",
+"executable": true
+},
+{
+"part": 5,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "004_p0_cash_disputes_admin_draft.sql",
+"bytes": 14042,
+"md5": "37e8e32320ef41e1cc82f90d42943af7",
+"executable": true
+},
+{
+"part": 6,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "002_custom_request_orders_status.sql",
+"bytes": 551,
+"md5": "bf230282c3a32ce48d70491759edc712",
+"executable": true
+},
+{
+"part": 7,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "005_p0_public_mentor_read_rpc.sql",
+"bytes": 3878,
+"md5": "5acf01016c908b4ed1c79ec1473d2e94",
+"executable": true
+},
+{
+"part": 8,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "006_p0_custom_request_public_post_browse_rpc.sql",
+"bytes": 2852,
+"md5": "53c0e7c9b943b95be581d430c02370a8",
+"executable": true
+},
+{
+"part": 9,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "007_p0_custom_order_revisions_and_order_events_rls.sql",
+"bytes": 2014,
+"md5": "8837287e43fd207c5318c32a6583247a",
+"executable": true
+},
+{
+"part": 10,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "008_p0_disputes_insert_party_rls.sql",
+"bytes": 1149,
+"md5": "a52329507eedf41d14a774c734ff1949",
+"executable": true
+},
+{
+"part": 11,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "009_p0_disputes_submitted_by_and_active_unique.sql",
+"bytes": 2894,
+"md5": "ad24e37fc801e9008d4be3b2ea324fa7",
+"executable": true
+},
+{
+"part": 12,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "010_p0_custom_order_deliverable_files_storage.sql",
+"bytes": 6192,
+"md5": "c90da6140c91ef2beeee084812ebc6a4",
+"executable": true
+},
+{
+"part": 13,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "011_p0_custom_order_deliverable_version_unique.sql",
+"bytes": 1894,
+"md5": "36b3c643fb2e4f5fc236c879f3e30f2f",
+"executable": true
+},
+{
+"part": 14,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "012_p0_custom_request_post_attachments_storage.sql",
+"bytes": 6548,
+"md5": "d137b2b4b4b516dea6e668644da31b69",
+"executable": true
+},
+{
+"part": 15,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "013_p0_custom_order_settlement_items.sql",
+"bytes": 3872,
+"md5": "ff0c8e4119a486de74f2d04be8e6750a",
+"executable": true
+},
+{
+"part": 16,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "014_p0_harden_custom_order_settlement_items.sql",
+"bytes": 2335,
+"md5": "76c2ad8935fa8e3215a76b612bbd9bb3",
+"executable": true
+},
+{
+"part": 17,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "015_p0_prevent_settlement_during_active_dispute.sql",
+"bytes": 2152,
+"md5": "1cff2fbb75f596b1d5a549e7d91b48e8",
+"executable": true
+},
+{
+"part": 18,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "016_p0_community_comments.sql",
+"bytes": 3114,
+"md5": "b8a7332184648805a0f929dc7b18c360",
+"executable": true
+},
+{
+"part": 19,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "017_p0_community_author_role_compat.sql",
+"bytes": 2386,
+"md5": "dafb6fb6d5a268d0fac5d95a006005f0",
+"executable": true
+},
+{
+"part": 20,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "018_p0_mentor_list_open_custom_request_posts.sql",
+"bytes": 2488,
+"md5": "1c3ba00fc4552871df08e7a354c600cf",
+"executable": true
+},
+{
+"part": 21,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "019_p0_subscription_cash_debit.sql",
+"bytes": 3934,
+"md5": "7ca95eebbf19108c0564545a74c64fcc",
+"executable": true
+},
+{
+"part": 22,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "020_p0_cash_topup_charge.sql",
+"bytes": 1941,
+"md5": "5e01d2dc1dc8a0c06406c368f0dd6611",
+"executable": true
+},
+{
+"part": 23,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "021_p0_refund_ins_admin_only.sql",
+"bytes": 356,
+"md5": "389c2856fc2220dfd974f173ced2db55",
+"executable": true
+},
+{
+"part": 24,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "022_p0_subscription_cash_debit_grants.sql",
+"bytes": 689,
+"md5": "9567cb455a342a6675de094be560224e",
+"executable": true
+},
+{
+"part": 25,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "023_p0_subscription_cash_debit_service_role_only.sql",
+"bytes": 1348,
+"md5": "cc0a6d51cf9a19c153bbed983e92449b",
+"executable": true
+},
+{
+"part": 26,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "024_p0_cash_topup_service_role_grant.sql",
+"bytes": 582,
+"md5": "f04219cf6e9b2b0c0eea4f55f9463528",
+"executable": true
+},
+{
+"part": 27,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "025_p0_payments_drop_update_own.sql",
+"bytes": 274,
+"md5": "20659154f02b1a5681a14fce1479352a",
+"executable": true
+},
+{
+"part": 28,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "026_p0_msr_insert_subscription_check.sql",
+"bytes": 812,
+"md5": "5e4688a2288d6538ae8e6ce82d937aaf",
+"executable": true
+},
+{
+"part": 29,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "027_p0_harden_payments_and_question_room_rls.sql",
+"bytes": 5121,
+"md5": "992bb2d4cdc5391e8399f599ab0fc1c3",
+"executable": true
+},
+{
+"part": 30,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "028_p0_lock_subscriptions_writes.sql",
+"bytes": 2779,
+"md5": "e887c6f209a8b444132baef24beef804",
+"executable": true
+},
+{
+"part": 31,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "029_p0_lock_subscription_deletes.sql",
+"bytes": 2731,
+"md5": "38cacf9b62abdfcc4f14f9c736fafc99",
+"executable": true
+},
+{
+"part": 32,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "030_p0_refund_approve_reject_admin_rpc.sql",
+"bytes": 10072,
+"md5": "b180f96514c35be54e6846ebb1d92eed",
+"executable": true
+},
+{
+"part": 33,
+"source": "supabase/bundles/bundle_1_base_001_031.sql",
+"section": "031_p1_admin_notices_promotions.sql",
+"bytes": 7299,
+"md5": "6bc1956537644c138ad29a6ce36a8545",
+"executable": true
+},
+{
+"part": 34,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "preamble",
+"bytes": 2511,
+"md5": "5ce8ed2b5fc4ed197a2dbb6bdf8562d8",
+"executable": false
+},
+{
+"part": 35,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "032_p0_weekly_question_usage.sql",
+"bytes": 2925,
+"md5": "c3ffb70bb73fdc591c80c013146f05dd",
+"executable": true
+},
+{
+"part": 36,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "032_p1_admin_content_reports.sql",
+"bytes": 4163,
+"md5": "761a6c2a0c9fcdba474bb5530318784c",
+"executable": true
+},
+{
+"part": 37,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "033_question_threads_topic.sql",
+"bytes": 500,
+"md5": "ad5afffb6f1dd216fe99315e0d2c83e1",
+"executable": true
+},
+{
+"part": 38,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "034_mentor_favorites.sql",
+"bytes": 1370,
+"md5": "8a69e3980441eed62e2ca30c83950294",
+"executable": true
+},
+{
+"part": 39,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "034_p1_admin_disputes_processing.sql",
+"bytes": 1561,
+"md5": "ba23b98c15684141d8814f9b21751b72",
+"executable": true
+},
+{
+"part": 40,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "035_p1_admin_audit_logs.sql",
+"bytes": 932,
+"md5": "3dc2c8e72d020ad1ed46763ffd22b7ef",
+"executable": true
+},
+{
+"part": 41,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "037_p1_community_board_v2.sql",
+"bytes": 12142,
+"md5": "a81ac7e691bb87f1403359dc992c9d1a",
+"executable": true
+},
+{
+"part": 42,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "038_p1_shortform_v2.sql",
+"bytes": 4648,
+"md5": "0c1926f690f126b91b04fcc5a9f2d35b",
+"executable": true
+},
+{
+"part": 43,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "039_p1_custom_request_compat.sql",
+"bytes": 1118,
+"md5": "192cfaadfde0e66be2d119946acfa824",
+"executable": true
+},
+{
+"part": 44,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "039_storage_buckets_private_audit.sql",
+"bytes": 1431,
+"md5": "3e28d2fe2e961cc2de2ee58067002253",
+"executable": true
+},
+{
+"part": 45,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "040_admin_action_logs.sql",
+"bytes": 1252,
+"md5": "e491e500a01cc2b5d9f25b9ce177d2a1",
+"executable": true
+},
+{
+"part": 46,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "041_mentor_payout_account.sql",
+"bytes": 447,
+"md5": "04a0c9fe57a9f1e48b5df865a42c23b1",
+"executable": true
+},
+{
+"part": 47,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "042_reviews_system.sql",
+"bytes": 3029,
+"md5": "4788f8edc3376467ad926a52ddb5f44f",
+"executable": true
+},
+{
+"part": 48,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "033_p1_admin_reviews_moderation.sql",
+"bytes": 2869,
+"md5": "97c18d76f85888d478e563cecc910b40",
+"executable": true
+},
+{
+"part": 49,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "043_p1_accept_order_settlement_atomic_rpc.sql",
+"bytes": 8369,
+"md5": "90c2a5c9c135fd10bb4735c299d40f88",
+"executable": true
+},
+{
+"part": 50,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "044_free_question_usage.sql",
+"bytes": 1373,
+"md5": "1ac08192e9976b81d666e58522963409",
+"executable": true
+},
+{
+"part": 51,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "045_review_eligibility_guard.sql",
+"bytes": 2619,
+"md5": "853ade53e4c4b5020d434e04a3889136",
+"executable": true
+},
+{
+"part": 52,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "046_free_question_usage_db_guard.sql",
+"bytes": 1408,
+"md5": "3cb174ba02bc84da4fb4246d4f9fa015",
+"executable": true
+},
+{
+"part": 53,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "047_active_dispute_settlement_block_trigger.sql",
+"bytes": 2523,
+"md5": "8e1396e3277bbaec58ab850bd808c55f",
+"executable": true
+},
+{
+"part": 54,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "048_connection_notes_author.sql",
+"bytes": 1100,
+"md5": "f2d3e64b174e4945cf6a6a4ea93a9814",
+"executable": true
+},
+{
+"part": 55,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "049_question_room_attachments_storage.sql",
+"bytes": 3157,
+"md5": "7fb6a4a3d6d17cc9d6b0290f92b6af55",
+"executable": true
+},
+{
+"part": 56,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "050_mentor_subscription_cap.sql",
+"bytes": 5470,
+"md5": "4c866299a82dbe569d32139ee6f5079e",
+"executable": true
+},
+{
+"part": 57,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "051_community_typo_author_label_category_backfill.sql",
+"bytes": 414,
+"md5": "296481058f00d63372ea9d1431d732f7",
+"executable": true
+},
+{
+"part": 58,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "052_free_question_policy_7_total_7day_expiry.sql",
+"bytes": 2015,
+"md5": "60e814650b523bbc7881bb8fd8c0a806",
+"executable": true
+},
+{
+"part": 59,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "053_community_rls_legacy_select_cleanup.sql",
+"bytes": 960,
+"md5": "98410533cddb81c54352786579ce5f75",
+"executable": true
+},
+{
+"part": 60,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "053b_shortform_posts_published_select_rls.sql",
+"bytes": 955,
+"md5": "13ef1c3819269eae8c5a72d8610c6605",
+"executable": true
+},
+{
+"part": 61,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "054_p0_custom_order_escrow_hold.sql",
+"bytes": 2589,
+"md5": "7d8c1fe46e5397a63344f293454feabd",
+"executable": true
+},
+{
+"part": 62,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "055_p0_custom_order_escrow_payout.sql",
+"bytes": 12411,
+"md5": "c1ed63209eff04dca17c6e2378566780",
+"executable": true
+},
+{
+"part": 63,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "056_p0_custom_order_escrow_refund.sql",
+"bytes": 12584,
+"md5": "1247955a50defe6ecc3e3a497611f0ba",
+"executable": true
+},
+{
+"part": 64,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "057_p0_custom_order_dispute_split.sql",
+"bytes": 9991,
+"md5": "a81292e2636b55bf1098663a79830ea8",
+"executable": true
+},
+{
+"part": 65,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "058_mentor_student_nickname_rpc.sql",
+"bytes": 1708,
+"md5": "69021c3f79bd0cdc8e2a06ef5c94ea2d",
+"executable": true
+},
+{
+"part": 66,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "059_p0_custom_request_application_attachments_storage.sql",
+"bytes": 7567,
+"md5": "e97a1ab488f525acfd360fc9012f2253",
+"executable": true
+},
+{
+"part": 67,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "060_ai_readiness_question_schema.sql",
+"bytes": 6341,
+"md5": "c113e9dc8e42d7e97b3da0091a854ce1",
+"executable": true
+},
+{
+"part": 68,
+"source": "supabase/bundles/bundle_2_features_032_061.sql",
+"section": "061_review_consecutive_and_response_time.sql",
+"bytes": 5058,
+"md5": "7c0126c85e03a7e12e872e2e81896def",
+"executable": true
+},
+{
+"part": 69,
+"source": "supabase/bundles/bundle_3_recent_062_069.sql",
+"section": "preamble",
+"bytes": 1477,
+"md5": "f19b8e224dc414c125ad7d674c61189a",
+"executable": false
+},
+{
+"part": 70,
+"source": "supabase/bundles/bundle_3_recent_062_069.sql",
+"section": "062_custom_request_order_unique_active_application.sql",
+"bytes": 1612,
+"md5": "ce723d56c0b1fc882f976d9fa2b885ca",
+"executable": true
+},
+{
+"part": 71,
+"source": "supabase/bundles/bundle_3_recent_062_069.sql",
+"section": "063_gate_deliverable_storage_by_order_completion.sql",
+"bytes": 3496,
+"md5": "f899d0f6dbf2b388ea298e86272c928a",
+"executable": true
+},
+{
+"part": 72,
+"source": "supabase/bundles/bundle_3_recent_062_069.sql",
+"section": "064_subscription_billing_period_schema.sql",
+"bytes": 10464,
+"md5": "a49c71e8c4f86713b48fbf647429a7bf",
+"executable": true
+},
+{
+"part": 73,
+"source": "supabase/bundles/bundle_3_recent_062_069.sql",
+"section": "065_anchor_weekly_question_usage.sql",
+"bytes": 3528,
+"md5": "e9fb2d0dc01419a051ffaae7b73385d9",
+"executable": true
+},
+{
+"part": 74,
+"source": "supabase/bundles/bundle_3_recent_062_069.sql",
+"section": "066_review_eligibility_billing_events.sql",
+"bytes": 3812,
+"md5": "3e396654d832f2932d634addad2df35a",
+"executable": true
+},
+{
+"part": 75,
+"source": "supabase/bundles/bundle_3_recent_062_069.sql",
+"section": "067_mentor_subscription_pricing.sql",
+"bytes": 3258,
+"md5": "064bf644815a8609f6b01fb27fb12d80",
+"executable": true
+},
+{
+"part": 76,
+"source": "supabase/bundles/bundle_3_recent_062_069.sql",
+"section": "068_subscription_renewal_rpc.sql",
+"bytes": 8328,
+"md5": "bdeffc47c14cdba684be4fad28cd1064",
+"executable": true
+},
+{
+"part": 77,
+"source": "supabase/bundles/bundle_3_recent_062_069.sql",
+"section": "069_subscription_cancel_refund_request.sql",
+"bytes": 4285,
+"md5": "3fce92fb93677fb9a138ff8e5d0c18fd",
+"executable": true
+},
+{
+"part": 78,
+"source": "supabase/baseline/supplements/001_dashboard_era_community_policies.sql",
+"section": "001_dashboard_era_community_policies.sql",
+"bytes": 1572,
+"md5": "88f6a2138196414683aab1c1e3380c11",
+"executable": true
+},
+{
+"part": 79,
+"source": "supabase/baseline/supplements/002_out_of_band_schema_remnants.sql",
+"section": "002_out_of_band_schema_remnants.sql",
+"bytes": 2505,
+"md5": "c5338737e5c4c84cd24c9ee0758aab76",
+"executable": true
+},
+{
+"part": 80,
+"source": "supabase/baseline/supplements/003_out_of_band_policies.sql",
+"section": "003_out_of_band_policies.sql",
+"bytes": 3259,
+"md5": "bbab36c77b9c22379b76c642c076a694",
+"executable": true
+},
+{
+"part": 81,
+"source": "supabase/baseline/supplements/004_rls_auto_enable_event_trigger.sql",
+"section": "004_rls_auto_enable_event_trigger.sql",
+"bytes": 1740,
+"md5": "5d59234d8514e75294f95eec65c1f78e",
+"executable": true
+},
+{
+"part": 82,
+"source": "supabase/sql/070_individual_question_schema_escrow.sql",
+"section": "070_individual_question_schema_escrow.sql",
+"bytes": 31544,
+"md5": "fa884cb35f9083cd61aa849206d408b2",
+"executable": true
+},
+{
+"part": 83,
+"source": "supabase/sql/072_harden_linter_warnings.sql",
+"section": "072_harden_linter_warnings.sql",
+"bytes": 8735,
+"md5": "526d8915aa3e7e2e9c777e6f888a622a",
+"executable": true
+},
+{
+"part": 84,
+"source": "supabase/sql/073_fix_exposed_cash_debit.sql",
+"section": "073_fix_exposed_cash_debit.sql",
+"bytes": 4909,
+"md5": "e37ae7a1c46f923b8831243843c518ba",
+"executable": true
+},
+{
+"part": 85,
+"source": "supabase/sql/074_subjects_subdivision.sql",
+"section": "074_subjects_subdivision.sql",
+"bytes": 5457,
+"md5": "8079b331fe9a2615cafc71508cf4e9ba",
+"executable": true
+},
+{
+"part": 86,
+"source": "supabase/sql/075_individual_question_transfers.sql",
+"section": "075_individual_question_transfers.sql",
+"bytes": 2483,
+"md5": "891516226ca0189a33af2918398d70c4",
+"executable": true
+},
+{
+"part": 87,
+"source": "supabase/sql/076_connection_notes_owner_edit.sql",
+"section": "076_connection_notes_owner_edit.sql",
+"bytes": 1991,
+"md5": "e0029b9a676744d13078873c6154fb9a",
+"executable": true
+},
+{
+"part": 88,
+"source": "supabase/sql/077_mentor_school_verification.sql",
+"section": "077_mentor_school_verification.sql",
+"bytes": 7524,
+"md5": "908ecee254aee667585d14e875b2647d",
+"executable": true
+},
+{
+"part": 89,
+"source": "supabase/sql/078_p0_public_mentor_read_rpc_v2.sql",
+"section": "078_p0_public_mentor_read_rpc_v2.sql",
+"bytes": 4354,
+"md5": "e36b163cc7ff5f3f7c60ab9c38d5ef53",
+"executable": true
+},
+{
+"part": 90,
+"source": "supabase/sql/079_b_classification_catalog.sql",
+"section": "079_b_classification_catalog.sql",
+"bytes": 8351,
+"md5": "05b7e268276fcbe4b02588157a88cf28",
+"executable": true
+},
+{
+"part": 91,
+"source": "supabase/sql/080_c_individual_question_qualification.sql",
+"section": "080_c_individual_question_qualification.sql",
+"bytes": 9845,
+"md5": "002652e92c8186d93344573db39e4cb9",
+"executable": true
+},
+{
+"part": 92,
+"source": "supabase/sql/081_d_claim_gate.sql",
+"section": "081_d_claim_gate.sql",
+"bytes": 4805,
+"md5": "ab07b871a618d863d94ce6d739e9d1b3",
+"executable": true
+},
+{
+"part": 93,
+"source": "supabase/sql/082_community_shortform_likes.sql",
+"section": "082_community_shortform_likes.sql",
+"bytes": 3057,
+"md5": "bf23e2b4d06a9d38956f1d375dc11e9b",
+"executable": true
+},
+{
+"part": 94,
+"source": "supabase/sql/083_custom_order_message_attachments.sql",
+"section": "083_custom_order_message_attachments.sql",
+"bytes": 8271,
+"md5": "192a062eaa7978136ee316cf5bf24d06",
+"executable": true
+},
+{
+"part": 95,
+"source": "supabase/sql/084_admin_case_notes.sql",
+"section": "084_admin_case_notes.sql",
+"bytes": 3341,
+"md5": "368fede7fad08a7d907d079686bdc9c4",
+"executable": true
+},
+{
+"part": 96,
+"source": "supabase/sql/085_connection_notes_author_rls.sql",
+"section": "085_connection_notes_author_rls.sql",
+"bytes": 3577,
+"md5": "92080f918cd81d1b9853ed6e39d336ec",
+"executable": true
+},
+{
+"part": 97,
+"source": "supabase/sql/086_subscription_settlement_items.sql",
+"section": "086_subscription_settlement_items.sql",
+"bytes": 12300,
+"md5": "b65803eb87a1633149587f9559394e14",
+"executable": true
+},
+{
+"part": 98,
+"source": "supabase/sql/087_user_consent_records.sql",
+"section": "087_user_consent_records.sql",
+"bytes": 6602,
+"md5": "068b3a3c0bd6edb42d78f6c23bad2fa2",
+"executable": true
+},
+{
+"part": 99,
+"source": "supabase/sql/088_custom_order_status_transition_rpcs.sql",
+"section": "088_custom_order_status_transition_rpcs.sql",
+"bytes": 13716,
+"md5": "e2eb680d5098f72199f1c0c58a3a244d",
+"executable": true
+},
+{
+"part": 100,
+"source": "supabase/sql/089_mentor_academic_record_change_requests.sql",
+"section": "089_mentor_academic_record_change_requests.sql",
+"bytes": 7360,
+"md5": "bb84035dd27f52d42987c155e1daeeb4",
+"executable": true
+},
+{
+"part": 101,
+"source": "supabase/sql/090_custom_order_fee_5pct.sql",
+"section": "090_custom_order_fee_5pct.sql",
+"bytes": 8292,
+"md5": "a340c0056efe72bbdb1f9e727fa0066e",
+"executable": true
+},
+{
+"part": 102,
+"source": "supabase/sql/091_individual_question_release_refund_wrappers.sql",
+"section": "091_individual_question_release_refund_wrappers.sql",
+"bytes": 5158,
+"md5": "72fcbccc86260f875220a4a8d5a1d4d5",
+"executable": true
+},
+{
+"part": 103,
+"source": "supabase/sql/092_individual_question_create_claim_wrappers.sql",
+"section": "092_individual_question_create_claim_wrappers.sql",
+"bytes": 12823,
+"md5": "c2e068a2c1a0829283294fcc9ac80f86",
+"executable": true
+},
+{
+"part": 104,
+"source": "supabase/sql/093_scan_annotations_and_withdrawals.sql",
+"section": "093_scan_annotations_and_withdrawals.sql",
+"bytes": 9187,
+"md5": "b4e6fdd33ab98e030921b1fa11bc8556",
+"executable": true
+},
+{
+"part": 105,
+"source": "supabase/sql/094_individual_question_pricing_rpc.sql",
+"section": "094_individual_question_pricing_rpc.sql",
+"bytes": 4188,
+"md5": "0672dc25f5534af78e68c6287b52bfb2",
+"executable": true
+},
+{
+"part": 106,
+"source": "supabase/sql/095_subscription_fee_15pct.sql",
+"section": "095_subscription_fee_15pct.sql",
+"bytes": 8755,
+"md5": "49b31b49092a10ed70c33754a34f09df",
+"executable": true
+},
+{
+"part": 107,
+"source": "supabase/sql/096_individual_question_fee_15pct.sql",
+"section": "096_individual_question_fee_15pct.sql",
+"bytes": 6414,
+"md5": "4d41686dda315bab1fc1de742334306a",
+"executable": true
+},
+{
+"part": 108,
+"source": "supabase/sql/097_mentor_profile_avatar.sql",
+"section": "097_mentor_profile_avatar.sql",
+"bytes": 2953,
+"md5": "783709686cd1a0f9fe617fef0cc7bad3",
+"executable": true
+},
+{
+"part": 109,
+"source": "supabase/sql/098_weekly_usage_count_on_create.sql",
+"section": "098_weekly_usage_count_on_create.sql",
+"bytes": 4233,
+"md5": "a43435e72e358f0f61b771504c3c6cab",
+"executable": true
+},
+{
+"part": 110,
+"source": "supabase/sql/099_subscription_refund_settlement_paid_guard.sql",
+"section": "099_subscription_refund_settlement_paid_guard.sql",
+"bytes": 8034,
+"md5": "9e4f372d4b3a7fc3410c75d8b36b4d2b",
+"executable": true
+},
+{
+"part": 111,
+"source": "supabase/sql/100_fix_subscription_renewal_attempt_count.sql",
+"section": "100_fix_subscription_renewal_attempt_count.sql",
+"bytes": 9447,
+"md5": "3ee9abd02bd99b1ba54a273d34e078d0",
+"executable": true
+},
+{
+"part": 112,
+"source": "supabase/sql/101_community_comments_admin_moderation.sql",
+"section": "101_community_comments_admin_moderation.sql",
+"bytes": 3594,
+"md5": "bc56329a323a5da72af768d98fb55e75",
+"executable": true
+},
+{
+"part": 113,
+"source": "supabase/sql/102_account_status_management.sql",
+"section": "102_account_status_management.sql",
+"bytes": 1668,
+"md5": "ffaf17fc772379338f3ece6e641fcff9",
+"executable": true
+},
+{
+"part": 114,
+"source": "supabase/sql/103_mentor_activity_suspension.sql",
+"section": "103_mentor_activity_suspension.sql",
+"bytes": 3404,
+"md5": "01cc48803517ca5a7a978721d4405d88",
+"executable": true
+},
+{
+"part": 115,
+"source": "supabase/sql/104_user_warnings.sql",
+"section": "104_user_warnings.sql",
+"bytes": 1520,
+"md5": "c1622e09d18ec4bbf78e16810eade0b7",
+"executable": true
+},
+{
+"part": 116,
+"source": "supabase/sql/105_subscription_settlement_period_gating.sql",
+"section": "105_subscription_settlement_period_gating.sql",
+"bytes": 10517,
+"md5": "4218ee8d0cb1ccd0a8dbdef496b496d5",
+"executable": true
+},
+{
+"part": 117,
+"source": "supabase/sql/106_payout_runs.sql",
+"section": "106_payout_runs.sql",
+"bytes": 5994,
+"md5": "fce62d98cd93df3016ab8168e895593e",
+"executable": true
+},
+{
+"part": 118,
+"source": "supabase/sql/108_pay_due_payouts_rpc.sql",
+"section": "108_pay_due_payouts_rpc.sql",
+"bytes": 10623,
+"md5": "0fae70eb5461543b8186c89223776655",
+"executable": true
+},
+{
+"part": 119,
+"source": "supabase/sql/109_individual_question_release_split.sql",
+"section": "109_individual_question_release_split.sql",
+"bytes": 10411,
+"md5": "47d06acf797626744039e33dccbb315a",
+"executable": true
+},
+{
+"part": 120,
+"source": "supabase/sql/110_custom_request_remove_immediate_payout.sql",
+"section": "110_custom_request_remove_immediate_payout.sql",
+"bytes": 8317,
+"md5": "cfbb99bbcc3a6d937d7fb9afb350c9cb",
+"executable": true
+},
+{
+"part": 121,
+"source": "supabase/sql/111_due_payouts_completion_guard.sql",
+"section": "111_due_payouts_completion_guard.sql",
+"bytes": 4891,
+"md5": "c1ff02e1d964f0ac1c123a6223410024",
+"executable": true
+},
+{
+"part": 122,
+"source": "supabase/sql/112_mentor_directory_rpc_photo_highschool.sql",
+"section": "112_mentor_directory_rpc_photo_highschool.sql",
+"bytes": 2856,
+"md5": "8458014e38704ed3f557f662d4b7adfc",
+"executable": true
+},
+{
+"part": 123,
+"source": "supabase/sql/113_individual_question_subject_gate.sql",
+"section": "113_individual_question_subject_gate.sql",
+"bytes": 5393,
+"md5": "b989be20ff6b5b2f82249b5bec39999e",
+"executable": true
+},
+{
+"part": 124,
+"source": "supabase/sql/114_payout_withholding_3_3pct.sql",
+"section": "114_payout_withholding_3_3pct.sql",
+"bytes": 6573,
+"md5": "304311194ad7d2069c1c9183c6100b23",
+"executable": true
+},
+{
+"part": 125,
+"source": "supabase/sql/115_account_deletion.sql",
+"section": "115_account_deletion.sql",
+"bytes": 5669,
+"md5": "91c7074d1f73d6f83f6968ffc6b55596",
+"executable": true
+},
+{
+"part": 126,
+"source": "supabase/sql/116_user_blocks.sql",
+"section": "116_user_blocks.sql",
+"bytes": 2427,
+"md5": "033dc6ceb6b9cf3723b370f65d8395cb",
+"executable": true
+},
+{
+"part": 127,
+"source": "supabase/sql/117_question_attachments_v2_author_realtime_backfill.sql",
+"section": "117_question_attachments_v2_author_realtime_backfill.sql",
+"bytes": 8004,
+"md5": "c50c7dff7e2d11cc99e721de743f3735",
+"executable": true
+},
+{
+"part": 128,
+"source": "supabase/sql/119_users_role_guard.sql",
+"section": "119_users_role_guard.sql",
+"bytes": 6365,
+"md5": "2459a54ad1561c6879d6803a63564f4d",
+"executable": true
+},
+{
+"part": 129,
+"source": "supabase/sql/120_admin_console_fixes.sql",
+"section": "120_admin_console_fixes.sql",
+"bytes": 5554,
+"md5": "5b9533f7cb6ca30e653550b6b23d6197",
+"executable": true
+},
+{
+"part": 130,
+"source": "supabase/sql/122_signup_role_no_admin.sql",
+"section": "122_signup_role_no_admin.sql",
+"bytes": 4419,
+"md5": "dbf72a7b2196ac68070419305714ba92",
+"executable": true
+},
+{
+"part": 131,
+"source": "supabase/sql/123_reviews_converge.sql",
+"section": "123_reviews_converge.sql",
+"bytes": 8280,
+"md5": "b7ae21d53825ad7de2fd5abada5a66d9",
+"executable": true
+},
+{
+"part": 132,
+"source": "supabase/sql/124_iq_refund_state_gate.sql",
+"section": "124_iq_refund_state_gate.sql",
+"bytes": 4378,
+"md5": "cc1b79c23e4b916112e0810655de5766",
+"executable": true
+},
+{
+"part": 133,
+"source": "supabase/sql/125_dispute_split_fee_5pct.sql",
+"section": "125_dispute_split_fee_5pct.sql",
+"bytes": 10535,
+"md5": "bbb838b93bdb5eef59778017d143c18d",
+"executable": true
+},
+{
+"part": 134,
+"source": "supabase/sql/126_reviews_rls_hardening.sql",
+"section": "126_reviews_rls_hardening.sql",
+"bytes": 7018,
+"md5": "348f00b9d5b4da96b395a72e3f8f2e0c",
+"executable": true
+},
+{
+"part": 135,
+"source": "supabase/sql/128_refund_admin_restore_escrow.sql",
+"section": "128_refund_admin_restore_escrow.sql",
+"bytes": 7824,
+"md5": "5896fdb096881e53ee5078bf0cba96ef",
+"executable": true
+},
+{
+"part": 136,
+"source": "supabase/sql/129_shortform_author_label.sql",
+"section": "129_shortform_author_label.sql",
+"bytes": 2146,
+"md5": "58093f73306b204f69261488726bb472",
+"executable": true
+},
+{
+"part": 137,
+"source": "supabase/sql/130_shortform_scrap_reaction.sql",
+"section": "130_shortform_scrap_reaction.sql",
+"bytes": 1663,
+"md5": "d28b46af6a7bc4e395ff23b5dc383b09",
+"executable": true
+},
+{
+"part": 138,
+"source": "supabase/sql/131_p1_13_subscription_checkout_atomic.sql",
+"section": "131_p1_13_subscription_checkout_atomic.sql",
+"bytes": 7323,
+"md5": "d75070ea34ad803f8c6bfc6566262724",
+"executable": true
+},
+{
+"part": 139,
+"source": "supabase/sql/132_notification_outbox_foundation.sql",
+"section": "132_notification_outbox_foundation.sql",
+"bytes": 7856,
+"md5": "a6ae525de93b920a3fd181acccec5516",
+"executable": true
+},
+{
+"part": 140,
+"source": "supabase/sql/133_mark_all_notifications_read.sql",
+"section": "133_mark_all_notifications_read.sql",
+"bytes": 2426,
+"md5": "bc36e1dcf15d55403d7f3554e30af23f",
+"executable": true
+},
+{
+"part": 141,
+"source": "supabase/sql/134_mentor_profile_bio.sql",
+"section": "134_mentor_profile_bio.sql",
+"bytes": 939,
+"md5": "92f32e66dfb247d19c5793d8e727b8c3",
+"executable": true
+},
+{
+"part": 142,
+"source": "supabase/sql/135_mentor_review_stats_rpc.sql",
+"section": "135_mentor_review_stats_rpc.sql",
+"bytes": 3047,
+"md5": "cba9abdd5f9e0e0f824aa4eba5288433",
+"executable": true
+},
+{
+"part": 143,
+"source": "supabase/sql/136_p1_8a_question_room_atomic_rpc.sql",
+"section": "136_p1_8a_question_room_atomic_rpc.sql",
+"bytes": 18015,
+"md5": "001e603859fa44fe3fd2a4924ee3e6ce",
+"executable": true
+},
+{
+"part": 144,
+"source": "supabase/sql/137_p3_8_realtime_messages_threads.sql",
+"section": "137_p3_8_realtime_messages_threads.sql",
+"bytes": 1392,
+"md5": "a315a355172b6568c62130cb77c1ddee",
+"executable": true
+},
+{
+"part": 145,
+"source": "supabase/sql/138_p3_9_student_nickname_rpc_anon_revoke.sql",
+"section": "138_p3_9_student_nickname_rpc_anon_revoke.sql",
+"bytes": 1275,
+"md5": "1214098ce775605dcd173fb15d3145b1",
+"executable": true
+},
+{
+"part": 146,
+"source": "supabase/sql/139_p1_8a_attachment_storage_contract.sql",
+"section": "139_p1_8a_attachment_storage_contract.sql",
+"bytes": 6375,
+"md5": "c83cc9a56563ea4ab24a98313747c9bf",
+"executable": true
+},
+{
+"part": 147,
+"source": "supabase/sql/140_p3_9_student_nickname_subscription_room_scope.sql",
+"section": "140_p3_9_student_nickname_subscription_room_scope.sql",
+"bytes": 2111,
+"md5": "ce51ba2547b34b50b1756992dd37cc66",
+"executable": true
+},
+{
+"part": 148,
+"source": "supabase/sql/141_p1_8a_direct_write_guards.sql",
+"section": "141_p1_8a_direct_write_guards.sql",
+"bytes": 7113,
+"md5": "f936b3cde0433126d10d8d92642586ca",
+"executable": true
+},
+{
+"part": 149,
+"source": "supabase/sql/142_p1_8a_pending_refund_lock.sql",
+"section": "142_p1_8a_pending_refund_lock.sql",
+"bytes": 13298,
+"md5": "1808677aa3f33dfc61e5a20bc6540ca2",
+"executable": true
+},
+{
+"part": 150,
+"source": "supabase/sql/143_p1_13_state_machine_hardening.sql",
+"section": "143_p1_13_state_machine_hardening.sql",
+"bytes": 8893,
+"md5": "fe218e5d2d150680454211af0ba62402",
+"executable": true
+},
+{
+"part": 151,
+"source": "supabase/sql/144_p1_8a_direct_write_eligibility.sql",
+"section": "144_p1_8a_direct_write_eligibility.sql",
+"bytes": 13563,
+"md5": "a6a849318582f2b4532327272f02c27b",
+"executable": true
+},
+{
+"part": 152,
+"source": "supabase/sql/145_p1_13_anomaly_persistence.sql",
+"section": "145_p1_13_anomaly_persistence.sql",
+"bytes": 10944,
+"md5": "0ddfd845c0f7c310106a6f86bfeca641",
+"executable": true
+},
+{
+"part": 153,
+"source": "supabase/baseline/supplements/005_pre147_out_of_band_idem_constraints.sql",
+"section": "005_pre147_out_of_band_idem_constraints.sql",
+"bytes": 1744,
+"md5": "ace7933b8304e12f8f179877069e5211",
+"executable": true
+},
+{
+"part": 154,
+"source": "supabase/sql/147_p2_2_community_board_idempotency_softdelete.sql",
+"section": "147_p2_2_community_board_idempotency_softdelete.sql",
+"bytes": 1981,
+"md5": "927a21c16e41e607e8fc5bb49dc9044c",
+"executable": true
+},
+{
+"part": 155,
+"source": "supabase/sql/148_p2_3_shortform_idempotency.sql",
+"section": "148_p2_3_shortform_idempotency.sql",
+"bytes": 970,
+"md5": "fb5013e5f8fe9b5b5341289f6fa5aa2f",
+"executable": true
+},
+{
+"part": 156,
+"source": "supabase/sql/149_p1_8a_storage_insert_eligibility.sql",
+"section": "149_p1_8a_storage_insert_eligibility.sql",
+"bytes": 3973,
+"md5": "03c01f113ab7c5e63f90282e1d468f0d",
+"executable": true
+},
+{
+"part": 157,
+"source": "supabase/sql/150_p1_13_refund_billing_event_fk.sql",
+"section": "150_p1_13_refund_billing_event_fk.sql",
+"bytes": 3330,
+"md5": "4f700357597977cbcdfd226b3487935c",
+"executable": true
+},
+{
+"part": 158,
+"source": "supabase/sql/151_p1_10_account_deletion_saga.sql",
+"section": "151_p1_10_account_deletion_saga.sql",
+"bytes": 12763,
+"md5": "d787c54cd50852192a1dca88cd08b948",
+"executable": true
+},
+{
+"part": 159,
+"source": "supabase/sql/152_p1_11c_notification_delivery_worker.sql",
+"section": "152_p1_11c_notification_delivery_worker.sql",
+"bytes": 14173,
+"md5": "5f4e4166fd7bb73b6535a122c2703c8a",
+"executable": true
+},
+{
+"part": 160,
+"source": "supabase/sql/153_p2_25_pay_due_payouts_convergence.sql",
+"section": "153_p2_25_pay_due_payouts_convergence.sql",
+"bytes": 9461,
+"md5": "0ee516a8cd2782776e4d1a8a7ca474db",
+"executable": true
+},
+{
+"part": 161,
+"source": "supabase/sql/154_p1_10_deletion_operational_adapters.sql",
+"section": "154_p1_10_deletion_operational_adapters.sql",
+"bytes": 7371,
+"md5": "77167f648608b77b666fc0b0c1900009",
+"executable": true
+},
+{
+"part": 162,
+"source": "supabase/sql/155_p1_11_iq_notification_atomization.sql",
+"section": "155_p1_11_iq_notification_atomization.sql",
+"bytes": 5397,
+"md5": "8613ac58620c7633b81d877535ed7dc3",
+"executable": true
+},
+{
+"part": 163,
+"source": "supabase/sql/156_p2_25_payout_scheduler_foundation.sql",
+"section": "156_p2_25_payout_scheduler_foundation.sql",
+"bytes": 4780,
+"md5": "acaf8128c3b8b8dedea6ad0977207076",
+"executable": true
+},
+{
+"part": 164,
+"source": "supabase/sql/157_p1_11_subscription_notification_atomization.sql",
+"section": "157_p1_11_subscription_notification_atomization.sql",
+"bytes": 10898,
+"md5": "c1f7ce81891e89617d18405a16cd46ca",
+"executable": true
+},
+{
+"part": 165,
+"source": "supabase/sql/158_p1_11_mentor_notification_atomization.sql",
+"section": "158_p1_11_mentor_notification_atomization.sql",
+"bytes": 8131,
+"md5": "57aa25dd7ad04aabd7345199e0cc63e3",
+"executable": true
+},
+{
+"part": 166,
+"source": "supabase/sql/159_p1_11_custom_request_notification_atomization.sql",
+"section": "159_p1_11_custom_request_notification_atomization.sql",
+"bytes": 4567,
+"md5": "1ee2df5c16180a8e3b2c33e922e06efd",
+"executable": true
+},
+{
+"part": 167,
+"source": "supabase/sql/160_p1_11_notification_helper_acl_hardening.sql",
+"section": "160_p1_11_notification_helper_acl_hardening.sql",
+"bytes": 1714,
+"md5": "b18554d0671cdddc31a25de66b174841",
+"executable": true
+},
+{
+"part": 168,
+"source": "supabase/sql/161_p1_10_account_deletion_self_rpc.sql",
+"section": "161_p1_10_account_deletion_self_rpc.sql",
+"bytes": 8033,
+"md5": "1bf38cc0485b518f6a7f5c301aa0f605",
+"executable": true
+},
+{
+"part": 169,
+"source": "supabase/sql/162_mobile_app_version_policy.sql",
+"section": "162_mobile_app_version_policy.sql",
+"bytes": 5936,
+"md5": "a04cc700a4f3ccf07658373449304c74",
+"executable": true
+},
+{
+"part": 170,
+"source": "supabase/sql/163_board_comment_canonical_bridge.sql",
+"section": "163_board_comment_canonical_bridge.sql",
+"bytes": 11713,
+"md5": "3b4058ec6389864d3bad63b1baa06354",
+"executable": true
+},
+{
+"part": 171,
+"source": "supabase/sql/164_board_comment_bridge_bidirectional_convergence.sql",
+"section": "164_board_comment_bridge_bidirectional_convergence.sql",
+"bytes": 11253,
+"md5": "6ea02bc8aff072f65487257c43638cdd",
+"executable": true
+},
+{
+"part": 172,
+"source": "supabase/sql/165_shortform_posts_mentor_insert_policy_convergence.sql",
+"section": "165_shortform_posts_mentor_insert_policy_convergence.sql",
+"bytes": 3106,
+"md5": "69cad9e85dbf9c520efc8f5e0713f817",
+"executable": true
+},
+{
+"part": 173,
+"source": "supabase/sql/166_mentor_plans_default_seed_on_first_approval.sql",
+"section": "166_mentor_plans_default_seed_on_first_approval.sql",
+"bytes": 5867,
+"md5": "38380e8b65ad656057effafd3ea0de90",
+"executable": true
+},
+{
+"part": 174,
+"source": "supabase/sql/167_iq_attachment_unique_question_storage_path.sql",
+"section": "167_iq_attachment_unique_question_storage_path.sql",
+"bytes": 5953,
+"md5": "e39ebba002f1345b702d2e35ef686adf",
+"executable": true
+},
+{
+"part": 175,
+"source": "supabase/sql/169_iq_attachment_storage_delete_policy.sql",
+"section": "169_iq_attachment_storage_delete_policy.sql",
+"bytes": 7684,
+"md5": "dcc13d0a9675e4ab728f7c0ccee30222",
+"executable": true
+},
+{
+"part": 176,
+"source": "supabase/sql/170_review_eligibility_relationship_based.sql",
+"section": "170_review_eligibility_relationship_based.sql",
+"bytes": 6213,
+"md5": "f1f623e6f6caebc59558f299320eaf28",
+"executable": true
+},
+{
+"part": 177,
+"source": "supabase/sql/171_reviews_author_update_and_updated_at.sql",
+"section": "171_reviews_author_update_and_updated_at.sql",
+"bytes": 10784,
+"md5": "14f222533733e32663cc128adf8274fd",
+"executable": true
+},
+{
+"part": 178,
+"source": "supabase/sql/173_reviews_moderated_author_edit_guard.sql",
+"section": "173_reviews_moderated_author_edit_guard.sql",
+"bytes": 10993,
+"md5": "82da6d2adceb41483806cd076957c3be",
+"executable": true
+},
+{
+"part": 179,
+"source": "supabase/sql/174_mentor_school_verification_approval_canon.sql",
+"section": "174_mentor_school_verification_approval_canon.sql",
+"bytes": 13949,
+"md5": "f976e9ec05c5fa3a03cb5a77d44e0bb7",
+"executable": true
+},
+{
+"part": 180,
+"source": "supabase/sql/175_p1_10_account_deletion_job_history.sql",
+"section": "175_p1_10_account_deletion_job_history.sql",
+"bytes": 18282,
+"md5": "b8d8a24aa91b87a34c893c3fdf2f2ea7",
+"executable": true
+},
+{
+"part": 181,
+"source": "supabase/sql/176_p1_10_account_deletion_forfeit_consent.sql",
+"section": "176_p1_10_account_deletion_forfeit_consent.sql",
+"bytes": 21530,
+"md5": "851728f85202fad127cbc417c0549604",
+"executable": true
+},
+{
+"part": 182,
+"source": "supabase/sql/177_p1_10_account_deletion_session_revoke.sql",
+"section": "177_p1_10_account_deletion_session_revoke.sql",
+"bytes": 5609,
+"md5": "8bcc849e3578dd4391229d39706230f7",
+"executable": true
+},
+{
+"part": 183,
+"source": "supabase/sql/178_p1_10_account_deletion_legacy_claim_revoke.sql",
+"section": "178_p1_10_account_deletion_legacy_claim_revoke.sql",
+"bytes": 3956,
+"md5": "85086a4e1130aa9671ed9dc2665c32d6",
+"executable": true
+},
+{
+"part": 184,
+"source": "supabase/sql/179_p1_10_account_deletion_consent_column_canon.sql",
+"section": "179_p1_10_account_deletion_consent_column_canon.sql",
+"bytes": 8529,
+"md5": "17a79407f66f6894337164fb1d0f7702",
+"executable": true
+},
+{
+"part": 185,
+"source": "supabase/sql/180_p1_10_account_deletion_forfeit_key_canon.sql",
+"section": "180_p1_10_account_deletion_forfeit_key_canon.sql",
+"bytes": 7659,
+"md5": "c00e6f41b88fa9f725130aa8e76fa95e",
+"executable": true
+},
+{
+"part": 186,
+"source": "supabase/sql/181_p1_10_account_deletion_storage_owner_refs.sql",
+"section": "181_p1_10_account_deletion_storage_owner_refs.sql",
+"bytes": 4447,
+"md5": "1486cdcbf8797f827ca89d1403193261",
+"executable": true
+},
+{
+"part": 187,
+"source": "supabase/sql/182_p1_10_account_deletion_consent_locked_read.sql",
+"section": "182_p1_10_account_deletion_consent_locked_read.sql",
+"bytes": 6765,
+"md5": "76ca64ae8abb272c80527d25aea7e01f",
+"executable": true
+},
+{
+"part": 188,
+"source": "supabase/sql/183_p1_10_account_deletion_verify_object_owners.sql",
+"section": "183_p1_10_account_deletion_verify_object_owners.sql",
+"bytes": 5673,
+"md5": "9c6f00b9820caa6b96fddcac71b8ea2d",
+"executable": true
+}
+]

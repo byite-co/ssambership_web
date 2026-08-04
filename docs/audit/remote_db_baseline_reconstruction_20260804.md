@@ -247,6 +247,41 @@ UNVERIFIED_ON_REAL_PLATFORM: 위 수정본의 branch 재생은 아직 실측되�
   → PHASE A(§7)로 62단계 완주를 확인해야 한다.
 ```
 
+### 5-5. PHASE A 실측 (2026-08-04, branch `ydoryiaexclkowbvkiep` — 삭제 완료)
+
+수정본을 실제 플랫폼(PostgreSQL 17.6)에서 검증했다. 원자료:
+`docs/audit/remote_db_inventory_20260804/phase_a_preview_20260805/`
+
+```text
+BASELINE_REAL_PLATFORM: PASS — 188/188 조각 · 114/114 stages
+  gaps 0 · duplicates 0 · errors 0 · open transactions 0
+  결과 public: tables 77 · functions 194 · policies 184 · buckets 12
+  선점 금지 객체 4종 부재 확인 · mobile_app_version_policies marker 존재
+AUGMENTED_REPLAY_REAL_PLATFORM: PARTIAL — 38/62 (시간 게이트로 중단, 실패 아님)
+M13_SELFCHECK(ledger version 20260731100540): PASS   ← 직전 세션 실패 지점
+```
+
+**함수 defacl 하드닝 가설이 실측으로 확정됐다.**
+
+| 시점 | `pg_default_acl`(postgres, public, objtype=f) |
+|---|---|
+| branch 생성 직후 | `{postgres=X, anon=X, authenticated=X, service_role=X}` |
+| step 33(`20260729000000`) 직후 | `{postgres=X/postgres}` — 부모 실측값과 일치 |
+
+step 38 직후 트리거 함수 2종 모두 `proacl={postgres=X/postgres}` 이고 anon/authenticated/
+service_role/PUBLIC EXECUTE 가 전부 false → 자체 검사 ③ matched=2 (직전 세션 matched=0 실패).
+즉 `20260729000000` 은 M13 통과에 **필요충분**했고, 그 파일의 `UNVERIFIED_ON_REAL_PLATFORM`
+경고는 해소됐다. 또한 branch 초기 defacl 이 **소유자(postgres)를 포함한** permissive 행이라는
+점이 platform_stub 교정(§5-3)이 실플랫폼과 일치함을 입증했다.
+
+잔존 위험: `supabase_admin` grantor 의 defacl(f) 행은 끝까지 permissive 하다 — 마이그레이션이
+만드는 함수의 소유자가 postgres 인 동안에만 무해하다.
+
+```text
+STILL_UNVERIFIED_ON_REAL_PLATFORM: replay 39~62 · 부모↔branch 13축 동등성 · PR #60 왕복
+  → 다음 PHASE A 세션에서 신규 branch 로 이어서 수행한다.
+```
+
 ---
 
 ## 6. 운영 채택 계획 — Strategy A (history-only)
@@ -358,9 +393,22 @@ preview branch 세션에서 부모에 대한 쓰기는 0 이었고, 세션 시�
 ```text
 PARENT_CHANGE_DETECTION: NO_CHANGE_DETECTED_ON_CAPTURED_SENTINELS
 PARENT_SENTINEL_CHECK: PASS
-PARENT_FULL_AXIS_PRE_POST_COMPARISON: NOT_RUN
-PARENT_BYTE_IDENTICAL: NOT_PROVEN
+PARENT_FULL_AXIS_PRE_POST_COMPARISON: PASS   (2026-08-04 PHASE A 세션에서 실제 수행)
+PARENT_BYTE_IDENTICAL: NOT_PROVEN            (이 표현은 계속 쓰지 않는다)
 ```
+
+2026-08-04 PHASE A 세션은 `axis_checksums_v2.sql`(13축)을 **세션 시작(16:07:51Z)과
+branch 삭제 후(18:11:16Z)** 각각 실행해 두 벌을 산출물로 남겼다. 13축 전부 개수·md5 동일:
+
+```text
+tables 79 · columns 860 · constraints 364 · indexes 240 · views 7 · functions 242 ·
+triggers 95 · policies 220 · table_grants 1319 · buckets 13 · types 1 ·
+publications 2 · default_privileges 6        → differing axes: 0
+원자료: docs/audit/remote_db_inventory_20260804/phase_a_preview_20260805/parent_{pre,post}_axes.json
+```
+
+그럼에도 `byte-identical` 은 쓰지 않는다 — 13축은 구조 축의 정규화 지문이며, 데이터 전체
+바이트·시스템 카탈로그 전체·물리 저장 구조·OID/통계/시간 메타데이터를 비교하지 않는다.
 
 채취한 sentinel 축:
 
@@ -376,19 +424,20 @@ PARENT_BYTE_IDENTICAL: NOT_PROVEN
 > 부모 프로젝트는 세션 시작·cleanup 후 채취한 migration ledger, guard 함수 MD5,
 > 주요 객체 수 등 위에 열거한 sentinel 에서 변화가 검출되지 않았다.
 
-### 다음 세션이 해야 할 개선
+### 절차 정착 (2026-08-04 PHASE A 에서 이행 완료)
 
-`docs/audit/remote_db_inventory_20260804/parent_axis_checksums.json` 은 **세션 시작 시점의
-부모 인벤토리에서 계산한 기준값 1벌**이다(사후 재채취본이 저장소에 없다). PHASE A/B 세션은
-`scripts/verify/baseline/axis_checksums.sql` 을 **세션 시작 직후와 cleanup 직후 각각 1회**
-실행해 두 벌을 산출물로 남겨야 한다. 그때 비로소 다음을 쓸 수 있다.
+이전 판에서 "다음 세션이 해야 할 개선" 으로 남겨 뒀던 pre/post 2벌 채취를 실제로 이행했다.
+`docs/audit/remote_db_inventory_20260804/parent_axis_checksums.json` 은 여전히 세션 시작
+시점 1벌(v1 규칙, 11축)이지만, PHASE A 세션은 **13축 v2**(`axis_checksums_v2.sql`)를
+세션 시작 직후와 branch 삭제 후 각각 실행해 두 벌을 남겼다.
 
-```text
-PARENT_FULL_AXIS_PRE_POST_COMPARISON: PASS
-PARENT_SCHEMA_EQUIVALENCE: PASS
-```
+이후 모든 PHASE A/B 세션은 같은 절차를 따른다:
 
-(그 경우에도 `byte-identical` 은 쓰지 않는다.)
+1. 세션 시작 직후 부모에 `axis_checksums_v2.sql` 1회 → `parent_pre_axes.json`
+2. branch 삭제 후 부모에 동일 파일 1회 → `parent_post_axes.json`
+3. 두 벌을 기계 비교해 differing axes 를 보고(0 이어야 PASS)
+
+`byte-identical` 은 두 벌이 모두 있어도 쓰지 않는다.
 
 ---
 
