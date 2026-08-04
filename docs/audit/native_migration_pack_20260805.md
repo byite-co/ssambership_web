@@ -158,7 +158,14 @@ reapply → FIXTURE PASS
 | job | 하는 일 |
 |---|---|
 | `static` | 생성기 재실행 후 `git diff --quiet`(비결정론/직접편집 탐지) · pack validator · replay manifest validator · workflow validator(+selftest) · secret 스캔(+selftest) · 산출물 artifact |
-| `pg17-cli-replay` | pinned `supabase/setup-cli@v1` (버전 `2.111.0`) · `--help` 캡처(명령을 기억으로 추측하지 않는다) · `config.toml major_version=17` 확인 · `supabase start` · `supabase migration list` · `verify_local_stack_state.sh` · `supabase stop` · artifact |
+| `pg17-cli-replay` | pinned `supabase/setup-cli@v1` (버전 `2.111.0`) · `--help` 캡처(명령을 기억으로 추측하지 않는다) · `config.toml major_version=17` 확인 · **pack 대피 → 빈 스택 기동 → 플랫폼 초기 상태 실측 → 전제 확립 → pack 복원 후 `supabase migration up`** · `supabase migration list` · `verify_local_stack_state.sh` · `supabase stop` · artifact |
+
+#### 왜 pack 을 먼저 치웠다가 다시 넣는가
+
+`supabase start` 는 `supabase/migrations` 를 **자동 적용**한다. 그러면 적용 전 플랫폼 상태를
+관측할 기회가 사라진다. pack 안의 자체 검사들이 바로 그 초기 상태를 전제하므로(§5-3),
+pack 을 잠시 치우고 빈 스택을 띄워 초기 상태를 실측한 뒤 되돌려 놓고
+`supabase migration up` 으로 적용한다. 적용은 여전히 **실제 CLI migration runner** 가 한다.
 
 `permissions: contents: read`, secret 참조 0. PR 마다 자동 실행된다.
 
@@ -175,7 +182,52 @@ reapply → FIXTURE PASS
 8. PR #60 미포함 pack 이면 IQ 함수 본문 md5 가 baseline 값인가
 9. 13축 인벤토리 덤프
 
-### 5-3. 이 검사 스크립트 자체를 어떻게 검증했나
+### 5-3. 실제 CLI runner 1차 실행이 찾아낸 것 — 로컬 스택 ≠ 호스팅 프로젝트
+
+`pg17-cli-replay` 의 첫 실행은 `supabase start` 도중 **원장 migration 자신의 자체 검사**에서
+멈췄다. 우리가 쓴 코드가 아니라 부모에서 실제로 실행됐던 migration 이 낸 예외다.
+
+```text
+BATCH_F_M11_BASELINE_ACL_MISMATCH:
+  expected <role> <priv> on public.mentor_profiles = true, measured false
+```
+
+M11 은 `public.mentor_profiles` 에 `anon`·`authenticated` 의 테이블 권한 7종이 모두 있어야
+통과한다. 그 권한은 명시적 GRANT 가 아니라 **테이블 생성 시점의 default privilege** 로 붙는다.
+
+| 환경 | public default ACL (테이블) | M11 |
+|---|---|---|
+| 부모 프로젝트 / Preview Branch (PHASE A 실측, PG17.6) | permissive | 통과 (replay 38/62 지점까지 확인) |
+| `supabase start` 로컬 스택 (PG17) | **동일하지 않다** | **실패** |
+| PG16 + `platform_stub.sql` | permissive (모델) | 통과 |
+
+즉 `platform_stub.sql` 이 모델링해 온 "permissive 초기 상태" 는 호스팅 프로젝트의 사실이지
+로컬 스택의 사실이 아니다. 이 차이는 지금까지 관측된 적이 없었다 — 실제 CLI runner 를
+돌려 보고서야 드러났다.
+
+대응은 두 갈래다.
+
+1. **실측한다.** `capture_platform_baseline.sh` 가 pack 적용 전에 role 목록·`pg_default_acl`
+   전량·schema 권한을 덤프하고, 결정적으로 **probe 테이블을 새로 만들어** 그 ACL 을 측정한다
+   (3 role × 7 권한 = 21줄). 결과는 `pg17-evidence/` 에 남는다.
+2. **전제를 확립한다.** `local_stack_preconditions.sql` 이 migration 실행 role 의 default
+   privilege 를 호스팅 실측값에 맞춘다. 멱등이고, 확립 직후 새 테이블로 14/14 를 스스로 검증한다.
+
+> 이 파일은 **모델링이지 pack 의 일부가 아니다.** `supabase/migrations` 에 들어가지 않고
+> 부모 프로젝트에는 절대 실행하지 않는다. 이 파일이 필요하다는 사실 자체가 실측 결과다.
+
+#### 이 진단 스크립트를 만들며 잡은 자체 결함 2건 (둘 다 '침묵이 성공처럼 보이는' 유형)
+
+* probe 권한 질의가 `ORDER BY position 2 is not in select list` 로 깨졌는데, 그 결과
+  `=false` 가 0건이 되어 **RESTRICTIVE 를 PERMISSIVE 로 오판**했다. → probe 가 정확히 21줄을
+  냈는지 먼저 확인하고, 아니면 그 실행의 판정을 무효로 만든다.
+* probe 테이블을 `create table if not exists` 로 만들었더니, 앞선 실행이 남긴 테이블을
+  재사용해 **그 시점의 낡은 ACL** 을 측정했다(전제를 확립한 뒤에도 계속 RESTRICTIVE 로 보고).
+  → default privilege 는 생성 시점에만 적용되므로 매번 drop 후 새로 만든다.
+
+두 결함 모두 로컬 PG16 에서 before/after 시나리오를 실제로 돌려 재현·수정했다.
+
+### 5-4. 이 검사 스크립트 자체를 어떻게 검증했나
 
 `scripts/verify/baseline/run_local_stack_emulation.sh` — `supabase start` 가 불가능한 이 환경에서
 로컬 스택의 최소 조건(TCP DB + pack 전량 적용 + history 채움)을 PG16 으로 재현하고
@@ -396,6 +448,8 @@ WORKFLOW_ACTUAL_EXECUTION:           NOT_RUN   (정적 검증만 수행)
 | `verify_local_stack_state.sh` | 러너의 `supabase start` 결과 검증(9개 검사군) |
 | `run_local_stack_emulation.sh` | 위 스크립트 자체를 PG16 으로 시험 + fingerprint 모델 검증 |
 | `parent_schema_fingerprint.sh` | 읽기 전용 15축 schema 지문(무해성 강제) |
+| `capture_platform_baseline.sh` | pack 적용 전 플랫폼 초기 상태 실측(probe 21줄 강제) |
+| `local_stack_preconditions.sql` | 로컬 스택을 호스팅 초기 상태로 정렬(모델링 · pack 아님) |
 | `validate_db_workflows.py` | 워크플로 R1~R12 정적 검증 + `--selftest` |
 | `scan_repo_secrets.py` | 값 기준 secret 스캔(루프백 로컬 기본값만 허용) + `--selftest` |
 | `check_pr60_native_migration_sync.sh` (PR #60) | source↔migration 바이트 동기화 강제 |

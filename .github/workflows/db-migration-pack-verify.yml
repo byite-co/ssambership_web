@@ -95,16 +95,53 @@ jobs:
           set -euo pipefail
           grep -E '^\s*major_version\s*=\s*17' supabase/config.toml \
             || { echo "::error::config.toml major_version 이 17 이 아니다"; exit 1; }
-      - name: local stack 시작 (migration runner 가 supabase/migrations 를 읽는다)
+      # `supabase start` 는 supabase/migrations 를 자동 적용한다. 그러면 적용 **전** 플랫폼
+      # 상태를 관측할 기회가 사라진다. pack 의 자체 검사(예: BATCH_F_M11)는 그 초기 상태를
+      # 전제하므로, 먼저 pack 을 치워 두고 빈 상태로 스택을 띄운다.
+      - name: pack 대피 (적용 전 플랫폼 상태를 관측하기 위해)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/pack
+          mv supabase/migrations/*.sql /tmp/pack/
+          echo "대피한 migration: $(ls /tmp/pack/*.sql | wc -l)본"
+      - name: local stack 시작 (pack 미적용 상태)
         shell: bash
         run: |
           set -euo pipefail
           supabase start 2>&1 | tail -20
+      - name: 플랫폼 초기 상태 실측 (이 job 의 1차 산출물)
+        shell: bash
+        run: bash scripts/verify/baseline/capture_platform_baseline.sh
+      - name: 호스팅 프로젝트 전제 확립 (로컬 스택 ↔ 호스팅 차이 보정)
+        shell: bash
+        run: |
+          set -euo pipefail
+          psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+            -v ON_ERROR_STOP=1 -f scripts/verify/baseline/local_stack_preconditions.sql
+          echo "재실측(전제 확립 후):"
+          EVIDENCE_DIR="$GITHUB_WORKSPACE/pg17-evidence/after-preconditions" \
+            bash scripts/verify/baseline/capture_platform_baseline.sh | tail -4
+      - name: pack 복원 + 실제 CLI migration runner 로 적용
+        shell: bash
+        run: |
+          set -euo pipefail
+          mv /tmp/pack/*.sql supabase/migrations/
+          echo "복원한 migration: $(ls supabase/migrations/*.sql | wc -l)본"
+          # 플래그를 기억으로 추측하지 않는다 — help 로 존재를 확인하고 있을 때만 쓴다.
+          supabase migration up --help > cli-up-help.txt 2>&1 || true
+          UP_FLAGS=""
+          if grep -q -- '--local' cli-up-help.txt; then UP_FLAGS="--local"; fi
+          echo "migration up flags: '${UP_FLAGS}'"
+          supabase migration up ${UP_FLAGS} 2>&1 | tail -40
       - name: migration history / 구조 검증
         shell: bash
         run: |
           set -euo pipefail
-          supabase migration list 2>&1 | tee migration-list.txt
+          supabase migration list --help > cli-list-help.txt 2>&1 || true
+          LIST_FLAGS=""
+          if grep -q -- '--local' cli-list-help.txt; then LIST_FLAGS="--local"; fi
+          supabase migration list ${LIST_FLAGS} 2>&1 | tee migration-list.txt
           bash scripts/verify/baseline/verify_local_stack_state.sh
       - name: stack 정리
         if: always()
