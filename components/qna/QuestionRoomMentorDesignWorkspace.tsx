@@ -448,8 +448,10 @@ export function QuestionRoomMentorDesignWorkspace(props: {
       // D-21: 셸 고정 오버헤드 = 헤더 h-16(4rem)+border 1px + AppShell main py-8(위/아래 4rem) = 8rem+1px.
       // rem 로 쓴다 — px 상수(129px)는 root font-size 16px 에서만 맞고, 브라우저 글꼴 크기를 키우면
       // 오버헤드가 커져 document 스크롤이 되살아난다(20px→32px, 24px→64px 밀림·입력창 이탈).
-      // min-h 고정값은 짧은 viewport에서 document 스크롤을 만들므로 상세 화면에선 두지 않는다.
-      <div className="flex h-[calc(100dvh-8rem-1px)] flex-col overflow-hidden border-t border-slate-200 bg-[#f8fafc] font-sans text-slate-900">
+      // min-h-[30rem]: 고정 행(헤더·플랜카드·입력창·노트 토글 ≈300px)이 잘리지 않는 최소 높이.
+      // 구 min-h-[640px]과 달리 검증 viewport(≥720 높이)에선 비활성이라 document 스크롤 0 을 유지하고,
+      // 그보다 짧은 화면(가로 모드 폰 등)에서만 기존처럼 document 스크롤로 하단 접근을 보장한다.
+      <div className="flex h-[calc(100dvh-8rem-1px)] min-h-[30rem] flex-col overflow-hidden border-t border-slate-200 bg-[#f8fafc] font-sans text-slate-900">
         {props.actionFeedback?.ok ? (
           <div className="shrink-0 border-b border-emerald-100 bg-emerald-50 px-4 py-2 text-center text-[11px] font-bold text-emerald-900">
             {props.actionFeedback.ok}

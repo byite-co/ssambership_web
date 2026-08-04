@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test:contract": "node --test --experimental-strip-types \"lib/**/__contract__/*.contract.test.ts\"",
-    "screenshots:report": "node scripts/generate-review-report.mjs"
+    "screenshots:report": "node scripts/generate-review-report.mjs",
+    "contracts:verify": "node scripts/contracts/verify_remote_contract.mjs",
+    "contracts:export": "node scripts/contracts/export_remote_contract.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.10.2",

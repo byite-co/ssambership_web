@@ -1,0 +1,6017 @@
+{
+  "contract_snapshot_version": 1,
+  "schemas": [
+    {
+      "usage": [
+        "authenticated"
+      ],
+      "schema": "api_app_v1"
+    },
+    {
+      "usage": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "schema": "api_web_v1"
+    },
+    {
+      "usage": [],
+      "schema": "core_private"
+    },
+    {
+      "usage": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "schema": "public"
+    }
+  ],
+  "functions": [
+    {
+      "args": "p_title text, p_body text, p_category text, p_idempotency_key uuid, p_image_refs text[], p_status text",
+      "name": "community_post_create",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_app_v1",
+      "execute": [
+        "authenticated"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_post_id uuid",
+      "name": "community_post_soft_delete",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_app_v1",
+      "execute": [
+        "authenticated"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_post_id uuid, p_title text, p_body text, p_category text, p_expected_updated_at timestamp with time zone, p_image_refs text[], p_status text",
+      "name": "community_post_update",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_app_v1",
+      "execute": [
+        "authenticated"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_mentor_id uuid",
+      "name": "ensure_free_question_room",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_app_v1",
+      "execute": [
+        "authenticated"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_room_id uuid, p_title text, p_subject text, p_topic text, p_first_message_body text",
+      "name": "qna_create_question_thread",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_app_v1",
+      "execute": [
+        "authenticated"
+      ],
+      "returns": "jsonb",
+      "body_md5": "58d2d496a7a3fff32007bddd23100f69",
+      "security_definer": true
+    },
+    {
+      "args": "p_nickname text, p_grade_level text",
+      "name": "user_profile_update_self",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_app_v1",
+      "execute": [
+        "authenticated"
+      ],
+      "returns": "jsonb",
+      "body_md5": "ac71fbca2ad4538b78ef705f79c6b5c3",
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "account_deletion_status_self",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_title text, p_body text, p_category text, p_idempotency_key uuid, p_image_refs text[], p_status text",
+      "name": "community_post_create",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_post_id uuid",
+      "name": "community_post_soft_delete",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_post_id uuid, p_title text, p_body text, p_category text, p_expected_updated_at timestamp with time zone, p_image_refs text[], p_status text",
+      "name": "community_post_update",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_mentor_id uuid",
+      "name": "ensure_free_question_room",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_bank_name text, p_account_number text",
+      "name": "mentor_payout_account_update_self",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_limited_cash_krw integer, p_standard_cash_krw integer, p_premium_cash_krw integer",
+      "name": "mentor_plan_prices_set_self",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_university_name text, p_department_name text, p_high_school_name text, p_teaching_subjects text[], p_intro_line text, p_bio text, p_answer_style text, p_profile_image_url text, p_is_open_for_subscriptions boolean",
+      "name": "mentor_profile_update_self",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "mentor_settlement_self",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "TABLE(item_id uuid, subscription_id uuid, student_label text, event_type text, billing_at timestamp with time zone, period_start timestamp with time zone, period_end timestamp with time zone, gross_cents bigint, platform_fee_cents bigint, mentor_amount_cents bigint, fee_rate numeric, status text, hold_reason text, paid_at timestamp with time zone, created_at timestamp with time zone)",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "my_subscriptions_self",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "TABLE(subscription_id uuid, mentor_id uuid, mentor_label text, plan_id uuid, plan_tier text, current_plan_amount_cents integer, status text, started_at timestamp with time zone, current_period_start timestamp with time zone, current_period_end timestamp with time zone, next_billing_at timestamp with time zone, cancel_at_period_end boolean, grace_until timestamp with time zone, created_at timestamp with time zone)",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_room_id uuid, p_title text, p_subject text, p_topic text, p_first_message_body text",
+      "name": "qna_create_question_thread",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": "d178fd1d9bdf727babf339232bcaf66c",
+      "security_definer": true
+    },
+    {
+      "args": "p_user_id uuid, p_amount_cents bigint, p_order_ref text",
+      "name": "record_cash_topup_v2",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_payment_id uuid, p_plan_id uuid, p_expected_amount_cents integer, p_idempotency_key text",
+      "name": "subscription_checkout_confirm_v2",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_agreed boolean",
+      "name": "user_marketing_consent_set_self",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_nickname text, p_grade_level text",
+      "name": "user_profile_update_self",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": "ac71fbca2ad4538b78ef705f79c6b5c3",
+      "security_definer": true
+    },
+    {
+      "args": "p_mentor_id uuid",
+      "name": "weekly_question_usage_self",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "api_web_v1",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_owner_id uuid, p_image_refs text[]",
+      "name": "community_image_refs_validate",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "core_private",
+      "execute": [],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "p_author_id uuid, p_title text, p_body text, p_category text, p_image_refs text[], p_status text, p_idempotency_key uuid",
+      "name": "community_post_create_impl",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "core_private",
+      "execute": [],
+      "returns": "jsonb",
+      "body_md5": "9089e4db2ece74f6eaf68307e8a3db1c",
+      "security_definer": false
+    },
+    {
+      "args": "p_author_id uuid, p_post_id uuid",
+      "name": "community_post_soft_delete_impl",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "core_private",
+      "execute": [],
+      "returns": "jsonb",
+      "body_md5": "872840d936494dc4e605e1b4d9b8b854",
+      "security_definer": false
+    },
+    {
+      "args": "p_author_id uuid, p_post_id uuid, p_title text, p_body text, p_category text, p_image_refs text[], p_status text, p_expected_updated_at timestamp with time zone",
+      "name": "community_post_update_impl",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "core_private",
+      "execute": [],
+      "returns": "jsonb",
+      "body_md5": "adf5244900c1befcbd57f1061230a241",
+      "security_definer": false
+    },
+    {
+      "args": "p_student_id uuid, p_mentor_id uuid, p_payment_id uuid, p_subscription_id uuid, p_require_entitlement boolean",
+      "name": "ensure_student_mentor_room",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "core_private",
+      "execute": [],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_user_id uuid, p_amount_cents bigint, p_idempotency_key text",
+      "name": "record_cash_topup_impl",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "core_private",
+      "execute": [],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "p_user_id uuid, p_nickname text, p_grade_level text",
+      "name": "user_profile_update_self_impl",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "core_private",
+      "execute": [],
+      "returns": "jsonb",
+      "body_md5": "c6160e8774f13afef3241050be57b1e1",
+      "security_definer": false
+    },
+    {
+      "args": "o custom_request_orders",
+      "name": "_order_primary_status_norm",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "text",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "o custom_request_orders, app custom_request_applications",
+      "name": "_pick_custom_order_gross_won",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "integer",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "v numeric",
+      "name": "_positive_int_from_numeric",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "integer",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "p_user_id uuid, p_from text, p_to text",
+      "name": "account_deletion_advance",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": "a17d3ec5ed0927b66684e6c3c94ba043",
+      "security_definer": true
+    },
+    {
+      "args": "p_user_id uuid",
+      "name": "account_deletion_begin_locked",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": "e69858b06581bbe3e70d181c7676789f",
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "account_deletion_cancel_self",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_owner text, p_limit integer, p_lease_seconds integer",
+      "name": "account_deletion_claim",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "service_role"
+      ],
+      "returns": "SETOF account_deletion_jobs",
+      "body_md5": "19cb0bcffc6025ed1646bd3b1a54a0b7",
+      "security_definer": true
+    },
+    {
+      "args": "p_acknowledged_balance_cents bigint",
+      "name": "account_deletion_request_self_consented_v2",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": "d709adf3770d06bebf7bebc1f4cca0b3",
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "account_deletion_request_self_v2",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": "f6834ec464f1e0a9606b5f205c775685",
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "account_deletion_status_self",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_user_id uuid",
+      "name": "account_deletion_write_blocked",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "account_deletion_write_guard",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_question_id uuid, p_storage_path text, p_file_name text, p_mime_type text, p_message_id uuid",
+      "name": "add_individual_question_attachment",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": "58f0c2411d40b2ce3bcec23efa0c88a1",
+      "security_definer": true
+    },
+    {
+      "args": "p_user_id uuid, p_reason text, p_severity text",
+      "name": "admin_issue_user_warning",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": "de2d5e39a33d4ea9603c599ca86fe8fe",
+      "security_definer": true
+    },
+    {
+      "args": "p_question_id uuid, p_body text",
+      "name": "answer_individual_question",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "SETOF individual_questions",
+      "body_md5": "75a5c5cf8ebcbe5abcb359239ff6be55",
+      "security_definer": true
+    },
+    {
+      "args": "p_verification_id uuid, p_university_name text, p_university_id text, p_department_name text, p_major_category text, p_school_tier text",
+      "name": "approve_mentor_school_verification_admin",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "cc_sync_board_delete_to_canonical",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "cc_sync_board_to_canonical",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "cc_write_guard",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "check_free_question_usage_limits",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_mentor_id uuid, p_student_id uuid",
+      "name": "check_review_eligibility",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": "2cfea5bce6afbc9ed662647389a6d185",
+      "security_definer": true
+    },
+    {
+      "args": "p_question_id uuid",
+      "name": "claim_individual_question_as_mentor",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "individual_question_escrow_result",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "com_notify_new_order_message",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "comment_sync_in_progress",
+      "config": [],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "comments_mirror_delete_to_legacy",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "comments_mirror_to_legacy",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "comments_write_guard",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "p_comment_id uuid",
+      "name": "community_comment_soft_delete_self",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated"
+      ],
+      "returns": "jsonb",
+      "body_md5": "9942aa77e5a3215423db62a00e2474cd",
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "community_refresh_post_comment_count",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "community_refresh_post_like_count",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "community_refresh_shortform_like_count",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "community_sync_hashtags",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "cra_backfill_post_fk",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "cra_notify_new_application",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "craa_application_uuid_from_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "uuid",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_question_type text, p_title text, p_body text, p_amount_cents integer, p_designated_mentor_id uuid, p_idempotency_key text",
+      "name": "create_individual_question_as_student",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "SETOF individual_questions",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "cro_backfill_fks",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "o custom_request_orders",
+      "name": "cro_primary_status_norm",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "text",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "o custom_request_orders",
+      "name": "cro_student_can_read_deliverable_storage",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "cro_uuid_from_deliverable_storage_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "uuid",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "crp_uuid_from_post_attachment_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "uuid",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_order_id uuid",
+      "name": "custom_order_mentor_deliver",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_order_id uuid",
+      "name": "custom_order_mentor_start",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_order_id uuid",
+      "name": "custom_order_message_attachment_is_party",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "custom_order_message_attachment_order_id_from_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "uuid",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "custom_order_message_attachment_uploader_id_from_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "uuid",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_order_id uuid, p_note text",
+      "name": "custom_order_student_request_revision",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "enforce_mentor_cap",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "fqu_legacy_standalone_noop",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "p_mentor_id uuid",
+      "name": "get_mentor_avg_response_hours",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "numeric",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_mentor_id uuid, p_include_hidden boolean",
+      "name": "get_mentor_review_stats",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "TABLE(review_count integer, avg_rating numeric, d1 integer, d2 integer, d3 integer, d4 integer, d5 integer)",
+      "body_md5": "19d751e83c775171fcbb63eea8c4f2e8",
+      "security_definer": true
+    },
+    {
+      "args": "p_student_ids uuid[]",
+      "name": "get_mentor_student_nicknames",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "TABLE(id uuid, nickname text, full_name text)",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_platform text",
+      "name": "get_mobile_app_version_policy",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_post_id uuid",
+      "name": "get_public_custom_request_post_for_browse",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "TABLE(id uuid, title text, body text, content text, subject text, description text, goal text, subcategory text, category text, due_at timestamp with time zone, deadline timestamp with time zone, due_date timestamp with time zone, deliverable_type text, deliverable_format text, result_format text, output_format text, budget_min numeric, budget_max numeric, state text, status text, created_at timestamp with time zone, updated_at timestamp with time zone)",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_student_id uuid, p_mentor_id uuid",
+      "name": "get_weekly_question_usage",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "json",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "handle_new_auth_user",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_post_id uuid",
+      "name": "increment_community_post_view",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "void",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_user_id uuid",
+      "name": "individual_question_user_is_admin",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_user_id uuid",
+      "name": "individual_question_user_is_approved_mentor",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "individual_question_uuid_from_storage_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "uuid",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_question_id uuid, p_body text",
+      "name": "iq_append_message",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-"
+      ],
+      "returns": "jsonb",
+      "body_md5": "81aa22313dc8ad3054c2a25310f75e7c",
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "iq_notify_assigned",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "iq_notify_status_transition",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "iqm_notify_message",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "is_admin",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "is_mentor",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "keep_subscription_refunded_status",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_limit integer",
+      "name": "list_open_custom_request_posts_for_mentor_browse",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "TABLE(id uuid, title text, body text, content text, subject text, description text, goal text, subcategory text, category text, due_at timestamp with time zone, deadline timestamp with time zone, due_date timestamp with time zone, deliverable_type text, deliverable_format text, result_format text, output_format text, budget_min numeric, budget_max numeric, state text, status text, created_at timestamp with time zone, updated_at timestamp with time zone)",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_limit integer",
+      "name": "list_open_individual_questions_for_mentor",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "TABLE(id uuid, subject text, topic text, title text, price_cents integer, expires_at timestamp with time zone, created_at timestamp with time zone)",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "mark_all_notifications_read",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "integer",
+      "body_md5": "8dd881a2911ea53b2f0eb5663735efd1",
+      "security_definer": true
+    },
+    {
+      "args": "p_notification_id uuid",
+      "name": "mark_notification_read",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": "0beed576d41ee229084a4aa903fb0dfc",
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "mentor_acad_change_guard_self_review",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_mentor_id uuid",
+      "name": "mentor_cap_limit",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "numeric",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_mentor_id uuid",
+      "name": "mentor_cap_used",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "numeric",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "mentor_school_verifications_guard_self_review",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "mp_notify_activity_transition",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "mplan_notify_price_changed",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_amount_cents bigint",
+      "name": "notification_cash_label",
+      "config": [],
+      "schema": "public",
+      "execute": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "text",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "p_at timestamp with time zone",
+      "name": "notification_date_label",
+      "config": [],
+      "schema": "public",
+      "execute": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "text",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "p_user_id uuid, p_event_type text",
+      "name": "notification_delivery_allowed",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_event_type text",
+      "name": "notification_event_group",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "text",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "notification_unread_count_self",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": "39a5dd73b6a58bb73bdf97f9d1e7b136",
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "payout_run_items_block_mutation",
+      "config": [],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "qa_direct_answered_after",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "qa_direct_write_guard",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "qm_direct_answered_after",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "qm_direct_write_guard",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "p_thread_id uuid, p_body text",
+      "name": "qna_append_message",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": "ddcf34af457558f86e4423f66a3855d1",
+      "security_definer": true
+    },
+    {
+      "args": "p_thread_id uuid",
+      "name": "qna_apply_answered_transition",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "void",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_thread_id uuid",
+      "name": "qna_confirm_thread",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_room_id uuid, p_title text, p_subject text, p_topic text, p_first_message_body text",
+      "name": "qna_create_free_question_thread",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_room_id uuid, p_title text, p_subject text, p_topic text, p_first_message_body text",
+      "name": "qna_create_question_thread",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": "58fb3f95caf5067d961445122f443f38",
+      "security_definer": true
+    },
+    {
+      "args": "p_thread_id uuid, p_is_wrong boolean",
+      "name": "qna_flag_wrong_answer",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "qna_is_direct_untrusted_writer",
+      "config": [],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "p_thread_id uuid, p_storage_path text, p_file_name text, p_mime_type text, p_message_id uuid",
+      "name": "qna_register_attachment",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": "5dcf55b6805f1019147159e99d7394d8",
+      "security_definer": true
+    },
+    {
+      "args": "p_subscription_id uuid",
+      "name": "qna_subscription_has_live_refund",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_a uuid, p_b uuid",
+      "name": "qna_users_blocked",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "qra_path_upload_eligible",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "qra_room_uuid_from_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "uuid",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "qra_thread_writable_for_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "qra_uploader_allowed_for_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "qt_direct_consume_free_usage",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "qt_direct_write_guard",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "p_recipient_user_id uuid, p_event_key text, p_dedup_key text, p_event_type text, p_title text, p_body text, p_link text, p_metadata jsonb, p_payload jsonb",
+      "name": "record_domain_notification",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "execute": [
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": "9014d31b34932bf118967bc905cc8ae8",
+      "security_definer": true
+    },
+    {
+      "args": "p_question_id uuid",
+      "name": "refund_individual_question",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "individual_question_escrow_result",
+      "body_md5": "0ca6ef165859d044e57dca81f63aa32c",
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "refund_notify_mentor_termination",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_question_id uuid",
+      "name": "release_individual_question",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "individual_question_escrow_result",
+      "body_md5": "29f8d26ab0cb53f2d87f68cf80c5a519",
+      "security_definer": true
+    },
+    {
+      "args": "p_target_id uuid",
+      "name": "report_target_user_valid",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "reviews_enforce_update",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "rls_auto_enable",
+      "config": [
+        "search_path=pg_catalog"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "event_trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "sbe_notify_billing_event",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "set_admin_content_updated_at",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "p_amount_cents integer",
+      "name": "set_individual_question_price",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "SETOF mentor_individual_question_pricing",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "set_refunds_updated_at",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "set_updated_at",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "shortform_posts_protected_guard",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "execute": [],
+      "returns": "trigger",
+      "body_md5": "18be7fceefd39928f89ff287eedb77a7",
+      "security_definer": false
+    },
+    {
+      "args": "p_post_id uuid, p_event_key uuid",
+      "name": "shortform_view_record_v2",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "execute": [
+        "anon",
+        "authenticated"
+      ],
+      "returns": "jsonb",
+      "body_md5": "13cf210ef84f057312280a30862b0a03",
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "sub_notify_expired",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_tier text",
+      "name": "subscription_cap_weight",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "numeric",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "sync_subscription_refunded_from_refund",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "trg_block_settlement_on_active_dispute",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "trigger",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
+      "args": "",
+      "name": "ugc_write_allowed",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": "b998bd2efefcc33cfeaaedb933d70f50",
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "user_can_read_craa_storage_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "user_can_read_cro_deliverable_storage_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "user_can_read_crpa_storage_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_application_id uuid",
+      "name": "user_is_application_mentor_for_craa_application",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "user_is_application_mentor_for_craa_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_question_id uuid",
+      "name": "user_is_individual_question_party",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "user_is_mentor_of_cro_storage_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "user_is_party_for_individual_question_storage_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "user_is_party_to_cro_storage_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_application_id uuid",
+      "name": "user_is_post_author_for_craa_application",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "user_is_post_author_for_crpa_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_name text",
+      "name": "user_is_room_party_for_qra_path",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "-",
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "boolean",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "",
+      "name": "users_protected_columns_guard",
+      "config": [
+        "search_path=\"\""
+      ],
+      "schema": "public",
+      "execute": [],
+      "returns": "trigger",
+      "body_md5": "4d08e991e4ef8e87b95c7753dd53c2ec",
+      "security_definer": false
+    }
+  ],
+  "views": [
+    {
+      "name": "community_posts_v1",
+      "schema": "api_app_v1",
+      "select": [
+        "authenticated"
+      ],
+      "columns": [
+        "id",
+        "author_id",
+        "title",
+        "body",
+        "category",
+        "image_refs",
+        "author_label",
+        "author_role",
+        "like_count",
+        "comment_count",
+        "view_count",
+        "status",
+        "created_at",
+        "updated_at"
+      ],
+      "security_invoker": true
+    },
+    {
+      "name": "community_comments_v1",
+      "schema": "api_web_v1",
+      "select": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "columns": [
+        "id",
+        "post_id",
+        "author_id",
+        "parent_id",
+        "body",
+        "like_count",
+        "author_label",
+        "author_role",
+        "created_at"
+      ],
+      "security_invoker": true
+    },
+    {
+      "name": "community_posts_v1",
+      "schema": "api_web_v1",
+      "select": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "columns": [
+        "id",
+        "author_id",
+        "title",
+        "body",
+        "category",
+        "image_refs",
+        "author_label",
+        "author_role",
+        "like_count",
+        "comment_count",
+        "view_count",
+        "status",
+        "created_at",
+        "updated_at"
+      ],
+      "security_invoker": true
+    },
+    {
+      "name": "mentor_directory_v1",
+      "schema": "api_web_v1",
+      "select": [
+        "anon",
+        "authenticated",
+        "service_role"
+      ],
+      "columns": [
+        "mentor_id",
+        "nickname",
+        "university_name",
+        "department_name",
+        "teaching_subjects",
+        "intro_line",
+        "profile_image_url",
+        "high_school_name",
+        "school_verified",
+        "school_tier",
+        "verified_major_category",
+        "verified_university_name",
+        "verified_department_name",
+        "is_open_for_subscriptions",
+        "avg_rating",
+        "review_count",
+        "created_at"
+      ],
+      "security_invoker": false
+    },
+    {
+      "name": "my_cash_ledger_v1",
+      "schema": "api_web_v1",
+      "select": [
+        "authenticated",
+        "service_role"
+      ],
+      "columns": [
+        "id",
+        "delta_cents",
+        "delta_krw",
+        "reason",
+        "ref_type",
+        "ref_id",
+        "order_ref",
+        "created_at"
+      ],
+      "security_invoker": true
+    },
+    {
+      "name": "my_wallet_v1",
+      "schema": "api_web_v1",
+      "select": [
+        "authenticated",
+        "service_role"
+      ],
+      "columns": [
+        "user_id",
+        "balance_cents",
+        "balance_krw"
+      ],
+      "security_invoker": true
+    }
+  ],
+  "table_grants": [
+    {
+      "table": "admin_action_logs",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "admin_action_logs",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "admin_case_notes",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "admin_case_notes",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "ai_drafts",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "ai_drafts",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "app_notices",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "app_notices",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "cash_ledger",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "cash_ledger",
+      "grantee": "authenticated",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "cash_topup_packages",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "cash_topup_packages",
+      "grantee": "authenticated",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "cash_wallets",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "cash_wallets",
+      "grantee": "authenticated",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "comments",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "comments",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "community_comments",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "community_comments",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "community_hashtags",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "community_hashtags",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "community_posts",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "community_posts",
+      "grantee": "authenticated",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "connection_notes",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "connection_notes",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "content_reports",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "content_reports",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_order_deliverables",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_order_deliverables",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_order_message_attachments",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_order_message_attachments",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_order_messages",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_order_messages",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_order_revisions",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_order_revisions",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_order_settlement_items",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_order_settlement_items",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_request_application_attachments",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_request_application_attachments",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_request_applications",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_request_applications",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_request_orders",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_request_orders",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_request_post_attachments",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_request_post_attachments",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_request_posts",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "custom_request_posts",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "device_tokens",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "disputes",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "disputes",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "favorites",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "favorites",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "free_question_usage",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "free_question_usage",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "individual_question_attachments",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "individual_question_attachments",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "individual_question_messages",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "individual_question_messages",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "individual_question_transfers",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "individual_questions",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "individual_questions",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "major_category_catalog",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "major_category_catalog",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "mentor_academic_record_change_requests",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "mentor_academic_record_change_requests",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "mentor_activity_events",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "mentor_activity_events",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "mentor_individual_question_pricing",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "mentor_individual_question_pricing",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "mentor_plans",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "mentor_plans",
+      "grantee": "authenticated",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "mentor_profiles",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "mentor_profiles",
+      "grantee": "authenticated",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "mentor_school_verifications",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "mentor_school_verifications",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "mentor_student_rooms",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "mentor_student_rooms",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "notification_settings",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "notifications",
+      "grantee": "authenticated",
+      "privileges": [
+        "SELECT",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "order_events",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "order_events",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "order_payments",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "order_payments",
+      "grantee": "authenticated",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "payments",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "payments",
+      "grantee": "authenticated",
+      "privileges": [
+        "INSERT",
+        "SELECT"
+      ]
+    },
+    {
+      "table": "payout_run_items",
+      "grantee": "authenticated",
+      "privileges": [
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE"
+      ]
+    },
+    {
+      "table": "post_reactions",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "post_reactions",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "promotion_campaigns",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "promotion_campaigns",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "question_attachments",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "question_attachments",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "question_messages",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "question_messages",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "question_threads",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "question_threads",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "refunds",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "refunds",
+      "grantee": "authenticated",
+      "privileges": [
+        "INSERT",
+        "SELECT"
+      ]
+    },
+    {
+      "table": "reviews",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "reviews",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "scan_annotations",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "scan_annotations",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "school_tier_catalog",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "school_tier_catalog",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "school_tier_mappings",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "school_tier_mappings",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "shortform_posts",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "shortform_posts",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "shortform_reactions",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "shortform_reactions",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "subjects",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "subjects",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "subscription_billing_events",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "subscription_billing_events",
+      "grantee": "authenticated",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "subscription_settlement_items",
+      "grantee": "authenticated",
+      "privileges": [
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE"
+      ]
+    },
+    {
+      "table": "subscriptions",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "subscriptions",
+      "grantee": "authenticated",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "user_blocks",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "user_blocks",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "user_consent_records",
+      "grantee": "authenticated",
+      "privileges": [
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE"
+      ]
+    },
+    {
+      "table": "user_warnings",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "user_warnings",
+      "grantee": "authenticated",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "users",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "users",
+      "grantee": "authenticated",
+      "privileges": [
+        "INSERT",
+        "SELECT"
+      ]
+    },
+    {
+      "table": "verification_logs",
+      "grantee": "anon",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "verification_logs",
+      "grantee": "authenticated",
+      "privileges": [
+        "DELETE",
+        "INSERT",
+        "REFERENCES",
+        "SELECT",
+        "TRIGGER",
+        "TRUNCATE",
+        "UPDATE"
+      ]
+    },
+    {
+      "table": "withdrawals",
+      "grantee": "anon",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "table": "withdrawals",
+      "grantee": "authenticated",
+      "privileges": [
+        "INSERT",
+        "SELECT"
+      ]
+    }
+  ],
+  "policies": [
+    {
+      "cmd": "INSERT",
+      "name": "admin_action_logs_insert_admin",
+      "roles": "{authenticated}",
+      "table": "admin_action_logs",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "1e23940d2c6a8e6ca0ed6e9a9b154ea3"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "admin_action_logs_select_admin",
+      "roles": "{authenticated}",
+      "table": "admin_action_logs",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "관리자만 로그 기록",
+      "roles": "{public}",
+      "table": "admin_action_logs",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "b8bf6e9a13e208943b01e11194dea410"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "관리자만 로그 조회",
+      "roles": "{public}",
+      "table": "admin_action_logs",
+      "qual_md5": "37b23c5927de5df0ba8faa8146d67b1f",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "admin_case_notes_delete_admin",
+      "roles": "{authenticated}",
+      "table": "admin_case_notes",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "admin_case_notes_insert_admin",
+      "roles": "{authenticated}",
+      "table": "admin_case_notes",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "1e23940d2c6a8e6ca0ed6e9a9b154ea3"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "admin_case_notes_select_admin",
+      "roles": "{authenticated}",
+      "table": "admin_case_notes",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "admin_case_notes_update_admin",
+      "roles": "{authenticated}",
+      "table": "admin_case_notes",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "dbb4fc5e4b346a20444fd31209fe241b"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "ai_drafts_insert_own",
+      "roles": "{authenticated}",
+      "table": "ai_drafts",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "6b585f00e9bbfe7ce02df45d468c9226"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "ai_drafts_select_own",
+      "roles": "{authenticated}",
+      "table": "ai_drafts",
+      "qual_md5": "6b585f00e9bbfe7ce02df45d468c9226",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "app_notices_delete_admin",
+      "roles": "{authenticated}",
+      "table": "app_notices",
+      "qual_md5": "a8889e5322f8467f00a2b22b9827e4a1",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "app_notices_insert_admin",
+      "roles": "{authenticated}",
+      "table": "app_notices",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "a8889e5322f8467f00a2b22b9827e4a1"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "app_notices_select",
+      "roles": "{anon,authenticated}",
+      "table": "app_notices",
+      "qual_md5": "2867795bdb3d8dcb1d35b405c6467805",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "app_notices_update_admin",
+      "roles": "{authenticated}",
+      "table": "app_notices",
+      "qual_md5": "a8889e5322f8467f00a2b22b9827e4a1",
+      "with_check_md5": "a8889e5322f8467f00a2b22b9827e4a1"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "cled_select",
+      "roles": "{authenticated}",
+      "table": "cash_ledger",
+      "qual_md5": "6a6b7c2a3a520c44377894171204e8d2",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "pkg_delete_admin",
+      "roles": "{authenticated}",
+      "table": "cash_topup_packages",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "pkg_insert_admin",
+      "roles": "{authenticated}",
+      "table": "cash_topup_packages",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "dbb4fc5e4b346a20444fd31209fe241b"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "pkg_select_public",
+      "roles": "{anon,authenticated}",
+      "table": "cash_topup_packages",
+      "qual_md5": "08da37ba6b8ee9d93159a29bbe3d9967",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "pkg_update_admin",
+      "roles": "{authenticated}",
+      "table": "cash_topup_packages",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "dbb4fc5e4b346a20444fd31209fe241b"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "cwal_select",
+      "roles": "{authenticated}",
+      "table": "cash_wallets",
+      "qual_md5": "6a6b7c2a3a520c44377894171204e8d2",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "comments_admin_delete",
+      "roles": "{authenticated}",
+      "table": "comments",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "comments_admin_select_all",
+      "roles": "{authenticated}",
+      "table": "comments",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "comments_admin_update",
+      "roles": "{authenticated}",
+      "table": "comments",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "dbb4fc5e4b346a20444fd31209fe241b"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "comments_delete_own",
+      "roles": "{authenticated}",
+      "table": "comments",
+      "qual_md5": "fb29d0add93020fcbfb365b2663f041a",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "comments_insert_own",
+      "roles": "{authenticated}",
+      "table": "comments",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "2046a6b7d90f25a7c065e1301877c1fd"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "comments_select_visible",
+      "roles": "{anon,authenticated}",
+      "table": "comments",
+      "qual_md5": "49368d38cf917252a72665e00bf4ced4",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "comments_update_own",
+      "roles": "{authenticated}",
+      "table": "comments",
+      "qual_md5": "2046a6b7d90f25a7c065e1301877c1fd",
+      "with_check_md5": "2046a6b7d90f25a7c065e1301877c1fd"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "community_comments_delete_admin",
+      "roles": "{authenticated}",
+      "table": "community_comments",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "community_comments_insert_authenticated",
+      "roles": "{authenticated}",
+      "table": "community_comments",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "1ef10c3a7c14d96cd0543f59397451d8"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "community_comments_select_visible",
+      "roles": "{anon,authenticated}",
+      "table": "community_comments",
+      "qual_md5": "de7a7668e0f1c94ed692235c27a28c70",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "community_comments_update_admin",
+      "roles": "{authenticated}",
+      "table": "community_comments",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "dbb4fc5e4b346a20444fd31209fe241b"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "community_hashtags_select_all",
+      "roles": "{anon,authenticated}",
+      "table": "community_hashtags",
+      "qual_md5": "b326b5062b2f0e69046810717534cb09",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "cp_select_own",
+      "roles": "{public}",
+      "table": "community_posts",
+      "qual_md5": "64e12b7353e0355f6eba045cc5feffb5",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "cp_select_published",
+      "roles": "{anon,authenticated}",
+      "table": "community_posts",
+      "qual_md5": "bd68a3fe1cd7c0ca22946acf708fcb03",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "누구나 게시글 읽기",
+      "roles": "{public}",
+      "table": "community_posts",
+      "qual_md5": "c4049f740cf3cb6bef18fb549aca569d",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "cn_delete",
+      "roles": "{authenticated}",
+      "table": "connection_notes",
+      "qual_md5": "acd6e839c9786dbdcb9e8e100299ac23",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "cn_insert",
+      "roles": "{authenticated}",
+      "table": "connection_notes",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "acd6e839c9786dbdcb9e8e100299ac23"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "cn_select",
+      "roles": "{authenticated}",
+      "table": "connection_notes",
+      "qual_md5": "bcd8c4b59de7eb4523110f28afb55b66",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "cn_update",
+      "roles": "{authenticated}",
+      "table": "connection_notes",
+      "qual_md5": "acd6e839c9786dbdcb9e8e100299ac23",
+      "with_check_md5": "acd6e839c9786dbdcb9e8e100299ac23"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "content_reports_delete_admin",
+      "roles": "{authenticated}",
+      "table": "content_reports",
+      "qual_md5": "a8889e5322f8467f00a2b22b9827e4a1",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "content_reports_insert_reporter",
+      "roles": "{authenticated}",
+      "table": "content_reports",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "b74e09885426fcf8d22bbc7f93f0ee54"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "content_reports_select_admin",
+      "roles": "{authenticated}",
+      "table": "content_reports",
+      "qual_md5": "a8889e5322f8467f00a2b22b9827e4a1",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "content_reports_select_reporter",
+      "roles": "{authenticated}",
+      "table": "content_reports",
+      "qual_md5": "adeb4821188d94dbc544c2e4b18da158",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "content_reports_update_admin",
+      "roles": "{authenticated}",
+      "table": "content_reports",
+      "qual_md5": "a8889e5322f8467f00a2b22b9827e4a1",
+      "with_check_md5": "a8889e5322f8467f00a2b22b9827e4a1"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "cdel_insert",
+      "roles": "{authenticated}",
+      "table": "custom_order_deliverables",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "d0dfb5c6b91f5ca1ebe85d903fc98b73"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "cdel_select",
+      "roles": "{authenticated}",
+      "table": "custom_order_deliverables",
+      "qual_md5": "1303753b18cfd90b1b9bece5c03b7398",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "멘토만 납품 업로드",
+      "roles": "{public}",
+      "table": "custom_order_deliverables",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "e3c4c7b1f6e787beb65d62b681ec35c9"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "coma_delete_uploader_or_admin",
+      "roles": "{authenticated}",
+      "table": "custom_order_message_attachments",
+      "qual_md5": "3c276224a2e6ebab090c77f8b580ef6b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "coma_insert_party",
+      "roles": "{authenticated}",
+      "table": "custom_order_message_attachments",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "af9ef79f84c6c86a53efe4cabc919fd2"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "coma_select_party",
+      "roles": "{authenticated}",
+      "table": "custom_order_message_attachments",
+      "qual_md5": "447e942852b88befbcd2499b8e76a927",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "cmsg_all_party",
+      "roles": "{authenticated}",
+      "table": "custom_order_messages",
+      "qual_md5": "508d5a4fb5be2d470017b1551061b3f0",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "cmsg_ins",
+      "roles": "{authenticated}",
+      "table": "custom_order_messages",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "f89f9030820907e2932dec5a1b941ba9"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "당사자만 메시지 전송",
+      "roles": "{public}",
+      "table": "custom_order_messages",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "326acdc1bb533f341fc80ee9737d6baa"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "crev_all_party",
+      "roles": "{authenticated}",
+      "table": "custom_order_revisions",
+      "qual_md5": "0f26874d9d2a997c84f099f7a9b21307",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "crev_ins",
+      "roles": "{authenticated}",
+      "table": "custom_order_revisions",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "39c049eb4b9adc951f30cbf64ce7e270"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "cosi_select_parties",
+      "roles": "{authenticated}",
+      "table": "custom_order_settlement_items",
+      "qual_md5": "40cc25c3e3f0d3021f0b36e3b53d101b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "cosi_update_admin",
+      "roles": "{authenticated}",
+      "table": "custom_order_settlement_items",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "dbb4fc5e4b346a20444fd31209fe241b"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "craa_insert_mentor",
+      "roles": "{authenticated}",
+      "table": "custom_request_application_attachments",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "063fa6e19e290cd8bea295a586aa9406"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "craa_select_authorized",
+      "roles": "{authenticated}",
+      "table": "custom_request_application_attachments",
+      "qual_md5": "958281f02664a0cf4003c16e4b5b7c3f",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "cra_insert",
+      "roles": "{authenticated}",
+      "table": "custom_request_applications",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "34b1cf43d63cee07310bab0fbea50f57"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "cra_select",
+      "roles": "{authenticated}",
+      "table": "custom_request_applications",
+      "qual_md5": "3e2c143dc4c083e522ecfb289e2a3cbd",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "cra_update",
+      "roles": "{authenticated}",
+      "table": "custom_request_applications",
+      "qual_md5": "34b1cf43d63cee07310bab0fbea50f57",
+      "with_check_md5": "34b1cf43d63cee07310bab0fbea50f57"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "멘토만 지원",
+      "roles": "{public}",
+      "table": "custom_request_applications",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "e3c4c7b1f6e787beb65d62b681ec35c9"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "cro_insert",
+      "roles": "{authenticated}",
+      "table": "custom_request_orders",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "31a003370707c48275cd636059be8b3f"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "cro_select",
+      "roles": "{authenticated}",
+      "table": "custom_request_orders",
+      "qual_md5": "a1cb9e4827bb56d1120d6bbeab5cd703",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "cro_update",
+      "roles": "{authenticated}",
+      "table": "custom_request_orders",
+      "qual_md5": "a1cb9e4827bb56d1120d6bbeab5cd703",
+      "with_check_md5": "a1cb9e4827bb56d1120d6bbeab5cd703"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "주문 당사자만 읽기",
+      "roles": "{public}",
+      "table": "custom_request_orders",
+      "qual_md5": "9ca2f1a0afb67629ea424fb32ddcff01",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "crpa_insert_author",
+      "roles": "{authenticated}",
+      "table": "custom_request_post_attachments",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "f16c22af1732d521e350152a9bd89acf"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "crpa_select_authorized",
+      "roles": "{authenticated}",
+      "table": "custom_request_post_attachments",
+      "qual_md5": "3109adb4c06644b707538be4c50b7c1b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "crp_insert",
+      "roles": "{authenticated}",
+      "table": "custom_request_posts",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "9cf2bfd47f2ed6725614c57d68a70c41"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "crp_select",
+      "roles": "{authenticated}",
+      "table": "custom_request_posts",
+      "qual_md5": "9cf2bfd47f2ed6725614c57d68a70c41",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "crp_update",
+      "roles": "{authenticated}",
+      "table": "custom_request_posts",
+      "qual_md5": "9cf2bfd47f2ed6725614c57d68a70c41",
+      "with_check_md5": "9cf2bfd47f2ed6725614c57d68a70c41"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "학생만 의뢰 등록",
+      "roles": "{public}",
+      "table": "custom_request_posts",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "326acdc1bb533f341fc80ee9737d6baa"
+    },
+    {
+      "cmd": "ALL",
+      "name": "device_tokens_modify_own",
+      "roles": "{authenticated}",
+      "table": "device_tokens",
+      "qual_md5": "6a6b7c2a3a520c44377894171204e8d2",
+      "with_check_md5": "6a6b7c2a3a520c44377894171204e8d2"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "device_tokens_select_own",
+      "roles": "{authenticated}",
+      "table": "device_tokens",
+      "qual_md5": "6a6b7c2a3a520c44377894171204e8d2",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "dispute_ins",
+      "roles": "{authenticated}",
+      "table": "disputes",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "4b4cc56eb097c6ffa553c9dbacf3fb0a"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "dispute_select",
+      "roles": "{authenticated}",
+      "table": "disputes",
+      "qual_md5": "901f18c146b50a818667746d49e2866a",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "dispute_update_admin",
+      "roles": "{authenticated}",
+      "table": "disputes",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "dbb4fc5e4b346a20444fd31209fe241b"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "favorites_delete_own",
+      "roles": "{public}",
+      "table": "favorites",
+      "qual_md5": "19300d155780585259ede73ac370586c",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "favorites_insert_own",
+      "roles": "{public}",
+      "table": "favorites",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "19300d155780585259ede73ac370586c"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "favorites_select_own",
+      "roles": "{public}",
+      "table": "favorites",
+      "qual_md5": "19300d155780585259ede73ac370586c",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "fqu_insert_own",
+      "roles": "{authenticated}",
+      "table": "free_question_usage",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "2efeca79dfc085ef27192a162cc11d05"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "fqu_select_own",
+      "roles": "{authenticated}",
+      "table": "free_question_usage",
+      "qual_md5": "2efeca79dfc085ef27192a162cc11d05",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "iqa_select_party",
+      "roles": "{authenticated}",
+      "table": "individual_question_attachments",
+      "qual_md5": "e7463e77289f136de0106dd29501cac4",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "iqm_select_party",
+      "roles": "{authenticated}",
+      "table": "individual_question_messages",
+      "qual_md5": "e7463e77289f136de0106dd29501cac4",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "iqt_select_student",
+      "roles": "{authenticated}",
+      "table": "individual_question_transfers",
+      "qual_md5": "2efeca79dfc085ef27192a162cc11d05",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "iq_select_party",
+      "roles": "{authenticated}",
+      "table": "individual_questions",
+      "qual_md5": "3b56fb8753b8db9beae2b102ae6c2a92",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "major_category_catalog_select_active_or_admin",
+      "roles": "{anon,authenticated}",
+      "table": "major_category_catalog",
+      "qual_md5": "da790c8ff220291f04e5f8f234dea877",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "ALL",
+      "name": "major_category_catalog_write_admin",
+      "roles": "{authenticated}",
+      "table": "major_category_catalog",
+      "qual_md5": "07745f9e92b1ac86637a4f75273f15cc",
+      "with_check_md5": "07745f9e92b1ac86637a4f75273f15cc"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "macc_admin_select_all",
+      "roles": "{authenticated}",
+      "table": "mentor_academic_record_change_requests",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "macc_admin_update_all",
+      "roles": "{authenticated}",
+      "table": "mentor_academic_record_change_requests",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "dbb4fc5e4b346a20444fd31209fe241b"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "macc_insert_own_pending",
+      "roles": "{authenticated}",
+      "table": "mentor_academic_record_change_requests",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "b708d339328251df81cc41a87516fae8"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "macc_select_own",
+      "roles": "{authenticated}",
+      "table": "mentor_academic_record_change_requests",
+      "qual_md5": "6b585f00e9bbfe7ce02df45d468c9226",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "macc_update_own_pending",
+      "roles": "{authenticated}",
+      "table": "mentor_academic_record_change_requests",
+      "qual_md5": "784e71b0ba76d235489d7ac66ceb4d3d",
+      "with_check_md5": "b22199cef44353cc89af9a01a22c4ad5"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "miqp_select_authenticated",
+      "roles": "{authenticated}",
+      "table": "mentor_individual_question_pricing",
+      "qual_md5": "b326b5062b2f0e69046810717534cb09",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "mplan_del",
+      "roles": "{authenticated}",
+      "table": "mentor_plans",
+      "qual_md5": "34b1cf43d63cee07310bab0fbea50f57",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "mplan_ins",
+      "roles": "{authenticated}",
+      "table": "mentor_plans",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "34b1cf43d63cee07310bab0fbea50f57"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "mplan_select",
+      "roles": "{anon,authenticated}",
+      "table": "mentor_plans",
+      "qual_md5": "b326b5062b2f0e69046810717534cb09",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "mplan_upd",
+      "roles": "{authenticated}",
+      "table": "mentor_plans",
+      "qual_md5": "34b1cf43d63cee07310bab0fbea50f57",
+      "with_check_md5": "34b1cf43d63cee07310bab0fbea50f57"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "mentor_insert_own",
+      "roles": "{authenticated}",
+      "table": "mentor_profiles",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "6a6b7c2a3a520c44377894171204e8d2"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "mentor_select_own",
+      "roles": "{authenticated}",
+      "table": "mentor_profiles",
+      "qual_md5": "6a6b7c2a3a520c44377894171204e8d2",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "mentor_update_own",
+      "roles": "{authenticated}",
+      "table": "mentor_profiles",
+      "qual_md5": "6a6b7c2a3a520c44377894171204e8d2",
+      "with_check_md5": "6a6b7c2a3a520c44377894171204e8d2"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "mp_admin_select_all",
+      "roles": "{authenticated}",
+      "table": "mentor_profiles",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "msv_admin_select_all",
+      "roles": "{authenticated}",
+      "table": "mentor_school_verifications",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "msv_admin_update_all",
+      "roles": "{authenticated}",
+      "table": "mentor_school_verifications",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "dbb4fc5e4b346a20444fd31209fe241b"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "msv_insert_own_pending",
+      "roles": "{authenticated}",
+      "table": "mentor_school_verifications",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "6be72629eb10783cea0a621cc1cfde97"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "msv_select_own",
+      "roles": "{authenticated}",
+      "table": "mentor_school_verifications",
+      "qual_md5": "6b585f00e9bbfe7ce02df45d468c9226",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "msv_update_own_pending",
+      "roles": "{authenticated}",
+      "table": "mentor_school_verifications",
+      "qual_md5": "784e71b0ba76d235489d7ac66ceb4d3d",
+      "with_check_md5": "8e670f30a407493c278d7efe5a7f4820"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "msr_select",
+      "roles": "{authenticated}",
+      "table": "mentor_student_rooms",
+      "qual_md5": "7caa706c130a9954705b9f95d80cab62",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "ALL",
+      "name": "notif_settings_modify_own",
+      "roles": "{authenticated}",
+      "table": "notification_settings",
+      "qual_md5": "6a6b7c2a3a520c44377894171204e8d2",
+      "with_check_md5": "6a6b7c2a3a520c44377894171204e8d2"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "notif_settings_select_own",
+      "roles": "{authenticated}",
+      "table": "notification_settings",
+      "qual_md5": "6a6b7c2a3a520c44377894171204e8d2",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "notif_select_recipient",
+      "roles": "{authenticated}",
+      "table": "notifications",
+      "qual_md5": "5eda569d0b521a216fd6e37cf6bb93ed",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "notif_update_recipient_read",
+      "roles": "{authenticated}",
+      "table": "notifications",
+      "qual_md5": "5eda569d0b521a216fd6e37cf6bb93ed",
+      "with_check_md5": "5eda569d0b521a216fd6e37cf6bb93ed"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "oev_insert",
+      "roles": "{authenticated}",
+      "table": "order_events",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "2d83c52e168bf6233e185025337373e0"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "oev_select",
+      "roles": "{authenticated}",
+      "table": "order_events",
+      "qual_md5": "d48b5afbf6f8b42bb6f1446f475b5091",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "opay_insert",
+      "roles": "{authenticated}",
+      "table": "order_payments",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "dbb4fc5e4b346a20444fd31209fe241b"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "opay_select",
+      "roles": "{authenticated}",
+      "table": "order_payments",
+      "qual_md5": "ed88bde903fcbd9bae017b94f8398a95",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "payments_insert_intent",
+      "roles": "{authenticated}",
+      "table": "payments",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "1945c051ae9320cfe4345b75bad266a9"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "payments_select_own",
+      "roles": "{authenticated}",
+      "table": "payments",
+      "qual_md5": "0e3f75e69b63e0ac71446cf99319e010",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "pri_select_mentor_own",
+      "roles": "{authenticated}",
+      "table": "payout_run_items",
+      "qual_md5": "6b585f00e9bbfe7ce02df45d468c9226",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "post_reactions_delete_own",
+      "roles": "{authenticated}",
+      "table": "post_reactions",
+      "qual_md5": "1363dd1c9be6d73fceb371f94491f62a",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "post_reactions_insert_own",
+      "roles": "{authenticated}",
+      "table": "post_reactions",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "1363dd1c9be6d73fceb371f94491f62a"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "post_reactions_select_all",
+      "roles": "{anon,authenticated}",
+      "table": "post_reactions",
+      "qual_md5": "b326b5062b2f0e69046810717534cb09",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "본인 반응만 조회",
+      "roles": "{public}",
+      "table": "post_reactions",
+      "qual_md5": "19300d155780585259ede73ac370586c",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "promotion_campaigns_delete_admin",
+      "roles": "{authenticated}",
+      "table": "promotion_campaigns",
+      "qual_md5": "a8889e5322f8467f00a2b22b9827e4a1",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "promotion_campaigns_insert_admin",
+      "roles": "{authenticated}",
+      "table": "promotion_campaigns",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "a8889e5322f8467f00a2b22b9827e4a1"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "promotion_campaigns_select",
+      "roles": "{anon,authenticated}",
+      "table": "promotion_campaigns",
+      "qual_md5": "2867795bdb3d8dcb1d35b405c6467805",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "promotion_campaigns_update_admin",
+      "roles": "{authenticated}",
+      "table": "promotion_campaigns",
+      "qual_md5": "a8889e5322f8467f00a2b22b9827e4a1",
+      "with_check_md5": "a8889e5322f8467f00a2b22b9827e4a1"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "question_attachments_insert_via_room",
+      "roles": "{authenticated}",
+      "table": "question_attachments",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "627dc73a83c13d559a4578678ef6a7ab"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "question_attachments_select_via_room",
+      "roles": "{authenticated}",
+      "table": "question_attachments",
+      "qual_md5": "49775fb41d567642e381da2246d84189",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "qm_insert",
+      "roles": "{authenticated}",
+      "table": "question_messages",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "bd750e61c340ca6934b1a1fd7e3af520"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "qm_select",
+      "roles": "{authenticated}",
+      "table": "question_messages",
+      "qual_md5": "d3a9a43be8c82f4c56cc52ef7de1e2ee",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "qt_select_via_room",
+      "roles": "{authenticated}",
+      "table": "question_threads",
+      "qual_md5": "d68bd1e747750155412b4f5b0205a499",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "qt_update_via_room",
+      "roles": "{authenticated}",
+      "table": "question_threads",
+      "qual_md5": "d68bd1e747750155412b4f5b0205a499",
+      "with_check_md5": "d68bd1e747750155412b4f5b0205a499"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "qt_write_via_room",
+      "roles": "{authenticated}",
+      "table": "question_threads",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "d68bd1e747750155412b4f5b0205a499"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "refund_ins",
+      "roles": "{authenticated}",
+      "table": "refunds",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "dbb4fc5e4b346a20444fd31209fe241b"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "refund_select",
+      "roles": "{authenticated}",
+      "table": "refunds",
+      "qual_md5": "bde5fa7aaa6753abd8df022252222cb5",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "reviews_insert_student",
+      "roles": "{authenticated}",
+      "table": "reviews",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "a2239604a314b8ae67f5d1b0874fc900"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "reviews_select_admin",
+      "roles": "{authenticated}",
+      "table": "reviews",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "reviews_select_author",
+      "roles": "{authenticated}",
+      "table": "reviews",
+      "qual_md5": "fb29d0add93020fcbfb365b2663f041a",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "reviews_select_public_visible",
+      "roles": "{anon,authenticated}",
+      "table": "reviews",
+      "qual_md5": "477ea0189b5acecb6ceb1b27bbd1870a",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "reviews_update_admin",
+      "roles": "{authenticated}",
+      "table": "reviews",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "dbb4fc5e4b346a20444fd31209fe241b"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "reviews_update_author",
+      "roles": "{authenticated}",
+      "table": "reviews",
+      "qual_md5": "8605768673a260025b01ce5cda05cb94",
+      "with_check_md5": "dace85b5c25dc9aec22160cfa4ad3db6"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "reviews_update_mentor",
+      "roles": "{authenticated}",
+      "table": "reviews",
+      "qual_md5": "70fb439a54dbebff3879ece9ea07ffe7",
+      "with_check_md5": "70fb439a54dbebff3879ece9ea07ffe7"
+    },
+    {
+      "cmd": "ALL",
+      "name": "reviews_duplicates_archive_service",
+      "roles": "{service_role}",
+      "table": "reviews_duplicates_archive",
+      "qual_md5": "b326b5062b2f0e69046810717534cb09",
+      "with_check_md5": "b326b5062b2f0e69046810717534cb09"
+    },
+    {
+      "cmd": "ALL",
+      "name": "reviews_quarantine_archive_service",
+      "roles": "{service_role}",
+      "table": "reviews_quarantine_archive",
+      "qual_md5": "b326b5062b2f0e69046810717534cb09",
+      "with_check_md5": "b326b5062b2f0e69046810717534cb09"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "scan_annotations_admin_select",
+      "roles": "{authenticated}",
+      "table": "scan_annotations",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "scan_annotations_insert_author",
+      "roles": "{authenticated}",
+      "table": "scan_annotations",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "e3cf51504e794e787b1484ea75d75546"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "scan_annotations_select_party",
+      "roles": "{authenticated}",
+      "table": "scan_annotations",
+      "qual_md5": "9c525c10e8902a7b5476ad9a054a806e",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "scan_annotations_update_author",
+      "roles": "{authenticated}",
+      "table": "scan_annotations",
+      "qual_md5": "dace85b5c25dc9aec22160cfa4ad3db6",
+      "with_check_md5": "e3cf51504e794e787b1484ea75d75546"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "school_tier_catalog_select_active_or_admin",
+      "roles": "{anon,authenticated}",
+      "table": "school_tier_catalog",
+      "qual_md5": "da790c8ff220291f04e5f8f234dea877",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "ALL",
+      "name": "school_tier_catalog_write_admin",
+      "roles": "{authenticated}",
+      "table": "school_tier_catalog",
+      "qual_md5": "07745f9e92b1ac86637a4f75273f15cc",
+      "with_check_md5": "07745f9e92b1ac86637a4f75273f15cc"
+    },
+    {
+      "cmd": "ALL",
+      "name": "school_tier_mappings_admin_all",
+      "roles": "{authenticated}",
+      "table": "school_tier_mappings",
+      "qual_md5": "07745f9e92b1ac86637a4f75273f15cc",
+      "with_check_md5": "07745f9e92b1ac86637a4f75273f15cc"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "sf_delete_own",
+      "roles": "{authenticated}",
+      "table": "shortform_posts",
+      "qual_md5": "bdebd3e1b607cd0385627f9eab0ea545",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "sf_insert_mentor",
+      "roles": "{authenticated}",
+      "table": "shortform_posts",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "f3a1479fd1664fab8dd218fe7093f81d"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "sf_select_published",
+      "roles": "{anon,authenticated}",
+      "table": "shortform_posts",
+      "qual_md5": "ce42f57b0d0ec62b5da49cc030cd2899",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "sf_update_admin",
+      "roles": "{authenticated}",
+      "table": "shortform_posts",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "dbb4fc5e4b346a20444fd31209fe241b"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "sf_update_own",
+      "roles": "{authenticated}",
+      "table": "shortform_posts",
+      "qual_md5": "bdebd3e1b607cd0385627f9eab0ea545",
+      "with_check_md5": "849697101f9e7e8f47dfcbbab67ef114"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "shortform_reactions_delete_own",
+      "roles": "{authenticated}",
+      "table": "shortform_reactions",
+      "qual_md5": "1363dd1c9be6d73fceb371f94491f62a",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "shortform_reactions_insert_own",
+      "roles": "{authenticated}",
+      "table": "shortform_reactions",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "85649520b86167eac12ff0c3e9499540"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "shortform_reactions_select_own",
+      "roles": "{authenticated}",
+      "table": "shortform_reactions",
+      "qual_md5": "6a6b7c2a3a520c44377894171204e8d2",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "subjects_select_all",
+      "roles": "{anon,authenticated}",
+      "table": "subjects",
+      "qual_md5": "b326b5062b2f0e69046810717534cb09",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "subscription_billing_events_select_parties",
+      "roles": "{authenticated}",
+      "table": "subscription_billing_events",
+      "qual_md5": "901f18c146b50a818667746d49e2866a",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "ssi_select_mentor_own",
+      "roles": "{authenticated}",
+      "table": "subscription_settlement_items",
+      "qual_md5": "6b585f00e9bbfe7ce02df45d468c9226",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "subscriptions_select_parties",
+      "roles": "{authenticated}",
+      "table": "subscriptions",
+      "qual_md5": "7caa706c130a9954705b9f95d80cab62",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "DELETE",
+      "name": "ub_delete_own",
+      "roles": "{authenticated}",
+      "table": "user_blocks",
+      "qual_md5": "71b78a950b9cb4a358202bf2c4cd7dbf",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "ub_insert_own",
+      "roles": "{authenticated}",
+      "table": "user_blocks",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "71b78a950b9cb4a358202bf2c4cd7dbf"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "ub_select_admin",
+      "roles": "{authenticated}",
+      "table": "user_blocks",
+      "qual_md5": "5533b5b0c6cb6bc41c771c2f6a2c8f37",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "ub_select_own",
+      "roles": "{authenticated}",
+      "table": "user_blocks",
+      "qual_md5": "71b78a950b9cb4a358202bf2c4cd7dbf",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "ucr_select_own",
+      "roles": "{authenticated}",
+      "table": "user_consent_records",
+      "qual_md5": "6a6b7c2a3a520c44377894171204e8d2",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "users_admin_select_all",
+      "roles": "{authenticated}",
+      "table": "users",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "users_insert_own",
+      "roles": "{authenticated}",
+      "table": "users",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "15c587ac9e0e9db4618a46c0502f35aa"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "users_select_own",
+      "roles": "{authenticated}",
+      "table": "users",
+      "qual_md5": "15c587ac9e0e9db4618a46c0502f35aa",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "UPDATE",
+      "name": "users_update_own",
+      "roles": "{authenticated}",
+      "table": "users",
+      "qual_md5": "15c587ac9e0e9db4618a46c0502f35aa",
+      "with_check_md5": "15c587ac9e0e9db4618a46c0502f35aa"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "ver_logs_admin_select",
+      "roles": "{authenticated}",
+      "table": "verification_logs",
+      "qual_md5": "dbb4fc5e4b346a20444fd31209fe241b",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "ver_logs_insert_own",
+      "roles": "{authenticated}",
+      "table": "verification_logs",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "6a6b7c2a3a520c44377894171204e8d2"
+    },
+    {
+      "cmd": "INSERT",
+      "name": "withdrawals_insert_self_requested",
+      "roles": "{authenticated}",
+      "table": "withdrawals",
+      "qual_md5": "d41d8cd98f00b204e9800998ecf8427e",
+      "with_check_md5": "9fbb10deb89f90de0ed29220a991b326"
+    },
+    {
+      "cmd": "SELECT",
+      "name": "withdrawals_select_self",
+      "roles": "{authenticated}",
+      "table": "withdrawals",
+      "qual_md5": "70fb439a54dbebff3879ece9ea07ffe7",
+      "with_check_md5": "d41d8cd98f00b204e9800998ecf8427e"
+    }
+  ],
+  "publication_tables": [
+    "individual_question_attachments",
+    "individual_question_messages",
+    "individual_questions",
+    "notifications",
+    "question_attachments",
+    "question_messages",
+    "question_threads"
+  ],
+  "storage_buckets": [
+    {
+      "id": "community-post-images",
+      "public": false,
+      "file_size_limit": 5242880,
+      "allowed_mime_types": [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/gif"
+      ]
+    },
+    {
+      "id": "connection-note-ink",
+      "public": false,
+      "file_size_limit": null,
+      "allowed_mime_types": null
+    },
+    {
+      "id": "custom-order-deliverables",
+      "public": false,
+      "file_size_limit": 20971520,
+      "allowed_mime_types": [
+        "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "application/zip",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      ]
+    },
+    {
+      "id": "custom-order-message-attachments",
+      "public": false,
+      "file_size_limit": 20971520,
+      "allowed_mime_types": [
+        "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "application/zip",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      ]
+    },
+    {
+      "id": "custom-request-application-attachments",
+      "public": false,
+      "file_size_limit": 20971520,
+      "allowed_mime_types": [
+        "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "application/zip",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      ]
+    },
+    {
+      "id": "custom-request-post-attachments",
+      "public": false,
+      "file_size_limit": 20971520,
+      "allowed_mime_types": [
+        "application/pdf",
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "application/zip",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      ]
+    },
+    {
+      "id": "individual-question-attachments",
+      "public": false,
+      "file_size_limit": 20971520,
+      "allowed_mime_types": [
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif",
+        "application/pdf",
+        "application/zip",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/json"
+      ]
+    },
+    {
+      "id": "profile-avatars",
+      "public": true,
+      "file_size_limit": 5242880,
+      "allowed_mime_types": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ]
+    },
+    {
+      "id": "question-room-attachments",
+      "public": false,
+      "file_size_limit": 20971520,
+      "allowed_mime_types": [
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif",
+        "application/pdf",
+        "application/zip",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+      ]
+    },
+    {
+      "id": "scan-annotations",
+      "public": false,
+      "file_size_limit": null,
+      "allowed_mime_types": null
+    },
+    {
+      "id": "shortform-thumbnails",
+      "public": false,
+      "file_size_limit": 5242880,
+      "allowed_mime_types": [
+        "image/jpeg",
+        "image/png",
+        "image/webp"
+      ]
+    },
+    {
+      "id": "shortform-videos",
+      "public": false,
+      "file_size_limit": 524288000,
+      "allowed_mime_types": [
+        "video/mp4",
+        "video/quicktime",
+        "video/webm"
+      ]
+    },
+    {
+      "id": "student-id-images",
+      "public": false,
+      "file_size_limit": null,
+      "allowed_mime_types": null
+    }
+  ],
+  "migrations": [
+    {
+      "name": "add_users_notification_enabled",
+      "version": "20260702065122"
+    },
+    {
+      "name": "create_connection_note_ink_bucket_and_policies",
+      "version": "20260702083003"
+    },
+    {
+      "name": "add_ink_columns_to_connection_notes",
+      "version": "20260702083017"
+    },
+    {
+      "name": "mentor_directory_v2_add_photo_highschool",
+      "version": "20260703043452"
+    },
+    {
+      "name": "iq_open_list_filter_by_mentor_subjects",
+      "version": "20260703083609"
+    },
+    {
+      "name": "iq_claim_gate_by_mentor_subject",
+      "version": "20260703083637"
+    },
+    {
+      "name": "116_user_blocks",
+      "version": "20260704135524"
+    },
+    {
+      "name": "102_account_status_management",
+      "version": "20260704135705"
+    },
+    {
+      "name": "115_account_deletion",
+      "version": "20260704135803"
+    },
+    {
+      "name": "add_iq_attachment_rpc_s17",
+      "version": "20260707103325"
+    },
+    {
+      "name": "add_iqa_storage_update_policy_annotations_s18",
+      "version": "20260707115017"
+    },
+    {
+      "name": "iqa_rpc_message_id_check_v2",
+      "version": "20260707205436"
+    },
+    {
+      "name": "iqa_bucket_allow_application_json",
+      "version": "20260707205504"
+    },
+    {
+      "name": "103_mentor_activity_suspension",
+      "version": "20260712051239"
+    },
+    {
+      "name": "101_community_comments_admin_moderation",
+      "version": "20260712060703"
+    },
+    {
+      "name": "104_user_warnings",
+      "version": "20260712060717"
+    },
+    {
+      "name": "fix_xv01_signup_admin_provisioning",
+      "version": "20260717044250"
+    },
+    {
+      "name": "fix_xv01_revoke_insert_guard_execute",
+      "version": "20260717044741"
+    },
+    {
+      "name": "admin_read_enablement_mentor_verification",
+      "version": "20260717091247"
+    },
+    {
+      "name": "120_admin_console_fixes",
+      "version": "20260717125606"
+    },
+    {
+      "name": "mentor_plan_price_band_clamp",
+      "version": "20260718094306"
+    },
+    {
+      "name": "p2_2_community_board_idempotency_softdelete_147",
+      "version": "20260720073848"
+    },
+    {
+      "name": "p2_3_shortform_idempotency_148",
+      "version": "20260720075436"
+    },
+    {
+      "name": "p1_8a_storage_insert_eligibility_149",
+      "version": "20260720080527"
+    },
+    {
+      "name": "p1_13_refund_billing_event_fk_150",
+      "version": "20260720080619"
+    },
+    {
+      "name": "p1_10_account_deletion_saga_151",
+      "version": "20260720081121"
+    },
+    {
+      "name": "p1_11c_notification_delivery_worker_152",
+      "version": "20260720081942"
+    },
+    {
+      "name": "p2_25_pay_due_payouts_convergence_153",
+      "version": "20260720083205"
+    },
+    {
+      "name": "p1_10_deletion_operational_adapters_154",
+      "version": "20260720085838"
+    },
+    {
+      "name": "p1_11_iq_notification_atomization_155",
+      "version": "20260720090434"
+    },
+    {
+      "name": "p2_25_payout_scheduler_foundation_156",
+      "version": "20260720091401"
+    },
+    {
+      "name": "20260729211929_mentor_profile_privileged_column_guard",
+      "version": "20260731095050"
+    },
+    {
+      "name": "20260729211941_weekly_usage_pair_party_guard",
+      "version": "20260731095136"
+    },
+    {
+      "name": "20260730095435_api_web_v1_schemas",
+      "version": "20260731100313"
+    },
+    {
+      "name": "20260730095436_comments_author_label_baseline_convergence",
+      "version": "20260731100358"
+    },
+    {
+      "name": "20260730095438_comments_author_label_denormalize",
+      "version": "20260731100540"
+    },
+    {
+      "name": "20260730095441_api_web_v1_read_views",
+      "version": "20260731100708"
+    },
+    {
+      "name": "20260730105244_core_private_room_ensure",
+      "version": "20260731101845"
+    },
+    {
+      "name": "20260730105248_api_web_v1_self_rpc",
+      "version": "20260731102007"
+    },
+    {
+      "name": "20260730105252_api_web_v1_community_rpc",
+      "version": "20260731113927"
+    },
+    {
+      "name": "20260730112525_api_app_v1_surface",
+      "version": "20260731114120"
+    },
+    {
+      "name": "20260730112528_api_web_v1_mentor_rpc",
+      "version": "20260731125643"
+    },
+    {
+      "name": "20260730112531_api_web_v1_payout_account_rpc",
+      "version": "20260731125802"
+    },
+    {
+      "name": "20260730120103_money_rpc",
+      "version": "20260731134000"
+    },
+    {
+      "name": "20260730195147_revoke_mentor_profiles_write",
+      "version": "20260731135324"
+    },
+    {
+      "name": "20260730195150_revoke_mentor_plans_write",
+      "version": "20260731135445"
+    },
+    {
+      "name": "community_direct_write_lockdown",
+      "version": "20260731170632"
+    },
+    {
+      "name": "contract_permission_assertions",
+      "version": "20260731170758"
+    },
+    {
+      "name": "20260801040844_qna_answer_notification_per_event",
+      "version": "20260801054636"
+    },
+    {
+      "name": "20260802024641_build13_db_contract_convergence",
+      "version": "20260802054930"
+    },
+    {
+      "name": "iq_append_message_v1",
+      "version": "20260803142534"
+    },
+    {
+      "name": "iq_attachment_author_v1",
+      "version": "20260803142559"
+    },
+    {
+      "name": "20260803162257_security_identity_profile_lockdown",
+      "version": "20260803170552"
+    },
+    {
+      "name": "20260803162808_domain_contract_convergence",
+      "version": "20260803170916"
+    },
+    {
+      "name": "20260803163322_realtime_notification_convergence",
+      "version": "20260803171053"
+    }
+  ]
+}

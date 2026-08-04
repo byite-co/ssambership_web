@@ -32,8 +32,10 @@ type UserMini = {
   grade_level: string | null;
 };
 
-function applyPublicFilters<T extends { eq: (col: string, val: boolean) => T }>(q: T): T {
-  return q.eq("is_hidden", false).eq("is_blinded", false);
+// 공개 조건 정본(수렴 §11.2): moderation_state='visible' AND is_hidden=false AND
+// is_blinded=false — RLS·get_mentor_review_stats·멘토 디렉토리 집계와 단일 predicate.
+function applyPublicFilters<T extends { eq: (col: string, val: boolean | string) => T }>(q: T): T {
+  return q.eq("moderation_state", "visible").eq("is_hidden", false).eq("is_blinded", false);
 }
 
 async function loadAuthorsMap(supabase: SupabaseClient, ids: string[]): Promise<Map<string, UserMini>> {

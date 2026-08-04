@@ -219,6 +219,12 @@ export async function getShortformDraft(
   };
 }
 
+/**
+ * 숏폼 view 계수 v2 (수렴 §10.5) — impression 당 event key 1개의 멱등 계약.
+ * 서버 렌더 1회 = impression 1회이므로 호출 시점에 key 를 생성한다. 실패는
+ * 조용히 무시하되(계수는 비핵심) 같은 impression 에서 새 key 로 재시도하지 않는다.
+ * legacy increment_shortform_post_view 는 EXECUTE 회수됨.
+ */
 export async function incrementShortformView(supabase: SupabaseClient, id: string): Promise<void> {
-  await supabase.rpc("increment_shortform_post_view", { p_post_id: id });
+  await supabase.rpc("shortform_view_record_v2", { p_post_id: id, p_event_key: crypto.randomUUID() });
 }

@@ -13,13 +13,38 @@ export type ModerationTargetType =
 
 export type ModerationIntent = "hidden" | "deleted" | "restored";
 
-/** content_reports.target_type 등 외부 표기를 normalize. */
+/** content_reports.target_type 등 외부 표기를 normalize.
+ * legacy 'comment' 는 게시판/숏폼 중 어느 댓글인지 판정 근거가 없으므로 자동
+ * 매핑하지 않는다(null → 자동 콘텐츠 조치 없이 수동 검토 상태 유지 — 수렴 §9.3).
+ * 대상 테이블을 확인할 수 있는 경로는 resolveLegacyCommentTargetType 을 쓴다. */
 export function normalizeModerationTargetType(raw: string | null | undefined): ModerationTargetType | null {
   const s = String(raw ?? "").trim().toLowerCase();
   if (s === "community_post" || s === "community" || s === "post") return "community_post";
   if (s === "shortform_post" || s === "shortform") return "shortform_post";
-  if (s === "community_comment" || s === "comment") return "community_comment";
+  if (s === "community_comment") return "community_comment";
   if (s === "board_comment" || s === "board_comment_v2") return "board_comment";
+  return null;
+}
+
+/** legacy 'comment' 행의 실제 대상 판정: target_id 가 어느 댓글 테이블에 실재하는지
+ * 조회해 수렴한다. 게시판 정본(comments)에 있으면 board_comment, 숏폼
+ * (community_comments post_type='shortform')에 있으면 community_comment.
+ * 어느 쪽도 아니거나 양쪽 모두면 null(수동 검토). */
+export async function resolveLegacyCommentTargetType(targetId: string): Promise<ModerationTargetType | null> {
+  const admin = createServiceRoleClient();
+  const [board, shortform] = await Promise.all([
+    admin.from("comments").select("id").eq("id", targetId).maybeSingle(),
+    admin
+      .from("community_comments")
+      .select("id")
+      .eq("id", targetId)
+      .eq("post_type", "shortform")
+      .maybeSingle(),
+  ]);
+  const inBoard = !board.error && board.data != null;
+  const inShortform = !shortform.error && shortform.data != null;
+  if (inBoard && !inShortform) return "board_comment";
+  if (inShortform && !inBoard) return "community_comment";
   return null;
 }
 
