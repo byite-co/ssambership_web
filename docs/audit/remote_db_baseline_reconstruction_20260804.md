@@ -307,13 +307,25 @@ STRATEGY_A_EXPECTED_HISTORY_ONLY_MUTATION: YES
 
 ### 실행 절차 (별도 승인 후, 이 세션에서는 실행하지 않음)
 
-1. **실행 전 반드시** 설치된 CLI 에서 문법을 확인한다: `supabase migration repair --help`
-   (이 컨테이너에는 CLI 가 없다 — `SUPABASE_CLI_SYNTAX_VERIFIED: NOT_POSSIBLE_IN_THIS_ENV`).
-   복수 version 을 한 번에 지정할 수 있는지도 그 출력으로 확인한다.
+**2026-08-05 갱신 — 손으로 치지 않는다.** 이 절차는 게이트가 걸린 워크플로로 구현됐다:
+`.github/workflows/db-adoption-repair.yml` (`workflow_dispatch` 전용 · Environment
+`supabase-db-adoption` 승인 · `mode` 기본값 `dry-run` · confirmation 문자열 정확 일치).
+자세한 내용은 `docs/audit/native_migration_pack_20260805.md` §6.
+
+워크플로가 대신 수행하는 항목:
+
+1. 실행 전 `supabase migration repair --help` 를 캡처하고, 쓰려는 플래그(`--status`,
+   `--db-url`)가 실제로 있는지 확인해 없으면 **부모를 건드리기 전에** 실패한다.
+   (이 컨테이너에는 CLI 가 없다 — `SUPABASE_CLI_SYNTAX_VERIFIED: NOT_POSSIBLE_IN_THIS_ENV`.)
 2. `adoption_repair_plan.tsv` 의 7개 version 을 `--status applied` 로 등록한다.
-   비밀값(access token·DB password·service key)은 명령 예시·로그 어디에도 남기지 않는다.
-3. 등록 전/후 `supabase_migrations.schema_migrations` 행 수를 비교해 **정확히 +7** 인지 확인한다.
-4. 스키마 diff 0 을 확인한다(`scripts/verify/baseline/axis_checksums.sql` 전/후 대조).
+   비밀값은 Environment secret `SUPABASE_DB_URL` 하나로만 주입하고 로그에 남기지 않는다.
+3. 등록 전/후 `supabase_migrations.schema_migrations` 를 비교해 행 수가 **정확히 56 → 63**
+   이고 **변경분이 계획된 7 version 집합과 정확히 일치**하는지 강제한다.
+4. `scripts/verify/baseline/parent_schema_fingerprint.sh` 로 전/후 15축 지문을 대조해
+   schema 무변경을 강제한다. 전후가 같아도 표기는 `NO_CHANGE_DETECTED_ON_CAPTURED_AXES` 다.
+
+> 사전 조건: PR #61 이 병합돼 `supabase/migrations/` 에 pack 63본이 있어야 한다.
+> 워크플로는 7 version 각각에 대응하는 migration 파일이 없으면 실행을 거부한다.
 
 ### 롤백 (version 단위)
 
@@ -460,4 +472,30 @@ publications 2 · default_privileges 6        → differing axes: 0
 | `compare_schema_inventory.py` | 부모 인벤토리 대조(허용 diff 는 종류별로 분리 계상) |
 | `view_deparse_diag.py` | 뷰 정의 차이가 엔진 버전 서식인지 실질 diff 인지 판별 |
 | `axis_checksums.sql` / `parent_axes.py` | 11축 개수+정규 문자열 md5 (대상 DB / 부모 인벤토리) |
-| `run_noop_test.sh` | baseline 2회 적용 시 구조 불변 검사 |
+| `run_noop_test.sh` | baseline 재적용 하자 특성화(전량 재적용은 `UNSAFE_BY_DESIGN`) |
+
+### 2026-08-05 추가 — 정식 migration pack 경로
+
+replay 자산(`supabase/baseline/**`)은 어떤 migration 러너도 읽지 않는다. 그래서 같은 내용을
+`supabase/migrations/` 정식 경로의 pack 63본으로 생성하고, GitHub 러너가 표준 Supabase CLI 로
+적용·검증할 수 있게 만들었다. 정본: **`docs/audit/native_migration_pack_20260805.md`**
+
+| 스크립트 | 역할 |
+|---|---|
+| `build_native_baseline_migration.py` | baseline 1본 결정론 생성(`--check` 로 stale/직접편집 탐지) |
+| `build_native_migration_pack.py` | 63본 pack 생성(binary copy) + manifest |
+| `validate_native_migration_pack.py` | pack 정적 검증(`--with-pr60` 로 통합 64본) |
+| `run_native_pack_replay.sh` | clean PG16 에 pack 적용 + PR60 왕복 |
+| `verify_local_stack_state.sh` | 러너의 `supabase start` 결과 검증(9개 검사군) |
+| `run_local_stack_emulation.sh` | 위 스크립트 자체를 PG16 으로 시험 + fingerprint 모델 검증 |
+| `parent_schema_fingerprint.sh` | 읽기 전용 15축 schema 지문(무해성 강제) |
+| `validate_db_workflows.py` | 워크플로 R1~R12 정적 검증 + `--selftest`(변형 12종) |
+
+원격 실행은 전부 워크플로로 게이트했다 —
+`db-migration-pack-verify.yml`(secret 불필요) · `db-adoption-repair.yml` · `db-apply-pr60.yml`.
+뒤 두 개는 `workflow_dispatch` 전용 · Environment 승인 · `dry-run` 기본값 · confirmation
+문자열 정확 일치의 4중 게이트다.
+
+> 이 컨테이너에서 **아직 실행되지 않은 것**:
+> `PG17_CLI_RUNNER_VERIFICATION: NOT_RUN` · `PARENT_REPAIR_EXECUTION: NOT_RUN` ·
+> `PHASE_B_BRANCH_REPRODUCTION: NOT_RUN` · `WORKFLOW_ACTUAL_EXECUTION: NOT_RUN`.
