@@ -12,12 +12,15 @@ do $$ begin
 end $$;
 grant usage on schema public to anon, authenticated, service_role;
 
--- Supabase 고전(permissive) 기본 권한 재현 — 테이블·시퀀스만.
--- 함수는 defacl 미설정(= proacl NULL, PUBLIC implicit EXECUTE)이 고전 동작:
--- 원장 파일들의 자체 REVOKE 가 부모와 같은 효과를 만든다(실측: 20260731100540 self-check).
--- 부모의 '현재' defacl 은 hardened 상태 — 시점 전환은 비교기 diff 로 도출해 interleave 로 모델링.
+-- Supabase 기본 권한(permissive) 재현 — preview branch 실측(2026-08-04)에 맞춘 정본.
+--   pg_default_acl(schema public, objtype f) = {postgres=X, anon=X, authenticated=X, service_role=X}
+--   → 신규 public 함수는 생성 즉시 세 역할에 EXECUTE 가 **명시적으로** 부여된다.
+-- ⚠️ 이전 스텁은 함수 defacl 을 비워 뒀고(proacl NULL = PUBLIC implicit), 그 때문에
+--    원장 M13(20260730095438)의 `REVOKE ALL ... FROM PUBLIC` 만으로 게이트가 통과했다.
+--    실제 플랫폼에서는 명시 역할 부여가 남아 게이트가 실패한다(브랜치 실측으로 확인).
 alter default privileges in schema public grant all on tables to anon, authenticated, service_role;
 alter default privileges in schema public grant all on sequences to anon, authenticated, service_role;
+alter default privileges in schema public grant execute on functions to anon, authenticated, service_role;
 
 -- auth 스텁
 create schema if not exists auth;

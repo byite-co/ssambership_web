@@ -4,11 +4,10 @@
 --   (notification_transport_config·shortform_view_events 에 anon/auth/service_role CRUD 부재,
 --    이후 public 함수들이 proacl 비-NULL·owner-only) — 반면 그 이전 생성 객체는 permissive.
 -- 전환 주체·정확 시각은 저장소·원장 어디에도 없음(out-of-band; UNRECOVERABLE_EXACT_TIME).
--- 목표 상태(부모 현재): tables anon/auth/service_role = D,x,t(,m) · functions postgres-only ·
+-- 목표 상태(부모 현재): tables anon/auth/service_role = D,x,t(,m) ·
+--   (functions 하드닝은 20260729000000 로 분리 — M13 이전이어야 함이 실측으로 확정)
 --   sequences anon/auth/service_role = w(update) 만.
 alter default privileges in schema public
   revoke select, insert, update, delete on tables from anon, authenticated, service_role;
-alter default privileges in schema public
-  revoke execute on functions from public;
 alter default privileges in schema public
   revoke select, usage on sequences from anon, authenticated, service_role;

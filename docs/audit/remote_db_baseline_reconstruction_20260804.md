@@ -80,3 +80,53 @@
 - *.supabase.co HTTPS/TCP egress 차단(프록시 403) → 실 JWT REST(Auth 가입·Storage
   업로드·Data API) 불가 → PR60 preview 실인증 검증 = BLOCKED_AUTH(§30 규칙).
 - MCP(서버측) 경유 SQL/관리작업은 가능 — branch 스키마 재현·PR60 forward/ACL/advisor 는 수행.
+
+## Preview Branch 실측 (2026-08-04, branch uszbhvqkdtsbnnwiblga — 삭제 완료)
+
+부모 원장만으로 신규 branch 를 만들면 재생이 실패한다는 사실이 재확인됐고(빈 스키마),
+재구성 baseline 을 실제 플랫폼(PostgreSQL 17 + 실 auth/storage/realtime)에 적용해
+다음을 확보했다.
+
+```text
+BASELINE_ON_REAL_PLATFORM: PASS — 188/188 조각, 누락 0 · 중복 0 · 오류 0 · 미완료 txn 0
+  최종: public 77 tables · 194 functions · 184 policies
+  (M2 사전 게이트 대상 shortform_view_events 부재 유지 — 선점 없음 확인)
+LEDGER_REPLAY_ON_REAL_PLATFORM: PARTIAL — 36/61 성공, 37번째에서 정지
+  실패: 20260731100540(M13 comments_author_label_denormalize)
+        S2_M13_SELFCHECK: trigger functions hardening mismatch (matched=0)
+  037 은 자체 begin/commit 으로 전량 롤백 — 부분 적용 없음(객체 실측 확인).
+```
+
+### 이 실패가 알려준 것 (로컬 스텁의 결함)
+
+- branch 실측 `pg_default_acl(schema public, objtype f)` =
+  `{postgres=X, anon=X, authenticated=X, service_role=X}` (grantor postgres·supabase_admin 2행).
+  즉 **신규 public 함수는 생성 즉시 세 역할에 EXECUTE 가 명시 부여**된다.
+- M13 의 하드닝은 `REVOKE ALL ... FROM PUBLIC` 뿐이라 명시 역할 부여를 지우지 못한다
+  → permissive defacl 상태에서 M13 자체 검사는 **구조적으로 통과 불가**.
+- 부모 '현재' defacl(f) 중 **grantor=postgres 행은 `{postgres=X}` 로 hardened**.
+  함수 소유자가 postgres 이므로 실제 적용되는 것은 이 행이다 → 부모에서는 통과한다.
+- 결론: **함수 defacl 하드닝은 M13(20260730095438) 이전에 이미 적용돼 있었다.**
+  기존 재구성은 이 전환을 20260802000000 한 곳에 뭉쳐 뒀고, 로컬 스텁이 함수 defacl 을
+  비워 둔 탓에 로컬에서는 이 오류가 드러나지 않았다.
+
+### 반영한 수정
+
+1. `scripts/verify/baseline/platform_stub.sql` — 함수 defacl 을 실측대로 permissive 하게 부여.
+   (이제 로컬 스텁이 M13 게이트를 실제 플랫폼과 같은 조건으로 시험한다.)
+2. interleave 분리 — `20260729000000_public_defacl_functions_hardening.sql`(함수, M13 이전) /
+   `20260802000000_public_defacl_hardening.sql`(테이블·시퀀스) 로 나눔.
+3. 수정 모델로 로컬 라운드트립 재실행 → 여전히 **EQUIVALENT**(11축 중 10축 md5 일치,
+   views 는 PG16↔17 deparse 서식으로 REAL_DIFF 0).
+
+```text
+UNVERIFIED_ON_REAL_PLATFORM: 위 수정본의 branch 재생은 미검증(브랜치 시간 상한).
+  → 신규 branch 1회로 62단계 완주 확인 필요(승인 항목).
+```
+
+### 대조 도구 추가
+
+- `scripts/verify/baseline/axis_checksums.sql` — 11축 개수 + 정규 문자열 집계 md5(대상 DB에서 1회 실행).
+- `scripts/verify/baseline/parent_axes.py` — 부모 인벤토리 JSON 에서 동일 규칙으로 계산.
+- `docs/audit/remote_db_inventory_20260804/parent_axis_checksums.json` — 부모 기준값.
+  로컬 재구축본이 이 기준값과 10/11 축 md5 일치함을 검증했다(views 는 엔진 버전 차이).
