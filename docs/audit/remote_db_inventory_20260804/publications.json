@@ -1,0 +1,72 @@
+{
+ "publications": [
+  {
+   "pubname": "supabase_realtime_messages_publication",
+   "puballtables": false,
+   "flags_insert_update_delete_truncate": "truetruetruetrue"
+  },
+  {
+   "pubname": "supabase_realtime",
+   "puballtables": false,
+   "flags_insert_update_delete_truncate": "truetruetruetrue"
+  }
+ ],
+ "publication_tables": [
+  {
+   "pubname": "supabase_realtime_messages_publication",
+   "table": "realtime.messages_2026_08_01"
+  },
+  {
+   "pubname": "supabase_realtime_messages_publication",
+   "table": "realtime.messages_2026_08_02"
+  },
+  {
+   "pubname": "supabase_realtime_messages_publication",
+   "table": "realtime.messages_2026_08_03"
+  },
+  {
+   "pubname": "supabase_realtime_messages_publication",
+   "table": "realtime.messages_2026_08_04"
+  },
+  {
+   "pubname": "supabase_realtime_messages_publication",
+   "table": "realtime.messages_2026_08_05"
+  },
+  {
+   "pubname": "supabase_realtime_messages_publication",
+   "table": "realtime.messages_2026_08_06"
+  },
+  {
+   "pubname": "supabase_realtime_messages_publication",
+   "table": "realtime.messages_2026_08_07"
+  },
+  {
+   "pubname": "supabase_realtime",
+   "table": "public.individual_question_attachments"
+  },
+  {
+   "pubname": "supabase_realtime",
+   "table": "public.individual_question_messages"
+  },
+  {
+   "pubname": "supabase_realtime",
+   "table": "public.individual_questions"
+  },
+  {
+   "pubname": "supabase_realtime",
+   "table": "public.notifications"
+  },
+  {
+   "pubname": "supabase_realtime",
+   "table": "public.question_attachments"
+  },
+  {
+   "pubname": "supabase_realtime",
+   "table": "public.question_messages"
+  },
+  {
+   "pubname": "supabase_realtime",
+   "table": "public.question_threads"
+  }
+ ]
+}

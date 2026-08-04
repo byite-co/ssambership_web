@@ -1,0 +1,2550 @@
+[
+{
+"schema": "public",
+"table": "account_deletion_jobs",
+"conname": "account_deletion_jobs_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "account_deletion_jobs",
+"conname": "account_deletion_jobs_state_check",
+"contype": "c",
+"definition": "CHECK ((state = ANY (ARRAY['pending'::text, 'locked'::text, 'purging'::text, 'storage_purged'::text, 'finalized'::text, 'auth_soft_deleted'::text, 'completed'::text, 'canceled'::text, 'failed'::text])))"
+},
+{
+"schema": "public",
+"table": "account_deletion_jobs",
+"conname": "account_deletion_jobs_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id)"
+},
+{
+"schema": "public",
+"table": "admin_action_logs",
+"conname": "admin_action_logs_admin_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (admin_id) REFERENCES auth.users(id)"
+},
+{
+"schema": "public",
+"table": "admin_action_logs",
+"conname": "admin_action_logs_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "admin_case_notes",
+"conname": "admin_case_notes_admin_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (admin_id) REFERENCES auth.users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "admin_case_notes",
+"conname": "admin_case_notes_dispute_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (dispute_id) REFERENCES disputes(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "admin_case_notes",
+"conname": "admin_case_notes_exactly_one_target",
+"contype": "c",
+"definition": "CHECK ((num_nonnulls(dispute_id, report_id) = 1))"
+},
+{
+"schema": "public",
+"table": "admin_case_notes",
+"conname": "admin_case_notes_note_nonempty",
+"contype": "c",
+"definition": "CHECK ((char_length(btrim(note)) > 0))"
+},
+{
+"schema": "public",
+"table": "admin_case_notes",
+"conname": "admin_case_notes_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "admin_case_notes",
+"conname": "admin_case_notes_report_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (report_id) REFERENCES content_reports(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "ai_drafts",
+"conname": "ai_drafts_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id)"
+},
+{
+"schema": "public",
+"table": "ai_drafts",
+"conname": "ai_drafts_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "ai_drafts",
+"conname": "ai_drafts_thread_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (thread_id) REFERENCES question_threads(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "app_notices",
+"conname": "app_notices_created_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "app_notices",
+"conname": "app_notices_date_range",
+"contype": "c",
+"definition": "CHECK (((starts_at IS NULL) OR (ends_at IS NULL) OR (ends_at >= starts_at)))"
+},
+{
+"schema": "public",
+"table": "app_notices",
+"conname": "app_notices_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "app_notices",
+"conname": "app_notices_title_nonempty",
+"contype": "c",
+"definition": "CHECK ((char_length(TRIM(BOTH FROM title)) > 0))"
+},
+{
+"schema": "public",
+"table": "app_notices",
+"conname": "app_notices_type_allowed",
+"contype": "c",
+"definition": "CHECK ((type = ANY (ARRAY['notice'::text, 'event'::text, 'maintenance'::text, 'update'::text])))"
+},
+{
+"schema": "public",
+"table": "app_notices",
+"conname": "app_notices_updated_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "cash_ledger",
+"conname": "cash_ledger_idempotency_key_key",
+"contype": "u",
+"definition": "UNIQUE (idempotency_key)"
+},
+{
+"schema": "public",
+"table": "cash_ledger",
+"conname": "cash_ledger_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "cash_ledger",
+"conname": "cash_ledger_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "cash_topup_packages",
+"conname": "cash_topup_packages_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "cash_wallets",
+"conname": "cash_wallets_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "cash_wallets",
+"conname": "cash_wallets_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "cash_wallets",
+"conname": "cash_wallets_user_id_key",
+"contype": "u",
+"definition": "UNIQUE (user_id)"
+},
+{
+"schema": "public",
+"table": "comments",
+"conname": "comments_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "comments",
+"conname": "comments_parent_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (parent_id) REFERENCES comments(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "comments",
+"conname": "comments_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "comments",
+"conname": "comments_post_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (post_id) REFERENCES community_posts(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"conname": "community_comments_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"conname": "community_comments_body_len_chk",
+"contype": "c",
+"definition": "CHECK (((char_length(TRIM(BOTH FROM body)) >= 1) AND (char_length(TRIM(BOTH FROM body)) <= 1000)))"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"conname": "community_comments_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"conname": "community_comments_post_type_check",
+"contype": "c",
+"definition": "CHECK ((post_type = ANY (ARRAY['board'::text, 'shortform'::text])))"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"conname": "community_comments_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['visible'::text, 'hidden'::text, 'deleted'::text])))"
+},
+{
+"schema": "public",
+"table": "community_comments",
+"conname": "community_comments_status_chk",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['visible'::text, 'hidden'::text])))"
+},
+{
+"schema": "public",
+"table": "community_hashtags",
+"conname": "community_hashtags_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (tag)"
+},
+{
+"schema": "public",
+"table": "community_posts",
+"conname": "community_posts_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "community_posts",
+"conname": "community_posts_author_idem_key",
+"contype": "u",
+"definition": "UNIQUE (author_id, create_idempotency_key)"
+},
+{
+"schema": "public",
+"table": "community_posts",
+"conname": "community_posts_author_role_chk",
+"contype": "c",
+"definition": "CHECK ((author_role = ANY (ARRAY['mentor'::text, 'student'::text, 'admin'::text, 'user'::text])))"
+},
+{
+"schema": "public",
+"table": "community_posts",
+"conname": "community_posts_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "community_posts",
+"conname": "community_posts_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'hidden'::text, 'deleted'::text])))"
+},
+{
+"schema": "public",
+"table": "community_posts",
+"conname": "community_posts_status_chk",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'hidden'::text])))"
+},
+{
+"schema": "public",
+"table": "connection_notes",
+"conname": "connection_notes_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "connection_notes",
+"conname": "connection_notes_mentor_student_room_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_student_room_id) REFERENCES mentor_student_rooms(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "connection_notes",
+"conname": "connection_notes_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "content_reports",
+"conname": "content_reports_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "content_reports",
+"conname": "content_reports_reporter_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (reporter_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "content_reports",
+"conname": "content_reports_resolved_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (resolved_by) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "content_reports",
+"conname": "content_reports_status_allowed",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'reviewing'::text, 'resolved'::text, 'rejected'::text, 'dismissed'::text, 'hidden'::text, 'removed'::text])))"
+},
+{
+"schema": "public",
+"table": "content_reports",
+"conname": "content_reports_target_type_nonempty",
+"contype": "c",
+"definition": "CHECK ((char_length(TRIM(BOTH FROM target_type)) > 0))"
+},
+{
+"schema": "public",
+"table": "custom_order_deliverables",
+"conname": "custom_order_deliverables_custom_request_order_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (custom_request_order_id) REFERENCES custom_request_orders(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "custom_order_deliverables",
+"conname": "custom_order_deliverables_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES auth.users(id)"
+},
+{
+"schema": "public",
+"table": "custom_order_deliverables",
+"conname": "custom_order_deliverables_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "custom_order_message_attachments",
+"conname": "custom_order_message_attachments_message_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (message_id) REFERENCES custom_order_messages(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_order_message_attachments",
+"conname": "custom_order_message_attachments_mime_type_check",
+"contype": "c",
+"definition": "CHECK ((mime_type = ANY (ARRAY['application/pdf'::text, 'image/png'::text, 'image/jpeg'::text, 'image/webp'::text, 'application/zip'::text, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'::text, 'application/vnd.openxmlformats-officedocument.presentationml.presentation'::text])))"
+},
+{
+"schema": "public",
+"table": "custom_order_message_attachments",
+"conname": "custom_order_message_attachments_order_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (order_id) REFERENCES custom_request_orders(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "custom_order_message_attachments",
+"conname": "custom_order_message_attachments_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "custom_order_message_attachments",
+"conname": "custom_order_message_attachments_size_check",
+"contype": "c",
+"definition": "CHECK (((file_size_bytes > 0) AND (file_size_bytes <= 20971520)))"
+},
+{
+"schema": "public",
+"table": "custom_order_message_attachments",
+"conname": "custom_order_message_attachments_storage_path_check",
+"contype": "c",
+"definition": "CHECK ((storage_path ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/[0-9]+-[a-z0-9]{8,32}\\.[a-z0-9]+$'::text))"
+},
+{
+"schema": "public",
+"table": "custom_order_message_attachments",
+"conname": "custom_order_message_attachments_storage_path_unique",
+"contype": "u",
+"definition": "UNIQUE (storage_path)"
+},
+{
+"schema": "public",
+"table": "custom_order_message_attachments",
+"conname": "custom_order_message_attachments_uploader_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (uploader_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "custom_order_messages",
+"conname": "custom_order_messages_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "custom_order_messages",
+"conname": "custom_order_messages_custom_request_order_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (custom_request_order_id) REFERENCES custom_request_orders(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "custom_order_messages",
+"conname": "custom_order_messages_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "custom_order_messages",
+"conname": "custom_order_messages_sender_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (sender_id) REFERENCES auth.users(id)"
+},
+{
+"schema": "public",
+"table": "custom_order_revisions",
+"conname": "custom_order_revisions_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "custom_order_revisions",
+"conname": "custom_order_revisions_custom_request_order_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (custom_request_order_id) REFERENCES custom_request_orders(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "custom_order_revisions",
+"conname": "custom_order_revisions_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "custom_order_settlement_items",
+"conname": "cosi_chk_amounts_core",
+"contype": "c",
+"definition": "CHECK (((gross_amount > 0) AND (mentor_amount > 0) AND (platform_fee_amount >= 0) AND ((platform_fee_amount + mentor_amount) = gross_amount)))"
+},
+{
+"schema": "public",
+"table": "custom_order_settlement_items",
+"conname": "cosi_chk_fee_rate_bounds",
+"contype": "c",
+"definition": "CHECK (((fee_rate >= (0)::numeric) AND (fee_rate <= (1)::numeric)))"
+},
+{
+"schema": "public",
+"table": "custom_order_settlement_items",
+"conname": "custom_order_settlement_items_custom_request_order_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (custom_request_order_id) REFERENCES custom_request_orders(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "custom_order_settlement_items",
+"conname": "custom_order_settlement_items_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE RESTRICT"
+},
+{
+"schema": "public",
+"table": "custom_order_settlement_items",
+"conname": "custom_order_settlement_items_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "custom_order_settlement_items",
+"conname": "custom_order_settlement_items_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'on_hold'::text, 'payable'::text, 'paid'::text, 'cancelled'::text])))"
+},
+{
+"schema": "public",
+"table": "custom_order_settlement_items",
+"conname": "custom_order_settlement_items_student_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_application_attachments",
+"conname": "custom_request_application_attachments_application_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (application_id) REFERENCES custom_request_applications(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "custom_request_application_attachments",
+"conname": "custom_request_application_attachments_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "custom_request_application_attachments",
+"conname": "custom_request_application_attachments_uploaded_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE RESTRICT"
+},
+{
+"schema": "public",
+"table": "custom_request_applications",
+"conname": "custom_request_applications_applicant_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (applicant_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_applications",
+"conname": "custom_request_applications_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "custom_request_applications",
+"conname": "custom_request_applications_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "custom_request_applications",
+"conname": "custom_request_applications_post_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (post_id) REFERENCES custom_request_posts(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "custom_request_applications",
+"conname": "custom_request_applications_proposer_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (proposer_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_applications",
+"conname": "custom_request_applications_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_application_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (application_id) REFERENCES custom_request_applications(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_assigned_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (assigned_mentor_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_buyer_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (buyer_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_client_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (client_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_custom_request_post_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (custom_request_post_id) REFERENCES custom_request_posts(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_expert_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (expert_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE RESTRICT"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_post_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (post_id) REFERENCES custom_request_posts(id) ON DELETE RESTRICT"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_requester_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (requester_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_selected_application_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (selected_application_id) REFERENCES custom_request_applications(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_selected_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (selected_mentor_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_student_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE RESTRICT"
+},
+{
+"schema": "public",
+"table": "custom_request_orders",
+"conname": "custom_request_orders_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_post_attachments",
+"conname": "custom_request_post_attachments_custom_request_post_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (custom_request_post_id) REFERENCES custom_request_posts(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "custom_request_post_attachments",
+"conname": "custom_request_post_attachments_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "custom_request_post_attachments",
+"conname": "custom_request_post_attachments_uploaded_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE RESTRICT"
+},
+{
+"schema": "public",
+"table": "custom_request_posts",
+"conname": "custom_request_posts_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "custom_request_posts",
+"conname": "custom_request_posts_client_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (client_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_posts",
+"conname": "custom_request_posts_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "custom_request_posts",
+"conname": "custom_request_posts_requester_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (requester_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_posts",
+"conname": "custom_request_posts_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['open'::text, 'closed'::text, 'cancelled'::text, 'canceled'::text, 'fulfilled'::text, 'pending'::text, 'draft'::text, 'archived'::text, 'in_review'::text, 'in_progress'::text])))"
+},
+{
+"schema": "public",
+"table": "custom_request_posts",
+"conname": "custom_request_posts_student_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "custom_request_posts",
+"conname": "custom_request_posts_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "device_tokens",
+"conname": "device_tokens_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "device_tokens",
+"conname": "device_tokens_platform_check",
+"contype": "c",
+"definition": "CHECK ((platform = ANY (ARRAY['ios'::text, 'android'::text, 'web'::text, 'unknown'::text])))"
+},
+{
+"schema": "public",
+"table": "device_tokens",
+"conname": "device_tokens_token_key",
+"contype": "u",
+"definition": "UNIQUE (token)"
+},
+{
+"schema": "public",
+"table": "device_tokens",
+"conname": "device_tokens_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "disputes",
+"conname": "disputes_custom_request_order_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (custom_request_order_id) REFERENCES custom_request_orders(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "disputes",
+"conname": "disputes_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "disputes",
+"conname": "disputes_payment_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "disputes",
+"conname": "disputes_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "disputes",
+"conname": "disputes_resolved_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (resolved_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "disputes",
+"conname": "disputes_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['open'::text, 'under_review'::text, 'resolved'::text, 'dismissed'::text, 'escalated'::text, 'on_hold'::text, 'sanction_7d'::text, 'sanction_30d'::text, 'sanction_permanent'::text])))"
+},
+{
+"schema": "public",
+"table": "disputes",
+"conname": "disputes_student_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "disputes",
+"conname": "disputes_submitted_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (submitted_by) REFERENCES auth.users(id)"
+},
+{
+"schema": "public",
+"table": "disputes",
+"conname": "disputes_subscription_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "favorites",
+"conname": "favorites_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES mentor_profiles(user_id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "favorites",
+"conname": "favorites_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "favorites",
+"conname": "favorites_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "favorites",
+"conname": "favorites_user_id_mentor_id_key",
+"contype": "u",
+"definition": "UNIQUE (user_id, mentor_id)"
+},
+{
+"schema": "public",
+"table": "free_question_usage",
+"conname": "free_question_usage_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "free_question_usage",
+"conname": "free_question_usage_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "free_question_usage",
+"conname": "free_question_usage_student_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "free_question_usage",
+"conname": "free_question_usage_thread_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (thread_id) REFERENCES question_threads(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "free_question_usage",
+"conname": "free_question_usage_thread_id_key",
+"contype": "u",
+"definition": "UNIQUE (thread_id)"
+},
+{
+"schema": "public",
+"table": "individual_question_attachments",
+"conname": "individual_question_attachments_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "individual_question_attachments",
+"conname": "individual_question_attachments_message_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (message_id) REFERENCES individual_question_messages(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "individual_question_attachments",
+"conname": "individual_question_attachments_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "individual_question_attachments",
+"conname": "individual_question_attachments_question_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (question_id) REFERENCES individual_questions(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "individual_question_attachments",
+"conname": "uq_iqa_question_storage_path",
+"contype": "u",
+"definition": "UNIQUE (question_id, storage_path)"
+},
+{
+"schema": "public",
+"table": "individual_question_messages",
+"conname": "individual_question_messages_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "individual_question_messages",
+"conname": "individual_question_messages_id_question_unique",
+"contype": "u",
+"definition": "UNIQUE (id, question_id)"
+},
+{
+"schema": "public",
+"table": "individual_question_messages",
+"conname": "individual_question_messages_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "individual_question_messages",
+"conname": "individual_question_messages_question_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (question_id) REFERENCES individual_questions(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "individual_question_transfers",
+"conname": "individual_question_transfers_individual_question_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (individual_question_id) REFERENCES individual_questions(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "individual_question_transfers",
+"conname": "individual_question_transfers_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "individual_question_transfers",
+"conname": "individual_question_transfers_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (individual_question_id)"
+},
+{
+"schema": "public",
+"table": "individual_question_transfers",
+"conname": "individual_question_transfers_room_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (room_id) REFERENCES mentor_student_rooms(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "individual_question_transfers",
+"conname": "individual_question_transfers_student_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "individual_question_transfers",
+"conname": "individual_question_transfers_thread_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (thread_id) REFERENCES question_threads(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_claimed_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (claimed_mentor_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_create_idempotency_key_key",
+"contype": "u",
+"definition": "UNIQUE (create_idempotency_key)"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_designated_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (designated_mentor_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_direct_mentor_required",
+"contype": "c",
+"definition": "CHECK (((question_type <> 'direct'::text) OR (designated_mentor_id IS NOT NULL)))"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_hold_ledger_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (hold_ledger_id) REFERENCES cash_ledger(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_open_claim_consistency",
+"contype": "c",
+"definition": "CHECK (((question_type <> 'open'::text) OR (designated_mentor_id IS NULL)))"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_price_cents_check",
+"contype": "c",
+"definition": "CHECK ((price_cents > 0))"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_question_type_check",
+"contype": "c",
+"definition": "CHECK ((question_type = ANY (ARRAY['direct'::text, 'open'::text])))"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_refund_ledger_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (refund_ledger_id) REFERENCES cash_ledger(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_release_ledger_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (release_ledger_id) REFERENCES cash_ledger(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_required_major_category_check",
+"contype": "c",
+"definition": "CHECK (((required_major_category IS NULL) OR (required_major_category = ANY (ARRAY['메디컬'::text, '교육'::text, '인문'::text, '사회상경'::text, '자연'::text, '공학'::text, '예체능'::text, '기타'::text]))))"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_required_school_tier_check",
+"contype": "c",
+"definition": "CHECK (((required_school_tier IS NULL) OR (required_school_tier = ANY (ARRAY['서연고'::text, '서성한'::text, '중경외시'::text, '건동홍'::text, '그외'::text, '미분류'::text]))))"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['escrowed'::text, 'assigned'::text, 'open'::text, 'claimed'::text, 'answered'::text, 'released'::text, 'expired'::text, 'refunded'::text, 'canceled'::text])))"
+},
+{
+"schema": "public",
+"table": "individual_questions",
+"conname": "individual_questions_student_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "major_category_catalog",
+"conname": "major_category_catalog_code_allowed",
+"contype": "c",
+"definition": "CHECK ((code = ANY (ARRAY['메디컬'::text, '교육'::text, '인문'::text, '사회상경'::text, '자연'::text, '공학'::text, '예체능'::text, '기타'::text])))"
+},
+{
+"schema": "public",
+"table": "major_category_catalog",
+"conname": "major_category_catalog_label_nonempty",
+"contype": "c",
+"definition": "CHECK ((char_length(TRIM(BOTH FROM label)) > 0))"
+},
+{
+"schema": "public",
+"table": "major_category_catalog",
+"conname": "major_category_catalog_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (code)"
+},
+{
+"schema": "public",
+"table": "mentor_academic_record_change_requests",
+"conname": "mentor_academic_record_change_requests_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "mentor_academic_record_change_requests",
+"conname": "mentor_academic_record_change_requests_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "mentor_academic_record_change_requests",
+"conname": "mentor_academic_record_change_requests_reviewed_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "mentor_academic_record_change_requests",
+"conname": "mentor_academic_record_change_requests_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'resubmit_required'::text])))"
+},
+{
+"schema": "public",
+"table": "mentor_activity_events",
+"conname": "mentor_activity_events_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "mentor_activity_events",
+"conname": "mentor_activity_events_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "mentor_activity_events",
+"conname": "mentor_activity_events_reviewed_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "mentor_individual_question_pricing",
+"conname": "mentor_individual_question_pricing_amount_cents_check",
+"contype": "c",
+"definition": "CHECK ((amount_cents > 0))"
+},
+{
+"schema": "public",
+"table": "mentor_individual_question_pricing",
+"conname": "mentor_individual_question_pricing_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "mentor_individual_question_pricing",
+"conname": "mentor_individual_question_pricing_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (mentor_id)"
+},
+{
+"schema": "public",
+"table": "mentor_plans",
+"conname": "mentor_plans_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "mentor_plans",
+"conname": "mentor_plans_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "mentor_profiles",
+"conname": "mentor_profiles_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (user_id)"
+},
+{
+"schema": "public",
+"table": "mentor_profiles",
+"conname": "mentor_profiles_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "mentor_school_verifications",
+"conname": "mentor_school_verifications_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "mentor_school_verifications",
+"conname": "mentor_school_verifications_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "mentor_school_verifications",
+"conname": "mentor_school_verifications_reviewed_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (reviewed_by) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "mentor_school_verifications",
+"conname": "mentor_school_verifications_school_tier_check",
+"contype": "c",
+"definition": "CHECK (((school_tier IS NULL) OR (school_tier = ANY (ARRAY['서연고'::text, '서성한'::text, '중경외시'::text, '건동홍'::text, '그외'::text, '미분류'::text]))))"
+},
+{
+"schema": "public",
+"table": "mentor_school_verifications",
+"conname": "mentor_school_verifications_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'approved'::text, 'rejected'::text, 'resubmit_required'::text, 'superseded'::text])))"
+},
+{
+"schema": "public",
+"table": "mentor_school_verifications",
+"conname": "mentor_school_verifications_verified_major_category_check",
+"contype": "c",
+"definition": "CHECK (((verified_major_category IS NULL) OR (verified_major_category = ANY (ARRAY['메디컬'::text, '교육'::text, '인문'::text, '사회상경'::text, '자연'::text, '공학'::text, '예체능'::text, '기타'::text]))))"
+},
+{
+"schema": "public",
+"table": "mentor_student_rooms",
+"conname": "mentor_student_rooms_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "mentor_student_rooms",
+"conname": "mentor_student_rooms_payment_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "mentor_student_rooms",
+"conname": "mentor_student_rooms_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "mentor_student_rooms",
+"conname": "mentor_student_rooms_student_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "mentor_student_rooms",
+"conname": "mentor_student_rooms_subscription_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "mobile_app_version_policies",
+"conname": "mavp_latest_ge_min_chk",
+"contype": "c",
+"definition": "CHECK ((latest_build >= min_supported_build))"
+},
+{
+"schema": "public",
+"table": "mobile_app_version_policies",
+"conname": "mavp_min_build_chk",
+"contype": "c",
+"definition": "CHECK ((min_supported_build >= 1))"
+},
+{
+"schema": "public",
+"table": "mobile_app_version_policies",
+"conname": "mavp_platform_chk",
+"contype": "c",
+"definition": "CHECK ((platform = ANY (ARRAY['android'::text, 'ios'::text])))"
+},
+{
+"schema": "public",
+"table": "mobile_app_version_policies",
+"conname": "mavp_store_url_chk",
+"contype": "c",
+"definition": "CHECK (((store_url IS NULL) OR ((store_url ~~ 'https://%'::text) AND ((store_url ~~ 'https://play.google.com/%'::text) OR (store_url ~~ 'https://apps.apple.com/%'::text) OR (store_url ~~ 'https://itunes.apple.com/%'::text)))))"
+},
+{
+"schema": "public",
+"table": "mobile_app_version_policies",
+"conname": "mobile_app_version_policies_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (platform)"
+},
+{
+"schema": "public",
+"table": "notification_deliveries",
+"conname": "notification_deliveries_device_token_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (device_token_id) REFERENCES device_tokens(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "notification_deliveries",
+"conname": "notification_deliveries_outbox_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (outbox_id) REFERENCES notification_outbox(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "notification_deliveries",
+"conname": "notification_deliveries_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "notification_deliveries",
+"conname": "notification_deliveries_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'sent'::text, 'failed'::text, 'dead'::text, 'skipped'::text])))"
+},
+{
+"schema": "public",
+"table": "notification_deliveries",
+"conname": "notification_deliveries_uq",
+"contype": "u",
+"definition": "UNIQUE (outbox_id, device_token_id)"
+},
+{
+"schema": "public",
+"table": "notification_outbox",
+"conname": "notification_outbox_notification_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (notification_id) REFERENCES notifications(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "notification_outbox",
+"conname": "notification_outbox_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "notification_outbox",
+"conname": "notification_outbox_recipient_dedup_uq",
+"contype": "u",
+"definition": "UNIQUE (recipient_user_id, dedup_key)"
+},
+{
+"schema": "public",
+"table": "notification_outbox",
+"conname": "notification_outbox_recipient_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (recipient_user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "notification_outbox",
+"conname": "notification_outbox_status_chk",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'leased'::text, 'sent'::text, 'failed'::text, 'dead'::text, 'suppressed'::text])))"
+},
+{
+"schema": "public",
+"table": "notification_settings",
+"conname": "notification_settings_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (user_id)"
+},
+{
+"schema": "public",
+"table": "notification_settings",
+"conname": "notification_settings_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "notification_transport_config",
+"conname": "notification_transport_config_id_check",
+"contype": "c",
+"definition": "CHECK (id)"
+},
+{
+"schema": "public",
+"table": "notification_transport_config",
+"conname": "notification_transport_config_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "notifications",
+"conname": "notifications_at_least_one_recipient",
+"contype": "c",
+"definition": "CHECK (((recipient_user_id IS NOT NULL) OR (user_id IS NOT NULL) OR (recipient_id IS NOT NULL) OR (student_id IS NOT NULL) OR (mentor_id IS NOT NULL) OR (target_user_id IS NOT NULL) OR (owner_id IS NOT NULL)))"
+},
+{
+"schema": "public",
+"table": "notifications",
+"conname": "notifications_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "notifications",
+"conname": "notifications_owner_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "notifications",
+"conname": "notifications_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "notifications",
+"conname": "notifications_recipient_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (recipient_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "notifications",
+"conname": "notifications_recipient_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (recipient_user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "notifications",
+"conname": "notifications_student_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "notifications",
+"conname": "notifications_target_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (target_user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "notifications",
+"conname": "notifications_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "order_events",
+"conname": "order_events_custom_request_order_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (custom_request_order_id) REFERENCES custom_request_orders(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "order_events",
+"conname": "order_events_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "order_payments",
+"conname": "order_payments_custom_request_order_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (custom_request_order_id) REFERENCES custom_request_orders(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "order_payments",
+"conname": "order_payments_payment_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE RESTRICT"
+},
+{
+"schema": "public",
+"table": "order_payments",
+"conname": "order_payments_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "payments",
+"conname": "payments_idempotency_key_key",
+"contype": "u",
+"definition": "UNIQUE (idempotency_key)"
+},
+{
+"schema": "public",
+"table": "payments",
+"conname": "payments_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "payments",
+"conname": "payments_payer_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (payer_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "payments",
+"conname": "payments_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "payments",
+"conname": "payments_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'succeeded'::text, 'failed'::text, 'canceled'::text, 'refunded'::text, 'paid'::text, 'success'::text, 'complete'::text, 'captured'::text])))"
+},
+{
+"schema": "public",
+"table": "payments",
+"conname": "payments_student_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "payments",
+"conname": "payments_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "payout_run_items",
+"conname": "payout_run_items_amount_chk",
+"contype": "c",
+"definition": "CHECK (((mentor_amount_cents >= 0) AND (gross_cents >= 0)))"
+},
+{
+"schema": "public",
+"table": "payout_run_items",
+"conname": "payout_run_items_ledger_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (ledger_id) REFERENCES cash_ledger(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "payout_run_items",
+"conname": "payout_run_items_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE RESTRICT"
+},
+{
+"schema": "public",
+"table": "payout_run_items",
+"conname": "payout_run_items_payout_run_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (payout_run_id) REFERENCES payout_runs(id) ON DELETE RESTRICT"
+},
+{
+"schema": "public",
+"table": "payout_run_items",
+"conname": "payout_run_items_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "payout_run_items",
+"conname": "payout_run_items_source_global_uq",
+"contype": "u",
+"definition": "UNIQUE (source_type, source_id)"
+},
+{
+"schema": "public",
+"table": "payout_run_items",
+"conname": "payout_run_items_source_type_check",
+"contype": "c",
+"definition": "CHECK ((source_type = ANY (ARRAY['subscription'::text, 'custom_request'::text, 'individual_question'::text])))"
+},
+{
+"schema": "public",
+"table": "payout_run_items",
+"conname": "payout_run_items_unique",
+"contype": "u",
+"definition": "UNIQUE (payout_run_id, source_type, source_id)"
+},
+{
+"schema": "public",
+"table": "payout_runs",
+"conname": "payout_runs_idem_unique",
+"contype": "u",
+"definition": "UNIQUE (idempotency_key)"
+},
+{
+"schema": "public",
+"table": "payout_runs",
+"conname": "payout_runs_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "payout_runs",
+"conname": "payout_runs_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['executing'::text, 'completed'::text])))"
+},
+{
+"schema": "public",
+"table": "payout_settings",
+"conname": "payout_settings_id_check",
+"contype": "c",
+"definition": "CHECK ((id = 1))"
+},
+{
+"schema": "public",
+"table": "payout_settings",
+"conname": "payout_settings_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "post_reactions",
+"conname": "post_reactions_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "post_reactions",
+"conname": "post_reactions_post_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (post_id) REFERENCES community_posts(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "post_reactions",
+"conname": "post_reactions_type_check",
+"contype": "c",
+"definition": "CHECK ((type = ANY (ARRAY['like'::text, 'scrap'::text])))"
+},
+{
+"schema": "public",
+"table": "post_reactions",
+"conname": "post_reactions_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "post_reactions",
+"conname": "post_reactions_user_id_post_id_type_key",
+"contype": "u",
+"definition": "UNIQUE (user_id, post_id, type)"
+},
+{
+"schema": "public",
+"table": "promotion_campaigns",
+"conname": "promotion_campaigns_created_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "promotion_campaigns",
+"conname": "promotion_campaigns_date_range",
+"contype": "c",
+"definition": "CHECK (((starts_at IS NULL) OR (ends_at IS NULL) OR (ends_at >= starts_at)))"
+},
+{
+"schema": "public",
+"table": "promotion_campaigns",
+"conname": "promotion_campaigns_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "promotion_campaigns",
+"conname": "promotion_campaigns_title_nonempty",
+"contype": "c",
+"definition": "CHECK ((char_length(TRIM(BOTH FROM title)) > 0))"
+},
+{
+"schema": "public",
+"table": "promotion_campaigns",
+"conname": "promotion_campaigns_updated_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "question_attachments",
+"conname": "question_attachments_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "question_attachments",
+"conname": "question_attachments_message_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (message_id) REFERENCES question_messages(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "question_attachments",
+"conname": "question_attachments_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "question_attachments",
+"conname": "question_attachments_storage_path_key",
+"contype": "u",
+"definition": "UNIQUE (storage_path)"
+},
+{
+"schema": "public",
+"table": "question_attachments",
+"conname": "question_attachments_thread_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (thread_id) REFERENCES question_threads(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "question_messages",
+"conname": "question_messages_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "question_messages",
+"conname": "question_messages_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "question_messages",
+"conname": "question_messages_thread_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (thread_id) REFERENCES question_threads(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "question_threads",
+"conname": "question_threads_mastery_status_check",
+"contype": "c",
+"definition": "CHECK ((mastery_status = ANY (ARRAY['unknown'::text, 'wrong'::text, 'review'::text, 'mastered'::text])))"
+},
+{
+"schema": "public",
+"table": "question_threads",
+"conname": "question_threads_mentor_student_room_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_student_room_id) REFERENCES mentor_student_rooms(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "question_threads",
+"conname": "question_threads_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "question_threads",
+"conname": "question_threads_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'answered'::text, 'confirmed'::text, 'open'::text, 'closed'::text, 'archived'::text])))"
+},
+{
+"schema": "public",
+"table": "question_threads",
+"conname": "question_threads_subject_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (subject) REFERENCES subjects(code)"
+},
+{
+"schema": "public",
+"table": "refunds",
+"conname": "refunds_billing_event_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (billing_event_id) REFERENCES subscription_billing_events(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "refunds",
+"conname": "refunds_custom_request_order_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (custom_request_order_id) REFERENCES custom_request_orders(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "refunds",
+"conname": "refunds_payment_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "refunds",
+"conname": "refunds_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "refunds",
+"conname": "refunds_processed_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (processed_by) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "refunds",
+"conname": "refunds_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'succeeded'::text, 'rejected'::text, 'canceled'::text])))"
+},
+{
+"schema": "public",
+"table": "refunds",
+"conname": "refunds_subscription_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "refunds",
+"conname": "refunds_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "reviews",
+"conname": "reviews_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "reviews",
+"conname": "reviews_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "reviews",
+"conname": "reviews_moderated_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (moderated_by) REFERENCES auth.users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "reviews",
+"conname": "reviews_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "reviews",
+"conname": "reviews_rating_check",
+"contype": "c",
+"definition": "CHECK (((rating >= 1) AND (rating <= 5)))"
+},
+{
+"schema": "public",
+"table": "reviews_duplicates_archive",
+"conname": "reviews_duplicates_archive_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "reviews_quarantine_archive",
+"conname": "reviews_quarantine_archive_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "scan_annotations",
+"conname": "scan_annotations_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "scan_annotations",
+"conname": "scan_annotations_author_role_check",
+"contype": "c",
+"definition": "CHECK ((author_role = ANY (ARRAY['student'::text, 'mentor'::text])))"
+},
+{
+"schema": "public",
+"table": "scan_annotations",
+"conname": "scan_annotations_mentor_student_room_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_student_room_id) REFERENCES mentor_student_rooms(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "scan_annotations",
+"conname": "scan_annotations_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "school_tier_catalog",
+"conname": "school_tier_catalog_code_allowed",
+"contype": "c",
+"definition": "CHECK ((code = ANY (ARRAY['서연고'::text, '서성한'::text, '중경외시'::text, '건동홍'::text, '그외'::text, '미분류'::text])))"
+},
+{
+"schema": "public",
+"table": "school_tier_catalog",
+"conname": "school_tier_catalog_label_nonempty",
+"contype": "c",
+"definition": "CHECK ((char_length(TRIM(BOTH FROM label)) > 0))"
+},
+{
+"schema": "public",
+"table": "school_tier_catalog",
+"conname": "school_tier_catalog_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (code)"
+},
+{
+"schema": "public",
+"table": "school_tier_mappings",
+"conname": "school_tier_mappings_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "school_tier_mappings",
+"conname": "school_tier_mappings_school_name_nonempty",
+"contype": "c",
+"definition": "CHECK ((char_length(TRIM(BOTH FROM school_name)) > 0))"
+},
+{
+"schema": "public",
+"table": "school_tier_mappings",
+"conname": "school_tier_mappings_school_tier_code_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (school_tier_code) REFERENCES school_tier_catalog(code) ON UPDATE RESTRICT ON DELETE RESTRICT"
+},
+{
+"schema": "public",
+"table": "shortform_posts",
+"conname": "shortform_posts_author_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (author_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "shortform_posts",
+"conname": "shortform_posts_author_idem_key",
+"contype": "u",
+"definition": "UNIQUE (author_id, create_idempotency_key)"
+},
+{
+"schema": "public",
+"table": "shortform_posts",
+"conname": "shortform_posts_author_role_chk",
+"contype": "c",
+"definition": "CHECK ((author_role = ANY (ARRAY['mentor'::text, 'student'::text, 'admin'::text, 'user'::text])))"
+},
+{
+"schema": "public",
+"table": "shortform_posts",
+"conname": "shortform_posts_creator_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (creator_id) REFERENCES auth.users(id)"
+},
+{
+"schema": "public",
+"table": "shortform_posts",
+"conname": "shortform_posts_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "shortform_posts",
+"conname": "shortform_posts_status_chk",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['draft'::text, 'published'::text, 'hidden'::text])))"
+},
+{
+"schema": "public",
+"table": "shortform_reactions",
+"conname": "shortform_reactions_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "shortform_reactions",
+"conname": "shortform_reactions_shortform_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (shortform_id) REFERENCES shortform_posts(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "shortform_reactions",
+"conname": "shortform_reactions_type_check",
+"contype": "c",
+"definition": "CHECK ((type = ANY (ARRAY['like'::text, 'scrap'::text])))"
+},
+{
+"schema": "public",
+"table": "shortform_reactions",
+"conname": "shortform_reactions_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "shortform_reactions",
+"conname": "shortform_reactions_user_id_shortform_id_type_key",
+"contype": "u",
+"definition": "UNIQUE (user_id, shortform_id, type)"
+},
+{
+"schema": "public",
+"table": "shortform_view_events",
+"conname": "shortform_view_events_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (post_id, event_key)"
+},
+{
+"schema": "public",
+"table": "shortform_view_events",
+"conname": "shortform_view_events_post_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (post_id) REFERENCES shortform_posts(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "subjects",
+"conname": "subjects_parent_code_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (parent_code) REFERENCES subjects(code)"
+},
+{
+"schema": "public",
+"table": "subjects",
+"conname": "subjects_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (code)"
+},
+{
+"schema": "public",
+"table": "subscription_billing_events",
+"conname": "subscription_billing_events_event_type_check",
+"contype": "c",
+"definition": "CHECK ((event_type = ANY (ARRAY['initial'::text, 'renewal'::text, 'renewal_failed'::text, 'expired'::text, 'cancel_scheduled'::text, 'canceled'::text, 'refund'::text])))"
+},
+{
+"schema": "public",
+"table": "subscription_billing_events",
+"conname": "subscription_billing_events_idempotency_key_key",
+"contype": "u",
+"definition": "UNIQUE (idempotency_key)"
+},
+{
+"schema": "public",
+"table": "subscription_billing_events",
+"conname": "subscription_billing_events_ledger_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (ledger_id) REFERENCES cash_ledger(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "subscription_billing_events",
+"conname": "subscription_billing_events_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "subscription_billing_events",
+"conname": "subscription_billing_events_payment_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "subscription_billing_events",
+"conname": "subscription_billing_events_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "subscription_billing_events",
+"conname": "subscription_billing_events_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'processing'::text, 'succeeded'::text, 'failed'::text, 'skipped'::text, 'refunded'::text])))"
+},
+{
+"schema": "public",
+"table": "subscription_billing_events",
+"conname": "subscription_billing_events_student_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "subscription_billing_events",
+"conname": "subscription_billing_events_subscription_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "subscription_checkout_anomalies",
+"conname": "subscription_checkout_anomalies_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "ssi_amounts_core",
+"contype": "c",
+"definition": "CHECK (((gross_cents > 0) AND (platform_fee_cents >= 0) AND (mentor_amount_cents > 0) AND ((platform_fee_cents + mentor_amount_cents) = gross_cents)))"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "ssi_fee_rate_bounds",
+"contype": "c",
+"definition": "CHECK (((fee_rate >= (0)::numeric) AND (fee_rate <= (1)::numeric)))"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "ssi_paid_at_required",
+"contype": "c",
+"definition": "CHECK (((status <> 'paid'::text) OR (paid_at IS NOT NULL)))"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "ssi_unique_billing_event",
+"contype": "u",
+"definition": "UNIQUE (billing_event_id)"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "subscription_settlement_items_billing_event_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (billing_event_id) REFERENCES subscription_billing_events(id) ON DELETE RESTRICT"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "subscription_settlement_items_event_type_check",
+"contype": "c",
+"definition": "CHECK ((event_type = ANY (ARRAY['initial'::text, 'renewal'::text])))"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "subscription_settlement_items_idempotency_key_key",
+"contype": "u",
+"definition": "UNIQUE (idempotency_key)"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "subscription_settlement_items_ledger_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (ledger_id) REFERENCES cash_ledger(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "subscription_settlement_items_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE RESTRICT"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "subscription_settlement_items_payment_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "subscription_settlement_items_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "subscription_settlement_items_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['accruing'::text, 'pending'::text, 'paid'::text, 'hold'::text, 'canceled'::text])))"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "subscription_settlement_items_student_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "subscription_settlement_items",
+"conname": "subscription_settlement_items_subscription_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (subscription_id) REFERENCES subscriptions(id) ON DELETE RESTRICT"
+},
+{
+"schema": "public",
+"table": "subscriptions",
+"conname": "subscriptions_last_billing_event_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (last_billing_event_id) REFERENCES subscription_billing_events(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "subscriptions",
+"conname": "subscriptions_last_payment_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (last_payment_id) REFERENCES payments(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "subscriptions",
+"conname": "subscriptions_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "subscriptions",
+"conname": "subscriptions_payment_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (payment_id) REFERENCES payments(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "subscriptions",
+"conname": "subscriptions_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "subscriptions",
+"conname": "subscriptions_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['pending'::text, 'active'::text, 'past_due'::text, 'cancel_scheduled'::text, 'canceled'::text, 'expired'::text, 'refunded'::text])))"
+},
+{
+"schema": "public",
+"table": "subscriptions",
+"conname": "subscriptions_student_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "user_blocks",
+"conname": "user_blocks_blocked_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (blocked_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "user_blocks",
+"conname": "user_blocks_blocker_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (blocker_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "user_blocks",
+"conname": "user_blocks_check",
+"contype": "c",
+"definition": "CHECK ((blocker_id <> blocked_id))"
+},
+{
+"schema": "public",
+"table": "user_blocks",
+"conname": "user_blocks_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (blocker_id, blocked_id)"
+},
+{
+"schema": "public",
+"table": "user_consent_records",
+"conname": "user_consent_records_consent_actor_check",
+"contype": "c",
+"definition": "CHECK ((consent_actor = ANY (ARRAY['user'::text, 'guardian'::text])))"
+},
+{
+"schema": "public",
+"table": "user_consent_records",
+"conname": "user_consent_records_consent_type_check",
+"contype": "c",
+"definition": "CHECK ((consent_type = ANY (ARRAY['terms'::text, 'privacy'::text, 'marketing'::text, 'minor_guardian_consent'::text])))"
+},
+{
+"schema": "public",
+"table": "user_consent_records",
+"conname": "user_consent_records_idempotency_key_key",
+"contype": "u",
+"definition": "UNIQUE (idempotency_key)"
+},
+{
+"schema": "public",
+"table": "user_consent_records",
+"conname": "user_consent_records_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "user_consent_records",
+"conname": "user_consent_records_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "user_deletion_log",
+"conname": "user_deletion_log_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "user_deletion_log",
+"conname": "user_deletion_log_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id)"
+},
+{
+"schema": "public",
+"table": "user_deletion_log",
+"conname": "user_deletion_log_user_id_key",
+"contype": "u",
+"definition": "UNIQUE (user_id)"
+},
+{
+"schema": "public",
+"table": "user_warnings",
+"conname": "user_warnings_issued_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (issued_by) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "user_warnings",
+"conname": "user_warnings_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "user_warnings",
+"conname": "user_warnings_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "users",
+"conname": "users_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "users",
+"conname": "users_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "users",
+"conname": "users_role_check",
+"contype": "c",
+"definition": "CHECK ((role = ANY (ARRAY['student'::text, 'mentor'::text, 'admin'::text])))"
+},
+{
+"schema": "public",
+"table": "users",
+"conname": "users_status_allowed",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['active'::text, 'suspended'::text, 'banned'::text, 'deleted'::text])))"
+},
+{
+"schema": "public",
+"table": "users",
+"conname": "users_status_changed_by_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (status_changed_by) REFERENCES users(id) ON DELETE SET NULL"
+},
+{
+"schema": "public",
+"table": "verification_logs",
+"conname": "verification_logs_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "verification_logs",
+"conname": "verification_logs_user_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE"
+},
+{
+"schema": "public",
+"table": "withdrawals",
+"conname": "withdrawals_amount_cash_check",
+"contype": "c",
+"definition": "CHECK ((amount_cash > 0))"
+},
+{
+"schema": "public",
+"table": "withdrawals",
+"conname": "withdrawals_mentor_id_fkey",
+"contype": "f",
+"definition": "FOREIGN KEY (mentor_id) REFERENCES users(id)"
+},
+{
+"schema": "public",
+"table": "withdrawals",
+"conname": "withdrawals_pkey",
+"contype": "p",
+"definition": "PRIMARY KEY (id)"
+},
+{
+"schema": "public",
+"table": "withdrawals",
+"conname": "withdrawals_status_check",
+"contype": "c",
+"definition": "CHECK ((status = ANY (ARRAY['requested'::text, 'paid'::text])))"
+}
+]

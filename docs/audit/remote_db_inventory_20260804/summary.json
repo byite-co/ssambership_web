@@ -1,0 +1,59 @@
+{
+ "project_id": "lbeqxarxothkmzqvpudy",
+ "generated_at": "2026-08-04",
+ "app_schemas": [
+  "public",
+  "api_web_v1",
+  "api_app_v1",
+  "core_private"
+ ],
+ "counts": {
+  "schemas": 4,
+  "extensions": 6,
+  "tables": 79,
+  "columns": 933,
+  "constraints": 364,
+  "indexes": 240,
+  "views": 7,
+  "matviews": 0,
+  "functions": 242,
+  "triggers": 95,
+  "policies": 220,
+  "table_grant_rows": 227,
+  "default_privileges": 6,
+  "buckets": 13,
+  "sequences": 0,
+  "publications": 2,
+  "publication_tables": 14,
+  "enums": 0,
+  "domains": 0,
+  "composite_types": 1,
+  "function_defs_extracted": 13
+ },
+ "functions_by_schema": {
+  "public": 213,
+  "api_web_v1": 16,
+  "api_app_v1": 6,
+  "core_private": 7
+ },
+ "function_defs_extracted_by_schema": {
+  "api_app_v1": 6,
+  "core_private": 7
+ },
+ "function_defs_not_extracted": {
+  "public": {
+   "count": 213,
+   "reason": "context budget exhausted; prosrc md5 fingerprints available in functions.json"
+  },
+  "api_web_v1": {
+   "count": 16,
+   "reason": "context budget exhausted; prosrc md5 fingerprints available in functions.json"
+  }
+ },
+ "notes": [
+  "All 79 base tables are in schema public; all have relrowsecurity=true, relforcerowsecurity=false, owner postgres.",
+  "api_web_v1/api_app_v1 contain only views+functions; core_private only functions.",
+  "sequences: none in app schemas; enums/domains: none; 1 composite type (public.individual_question_escrow_result), see enums.json.",
+  "Every transferred payload was md5-verified against a server-side hash."
+ ]
+}
