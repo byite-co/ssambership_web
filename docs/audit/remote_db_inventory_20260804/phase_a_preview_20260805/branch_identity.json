@@ -1,0 +1,17 @@
+{
+ "TEMP_BRANCH_TYPE": "preview (is_default=false, parent_project_ref set)",
+ "TEMP_BRANCH_ID": "d9ff1a6b-2d88-44db-8b55-b0707599fbf3",
+ "TEMP_BRANCH_NAME": "pr61-phase-a-corrected-baseline-20260805",
+ "TEMP_BRANCH_PROJECT_REF": "ydoryiaexclkowbvkiep",
+ "PARENT_PROJECT_REF": "lbeqxarxothkmzqvpudy",
+ "PARENT_IS_DEFAULT_BRANCH": "main (is_default=true)",
+ "BRANCH_CREATED_AT_UTC": "2026-08-04T16:09:17Z",
+ "WITH_DATA": false,
+ "ESTIMATED_HOURLY_COST_USD": 0.01344,
+ "TARGET_COST_CAP_USD": 0.05,
+ "HARD_LIFETIME_LIMIT": "2026-08-04T18:54:17Z",
+ "GATE_T0_2H10M": "2026-08-04T18:19:17Z",
+ "GATE_T0_2H20M": "2026-08-04T18:29:17Z",
+ "GATE_T0_2H30M": "2026-08-04T18:39:17Z",
+ "GATE_DELETE_AT": "2026-08-04T18:49:17Z"
+}

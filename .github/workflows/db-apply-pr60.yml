@@ -1,0 +1,258 @@
+name: db apply PR60 IQ guard
+
+# PR #60 의 guard migration(20260804113000_iq_attachment_message_author_guard)을
+# 정식 migration 경로로 부모 프로젝트에 적용하거나 되돌린다.
+#
+# 전제: Strategy A repair 가 끝나 부모 ledger 에 pack 63본이 기록돼 있어야 한다.
+#       그래야 `supabase db push` 가 이 1본만 pending 으로 보고 적용한다.
+#
+# 안전 장치 (4중)
+#   1. workflow_dispatch 전용.
+#   2. Environment `supabase-db-adoption` 승인 게이트.
+#   3. mode 기본값 dry-run.
+#   4. confirmation 문자열 정확 일치.
+#
+# 필요한 Environment secret
+#   SUPABASE_DB_URL   부모 프로젝트 Postgres 연결 문자열
+#
+# 이 워크플로가 하지 않는 것
+#   * 계약 검증 harness 실행 (부모에 테스트 데이터를 쓰지 않는다 — 로컬/preview 전용이다)
+#   * baseline 63본 재적용 (전량 적용 플래그를 쓰지 않는다. pending 1본만 적용한다)
+#   * 사용자 데이터 변경
+#
+# 참고: 위 두 금지 항목은 scripts/verify/baseline/validate_db_workflows.py 의 R9 가
+#       토큰 수준에서 강제한다. 그래서 이 파일에는 해당 토큰이 부정문으로도 등장하지 않는다.
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: '실행 모드'
+        type: choice
+        required: true
+        default: dry-run
+        options:
+          - dry-run
+          - apply
+          - rollback
+      confirmation:
+        description: 'apply=APPLY_PR60_20260804113000_TO_lbeqxarxothkmzqvpudy / rollback=ROLLBACK_PR60_20260804113000_ON_lbeqxarxothkmzqvpudy'
+        type: string
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-adoption-repair-parent   # repair 워크플로와 같은 그룹 — 부모에 동시 실행 금지
+  cancel-in-progress: false
+
+env:
+  SUPABASE_CLI_VERSION: '2.111.0'   # pinned — latest floating 금지
+  PARENT_PROJECT_REF: lbeqxarxothkmzqvpudy
+  PR60_VERSION: '20260804113000'
+  PR60_NAME: iq_attachment_message_author_guard
+  CONFIRM_APPLY: APPLY_PR60_20260804113000_TO_lbeqxarxothkmzqvpudy
+  CONFIRM_ROLLBACK: ROLLBACK_PR60_20260804113000_ON_lbeqxarxothkmzqvpudy
+  EXPECT_LEDGER_BEFORE_APPLY: '63'
+  EXPECT_LEDGER_AFTER_APPLY: '64'
+
+jobs:
+  apply:
+    name: 'PR60 guard (${{ inputs.mode }})'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: supabase-db-adoption
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 확인 문자열 검사
+        shell: bash
+        env:
+          MODE: ${{ inputs.mode }}
+          GIVEN: ${{ inputs.confirmation }}
+        run: |
+          set -euo pipefail
+          case "$MODE" in
+            dry-run) echo "MODE=dry-run — 부모에 어떤 쓰기도 하지 않는다"; exit 0 ;;
+            apply)    WANT="$CONFIRM_APPLY" ;;
+            rollback) WANT="$CONFIRM_ROLLBACK" ;;
+            *) echo "::error::알 수 없는 mode: $MODE"; exit 1 ;;
+          esac
+          if [ "$GIVEN" != "$WANT" ]; then
+            echo "::error::confirmation 불일치. mode=$MODE 에는 정확히 '$WANT' 가 필요하다."
+            exit 1
+          fi
+          echo "CONFIRMATION: OK ($MODE)"
+
+      - name: ref 전제 검증 (통합 pack 64본 · guard 파일 · rollback 파일)
+        shell: bash
+        run: |
+          set -euo pipefail
+          MIG="supabase/migrations/${PR60_VERSION}_${PR60_NAME}.sql"
+          SRC="supabase/sql/${PR60_VERSION}_${PR60_NAME}.sql"
+          RB="supabase/rollback/${PR60_VERSION}_${PR60_NAME}_rollback.sql"
+          for f in "$MIG" "$RB"; do
+            [ -f "$f" ] || { echo "::error::$f 이 이 ref 에 없다 (PR #60·#61 병합본에서 실행해야 한다)"; exit 1; }
+          done
+          if [ -f "$SRC" ]; then
+            a=$(sha256sum "$SRC" | cut -d' ' -f1); b=$(sha256sum "$MIG" | cut -d' ' -f1)
+            [ "$a" = "$b" ] || { echo "::error::source 와 migration 의 SHA-256 이 다르다"; exit 1; }
+            echo "source↔migration SHA-256 일치: ${a:0:16}…"
+          fi
+          grep -q MESSAGE_AUTHOR_MISMATCH "$MIG" \
+            || { echo "::error::migration 에 MESSAGE_AUTHOR_MISMATCH 가드가 없다"; exit 1; }
+          cnt=$(ls supabase/migrations/*.sql | wc -l)
+          echo "migration 파일 수: $cnt"
+          [ "$cnt" = "64" ] || { echo "::error::migration 파일이 $cnt 개다 — 통합 pack 64본에서 실행해야 한다"; exit 1; }
+          last=$(ls supabase/migrations/*.sql | sort | tail -1 | xargs basename | cut -c1-14)
+          [ "$last" = "$PR60_VERSION" ] || { echo "::error::마지막 version 이 $last 다 ($PR60_VERSION 기대)"; exit 1; }
+
+      - name: pack 정적 검증 재실행 (64본)
+        run: python3 scripts/verify/baseline/validate_native_migration_pack.py --with-pr60 supabase/migrations
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: ${{ env.SUPABASE_CLI_VERSION }}
+
+      - name: CLI 계약 확인
+        shell: bash
+        run: |
+          set -euo pipefail
+          supabase --version | tee cli-version.txt
+          supabase db push --help > cli-push-help.txt 2>&1 || true
+          supabase migration repair --help > cli-repair-help.txt 2>&1 || true
+          cat cli-push-help.txt
+          grep -q -- '--db-url' cli-push-help.txt \
+            || { echo "::error::db push 에 --db-url 플래그가 없다 — CLI 계약이 바뀌었다"; exit 1; }
+          grep -q -- '--status' cli-repair-help.txt \
+            || { echo "::error::migration repair 에 --status 플래그가 없다"; exit 1; }
+          echo "CLI_CONTRACT: OK"
+
+      - name: 부모 사전 상태 캡처 (읽기 전용)
+        if: inputs.mode != 'dry-run'
+        shell: bash
+        env:
+          PGURL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          [ -n "$PGURL" ] || { echo "::error::Environment secret SUPABASE_DB_URL 이 없다"; exit 1; }
+          mkdir -p parent-evidence
+          psql "$PGURL" -At -c \
+            "select version from supabase_migrations.schema_migrations order by version" \
+            > parent-evidence/ledger_before.txt
+          before=$(wc -l < parent-evidence/ledger_before.txt)
+          echo "ledger_before=$before"
+          if [ "${{ inputs.mode }}" = "apply" ]; then
+            [ "$before" = "$EXPECT_LEDGER_BEFORE_APPLY" ] \
+              || { echo "::error::ledger $before 행 ($EXPECT_LEDGER_BEFORE_APPLY 기대). Strategy A repair 가 선행돼야 한다."; exit 1; }
+            grep -qx "$PR60_VERSION" parent-evidence/ledger_before.txt \
+              && { echo "::error::$PR60_VERSION 이 이미 적용됐다"; exit 1; }
+          else
+            [ "$before" = "$EXPECT_LEDGER_AFTER_APPLY" ] \
+              || { echo "::error::ledger $before 행 ($EXPECT_LEDGER_AFTER_APPLY 기대)"; exit 1; }
+            grep -qx "$PR60_VERSION" parent-evidence/ledger_before.txt \
+              || { echo "::error::$PR60_VERSION 이 ledger 에 없다 — rollback 대상이 아니다"; exit 1; }
+          fi
+          psql "$PGURL" -At -c \
+            "select 'md5='||md5(prosrc) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+             where n.nspname='public' and p.proname='add_individual_question_attachment'" \
+            > parent-evidence/fn_md5_before.txt
+          cat parent-evidence/fn_md5_before.txt
+          bash scripts/verify/baseline/parent_schema_fingerprint.sh "$PGURL" > parent-evidence/fingerprint_before.txt
+
+      - name: DRY-RUN — 실행될 명령만 출력
+        if: inputs.mode == 'dry-run'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== dry-run: apply 모드에서 실행될 명령 ==="
+          echo "supabase db push --db-url \$SUPABASE_DB_URL          # pending 1본(${PR60_VERSION})만 적용"
+          echo "=== dry-run: rollback 모드에서 실행될 명령 ==="
+          echo "psql \$SUPABASE_DB_URL -f supabase/rollback/${PR60_VERSION}_${PR60_NAME}_rollback.sql"
+          echo "supabase migration repair --status reverted ${PR60_VERSION} --db-url \$SUPABASE_DB_URL"
+          echo "=== 부모 DB 접속 0회 · 쓰기 0회 ==="
+
+      - name: APPLY — pending migration 1본 적용
+        if: inputs.mode == 'apply'
+        shell: bash
+        env:
+          PGURL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          supabase db push --db-url "$PGURL" 2>&1 | tee push.log
+
+      - name: ROLLBACK — rollback SQL 적용 후 history 되돌림
+        if: inputs.mode == 'rollback'
+        shell: bash
+        env:
+          PGURL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          psql "$PGURL" -v ON_ERROR_STOP=1 \
+            -f "supabase/rollback/${PR60_VERSION}_${PR60_NAME}_rollback.sql" 2>&1 | tee rollback.log
+          supabase migration repair --status reverted "$PR60_VERSION" --db-url "$PGURL"
+
+      - name: 부모 사후 검증
+        if: inputs.mode != 'dry-run'
+        shell: bash
+        env:
+          PGURL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          set -euo pipefail
+          psql "$PGURL" -At -c \
+            "select version from supabase_migrations.schema_migrations order by version" \
+            > parent-evidence/ledger_after.txt
+          after=$(wc -l < parent-evidence/ledger_after.txt)
+          if [ "${{ inputs.mode }}" = "apply" ]; then want="$EXPECT_LEDGER_AFTER_APPLY"; else want="$EXPECT_LEDGER_BEFORE_APPLY"; fi
+          echo "ledger_after=$after (기대 $want)"
+          [ "$after" = "$want" ] || { echo "::error::ledger 행 수가 기대와 다르다"; exit 1; }
+          diff <(sort parent-evidence/ledger_before.txt) <(sort parent-evidence/ledger_after.txt) \
+            | grep -E '^[<>]' | sed 's/^[<>] //' | sort > parent-evidence/ledger_delta.txt || true
+          d=$(cat parent-evidence/ledger_delta.txt)
+          [ "$d" = "$PR60_VERSION" ] || { echo "::error::ledger 변경분이 '$d' 다 ($PR60_VERSION 만 기대)"; exit 1; }
+          echo "LEDGER_DELTA: $PR60_VERSION 1건"
+
+          psql "$PGURL" -At -c \
+            "select 'md5='||md5(prosrc) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+             where n.nspname='public' and p.proname='add_individual_question_attachment'" \
+            > parent-evidence/fn_md5_after.txt
+          echo "fn md5 before/after:"; cat parent-evidence/fn_md5_before.txt parent-evidence/fn_md5_after.txt
+          if [ "${{ inputs.mode }}" = "apply" ]; then
+            if diff -q parent-evidence/fn_md5_before.txt parent-evidence/fn_md5_after.txt >/dev/null; then
+              echo "::error::guard 적용 후에도 함수 본문이 그대로다"; exit 1
+            fi
+            psql "$PGURL" -At -c \
+              "select case when prosrc like '%MESSAGE_AUTHOR_MISMATCH%' then 'GUARD_PRESENT' else 'GUARD_ABSENT' end
+               from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+               where n.nspname='public' and p.proname='add_individual_question_attachment'" \
+              | tee parent-evidence/guard_presence.txt
+            grep -qx GUARD_PRESENT parent-evidence/guard_presence.txt \
+              || { echo "::error::적용 후 함수 본문에 MESSAGE_AUTHOR_MISMATCH 가드가 없다"; exit 1; }
+          else
+            diff -q parent-evidence/fn_md5_before.txt parent-evidence/fn_md5_after.txt >/dev/null \
+              && { echo "::error::rollback 했는데 함수 본문이 그대로다"; exit 1; } || true
+          fi
+
+          bash scripts/verify/baseline/parent_schema_fingerprint.sh "$PGURL" > parent-evidence/fingerprint_after.txt
+          echo "=== fingerprint diff (함수 본문 축만 변하는 것이 정상) ==="
+          diff -u parent-evidence/fingerprint_before.txt parent-evidence/fingerprint_after.txt || true
+          for axis in tables columns constraints indexes views functions triggers policies buckets md5_tables md5_columns md5_policies md5_default_acl; do
+            b=$(grep -m1 "^${axis}=" parent-evidence/fingerprint_before.txt || true)
+            a=$(grep -m1 "^${axis}=" parent-evidence/fingerprint_after.txt || true)
+            [ "$b" = "$a" ] || { echo "::error::축 $axis 이 변했다: '$b' → '$a'"; exit 1; }
+          done
+          echo "SCHEMA_FINGERPRINT: 함수 본문 외 포착 축 NO_CHANGE_DETECTED"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: db-apply-pr60-${{ inputs.mode }}-${{ github.run_id }}
+          path: |
+            cli-version.txt
+            cli-*-help.txt
+            push.log
+            rollback.log
+            parent-evidence/**
+          retention-days: 90

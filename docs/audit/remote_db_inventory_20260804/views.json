@@ -1,0 +1,47 @@
+{
+"views": [
+{
+"schema": "api_app_v1",
+"name": "community_posts_v1",
+"kind": "view",
+"definition": " SELECT id,\n    author_id,\n    title,\n    COALESCE(content, body) AS body,\n    category,\n    COALESCE(image_urls, '{}'::text[]) AS image_refs,\n    author_label,\n    author_role,\n    like_count,\n    comment_count,\n    view_count,\n    status,\n    created_at,\n    updated_at\n   FROM community_posts p\n  WHERE ((deleted_at IS NULL) AND ((status = 'published'::text) OR (author_id = ( SELECT auth.uid() AS uid))));"
+},
+{
+"schema": "api_web_v1",
+"name": "community_comments_v1",
+"kind": "view",
+"definition": " SELECT id,\n    post_id,\n    author_id,\n    parent_id,\n    content AS body,\n    like_count,\n    author_label,\n    author_role,\n    created_at\n   FROM comments c\n  WHERE (is_deleted = false);"
+},
+{
+"schema": "api_web_v1",
+"name": "community_posts_v1",
+"kind": "view",
+"definition": " SELECT id,\n    author_id,\n    title,\n    COALESCE(content, body) AS body,\n    category,\n    COALESCE(image_urls, '{}'::text[]) AS image_refs,\n    author_label,\n    author_role,\n    like_count,\n    comment_count,\n    view_count,\n    status,\n    created_at,\n    updated_at\n   FROM community_posts p\n  WHERE ((deleted_at IS NULL) AND ((status = 'published'::text) OR (author_id = ( SELECT auth.uid() AS uid))));"
+},
+{
+"schema": "api_web_v1",
+"name": "mentor_directory_v1",
+"kind": "view",
+"definition": " SELECT mp.user_id AS mentor_id,\n    u.nickname,\n    mp.university_name,\n    mp.department_name,\n    mp.teaching_subjects,\n    mp.intro_line,\n    mp.profile_image_url,\n    mp.high_school_name,\n    (sv.mentor_id IS NOT NULL) AS school_verified,\n    sv.school_tier,\n    sv.verified_major_category,\n    sv.verified_university_name,\n    sv.verified_department_name,\n    mp.is_open_for_subscriptions,\n    rv.avg_rating,\n    rv.review_count,\n    mp.created_at\n   FROM (((mentor_profiles mp\n     JOIN users u ON ((u.id = mp.user_id)))\n     LEFT JOIN LATERAL ( SELECT msv.mentor_id,\n            msv.school_tier,\n            msv.verified_major_category,\n            msv.verified_university_name,\n            msv.verified_department_name\n           FROM mentor_school_verifications msv\n          WHERE ((msv.mentor_id = mp.user_id) AND (msv.status = 'approved'::text))\n          ORDER BY COALESCE(msv.reviewed_at, msv.updated_at, msv.created_at) DESC, msv.created_at DESC\n         LIMIT 1) sv ON (true))\n     LEFT JOIN LATERAL ( SELECT avg(r.rating) AS avg_rating,\n            (count(*))::integer AS review_count\n           FROM reviews r\n          WHERE ((r.mentor_id = mp.user_id) AND (r.moderation_state = 'visible'::text) AND (COALESCE(r.is_hidden, false) = false) AND (COALESCE(r.is_blinded, false) = false))) rv ON (true))\n  WHERE ((u.role = 'mentor'::text) AND (lower(COALESCE(u.status, 'active'::text)) = 'active'::text) AND (lower(COALESCE(mp.verification_status, ''::text)) = ANY (ARRAY['approved'::text, 'verified'::text, 'active'::text])) AND (NOT (EXISTS ( SELECT 1\n           FROM account_deletion_jobs j\n          WHERE ((j.user_id = mp.user_id) AND (j.state = ANY (ARRAY['pending'::text, 'locked'::text, 'purging'::text, 'storage_purged'::text, 'finalized'::text, 'auth_soft_deleted'::text])))))));"
+},
+{
+"schema": "api_web_v1",
+"name": "my_cash_ledger_v1",
+"kind": "view",
+"definition": " SELECT id,\n    delta_cents,\n    (delta_cents / 100) AS delta_krw,\n    reason,\n    ref_type,\n    ref_id,\n        CASE\n            WHEN (ref_type = 'topup'::text) THEN idempotency_key\n            ELSE NULL::text\n        END AS order_ref,\n    created_at\n   FROM cash_ledger l;"
+},
+{
+"schema": "api_web_v1",
+"name": "my_wallet_v1",
+"kind": "view",
+"definition": " SELECT user_id,\n    balance_cents,\n    (balance_cents / 100) AS balance_krw\n   FROM cash_wallets w;"
+},
+{
+"schema": "public",
+"name": "due_payouts",
+"kind": "view",
+"definition": " SELECT 'subscription'::text AS source_type,\n    ssi.id AS source_id,\n    ssi.mentor_id,\n    ssi.mentor_amount_cents,\n    ssi.gross_cents,\n    ssi.platform_fee_cents,\n    ssi.fee_rate,\n    ssi.period_end AS completion_ts\n   FROM subscription_settlement_items ssi\n  WHERE ((ssi.period_end IS NOT NULL) AND (ssi.period_end <= now()) AND (ssi.status <> ALL (ARRAY['paid'::text, 'hold'::text, 'canceled'::text])))\nUNION ALL\n SELECT 'custom_request'::text AS source_type,\n    cs.id AS source_id,\n    cs.mentor_id,\n    ((cs.mentor_amount)::bigint * 100) AS mentor_amount_cents,\n    ((cs.gross_amount)::bigint * 100) AS gross_cents,\n    ((cs.platform_fee_amount)::bigint * 100) AS platform_fee_cents,\n    cs.fee_rate,\n    o.accepted_at AS completion_ts\n   FROM (custom_order_settlement_items cs\n     JOIN custom_request_orders o ON ((o.id = cs.custom_request_order_id)))\n  WHERE ((cs.status = ANY (ARRAY['pending'::text, 'on_hold'::text, 'payable'::text])) AND (o.accepted_at IS NOT NULL) AND (o.accepted_at <= now()) AND (COALESCE(lower(TRIM(BOTH FROM o.payment_status)), ''::text) <> 'refunded'::text) AND (COALESCE(lower(TRIM(BOTH FROM o.status)), ''::text) <> ALL (ARRAY['cancelled'::text, 'canceled'::text, 'refunded'::text])) AND (NOT (EXISTS ( SELECT 1\n           FROM disputes d\n          WHERE ((d.custom_request_order_id = o.id) AND (d.status = ANY (ARRAY['open'::text, 'under_review'::text, 'escalated'::text])))))))\nUNION ALL\n SELECT 'individual_question'::text AS source_type,\n    q.id AS source_id,\n    COALESCE(q.claimed_mentor_id, q.designated_mentor_id) AS mentor_id,\n    (floor(((q.price_cents)::numeric * 0.85)))::bigint AS mentor_amount_cents,\n    (q.price_cents)::bigint AS gross_cents,\n    (q.price_cents - (floor(((q.price_cents)::numeric * 0.85)))::bigint) AS platform_fee_cents,\n    0.15 AS fee_rate,\n    q.released_at AS completion_ts\n   FROM individual_questions q\n  WHERE ((q.released_at IS NOT NULL) AND (q.released_at <= now()) AND (q.release_ledger_id IS NULL) AND (q.refund_ledger_id IS NULL) AND (q.status <> ALL (ARRAY['refunded'::text, 'expired'::text, 'canceled'::text])) AND (COALESCE(q.claimed_mentor_id, q.designated_mentor_id) IS NOT NULL));"
+}
+],
+"matviews": []
+}

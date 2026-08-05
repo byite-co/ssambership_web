@@ -1,0 +1,6 @@
+{"captured_at_utc":"2026-08-04T18:09:45Z","server_version":"17.6",
+ "state_label":"baseline 188/188 + augmented replay 38/62 (INCOMPLETE — 부모와 직접 비교 불가)",
+ "tables":77,"functions":199,"policies":184,"views":1,"buckets":13,
+ "app_schemas":"api_web_v1,core_private (api_app_v1 은 step 43 이후 생성 — 미도달)",
+ "defacl_f_postgres":"{postgres=X/postgres}",
+ "open_txn":0,"active_queries":0}

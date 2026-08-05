@@ -1,0 +1,2977 @@
+{
+"grants": [
+{
+"table_schema": "api_app_v1",
+"table_name": "community_posts_v1",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "api_web_v1",
+"table_name": "community_comments_v1",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "api_web_v1",
+"table_name": "community_comments_v1",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "api_web_v1",
+"table_name": "community_comments_v1",
+"grantee": "service_role",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "api_web_v1",
+"table_name": "community_posts_v1",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "api_web_v1",
+"table_name": "community_posts_v1",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "api_web_v1",
+"table_name": "community_posts_v1",
+"grantee": "service_role",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "api_web_v1",
+"table_name": "mentor_directory_v1",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "api_web_v1",
+"table_name": "mentor_directory_v1",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "api_web_v1",
+"table_name": "mentor_directory_v1",
+"grantee": "service_role",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "api_web_v1",
+"table_name": "my_cash_ledger_v1",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "api_web_v1",
+"table_name": "my_cash_ledger_v1",
+"grantee": "service_role",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "api_web_v1",
+"table_name": "my_wallet_v1",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "api_web_v1",
+"table_name": "my_wallet_v1",
+"grantee": "service_role",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "account_deletion_jobs",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "admin_action_logs",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "admin_action_logs",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "admin_action_logs",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "admin_case_notes",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "admin_case_notes",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "admin_case_notes",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "ai_drafts",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "ai_drafts",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "ai_drafts",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "app_notices",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "app_notices",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "app_notices",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "cash_ledger",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "cash_ledger",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "cash_ledger",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "cash_topup_packages",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "cash_topup_packages",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "cash_topup_packages",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "cash_wallets",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "cash_wallets",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "cash_wallets",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "comments",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "comments",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "comments",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "community_comments",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "community_comments",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "community_comments",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "community_hashtags",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "community_hashtags",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "community_hashtags",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "community_posts",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "community_posts",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "community_posts",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "connection_notes",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "connection_notes",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "connection_notes",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "content_reports",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "content_reports",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "content_reports",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_deliverables",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_deliverables",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_deliverables",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_message_attachments",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_message_attachments",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_message_attachments",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_messages",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_messages",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_messages",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_revisions",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_revisions",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_revisions",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_settlement_items",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_settlement_items",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_order_settlement_items",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_application_attachments",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_application_attachments",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_application_attachments",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_applications",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_applications",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_applications",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_orders",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_orders",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_orders",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_post_attachments",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_post_attachments",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_post_attachments",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_posts",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_posts",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "custom_request_posts",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "device_tokens",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "device_tokens",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "disputes",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "disputes",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "disputes",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "due_payouts",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "favorites",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "favorites",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "favorites",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "free_question_usage",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "free_question_usage",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "free_question_usage",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "individual_question_attachments",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "individual_question_attachments",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "individual_question_attachments",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "individual_question_messages",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "individual_question_messages",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "individual_question_messages",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "individual_question_transfers",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "individual_question_transfers",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "individual_questions",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "individual_questions",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "individual_questions",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "major_category_catalog",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "major_category_catalog",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "major_category_catalog",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_academic_record_change_requests",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_academic_record_change_requests",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_academic_record_change_requests",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_activity_events",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_activity_events",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_activity_events",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_individual_question_pricing",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_individual_question_pricing",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_individual_question_pricing",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_plans",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_plans",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_plans",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_profiles",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_profiles",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_profiles",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_school_verifications",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_school_verifications",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_school_verifications",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_student_rooms",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_student_rooms",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mentor_student_rooms",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "mobile_app_version_policies",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "notification_deliveries",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "notification_outbox",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "notification_settings",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "notification_settings",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "notification_transport_config",
+"grantee": "service_role",
+"privileges": [
+"REFERENCES",
+"TRIGGER",
+"TRUNCATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "notifications",
+"grantee": "authenticated",
+"privileges": [
+"SELECT",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "notifications",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "order_events",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "order_events",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "order_events",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "order_payments",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "order_payments",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "order_payments",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "payments",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "payments",
+"grantee": "authenticated",
+"privileges": [
+"INSERT",
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "payments",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "payout_run_items",
+"grantee": "authenticated",
+"privileges": [
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "payout_run_items",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "payout_runs",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "payout_settings",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "post_reactions",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "post_reactions",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "post_reactions",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "promotion_campaigns",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "promotion_campaigns",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "promotion_campaigns",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "question_attachments",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "question_attachments",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "question_attachments",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "question_messages",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "question_messages",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "question_messages",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "question_threads",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "question_threads",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "question_threads",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "refunds",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "refunds",
+"grantee": "authenticated",
+"privileges": [
+"INSERT",
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "refunds",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "reviews",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "reviews",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "reviews",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "reviews_duplicates_archive",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "reviews_quarantine_archive",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "scan_annotations",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "scan_annotations",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "scan_annotations",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "school_tier_catalog",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "school_tier_catalog",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "school_tier_catalog",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "school_tier_mappings",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "school_tier_mappings",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "school_tier_mappings",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "shortform_posts",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "shortform_posts",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "shortform_posts",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "shortform_reactions",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "shortform_reactions",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "shortform_reactions",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "shortform_view_events",
+"grantee": "service_role",
+"privileges": [
+"REFERENCES",
+"TRIGGER",
+"TRUNCATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "subjects",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "subjects",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "subjects",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "subscription_billing_events",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "subscription_billing_events",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "subscription_billing_events",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "subscription_checkout_anomalies",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "subscription_settlement_items",
+"grantee": "authenticated",
+"privileges": [
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "subscription_settlement_items",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "subscriptions",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "subscriptions",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "subscriptions",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "user_blocks",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "user_blocks",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "user_blocks",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "user_consent_records",
+"grantee": "authenticated",
+"privileges": [
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "user_consent_records",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "user_deletion_log",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "user_warnings",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "user_warnings",
+"grantee": "authenticated",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "user_warnings",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "users",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "users",
+"grantee": "authenticated",
+"privileges": [
+"INSERT",
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "users",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "verification_logs",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "verification_logs",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "verification_logs",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "public",
+"table_name": "withdrawals",
+"grantee": "anon",
+"privileges": [
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "withdrawals",
+"grantee": "authenticated",
+"privileges": [
+"INSERT",
+"SELECT"
+]
+},
+{
+"table_schema": "public",
+"table_name": "withdrawals",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "storage",
+"table_name": "buckets",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "storage",
+"table_name": "buckets",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "storage",
+"table_name": "buckets",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "storage",
+"table_name": "objects",
+"grantee": "anon",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "storage",
+"table_name": "objects",
+"grantee": "authenticated",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+},
+{
+"table_schema": "storage",
+"table_name": "objects",
+"grantee": "service_role",
+"privileges": [
+"DELETE",
+"INSERT",
+"REFERENCES",
+"SELECT",
+"TRIGGER",
+"TRUNCATE",
+"UPDATE"
+]
+}
+],
+"default_privileges": [
+{
+"owner_role": "postgres",
+"schema": "public",
+"objtype": "S",
+"defaclacl": [
+"postgres=rwU/postgres",
+"anon=w/postgres",
+"authenticated=w/postgres",
+"service_role=w/postgres"
+]
+},
+{
+"owner_role": "postgres",
+"schema": "public",
+"objtype": "f",
+"defaclacl": [
+"postgres=X/postgres"
+]
+},
+{
+"owner_role": "postgres",
+"schema": "public",
+"objtype": "r",
+"defaclacl": [
+"postgres=arwdDxtm/postgres",
+"anon=Dxtm/postgres",
+"authenticated=Dxtm/postgres",
+"service_role=Dxtm/postgres"
+]
+},
+{
+"owner_role": "supabase_admin",
+"schema": "public",
+"objtype": "S",
+"defaclacl": [
+"postgres=rwU/supabase_admin",
+"anon=rwU/supabase_admin",
+"authenticated=rwU/supabase_admin",
+"service_role=rwU/supabase_admin"
+]
+},
+{
+"owner_role": "supabase_admin",
+"schema": "public",
+"objtype": "f",
+"defaclacl": [
+"postgres=X/supabase_admin",
+"anon=X/supabase_admin",
+"authenticated=X/supabase_admin",
+"service_role=X/supabase_admin"
+]
+},
+{
+"owner_role": "supabase_admin",
+"schema": "public",
+"objtype": "r",
+"defaclacl": [
+"postgres=arwdDxtm/supabase_admin",
+"anon=arwdDxtm/supabase_admin",
+"authenticated=arwdDxtm/supabase_admin",
+"service_role=arwdDxtm/supabase_admin"
+]
+}
+]
+}

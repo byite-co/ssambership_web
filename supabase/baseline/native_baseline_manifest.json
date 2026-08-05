@@ -1,0 +1,16 @@
+{
+ "apply_order_sha256": "62de26ba89a600790ea8760e47ca31ba1d131d952c8dfbc7074ea92db9cfc862",
+ "apply_stages": 114,
+ "atomicity": "NOT_GUARANTEED",
+ "comment_only_parts": 3,
+ "executable_parts": 185,
+ "failure_recovery": "DISCARD_FRESH_DATABASE_AND_RECREATE",
+ "generated_content_sha256": "73708562ee0af8c54e9f55d29330e021a17bba87e8043c1db8a07ec4c320a5a6",
+ "generator": "scripts/verify/baseline/build_native_baseline_migration.py",
+ "output_path": "supabase/migrations/20260701000000_pre_ledger_baseline.sql",
+ "output_sha256": "ec71936927af655158374768fc4354e438f73f6c96370ac406f72b5909e92ce9",
+ "output_size": 1115384,
+ "same_db_retry": "PROHIBITED",
+ "source_manifest_sha256": "59e29b7bbc868400335b30b9d287ed4d72466d7ef55d5d6dcecefe2bc7053782",
+ "source_parts": 188
+}

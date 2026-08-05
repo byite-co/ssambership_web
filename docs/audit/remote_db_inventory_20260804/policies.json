@@ -1,0 +1,2659 @@
+[
+{
+"schemaname": "public",
+"tablename": "admin_action_logs",
+"policyname": "admin_action_logs_insert_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((( SELECT is_admin() AS is_admin) = true) AND (admin_id = ( SELECT auth.uid() AS uid)))"
+},
+{
+"schemaname": "public",
+"tablename": "admin_action_logs",
+"policyname": "admin_action_logs_select_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "admin_action_logs",
+"policyname": "관리자만 로그 기록",
+"permissive": "PERMISSIVE",
+"roles": [
+"public"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(auth.uid() = admin_id)"
+},
+{
+"schemaname": "public",
+"tablename": "admin_action_logs",
+"policyname": "관리자만 로그 조회",
+"permissive": "PERMISSIVE",
+"roles": [
+"public"
+],
+"cmd": "SELECT",
+"qual": "(EXISTS ( SELECT 1\n   FROM users\n  WHERE ((users.id = auth.uid()) AND (users.role = 'admin'::text))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "admin_case_notes",
+"policyname": "admin_case_notes_delete_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "admin_case_notes",
+"policyname": "admin_case_notes_insert_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((( SELECT is_admin() AS is_admin) = true) AND (admin_id = ( SELECT auth.uid() AS uid)))"
+},
+{
+"schemaname": "public",
+"tablename": "admin_case_notes",
+"policyname": "admin_case_notes_select_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "admin_case_notes",
+"policyname": "admin_case_notes_update_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": "(( SELECT is_admin() AS is_admin) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "ai_drafts",
+"policyname": "ai_drafts_insert_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(mentor_id = ( SELECT auth.uid() AS uid))"
+},
+{
+"schemaname": "public",
+"tablename": "ai_drafts",
+"policyname": "ai_drafts_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(mentor_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "app_notices",
+"policyname": "app_notices_delete_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "(EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "app_notices",
+"policyname": "app_notices_insert_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))"
+},
+{
+"schemaname": "public",
+"tablename": "app_notices",
+"policyname": "app_notices_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text)))) OR ((COALESCE(is_active, false) = true) AND ((starts_at IS NULL) OR (starts_at <= now())) AND ((ends_at IS NULL) OR (ends_at >= now()))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "app_notices",
+"policyname": "app_notices_update_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))",
+"with_check": "(EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))"
+},
+{
+"schemaname": "public",
+"tablename": "cash_ledger",
+"policyname": "cled_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(user_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "cash_topup_packages",
+"policyname": "pkg_delete_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "cash_topup_packages",
+"policyname": "pkg_insert_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(( SELECT is_admin() AS is_admin) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "cash_topup_packages",
+"policyname": "pkg_select_public",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(COALESCE(active, true) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "cash_topup_packages",
+"policyname": "pkg_update_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": "(( SELECT is_admin() AS is_admin) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "cash_wallets",
+"policyname": "cwal_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(user_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "comments",
+"policyname": "comments_admin_delete",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "comments",
+"policyname": "comments_admin_select_all",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "comments",
+"policyname": "comments_admin_update",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": "(( SELECT is_admin() AS is_admin) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "comments",
+"policyname": "comments_delete_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "(author_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "comments",
+"policyname": "comments_insert_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((author_id = ( SELECT auth.uid() AS uid)) AND ( SELECT ugc_write_allowed() AS ugc_write_allowed))"
+},
+{
+"schemaname": "public",
+"tablename": "comments",
+"policyname": "comments_select_visible",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(is_deleted = false)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "comments",
+"policyname": "comments_update_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((author_id = ( SELECT auth.uid() AS uid)) AND ( SELECT ugc_write_allowed() AS ugc_write_allowed))",
+"with_check": "((author_id = ( SELECT auth.uid() AS uid)) AND ( SELECT ugc_write_allowed() AS ugc_write_allowed))"
+},
+{
+"schemaname": "public",
+"tablename": "community_comments",
+"policyname": "community_comments_delete_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "community_comments",
+"policyname": "community_comments_insert_authenticated",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((author_id = ( SELECT auth.uid() AS uid)) AND (( SELECT auth.uid() AS uid) IS NOT NULL) AND (char_length(btrim(body)) >= 1) AND (char_length(btrim(body)) <= 1000) AND ( SELECT ugc_write_allowed() AS ugc_write_allowed))"
+},
+{
+"schemaname": "public",
+"tablename": "community_comments",
+"policyname": "community_comments_select_visible",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((status = 'visible'::text) OR (author_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "community_comments",
+"policyname": "community_comments_update_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": "(( SELECT is_admin() AS is_admin) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "community_hashtags",
+"policyname": "community_hashtags_select_all",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "true",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "community_posts",
+"policyname": "cp_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"public"
+],
+"cmd": "SELECT",
+"qual": "((author_id = ( SELECT auth.uid() AS uid)) OR ( SELECT is_admin() AS is_admin))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "community_posts",
+"policyname": "cp_select_published",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((status = 'published'::text) OR (author_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "community_posts",
+"policyname": "누구나 게시글 읽기",
+"permissive": "PERMISSIVE",
+"roles": [
+"public"
+],
+"cmd": "SELECT",
+"qual": "(status = 'published'::text)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "connection_notes",
+"policyname": "cn_delete",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "((author_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = connection_notes.mentor_student_room_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "connection_notes",
+"policyname": "cn_insert",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((author_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = connection_notes.mentor_student_room_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))"
+},
+{
+"schemaname": "public",
+"tablename": "connection_notes",
+"policyname": "cn_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = connection_notes.mentor_student_room_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id)))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "connection_notes",
+"policyname": "cn_update",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((author_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = connection_notes.mentor_student_room_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))",
+"with_check": "((author_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = connection_notes.mentor_student_room_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))"
+},
+{
+"schemaname": "public",
+"tablename": "content_reports",
+"policyname": "content_reports_delete_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "(EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "content_reports",
+"policyname": "content_reports_insert_reporter",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((reporter_id = ( SELECT auth.uid() AS uid)) AND (status = 'pending'::text) AND (admin_note IS NULL) AND (resolved_by IS NULL) AND (resolved_at IS NULL) AND (target_type = ANY (ARRAY['community_post'::text, 'shortform_post'::text, 'community_comment'::text, 'board_comment'::text, 'user'::text])) AND ((target_type <> 'user'::text) OR report_target_user_valid(target_id)))"
+},
+{
+"schemaname": "public",
+"tablename": "content_reports",
+"policyname": "content_reports_select_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "content_reports",
+"policyname": "content_reports_select_reporter",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(reporter_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "content_reports",
+"policyname": "content_reports_update_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))",
+"with_check": "(EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_deliverables",
+"policyname": "cdel_insert",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(EXISTS ( SELECT 1\n   FROM custom_request_orders o\n  WHERE ((o.id = custom_order_deliverables.custom_request_order_id) AND (o.mentor_id = ( SELECT auth.uid() AS uid)))))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_deliverables",
+"policyname": "cdel_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(EXISTS ( SELECT 1\n   FROM custom_request_orders o\n  WHERE ((o.id = custom_order_deliverables.custom_request_order_id) AND ((( SELECT is_admin() AS is_admin) = true) OR ((( SELECT auth.uid() AS uid) = o.student_id) OR (( SELECT auth.uid() AS uid) = o.mentor_id)) OR (o.buyer_id = ( SELECT auth.uid() AS uid)) OR (o.client_id = ( SELECT auth.uid() AS uid)) OR (o.user_id = ( SELECT auth.uid() AS uid)) OR (o.author_id = ( SELECT auth.uid() AS uid)) OR (o.requester_id = ( SELECT auth.uid() AS uid))))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_deliverables",
+"policyname": "멘토만 납품 업로드",
+"permissive": "PERMISSIVE",
+"roles": [
+"public"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(auth.uid() = mentor_id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_message_attachments",
+"policyname": "coma_delete_uploader_or_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "((uploader_id = ( SELECT auth.uid() AS uid)) OR is_admin())",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_message_attachments",
+"policyname": "coma_insert_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((uploader_id = ( SELECT auth.uid() AS uid)) AND custom_order_message_attachment_is_party(order_id))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_message_attachments",
+"policyname": "coma_select_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "custom_order_message_attachment_is_party(order_id)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_messages",
+"policyname": "cmsg_all_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(EXISTS ( SELECT 1\n   FROM custom_request_orders o\n  WHERE ((o.id = custom_order_messages.custom_request_order_id) AND ((( SELECT is_admin() AS is_admin) = true) OR ((( SELECT auth.uid() AS uid) = o.student_id) OR (( SELECT auth.uid() AS uid) = o.mentor_id)) OR (o.buyer_id = ( SELECT auth.uid() AS uid)) OR (o.client_id = ( SELECT auth.uid() AS uid)) OR (o.user_id = ( SELECT auth.uid() AS uid)) OR (o.author_id = ( SELECT auth.uid() AS uid)) OR (o.requester_id = ( SELECT auth.uid() AS uid))))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_messages",
+"policyname": "cmsg_ins",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((( SELECT auth.uid() AS uid) = author_id) AND (EXISTS ( SELECT 1\n   FROM custom_request_orders o\n  WHERE ((o.id = custom_order_messages.custom_request_order_id) AND (((( SELECT auth.uid() AS uid) = o.student_id) OR (( SELECT auth.uid() AS uid) = o.mentor_id)) OR (o.buyer_id = ( SELECT auth.uid() AS uid)) OR (o.client_id = ( SELECT auth.uid() AS uid)) OR (o.user_id = ( SELECT auth.uid() AS uid)) OR (o.author_id = ( SELECT auth.uid() AS uid)) OR (o.requester_id = ( SELECT auth.uid() AS uid)))))))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_messages",
+"policyname": "당사자만 메시지 전송",
+"permissive": "PERMISSIVE",
+"roles": [
+"public"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(auth.uid() = author_id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_revisions",
+"policyname": "crev_all_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(EXISTS ( SELECT 1\n   FROM custom_request_orders o\n  WHERE ((o.id = custom_order_revisions.custom_request_order_id) AND ((( SELECT is_admin() AS is_admin) = true) OR ((( SELECT auth.uid() AS uid) = o.student_id) OR (( SELECT auth.uid() AS uid) = o.mentor_id)) OR (o.buyer_id = ( SELECT auth.uid() AS uid)) OR (o.client_id = ( SELECT auth.uid() AS uid)) OR (o.user_id = ( SELECT auth.uid() AS uid)) OR (o.author_id = ( SELECT auth.uid() AS uid)) OR (o.requester_id = ( SELECT auth.uid() AS uid))))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_revisions",
+"policyname": "crev_ins",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((author_id = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1\n   FROM custom_request_orders o\n  WHERE ((o.id = custom_order_revisions.custom_request_order_id) AND ((o.student_id = ( SELECT auth.uid() AS uid)) OR (o.buyer_id = ( SELECT auth.uid() AS uid)) OR (o.user_id = ( SELECT auth.uid() AS uid)) OR (o.client_id = ( SELECT auth.uid() AS uid)) OR (o.author_id = ( SELECT auth.uid() AS uid)) OR (o.requester_id = ( SELECT auth.uid() AS uid)))))))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_settlement_items",
+"policyname": "cosi_select_parties",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((( SELECT is_admin() AS is_admin) = true) OR (mentor_id = ( SELECT auth.uid() AS uid)) OR (student_id = ( SELECT auth.uid() AS uid)))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "custom_order_settlement_items",
+"policyname": "cosi_update_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": "(( SELECT is_admin() AS is_admin) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_application_attachments",
+"policyname": "craa_insert_mentor",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((uploaded_by = ( SELECT auth.uid() AS uid)) AND (user_is_application_mentor_for_craa_application(application_id) = true))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_application_attachments",
+"policyname": "craa_select_authorized",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((( SELECT is_admin() AS is_admin) = true) OR (user_is_application_mentor_for_craa_application(application_id) = true) OR (user_is_post_author_for_craa_application(application_id) = true))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_applications",
+"policyname": "cra_insert",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((mentor_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_applications",
+"policyname": "cra_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((mentor_id = ( SELECT auth.uid() AS uid)) OR (EXISTS ( SELECT 1\n   FROM custom_request_posts p\n  WHERE ((p.id = custom_request_applications.post_id) AND (p.author_id = ( SELECT auth.uid() AS uid))))) OR (EXISTS ( SELECT 1\n   FROM custom_request_posts p\n  WHERE ((p.id = custom_request_applications.post_id) AND (p.user_id = ( SELECT auth.uid() AS uid))))) OR (( SELECT is_admin() AS is_admin) = true))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_applications",
+"policyname": "cra_update",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((mentor_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))",
+"with_check": "((mentor_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_applications",
+"policyname": "멘토만 지원",
+"permissive": "PERMISSIVE",
+"roles": [
+"public"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(auth.uid() = mentor_id)"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_orders",
+"policyname": "cro_insert",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((student_id = ( SELECT auth.uid() AS uid)) OR (buyer_id = ( SELECT auth.uid() AS uid)) OR (client_id = ( SELECT auth.uid() AS uid)) OR (user_id = ( SELECT auth.uid() AS uid)) OR (author_id = ( SELECT auth.uid() AS uid)) OR (requester_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_orders",
+"policyname": "cro_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((student_id = ( SELECT auth.uid() AS uid)) OR (buyer_id = ( SELECT auth.uid() AS uid)) OR (client_id = ( SELECT auth.uid() AS uid)) OR (user_id = ( SELECT auth.uid() AS uid)) OR (author_id = ( SELECT auth.uid() AS uid)) OR (requester_id = ( SELECT auth.uid() AS uid)) OR (mentor_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_orders",
+"policyname": "cro_update",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((student_id = ( SELECT auth.uid() AS uid)) OR (buyer_id = ( SELECT auth.uid() AS uid)) OR (client_id = ( SELECT auth.uid() AS uid)) OR (user_id = ( SELECT auth.uid() AS uid)) OR (author_id = ( SELECT auth.uid() AS uid)) OR (requester_id = ( SELECT auth.uid() AS uid)) OR (mentor_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))",
+"with_check": "((student_id = ( SELECT auth.uid() AS uid)) OR (buyer_id = ( SELECT auth.uid() AS uid)) OR (client_id = ( SELECT auth.uid() AS uid)) OR (user_id = ( SELECT auth.uid() AS uid)) OR (author_id = ( SELECT auth.uid() AS uid)) OR (requester_id = ( SELECT auth.uid() AS uid)) OR (mentor_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_orders",
+"policyname": "주문 당사자만 읽기",
+"permissive": "PERMISSIVE",
+"roles": [
+"public"
+],
+"cmd": "SELECT",
+"qual": "((auth.uid() = student_id) OR (auth.uid() = mentor_id))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_post_attachments",
+"policyname": "crpa_insert_author",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((uploaded_by = ( SELECT auth.uid() AS uid)) AND (EXISTS ( SELECT 1\n   FROM custom_request_posts p\n  WHERE ((p.id = custom_request_post_attachments.custom_request_post_id) AND ((p.author_id = ( SELECT auth.uid() AS uid)) OR (p.student_id = ( SELECT auth.uid() AS uid)) OR (p.user_id = ( SELECT auth.uid() AS uid)) OR (p.requester_id = ( SELECT auth.uid() AS uid)) OR (p.client_id = ( SELECT auth.uid() AS uid)))))))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_post_attachments",
+"policyname": "crpa_select_authorized",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((( SELECT is_admin() AS is_admin) = true) OR (EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.role = 'mentor'::text)))) OR (EXISTS ( SELECT 1\n   FROM custom_request_posts p\n  WHERE ((p.id = custom_request_post_attachments.custom_request_post_id) AND ((p.author_id = ( SELECT auth.uid() AS uid)) OR (p.student_id = ( SELECT auth.uid() AS uid)) OR (p.user_id = ( SELECT auth.uid() AS uid)) OR (p.requester_id = ( SELECT auth.uid() AS uid)) OR (p.client_id = ( SELECT auth.uid() AS uid)))))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_posts",
+"policyname": "crp_insert",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((author_id = ( SELECT auth.uid() AS uid)) OR (user_id = ( SELECT auth.uid() AS uid)) OR (student_id = ( SELECT auth.uid() AS uid)) OR (requester_id = ( SELECT auth.uid() AS uid)) OR (client_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_posts",
+"policyname": "crp_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((author_id = ( SELECT auth.uid() AS uid)) OR (user_id = ( SELECT auth.uid() AS uid)) OR (student_id = ( SELECT auth.uid() AS uid)) OR (requester_id = ( SELECT auth.uid() AS uid)) OR (client_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_posts",
+"policyname": "crp_update",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((author_id = ( SELECT auth.uid() AS uid)) OR (user_id = ( SELECT auth.uid() AS uid)) OR (student_id = ( SELECT auth.uid() AS uid)) OR (requester_id = ( SELECT auth.uid() AS uid)) OR (client_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))",
+"with_check": "((author_id = ( SELECT auth.uid() AS uid)) OR (user_id = ( SELECT auth.uid() AS uid)) OR (student_id = ( SELECT auth.uid() AS uid)) OR (requester_id = ( SELECT auth.uid() AS uid)) OR (client_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))"
+},
+{
+"schemaname": "public",
+"tablename": "custom_request_posts",
+"policyname": "학생만 의뢰 등록",
+"permissive": "PERMISSIVE",
+"roles": [
+"public"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(auth.uid() = author_id)"
+},
+{
+"schemaname": "public",
+"tablename": "device_tokens",
+"policyname": "device_tokens_modify_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "ALL",
+"qual": "(user_id = ( SELECT auth.uid() AS uid))",
+"with_check": "(user_id = ( SELECT auth.uid() AS uid))"
+},
+{
+"schemaname": "public",
+"tablename": "device_tokens",
+"policyname": "device_tokens_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(user_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "disputes",
+"policyname": "dispute_ins",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(((( SELECT auth.uid() AS uid) = student_id) OR (( SELECT auth.uid() AS uid) = mentor_id)) AND (custom_request_order_id IS NOT NULL) AND (EXISTS ( SELECT 1\n   FROM custom_request_orders o\n  WHERE ((o.id = disputes.custom_request_order_id) AND (o.student_id = o.student_id) AND (o.mentor_id = o.mentor_id) AND ((o.student_id = ( SELECT auth.uid() AS uid)) OR (o.mentor_id = ( SELECT auth.uid() AS uid)) OR (o.buyer_id = ( SELECT auth.uid() AS uid)) OR (o.user_id = ( SELECT auth.uid() AS uid)) OR (o.client_id = ( SELECT auth.uid() AS uid)) OR (o.author_id = ( SELECT auth.uid() AS uid)) OR (o.requester_id = ( SELECT auth.uid() AS uid)))))))"
+},
+{
+"schemaname": "public",
+"tablename": "disputes",
+"policyname": "dispute_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(((( SELECT auth.uid() AS uid) = student_id) OR (( SELECT auth.uid() AS uid) = mentor_id)) OR (( SELECT is_admin() AS is_admin) = true))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "disputes",
+"policyname": "dispute_update_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": "(( SELECT is_admin() AS is_admin) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "favorites",
+"policyname": "favorites_delete_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"public"
+],
+"cmd": "DELETE",
+"qual": "(auth.uid() = user_id)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "favorites",
+"policyname": "favorites_insert_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"public"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(auth.uid() = user_id)"
+},
+{
+"schemaname": "public",
+"tablename": "favorites",
+"policyname": "favorites_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"public"
+],
+"cmd": "SELECT",
+"qual": "(auth.uid() = user_id)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "free_question_usage",
+"policyname": "fqu_insert_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(student_id = ( SELECT auth.uid() AS uid))"
+},
+{
+"schemaname": "public",
+"tablename": "free_question_usage",
+"policyname": "fqu_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(student_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "individual_question_attachments",
+"policyname": "iqa_select_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "user_is_individual_question_party(question_id)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "individual_question_messages",
+"policyname": "iqm_select_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "user_is_individual_question_party(question_id)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "individual_question_transfers",
+"policyname": "iqt_select_student",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(student_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "individual_questions",
+"policyname": "iq_select_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "user_is_individual_question_party(id)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "major_category_catalog",
+"policyname": "major_category_catalog_select_active_or_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((is_active = true) OR (COALESCE(( SELECT is_admin() AS is_admin), false) = true))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "major_category_catalog",
+"policyname": "major_category_catalog_write_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "ALL",
+"qual": "(COALESCE(( SELECT is_admin() AS is_admin), false) = true)",
+"with_check": "(COALESCE(( SELECT is_admin() AS is_admin), false) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_academic_record_change_requests",
+"policyname": "macc_admin_select_all",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "mentor_academic_record_change_requests",
+"policyname": "macc_admin_update_all",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": "(( SELECT is_admin() AS is_admin) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_academic_record_change_requests",
+"policyname": "macc_insert_own_pending",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((mentor_id = ( SELECT auth.uid() AS uid)) AND (status = 'pending'::text) AND (EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.role = 'mentor'::text)))) AND (approved_university_name IS NULL) AND (reviewed_by IS NULL) AND (reviewed_at IS NULL) AND (reject_reason IS NULL))"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_academic_record_change_requests",
+"policyname": "macc_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(mentor_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "mentor_academic_record_change_requests",
+"policyname": "macc_update_own_pending",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((mentor_id = ( SELECT auth.uid() AS uid)) AND (status = ANY (ARRAY['pending'::text, 'resubmit_required'::text])))",
+"with_check": "((mentor_id = ( SELECT auth.uid() AS uid)) AND (status = 'pending'::text) AND (approved_university_name IS NULL) AND (reviewed_by IS NULL) AND (reviewed_at IS NULL) AND (reject_reason IS NULL))"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_individual_question_pricing",
+"policyname": "miqp_select_authenticated",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "true",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "mentor_plans",
+"policyname": "mplan_del",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "((mentor_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "mentor_plans",
+"policyname": "mplan_ins",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((mentor_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_plans",
+"policyname": "mplan_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "true",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "mentor_plans",
+"policyname": "mplan_upd",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((mentor_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))",
+"with_check": "((mentor_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_profiles",
+"policyname": "mentor_insert_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(user_id = ( SELECT auth.uid() AS uid))"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_profiles",
+"policyname": "mentor_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(user_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "mentor_profiles",
+"policyname": "mentor_update_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(user_id = ( SELECT auth.uid() AS uid))",
+"with_check": "(user_id = ( SELECT auth.uid() AS uid))"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_profiles",
+"policyname": "mp_admin_select_all",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "mentor_school_verifications",
+"policyname": "msv_admin_select_all",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "mentor_school_verifications",
+"policyname": "msv_admin_update_all",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": "(( SELECT is_admin() AS is_admin) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_school_verifications",
+"policyname": "msv_insert_own_pending",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((mentor_id = ( SELECT auth.uid() AS uid)) AND (status = 'pending'::text) AND (EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.role = 'mentor'::text)))) AND (verified_university_name IS NULL) AND (verified_university_id IS NULL) AND (verified_major_category IS NULL) AND (verified_department_name IS NULL) AND (school_tier IS NULL) AND (reviewed_by IS NULL) AND (reviewed_at IS NULL) AND (reject_reason IS NULL))"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_school_verifications",
+"policyname": "msv_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(mentor_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "mentor_school_verifications",
+"policyname": "msv_update_own_pending",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((mentor_id = ( SELECT auth.uid() AS uid)) AND (status = ANY (ARRAY['pending'::text, 'resubmit_required'::text])))",
+"with_check": "((mentor_id = ( SELECT auth.uid() AS uid)) AND (status = 'pending'::text) AND (verified_university_name IS NULL) AND (verified_university_id IS NULL) AND (verified_major_category IS NULL) AND (verified_department_name IS NULL) AND (school_tier IS NULL) AND (reviewed_by IS NULL) AND (reviewed_at IS NULL) AND (reject_reason IS NULL))"
+},
+{
+"schemaname": "public",
+"tablename": "mentor_student_rooms",
+"policyname": "msr_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((( SELECT auth.uid() AS uid) = student_id) OR (( SELECT auth.uid() AS uid) = mentor_id))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "notification_settings",
+"policyname": "notif_settings_modify_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "ALL",
+"qual": "(user_id = ( SELECT auth.uid() AS uid))",
+"with_check": "(user_id = ( SELECT auth.uid() AS uid))"
+},
+{
+"schemaname": "public",
+"tablename": "notification_settings",
+"policyname": "notif_settings_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(user_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "notifications",
+"policyname": "notif_select_recipient",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(((recipient_user_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = recipient_user_id)) OR ((user_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = user_id)) OR ((recipient_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = recipient_id)) OR ((student_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = student_id)) OR ((mentor_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = mentor_id)) OR ((target_user_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = target_user_id)) OR ((owner_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = owner_id)))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "notifications",
+"policyname": "notif_update_recipient_read",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(((recipient_user_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = recipient_user_id)) OR ((user_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = user_id)) OR ((recipient_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = recipient_id)) OR ((student_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = student_id)) OR ((mentor_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = mentor_id)) OR ((target_user_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = target_user_id)) OR ((owner_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = owner_id)))",
+"with_check": "(((recipient_user_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = recipient_user_id)) OR ((user_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = user_id)) OR ((recipient_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = recipient_id)) OR ((student_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = student_id)) OR ((mentor_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = mentor_id)) OR ((target_user_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = target_user_id)) OR ((owner_id IS NOT NULL) AND (( SELECT auth.uid() AS uid) = owner_id)))"
+},
+{
+"schemaname": "public",
+"tablename": "order_events",
+"policyname": "oev_insert",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(EXISTS ( SELECT 1\n   FROM custom_request_orders o\n  WHERE ((o.id = order_events.custom_request_order_id) AND ((o.student_id = ( SELECT auth.uid() AS uid)) OR (o.mentor_id = ( SELECT auth.uid() AS uid)) OR (o.buyer_id = ( SELECT auth.uid() AS uid)) OR (o.user_id = ( SELECT auth.uid() AS uid)) OR (o.client_id = ( SELECT auth.uid() AS uid)) OR (o.author_id = ( SELECT auth.uid() AS uid)) OR (o.requester_id = ( SELECT auth.uid() AS uid))))))"
+},
+{
+"schemaname": "public",
+"tablename": "order_events",
+"policyname": "oev_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(EXISTS ( SELECT 1\n   FROM custom_request_orders o\n  WHERE ((o.id = order_events.custom_request_order_id) AND ((( SELECT is_admin() AS is_admin) = true) OR ((( SELECT auth.uid() AS uid) = o.student_id) OR (( SELECT auth.uid() AS uid) = o.mentor_id)) OR (o.buyer_id = ( SELECT auth.uid() AS uid)) OR (o.client_id = ( SELECT auth.uid() AS uid)) OR (o.user_id = ( SELECT auth.uid() AS uid)) OR (o.author_id = ( SELECT auth.uid() AS uid)) OR (o.requester_id = ( SELECT auth.uid() AS uid))))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "order_payments",
+"policyname": "opay_insert",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(( SELECT is_admin() AS is_admin) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "order_payments",
+"policyname": "opay_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(EXISTS ( SELECT 1\n   FROM custom_request_orders o\n  WHERE ((o.id = order_payments.custom_request_order_id) AND ((( SELECT is_admin() AS is_admin) = true) OR ((( SELECT auth.uid() AS uid) = o.student_id) OR (( SELECT auth.uid() AS uid) = o.mentor_id)) OR (o.buyer_id = ( SELECT auth.uid() AS uid)) OR (o.client_id = ( SELECT auth.uid() AS uid)) OR (o.user_id = ( SELECT auth.uid() AS uid)) OR (o.author_id = ( SELECT auth.uid() AS uid)) OR (o.requester_id = ( SELECT auth.uid() AS uid))))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "payments",
+"policyname": "payments_insert_intent",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((( SELECT auth.uid() AS uid) = user_id) AND (status = ANY (ARRAY['pending'::text, 'processing'::text])))"
+},
+{
+"schemaname": "public",
+"tablename": "payments",
+"policyname": "payments_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((((( SELECT auth.uid() AS uid) = user_id) OR (( SELECT auth.uid() AS uid) = student_id)) OR (( SELECT auth.uid() AS uid) = payer_id)) OR (( SELECT auth.uid() AS uid) = mentor_id))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "payout_run_items",
+"policyname": "pri_select_mentor_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(mentor_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "post_reactions",
+"policyname": "post_reactions_delete_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "((user_id = ( SELECT auth.uid() AS uid)) AND ( SELECT ugc_write_allowed() AS ugc_write_allowed))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "post_reactions",
+"policyname": "post_reactions_insert_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((user_id = ( SELECT auth.uid() AS uid)) AND ( SELECT ugc_write_allowed() AS ugc_write_allowed))"
+},
+{
+"schemaname": "public",
+"tablename": "post_reactions",
+"policyname": "post_reactions_select_all",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "true",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "post_reactions",
+"policyname": "본인 반응만 조회",
+"permissive": "PERMISSIVE",
+"roles": [
+"public"
+],
+"cmd": "SELECT",
+"qual": "(auth.uid() = user_id)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "promotion_campaigns",
+"policyname": "promotion_campaigns_delete_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "(EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "promotion_campaigns",
+"policyname": "promotion_campaigns_insert_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))"
+},
+{
+"schemaname": "public",
+"tablename": "promotion_campaigns",
+"policyname": "promotion_campaigns_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text)))) OR ((COALESCE(is_active, false) = true) AND ((starts_at IS NULL) OR (starts_at <= now())) AND ((ends_at IS NULL) OR (ends_at >= now()))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "promotion_campaigns",
+"policyname": "promotion_campaigns_update_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))",
+"with_check": "(EXISTS ( SELECT 1\n   FROM users u\n  WHERE ((u.id = auth.uid()) AND (u.role = 'admin'::text))))"
+},
+{
+"schemaname": "public",
+"tablename": "question_attachments",
+"policyname": "question_attachments_insert_via_room",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((EXISTS ( SELECT 1\n   FROM (question_threads qt\n     JOIN mentor_student_rooms r ON ((r.id = qt.mentor_student_room_id)))\n  WHERE ((qt.id = question_attachments.thread_id) AND ((r.student_id = ( SELECT auth.uid() AS uid)) OR (r.mentor_id = ( SELECT auth.uid() AS uid)))))) AND ((message_id IS NULL) OR (EXISTS ( SELECT 1\n   FROM question_messages qm\n  WHERE ((qm.id = question_attachments.message_id) AND (qm.thread_id = question_attachments.thread_id))))) AND ((author_id IS NULL) OR (author_id = ( SELECT auth.uid() AS uid))))"
+},
+{
+"schemaname": "public",
+"tablename": "question_attachments",
+"policyname": "question_attachments_select_via_room",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(EXISTS ( SELECT 1\n   FROM (question_threads qt\n     JOIN mentor_student_rooms r ON ((r.id = qt.mentor_student_room_id)))\n  WHERE ((qt.id = question_attachments.thread_id) AND ((r.student_id = ( SELECT auth.uid() AS uid)) OR (r.mentor_id = ( SELECT auth.uid() AS uid)) OR (EXISTS ( SELECT 1\n           FROM users u\n          WHERE ((u.id = ( SELECT auth.uid() AS uid)) AND (u.role = 'admin'::text))))))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "question_messages",
+"policyname": "qm_insert",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((( SELECT auth.uid() AS uid) = author_id) AND (EXISTS ( SELECT 1\n   FROM (question_threads t\n     JOIN mentor_student_rooms r ON ((r.id = t.mentor_student_room_id)))\n  WHERE ((t.id = question_messages.thread_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))"
+},
+{
+"schemaname": "public",
+"tablename": "question_messages",
+"policyname": "qm_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(EXISTS ( SELECT 1\n   FROM (question_threads t\n     JOIN mentor_student_rooms r ON ((r.id = t.mentor_student_room_id)))\n  WHERE ((t.id = question_messages.thread_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id)))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "question_threads",
+"policyname": "qt_select_via_room",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = question_threads.mentor_student_room_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id)))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "question_threads",
+"policyname": "qt_update_via_room",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = question_threads.mentor_student_room_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id)))))",
+"with_check": "(EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = question_threads.mentor_student_room_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id)))))"
+},
+{
+"schemaname": "public",
+"tablename": "question_threads",
+"policyname": "qt_write_via_room",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = question_threads.mentor_student_room_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id)))))"
+},
+{
+"schemaname": "public",
+"tablename": "refunds",
+"policyname": "refund_ins",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(( SELECT is_admin() AS is_admin) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "refunds",
+"policyname": "refund_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((user_id = ( SELECT auth.uid() AS uid)) OR (( SELECT is_admin() AS is_admin) = true))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "reviews",
+"policyname": "reviews_insert_student",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((author_id = ( SELECT auth.uid() AS uid)) AND check_review_eligibility(mentor_id, ( SELECT auth.uid() AS uid)))"
+},
+{
+"schemaname": "public",
+"tablename": "reviews",
+"policyname": "reviews_select_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "reviews",
+"policyname": "reviews_select_author",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(author_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "reviews",
+"policyname": "reviews_select_public_visible",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((moderation_state = 'visible'::text) AND (COALESCE(is_hidden, false) = false) AND (COALESCE(is_blinded, false) = false))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "reviews",
+"policyname": "reviews_update_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": "(( SELECT is_admin() AS is_admin) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "reviews",
+"policyname": "reviews_update_author",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((( SELECT auth.uid() AS uid) = author_id) AND (COALESCE(is_hidden, false) = false) AND (COALESCE(is_blinded, false) = false))",
+"with_check": "(( SELECT auth.uid() AS uid) = author_id)"
+},
+{
+"schemaname": "public",
+"tablename": "reviews",
+"policyname": "reviews_update_mentor",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(( SELECT auth.uid() AS uid) = mentor_id)",
+"with_check": "(( SELECT auth.uid() AS uid) = mentor_id)"
+},
+{
+"schemaname": "public",
+"tablename": "reviews_duplicates_archive",
+"policyname": "reviews_duplicates_archive_service",
+"permissive": "PERMISSIVE",
+"roles": [
+"service_role"
+],
+"cmd": "ALL",
+"qual": "true",
+"with_check": "true"
+},
+{
+"schemaname": "public",
+"tablename": "reviews_quarantine_archive",
+"policyname": "reviews_quarantine_archive_service",
+"permissive": "PERMISSIVE",
+"roles": [
+"service_role"
+],
+"cmd": "ALL",
+"qual": "true",
+"with_check": "true"
+},
+{
+"schemaname": "public",
+"tablename": "scan_annotations",
+"policyname": "scan_annotations_admin_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "scan_annotations",
+"policyname": "scan_annotations_insert_author",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((( SELECT auth.uid() AS uid) = author_id) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = scan_annotations.mentor_student_room_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))"
+},
+{
+"schemaname": "public",
+"tablename": "scan_annotations",
+"policyname": "scan_annotations_select_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = scan_annotations.mentor_student_room_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id)))))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "scan_annotations",
+"policyname": "scan_annotations_update_author",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(( SELECT auth.uid() AS uid) = author_id)",
+"with_check": "((( SELECT auth.uid() AS uid) = author_id) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = scan_annotations.mentor_student_room_id) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))"
+},
+{
+"schemaname": "public",
+"tablename": "school_tier_catalog",
+"policyname": "school_tier_catalog_select_active_or_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((is_active = true) OR (COALESCE(( SELECT is_admin() AS is_admin), false) = true))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "school_tier_catalog",
+"policyname": "school_tier_catalog_write_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "ALL",
+"qual": "(COALESCE(( SELECT is_admin() AS is_admin), false) = true)",
+"with_check": "(COALESCE(( SELECT is_admin() AS is_admin), false) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "school_tier_mappings",
+"policyname": "school_tier_mappings_admin_all",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "ALL",
+"qual": "(COALESCE(( SELECT is_admin() AS is_admin), false) = true)",
+"with_check": "(COALESCE(( SELECT is_admin() AS is_admin), false) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_posts",
+"policyname": "sf_delete_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "(((author_id = ( SELECT auth.uid() AS uid)) OR (creator_id = ( SELECT auth.uid() AS uid))) AND ( SELECT ugc_write_allowed() AS ugc_write_allowed))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "shortform_posts",
+"policyname": "sf_insert_mentor",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((( SELECT is_mentor() AS is_mentor) = true) AND ((author_id = ( SELECT auth.uid() AS uid)) OR (creator_id = ( SELECT auth.uid() AS uid))) AND ( SELECT ugc_write_allowed() AS ugc_write_allowed))"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_posts",
+"policyname": "sf_select_published",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((status = 'published'::text) OR (author_id = ( SELECT auth.uid() AS uid)) OR (creator_id = ( SELECT auth.uid() AS uid)) OR ( SELECT is_admin() AS is_admin))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "shortform_posts",
+"policyname": "sf_update_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": "(( SELECT is_admin() AS is_admin) = true)"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_posts",
+"policyname": "sf_update_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(((author_id = ( SELECT auth.uid() AS uid)) OR (creator_id = ( SELECT auth.uid() AS uid))) AND ( SELECT ugc_write_allowed() AS ugc_write_allowed))",
+"with_check": "((author_id = ( SELECT auth.uid() AS uid)) OR (creator_id = ( SELECT auth.uid() AS uid)))"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_reactions",
+"policyname": "shortform_reactions_delete_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "((user_id = ( SELECT auth.uid() AS uid)) AND ( SELECT ugc_write_allowed() AS ugc_write_allowed))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "shortform_reactions",
+"policyname": "shortform_reactions_insert_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((user_id = ( SELECT auth.uid() AS uid)) AND (type = ANY (ARRAY['like'::text, 'scrap'::text])) AND ( SELECT ugc_write_allowed() AS ugc_write_allowed))"
+},
+{
+"schemaname": "public",
+"tablename": "shortform_reactions",
+"policyname": "shortform_reactions_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(user_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "subjects",
+"policyname": "subjects_select_all",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "true",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "subscription_billing_events",
+"policyname": "subscription_billing_events_select_parties",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(((( SELECT auth.uid() AS uid) = student_id) OR (( SELECT auth.uid() AS uid) = mentor_id)) OR (( SELECT is_admin() AS is_admin) = true))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "subscription_settlement_items",
+"policyname": "ssi_select_mentor_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(mentor_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "subscriptions",
+"policyname": "subscriptions_select_parties",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((( SELECT auth.uid() AS uid) = student_id) OR (( SELECT auth.uid() AS uid) = mentor_id))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "user_blocks",
+"policyname": "ub_delete_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "(blocker_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "user_blocks",
+"policyname": "ub_insert_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(blocker_id = ( SELECT auth.uid() AS uid))"
+},
+{
+"schemaname": "public",
+"tablename": "user_blocks",
+"policyname": "ub_select_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "is_admin()",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "user_blocks",
+"policyname": "ub_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(blocker_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "user_consent_records",
+"policyname": "ucr_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(user_id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "users",
+"policyname": "users_admin_select_all",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "users",
+"policyname": "users_insert_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(id = ( SELECT auth.uid() AS uid))"
+},
+{
+"schemaname": "public",
+"tablename": "users",
+"policyname": "users_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(id = ( SELECT auth.uid() AS uid))",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "users",
+"policyname": "users_update_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(id = ( SELECT auth.uid() AS uid))",
+"with_check": "(id = ( SELECT auth.uid() AS uid))"
+},
+{
+"schemaname": "public",
+"tablename": "verification_logs",
+"policyname": "ver_logs_admin_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(( SELECT is_admin() AS is_admin) = true)",
+"with_check": null
+},
+{
+"schemaname": "public",
+"tablename": "verification_logs",
+"policyname": "ver_logs_insert_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(user_id = ( SELECT auth.uid() AS uid))"
+},
+{
+"schemaname": "public",
+"tablename": "withdrawals",
+"policyname": "withdrawals_insert_self_requested",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((( SELECT auth.uid() AS uid) = mentor_id) AND (status = 'requested'::text))"
+},
+{
+"schemaname": "public",
+"tablename": "withdrawals",
+"policyname": "withdrawals_select_self",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(( SELECT auth.uid() AS uid) = mentor_id)",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "adg_storage_block_insert_when_deleting",
+"permissive": "RESTRICTIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "(NOT account_deletion_write_blocked(auth.uid()))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "adg_storage_block_update_when_deleting",
+"permissive": "RESTRICTIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "(NOT account_deletion_write_blocked(auth.uid()))",
+"with_check": "(NOT account_deletion_write_blocked(auth.uid()))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "connection_note_ink_obj_insert",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((bucket_id = 'connection-note-ink'::text) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = ((storage.foldername(objects.name))[1])::uuid) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "connection_note_ink_obj_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((bucket_id = 'connection-note-ink'::text) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = ((storage.foldername(objects.name))[1])::uuid) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "connection_note_ink_obj_update",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((bucket_id = 'connection-note-ink'::text) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = ((storage.foldername(objects.name))[1])::uuid) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))",
+"with_check": "((bucket_id = 'connection-note-ink'::text) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = ((storage.foldername(objects.name))[1])::uuid) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "cpi_auth_delete_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "((bucket_id = 'community-post-images'::text) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "cpi_auth_insert_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((bucket_id = 'community-post-images'::text) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text) AND (NOT account_deletion_write_blocked(auth.uid())))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "cpi_auth_update_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((bucket_id = 'community-post-images'::text) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "cpi_public_read",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(bucket_id = 'community-post-images'::text)",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "craa_storage_insert_mentor",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((bucket_id = 'custom-request-application-attachments'::text) AND (user_is_application_mentor_for_craa_path(name) = true))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "craa_storage_read_authorized",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((bucket_id = 'custom-request-application-attachments'::text) AND user_can_read_craa_storage_path(name))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "crpa_storage_insert_author",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((bucket_id = 'custom-request-post-attachments'::text) AND user_is_post_author_for_crpa_path(name))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "crpa_storage_read_authorized",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((bucket_id = 'custom-request-post-attachments'::text) AND user_can_read_crpa_storage_path(name))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "custom_order_deliverable_storage_insert_mentor",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((bucket_id = 'custom-order-deliverables'::text) AND user_is_mentor_of_cro_storage_path(name))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "custom_order_deliverable_storage_read_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((bucket_id = 'custom-order-deliverables'::text) AND user_can_read_cro_deliverable_storage_path(name))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "custom_order_message_attachments_storage_delete_uploader_or_adm",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "((bucket_id = 'custom-order-message-attachments'::text) AND ((EXISTS ( SELECT 1\n   FROM custom_order_message_attachments a\n  WHERE ((a.storage_path = objects.name) AND ((a.uploader_id = ( SELECT auth.uid() AS uid)) OR is_admin())))) OR ((custom_order_message_attachment_uploader_id_from_path(name) = ( SELECT auth.uid() AS uid)) AND custom_order_message_attachment_is_party(custom_order_message_attachment_order_id_from_path(name)))))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "custom_order_message_attachments_storage_insert_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((bucket_id = 'custom-order-message-attachments'::text) AND (custom_order_message_attachment_order_id_from_path(name) IS NOT NULL) AND (custom_order_message_attachment_uploader_id_from_path(name) = ( SELECT auth.uid() AS uid)) AND custom_order_message_attachment_is_party(custom_order_message_attachment_order_id_from_path(name)))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "custom_order_message_attachments_storage_select_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((bucket_id = 'custom-order-message-attachments'::text) AND (EXISTS ( SELECT 1\n   FROM custom_order_message_attachments a\n  WHERE ((a.storage_path = objects.name) AND custom_order_message_attachment_is_party(a.order_id)))))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "iqa_storage_delete_unregistered_owner",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "((bucket_id = 'individual-question-attachments'::text) AND (owner_id = (( SELECT auth.uid() AS uid))::text) AND user_is_party_for_individual_question_storage_path(name) AND (NOT (EXISTS ( SELECT 1\n   FROM individual_question_attachments a\n  WHERE (a.storage_path = objects.name)))))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "iqa_storage_insert_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((bucket_id = 'individual-question-attachments'::text) AND user_is_party_for_individual_question_storage_path(name))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "iqa_storage_read_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((bucket_id = 'individual-question-attachments'::text) AND user_is_party_for_individual_question_storage_path(name))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "iqa_storage_update_party_annotations",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((bucket_id = 'individual-question-attachments'::text) AND (split_part(name, '/'::text, 2) = 'annotations'::text) AND user_is_party_for_individual_question_storage_path(name))",
+"with_check": "((bucket_id = 'individual-question-attachments'::text) AND (split_part(name, '/'::text, 2) = 'annotations'::text) AND user_is_party_for_individual_question_storage_path(name))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "pa_auth_delete_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "((bucket_id = 'profile-avatars'::text) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "pa_auth_insert_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((bucket_id = 'profile-avatars'::text) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "pa_auth_update_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((bucket_id = 'profile-avatars'::text) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "pa_public_read",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(bucket_id = 'profile-avatars'::text)",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "qra_storage_delete_unregistered_owner",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "((bucket_id = 'question-room-attachments'::text) AND (owner_id = (( SELECT auth.uid() AS uid))::text) AND (NOT (EXISTS ( SELECT 1\n   FROM question_attachments a\n  WHERE (a.storage_path = objects.name)))))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "qra_storage_insert_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((bucket_id = 'question-room-attachments'::text) AND user_is_room_party_for_qra_path(name) AND qra_thread_writable_for_path(name) AND qra_uploader_allowed_for_path(name) AND qra_path_upload_eligible(name) AND (NOT account_deletion_write_blocked(auth.uid())))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "qra_storage_read_admin",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((bucket_id = 'question-room-attachments'::text) AND (( SELECT is_admin() AS is_admin) = true))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "qra_storage_read_party",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((bucket_id = 'question-room-attachments'::text) AND user_is_room_party_for_qra_path(name))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "scan_annotations_obj_admin_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((bucket_id = 'scan-annotations'::text) AND (( SELECT is_admin() AS is_admin) = true))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "scan_annotations_obj_insert",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((bucket_id = 'scan-annotations'::text) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = ((storage.foldername(objects.name))[1])::uuid) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "scan_annotations_obj_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((bucket_id = 'scan-annotations'::text) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = ((storage.foldername(objects.name))[1])::uuid) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "scan_annotations_obj_update",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((bucket_id = 'scan-annotations'::text) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = ((storage.foldername(objects.name))[1])::uuid) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))",
+"with_check": "((bucket_id = 'scan-annotations'::text) AND (EXISTS ( SELECT 1\n   FROM mentor_student_rooms r\n  WHERE ((r.id = ((storage.foldername(objects.name))[1])::uuid) AND ((( SELECT auth.uid() AS uid) = r.student_id) OR (( SELECT auth.uid() AS uid) = r.mentor_id))))))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "sfv_mentor_delete_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "((bucket_id = ANY (ARRAY['shortform-videos'::text, 'shortform-thumbnails'::text])) AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "sfv_mentor_insert",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((bucket_id = ANY (ARRAY['shortform-videos'::text, 'shortform-thumbnails'::text])) AND is_mentor() AND ((storage.foldername(name))[1] = (( SELECT auth.uid() AS uid))::text) AND (NOT account_deletion_write_blocked(auth.uid())))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "sfv_public_read",
+"permissive": "PERMISSIVE",
+"roles": [
+"anon",
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "(bucket_id = ANY (ARRAY['shortform-videos'::text, 'shortform-thumbnails'::text]))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "student_id_images_admin_select",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((bucket_id = 'student-id-images'::text) AND (( SELECT is_admin() AS is_admin) = true))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "student_id_images_delete_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "DELETE",
+"qual": "((bucket_id = 'student-id-images'::text) AND (split_part(name, '/'::text, 1) = ( SELECT (auth.uid())::text AS uid)))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "student_id_images_insert_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "INSERT",
+"qual": null,
+"with_check": "((bucket_id = 'student-id-images'::text) AND (split_part(name, '/'::text, 1) = ( SELECT (auth.uid())::text AS uid)))"
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "student_id_images_select_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "SELECT",
+"qual": "((bucket_id = 'student-id-images'::text) AND (split_part(name, '/'::text, 1) = ( SELECT (auth.uid())::text AS uid)))",
+"with_check": null
+},
+{
+"schemaname": "storage",
+"tablename": "objects",
+"policyname": "student_id_images_update_own",
+"permissive": "PERMISSIVE",
+"roles": [
+"authenticated"
+],
+"cmd": "UPDATE",
+"qual": "((bucket_id = 'student-id-images'::text) AND (split_part(name, '/'::text, 1) = ( SELECT (auth.uid())::text AS uid)))",
+"with_check": "((bucket_id = 'student-id-images'::text) AND (split_part(name, '/'::text, 1) = ( SELECT (auth.uid())::text AS uid)))"
+}
+]

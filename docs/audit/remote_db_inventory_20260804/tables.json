@@ -1,0 +1,555 @@
+[
+ {
+  "schema": "public",
+  "table": "account_deletion_jobs",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "admin_action_logs",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "admin_case_notes",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "ai_drafts",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "app_notices",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "cash_ledger",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "cash_topup_packages",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "cash_wallets",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "comments",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "community_comments",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "community_hashtags",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "community_posts",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "connection_notes",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "content_reports",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "custom_order_deliverables",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "custom_order_message_attachments",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "custom_order_messages",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "custom_order_revisions",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "custom_order_settlement_items",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "custom_request_application_attachments",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "custom_request_applications",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "custom_request_orders",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "custom_request_post_attachments",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "custom_request_posts",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "device_tokens",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "disputes",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "favorites",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "free_question_usage",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "individual_question_attachments",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "individual_question_messages",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "individual_question_transfers",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "individual_questions",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "major_category_catalog",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "mentor_academic_record_change_requests",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "mentor_activity_events",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "mentor_individual_question_pricing",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "mentor_plans",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "mentor_profiles",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "mentor_school_verifications",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "mentor_student_rooms",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "mobile_app_version_policies",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "notification_deliveries",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "notification_outbox",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "notification_settings",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "notification_transport_config",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "notifications",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "order_events",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "order_payments",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "payments",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "payout_run_items",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "payout_runs",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "payout_settings",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "post_reactions",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "promotion_campaigns",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "question_attachments",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "question_messages",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "question_threads",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "refunds",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "reviews",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "reviews_duplicates_archive",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "reviews_quarantine_archive",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "scan_annotations",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "school_tier_catalog",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "school_tier_mappings",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "shortform_posts",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "shortform_reactions",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "shortform_view_events",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "subjects",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "subscription_billing_events",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "subscription_checkout_anomalies",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "subscription_settlement_items",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "subscriptions",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "user_blocks",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "user_consent_records",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "user_deletion_log",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "user_warnings",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "users",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "verification_logs",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ },
+ {
+  "schema": "public",
+  "table": "withdrawals",
+  "rls_enabled": true,
+  "rls_forced": false,
+  "owner": "postgres"
+ }
+]
