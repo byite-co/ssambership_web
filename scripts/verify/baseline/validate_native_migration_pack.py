@@ -53,14 +53,21 @@ def sha256(b: bytes) -> str: return hashlib.sha256(b).hexdigest()
 
 def main() -> int:
     args = sys.argv[1:]
-    pack_dir, expect_total, with_pr60 = MIG, 63, False
+    pack_dir, with_pr60 = MIG, False
     if '--with-pr60' in args:
         i = args.index('--with-pr60')
         if i + 1 >= len(args):
             print('usage: --with-pr60 <dir>'); return 2
-        pack_dir, expect_total, with_pr60 = Path(args[i + 1]), 64, True
+        pack_dir, with_pr60 = Path(args[i + 1]), True
 
     files = sorted(pack_dir.glob('*.sql'))
+    # PR #60(20260804113000) 병합 전에는 63본, 병합 후에는 64본이 정상이다.
+    # 어느 쪽인지는 디렉터리 실측으로 판정한다 — 플래그로 거짓말할 수 없다.
+    if not with_pr60:
+        with_pr60 = any(f.name.startswith(PR60_VERSION + '_') for f in files)
+        if with_pr60:
+            print('  (통합 상태 감지: PR60 migration 존재 → 64본 기준으로 검증)')
+    expect_total = 64 if with_pr60 else 63
     print(f'=== pack: {pack_dir}  files={len(files)} (expect {expect_total})')
     if len(files) != expect_total:
         bad(f'migration file count {len(files)} != {expect_total}')

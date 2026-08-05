@@ -117,9 +117,13 @@ def main():
     if check:
         if not MANIFEST.exists() or MANIFEST.read_bytes() != mtext:
             problems.append(str(MANIFEST.relative_to(REPO)))
-        # migrations/ 안에 계획 밖 파일이 있으면 실패 (PR60 version 제외 허용 안 함)
+        # migrations/ 안에 계획 밖 파일이 있으면 실패.
+        # 단 PR #60 소유 migration(20260804113000)은 pack 생성기 산출물이 아니라
+        # 별도 PR 이 소유하는 정식 migration 이므로, 병합 후 공존 상태를 정상으로 본다.
+        # (source ↔ migration 동기화는 check_pr60_native_migration_sync.sh 가 강제한다.)
         planned = {i['output'].name for i in items}
-        extra = sorted(p.name for p in MIG.glob('*.sql') if p.name not in planned)
+        extra = sorted(p.name for p in MIG.glob('*.sql')
+                       if p.name not in planned and not p.name.startswith(PR60_VERSION + '_'))
         if extra:
             problems.append('EXTRA:' + ','.join(extra))
         if problems:
