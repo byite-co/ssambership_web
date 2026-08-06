@@ -8,6 +8,12 @@ export const MENTOR_SUBSCRIPTION_PLATFORM_SHARE = 0.15 as const;
 export const MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE = 0.05 as const;
 export const MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE = 0.15 as const;
 
+/**
+ * UI 표기 — 지급일. 계산 정본(lib/payout/payoutComputation.ts)에서 그대로 재수출한다.
+ * 화면 문구가 계산과 갈라지지 않게 하는 단일 지점이다(QA-C12).
+ */
+export { PAYOUT_DAY_LABEL } from "@/lib/payout/payoutComputation";
+
 /** UI 표기 — 플랫폼 수수료(공제) */
 export const SUBSCRIPTION_PLATFORM_FEE_LABEL = "15% 공제 (플랫폼 수수료)" as const;
 export const CUSTOM_REQUEST_PLATFORM_FEE_LABEL = "5% 공제 (플랫폼 수수료)" as const;

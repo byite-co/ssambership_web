@@ -45,6 +45,7 @@ export function CommunityBoardComposeForm(props: Props) {
   const formRef = useRef<HTMLFormElement>(null);
   const imageRefsInputRef = useRef<HTMLInputElement>(null);
   const requestIdInputRef = useRef<HTMLInputElement>(null);
+  const intentInputRef = useRef<HTMLInputElement>(null);
   // 2단 제출 플래그: 클라 업로드가 끝난 뒤 requestSubmit 으로 네이티브 제출을 통과시킨다.
   const uploadedGateRef = useRef(false);
 
@@ -113,6 +114,8 @@ export function CommunityBoardComposeForm(props: Props) {
     setBusy(true);
     setError(null);
     try {
+      // 업로드 await 이전에 캡처한다 — 이후 재렌더로 submitter 가 disabled 돼도 의도가 남는다.
+      if (intentInputRef.current) intentInputRef.current.value = intent;
       let refs: string[] = [];
       if (files.length) {
         const up = await uploadCommunityImagesFromBrowser(supabase, props.userId, files);
@@ -130,9 +133,12 @@ export function CommunityBoardComposeForm(props: Props) {
       }
       if (imageRefsInputRef.current) imageRefsInputRef.current.value = JSON.stringify(refs);
       if (requestIdInputRef.current) requestIdInputRef.current.value = rid;
+      // 재제출 직전 한 번 더 못박는다 — 이 줄과 requestSubmit 사이에는 재렌더가 끼어들 수 없다.
+      if (intentInputRef.current) intentInputRef.current.value = intent;
       uploadedGateRef.current = true;
-      // 동일 intent 로 네이티브 제출 재개(파일은 body 로 안 감 — imageRefs 텍스트만).
-      formRef.current?.requestSubmit(submitter ?? undefined);
+      // submitter 를 넘기지 않는다 — 이 시점의 상단바 버튼은 busy 로 disabled 라
+      // 넘겨도 entry list 에서 제외된다(그게 QA-A3 의 원인이었다). intent 는 위 hidden 이 나른다.
+      formRef.current?.requestSubmit();
     } catch {
       setError("저장에 실패했어요. 다시 시도해 주세요.");
       setBusy(false);
@@ -152,6 +158,12 @@ export function CommunityBoardComposeForm(props: Props) {
         <input type="hidden" name="returnPath" value={returnPath} />
         <input type="hidden" name="requestId" ref={requestIdInputRef} defaultValue="" />
         <input type="hidden" name="imageRefs" ref={imageRefsInputRef} defaultValue="[]" />
+        {/* 최초 submit 의 intent 캡처 — 업로드 await 사이 재렌더로 상단바 버튼이
+            disabled 가 되면 submitter 값이 FormData 에 실리지 않아 임시저장이
+            publish 로 변질된다(QA-A3). hidden 은 disabled 되지 않으므로 항상 실린다.
+            서버는 getAll("intent") 의 첫 유효값을 취하므로 JS 비활성 경로(빈 hidden +
+            submitter 값)도 그대로 동작한다. */}
+        <input type="hidden" name="intent" ref={intentInputRef} defaultValue="" />
         {props.draft ? (
           <>
             <input type="hidden" name="draftId" value={props.draft.id} />

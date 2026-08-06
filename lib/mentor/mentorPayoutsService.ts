@@ -20,6 +20,8 @@ import {
   detailLineToSettlementRow,
   withPayoutWithholding,
 } from "@/lib/mentor/mentorPayoutsDisplay";
+import { payoutLineStatusKind } from "@/lib/mentor/payoutLineStatus";
+
 import type {
   MentorPayoutDetailLine,
   MentorPayoutDetailResult,
@@ -133,14 +135,6 @@ function subscriptionSettlementDescription(row: Row): string {
   return suffix ? `${SUBSCRIPTION_SETTLEMENT_LABEL} - ${suffix}` : SUBSCRIPTION_SETTLEMENT_LABEL;
 }
 
-function payoutLineStatusKind(status: string): "pending" | "paid" | "hold" | "canceled" {
-  const raw = status.trim();
-  const s = raw.toLowerCase();
-  if (s === "canceled" || s === "cancelled" || raw.includes("\uCDE8\uC18C")) return "canceled";
-  if (s === "paid" || raw.includes("\uC9C0\uAE09\uC644\uB8CC") || raw.includes("\uC815\uC0B0\uC644\uB8CC")) return "paid";
-  if (s === "hold" || s === "on_hold" || raw.includes("\uBCF4\uB958")) return "hold";
-  return "pending";
-}
 
 function isPaidPayoutLine(line: MentorPayoutDetailLine): boolean {
   return payoutLineStatusKind(line.status) === "paid";
@@ -149,6 +143,11 @@ function isPaidPayoutLine(line: MentorPayoutDetailLine): boolean {
 function isPendingPayoutLine(line: MentorPayoutDetailLine): boolean {
   const kind = payoutLineStatusKind(line.status);
   return kind === "pending" || kind === "hold";
+}
+
+/** 적립중 — 지급 예정과 배타적이다(합계가 겹치면 안 된다). */
+function isAccruingPayoutLine(line: MentorPayoutDetailLine): boolean {
+  return payoutLineStatusKind(line.status) === "accruing";
 }
 
 async function loadSubscriptionLines(client: SupabaseClient, mentorId: string): Promise<MentorPayoutDetailLine[]> {
@@ -376,8 +375,14 @@ export async function loadMentorPayoutSummary(supabase: SupabaseClient, mentorId
 
   const paidThisMonth = sumNetByStatus(all, ym, isPaidPayoutLine);
   const expectedThisMonth = sumNetByStatus(all, ym, isPendingPayoutLine);
+  const accruingThisMonth = sumNetByStatus(all, ym, isAccruingPayoutLine);
+  // 적립중은 지급 예정이 아니다. 폴백(수익−지급완료)에서도 빼야 한다 — 안 그러면
+  // 이번 달이 전부 적립중일 때 expectedThisMonth 가 0 이라 폴백이 적립분을 통째로
+  // "지급 예정"으로 되살린다(QA-A2 의 원래 증상과 같은 오표시).
   const thisMonthScheduledPayout =
-    expectedThisMonth > 0 ? expectedThisMonth : Math.max(0, thisMonthRevenue - paidThisMonth);
+    expectedThisMonth > 0
+      ? expectedThisMonth
+      : Math.max(0, thisMonthRevenue - paidThisMonth - accruingThisMonth);
 
   // W-01 4단 구조: 총 수익 → 플랫폼 수수료 → 원천징수 3.3% → 실지급 예정액(23일)
   const monthLines = all.filter((l) => inYm(l.date, ym));
@@ -393,6 +398,7 @@ export async function loadMentorPayoutSummary(supabase: SupabaseClient, mentorId
   return {
     thisMonthRevenue,
     thisMonthScheduledPayout,
+    thisMonthAccruing: accruingThisMonth,
     thisMonthSubscription,
     thisMonthCustomRequest,
     thisMonthIndividualQuestion,
@@ -431,8 +437,10 @@ export async function loadMentorPayoutMonthlyCards(
     const revenue = sumNet(all, ym);
     const paidInMonth = sumNetByStatus(all, ym, isPaidPayoutLine);
     const pendingInMonth = sumNetByStatus(all, ym, isPendingPayoutLine);
+    const accruingInMonth = sumNetByStatus(all, ym, isAccruingPayoutLine);
 
-    const scheduledPayout = pendingInMonth > 0 ? pendingInMonth : Math.max(0, revenue - paidInMonth);
+    const scheduledPayout =
+      pendingInMonth > 0 ? pendingInMonth : Math.max(0, revenue - paidInMonth - accruingInMonth);
 
     cards.push({
       yearMonth: ym,

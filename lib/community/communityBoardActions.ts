@@ -24,6 +24,7 @@ import {
   maskContactInUserText,
   sanitizeTrustSafetyText,
 } from "@/lib/safety/trustSafetyText";
+import { resolveComposeIntent } from "@/lib/community/composeIntent";
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DEFAULT_RETURN = "/community/new";
@@ -79,7 +80,10 @@ export async function submitCommunityBoardPostAction(formData: FormData) {
     if (!acctGate.ok) redirect(errRedirect(returnPath, "account_blocked"));
   }
 
-  const intent = String(formData.get("intent") ?? "publish");
+  // getAll 의 첫 유효값 — JS 활성(hidden 캡처)·비활성(submitter) 두 경로를 모두 덮는다.
+  // get() 단건 조회는 disabled submitter 로 값이 통째로 빠졌을 때 조용히 publish 로
+  // 떨어져 임시저장을 공개 발행했다(QA-A3).
+  const intent = resolveComposeIntent(formData.getAll("intent"));
   const status = intent === "draft" ? "draft" : "published";
   const draftId = String(formData.get("draftId") ?? "").trim();
   const title = String(formData.get("title") ?? "").trim();

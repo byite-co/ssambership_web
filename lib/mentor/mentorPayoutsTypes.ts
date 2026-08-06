@@ -44,6 +44,11 @@ export type MentorPayoutSummary = {
   thisMonthWithholding: number;
   /** W-01 4단 구조: 이번 달 실지급 예정액(수수료·원천징수 공제 후, 23일 지급) */
   thisMonthNetScheduledPayout: number;
+  /**
+   * 이번 달 **적립중** 금액(수수료 공제 후). 구독 사이클이 끝나지 않아 아직 지급
+   * 대상이 아닌 항목의 합계이며, thisMonthScheduledPayout 과 겹치지 않는다(QA-A2).
+   */
+  thisMonthAccruing: number;
   bankDisplay: string;
   bankEditable: boolean;
   bankName: string | null;
@@ -64,7 +69,8 @@ export type MentorPayoutDetailResult = {
   };
 };
 
-export type PayoutUiStatus = "paid" | "scheduled" | "hold" | "cancelled";
+/** accruing = 적립중(구독 사이클 미완료 — 아직 지급 대상이 아니다, QA-A2) */
+export type PayoutUiStatus = "paid" | "scheduled" | "accruing" | "hold" | "cancelled";
 
 export type MentorPayoutSettlementTableRow = {
   id: string;

@@ -33,6 +33,9 @@ export function settlementStatusBadge(status: PayoutUiStatus): { label: string; 
       return { label: "보류", className: "border-slate-200 bg-slate-100 text-slate-600" };
     case "cancelled":
       return { label: "취소", className: "border-slate-200 bg-slate-100 text-slate-500" };
+    case "accruing":
+      // 지급 예정(amber)과 색까지 구분한다 — 같은 칩으로 보이면 구분한 의미가 없다.
+      return { label: "적립중", className: "border-sky-200 bg-sky-50 text-sky-800" };
     default:
       return { label: "정산예정", className: "border-amber-200 bg-amber-50 text-amber-900" };
   }

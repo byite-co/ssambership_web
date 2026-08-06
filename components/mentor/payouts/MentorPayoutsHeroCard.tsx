@@ -42,6 +42,18 @@ export function MentorPayoutsHeroCard(props: Props) {
             </strong>
             {" = "}실지급 예정액
           </p>
+          {/* 적립중 — 구독 사이클이 끝나지 않아 아직 지급 대상이 아닌 금액.
+              위 실지급 예정액과 겹치지 않는다. 이걸 숨기면 배치가 정상 동작해도
+              멘토 화면이 0원으로 보인다(QA-A2). 0원일 때는 노출하지 않는다. */}
+          {summary.thisMonthAccruing > 0 ? (
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-[12px] text-sky-900">
+              <span className="font-extrabold">적립중</span>
+              <span className="font-semibold tabular-nums">
+                {formatCashKrw(summary.thisMonthAccruing)}
+              </span>
+              <span className="text-sky-700">· 구독 기간이 끝나면 지급 예정으로 넘어가요</span>
+            </p>
+          ) : null}
         </div>
         <div className="sm:text-right">
           <p className="text-[12px] font-semibold text-slate-500">지급 예정일</p>
