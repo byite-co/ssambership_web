@@ -27,6 +27,11 @@
 --
 -- 멱등: event_key 를 message_id 기준으로 잡아 스레드 생성 알림
 --   (question_received:<thread_id>)과 절대 충돌하지 않는다.
+--
+-- 중복 방지: 스레드의 **첫 메시지**는 이 경로에서 알리지 않는다. 질문 생성 RPC
+--   (qna_create_question_thread)가 같은 트랜잭션에서 이미 '새 질문' 알림을
+--   보내기 때문이다 — 검증에서 무료질문 1건에 멘토 알림이 2건 생기는 것을
+--   확인하고 막았다. 두 번째 메시지부터 이 경로가 동작한다.
 
 create or replace function public.qna_emit_answer_notification(
   p_thread_id uuid,
@@ -103,6 +108,20 @@ begin
       if not exists (
         select 1 from public.question_messages m
         where m.id = p_message_id and m.thread_id = p_thread_id and m.author_id = v_student
+      ) then return; end if;
+      -- ★ 질문 생성 RPC 가 스레드와 함께 만든 '첫 메시지'는 알리지 않는다.
+      --   그 경로는 같은 트랜잭션에서 이미 '새 질문이 도착했어요'
+      --   (question_received:<thread_id>)를 보내므로, 여기서 또 보내면 질문
+      --   1건에 멘토 알림이 2건 생긴다(무료·구독 공통 — 검증에서 실제 확인).
+      --   판정 기준은 **스레드와 같은 트랜잭션에서 생성됐는가**다: created_at 이
+      --   트랜잭션 시각(now())이라 RPC 가 만든 첫 메시지만 스레드와 정확히 같고,
+      --   이후 사용자가 보내는 메시지는 별도 트랜잭션이라 반드시 달라진다.
+      if exists (
+        select 1
+          from public.question_threads t2
+          join public.question_messages m2 on m2.id = p_message_id
+         where t2.id = p_thread_id
+           and m2.created_at = t2.created_at
       ) then return; end if;
       v_key := 'question_student_message:' || p_message_id::text;
       v_body_suffix := '님이 메시지를 보냈어요.';
