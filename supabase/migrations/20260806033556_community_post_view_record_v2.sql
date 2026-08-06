@@ -4,6 +4,11 @@
 -- 같은 진입의 재시도·재빌드마다 무한 가산됐다. 숏폼 v2 규약
 -- (shortform_view_record_v2 — (post, event_key) 멱등)을 게시판에 그대로
 -- 복제한다. 구 RPC 는 구버전 앱 호환을 위해 유지(정리 별도 과제).
+--
+-- ★ 한계 문서화(파일 주석 — 함수 본문은 as-applied 와 바이트 동일 유지):
+--   event_key 는 클라이언트 생성이라 악의적 조회수 부풀리기(새 키 남발)를
+--   막는 구조는 아니다 — 멱등의 목적은 정상 클라이언트의 재시도·재진입
+--   중복 가산 제거다(숏폼 v2 와 동일한 수용 리스크).
 create table public.community_post_view_events (
   post_id uuid not null references public.community_posts(id) on delete cascade,
   event_key uuid not null,
@@ -47,9 +52,6 @@ begin
   end if;
 
   -- 중복 key 는 idempotent success (계수 증가 없음)
-  -- ★ 한계 문서화: event_key 는 클라이언트 생성이라 악의적 조회수 부풀리기
-  --   (새 키 남발)를 막는 구조는 아니다 — 멱등의 목적은 정상 클라이언트의
-  --   재시도·재진입 중복 가산 제거다(숏폼 v2 와 동일한 수용 리스크).
   return jsonb_build_object('ok', true, 'contract_version', 1, 'incremented', v_inserted);
 end
 $function$;
