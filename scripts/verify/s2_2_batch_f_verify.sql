@@ -129,9 +129,16 @@ begin
                 where schemaname='public' and tablename='community_posts'
                   and policyname in ('cp_write_self','로그인 유저 게시글 작성','cp_update_own',
                                      'cp_update_self','본인 게시글 수정','cp_delete_own')) = 0
-          and (select count(*) from pg_policies
-                where schemaname='public' and tablename='community_posts' and cmd='SELECT'
-                  and policyname in ('cp_select_own','cp_select_published')) = 2;
+          -- S1-2(20260806200500) 이전 = 레거시 2종 / 이후 = 통합본 cp_select_visible 1종.
+          -- 어느 쪽이든 "SELECT 정책이 유지된다"는 이 검사의 의도는 동일하다.
+          and (
+                (select count(*) from pg_policies
+                  where schemaname='public' and tablename='community_posts' and cmd='SELECT'
+                    and policyname in ('cp_select_own','cp_select_published')) = 2
+             or (select count(*) from pg_policies
+                  where schemaname='public' and tablename='community_posts' and cmd='SELECT'
+                    and policyname = 'cp_select_visible') = 1
+              );
   insert into s2_results(grp,test,pass,detail) values
     ('T-PERM-15','M16 community_posts SELECT-only·쓰기 정책 6종 부재·SELECT 정책 유지', v_ok, 'mismatch=' || v_cnt);
 
@@ -642,9 +649,16 @@ begin
         or (policyname = '본인 게시글 수정'         and cmd='UPDATE' and roles='{public}')
         or (policyname = 'cp_delete_own'            and cmd='DELETE' and roles='{authenticated}') );
   v_ok := v_cnt = 6
-          and (select count(*) from pg_policies
-                where schemaname='public' and tablename='community_posts' and cmd='SELECT'
-                  and policyname in ('cp_select_own','cp_select_published')) = 2;
+          -- S1-2(20260806200500) 이전 = 레거시 2종 / 이후 = 통합본 cp_select_visible 1종.
+          -- 어느 쪽이든 "SELECT 정책이 유지된다"는 이 검사의 의도는 동일하다.
+          and (
+                (select count(*) from pg_policies
+                  where schemaname='public' and tablename='community_posts' and cmd='SELECT'
+                    and policyname in ('cp_select_own','cp_select_published')) = 2
+             or (select count(*) from pg_policies
+                  where schemaname='public' and tablename='community_posts' and cmd='SELECT'
+                    and policyname = 'cp_select_visible') = 1
+              );
   insert into s2_results(grp,test,pass,detail) values
     ('RB','rollback 후 쓰기 정책 6종·SELECT 정책 복원', v_ok, 'restored=' || v_cnt);
 

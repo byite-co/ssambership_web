@@ -24,10 +24,17 @@
 --
 -- 적용 범위: deleted_at 컬럼을 가진 public 테이블은 community_posts 하나뿐이므로
 --            (실측) 다른 테이블에 동일 결함은 없다.
+--
+-- 정책 이름이 바뀌므로 이름을 하드 어설트하던 과거 검증 스크립트
+-- (scripts/verify/s2_2_batch_f_verify.sql F-03·R-02)를 통합본도 통과하도록 함께 고쳤다.
 
 drop policy if exists "누구나 게시글 읽기" on public.community_posts;
 drop policy if exists cp_select_own on public.community_posts;
 drop policy if exists cp_select_published on public.community_posts;
+-- 재적용 안전(멱등): CREATE POLICY 에는 OR REPLACE 가 없다. 이 줄이 없으면
+-- 두 번째 적용이 42710 duplicate_object 로 실패해 pack 재생·부분 재적용이 깨진다
+-- — 이 배치에서 유일하게 멱등하지 않던 파일이었다.
+drop policy if exists cp_select_visible on public.community_posts;
 
 create policy cp_select_visible on public.community_posts
   for select

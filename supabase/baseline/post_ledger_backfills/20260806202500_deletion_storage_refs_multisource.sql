@@ -35,6 +35,18 @@
 --         라 이 규칙을 적용하면 남의 파일을 지울 수 있어 **제외**한다.)
 --
 -- 반환 계약(bucket_id, name)과 호출부는 그대로다. 중복은 union 으로 제거된다.
+--
+-- ★ 이 migration 만으로는 QA-C11 이 닫히지 않는다(적대적 검증 2026-08-06) ★
+--   워커는 181 로 귀속을 넓힌 직후 183(account_deletion_verify_object_owners)의
+--   verdict 를 덮어쓴다. owner_id 가 비어 있는 객체는 183 이 'none' 을 돌려주고,
+--   종전 TS 매핑은 그 값을 **null 로 덮어** 여기서 넓힌 귀속 근거를 지웠다.
+--   그러면 buildDeletionPlan 이 그 객체를 `unattributable` 로 분류하고, 계획이
+--   오염 판정돼 탈퇴 워커가 real-run 을 아예 시작하지 못한다(§3-4).
+--   그래서 짝이 되는 수정이 함께 들어간다:
+--     lib/account/accountDeletionPurgePlan.ts — applyOwnerVerdicts 의 'none' 은
+--     "storage 소유자 기록 부재"라는 사실일 뿐이므로 base 의 대상 귀속을 덮지 않는다.
+--   계약 테스트: lib/account/__contract__/accountDeletionOwnerRefsMapping.contract.test.ts
+--   (S1-5 3건 — 귀속 유지 · 무근거 객체의 null 유지 · 'other' 우선 불변).
 
 create or replace function public.account_deletion_storage_owner_refs(p_user_id uuid)
 returns table(bucket_id text, name text)

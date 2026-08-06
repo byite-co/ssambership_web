@@ -73,3 +73,52 @@ begin
   end if;
   return NEW;
 end $function$;
+
+-- ── 가드 트리거를 BEFORE → AFTER 로 옮긴다(탈퇴상태 오라클 차단) ────────────
+--
+-- 왜 필요한가: 위에서 self-probe 제한을 뺐기 때문에 가드는 이제 **남의 id** 에
+--   대해서도 탈퇴 상태를 판정한다. 그런데 BEFORE 트리거는 RLS WITH CHECK 보다
+--   먼저 실행된다. 그래서 공격자가 소유자 컬럼에 임의의 uuid 를 넣고 INSERT 를
+--   시도하면, 원래 RLS 가 42501 로 끝냈을 요청이
+--     · 그 사용자가 탈퇴 진행 중 → P0001 ACCOUNT_DELETION_IN_PROGRESS
+--     · 아니면                   → 42501 (RLS 거부)
+--   로 갈라져 **임의 uuid 의 탈퇴 진행 여부를 알아내는 오라클**이 된다.
+--   수정 전에는 self-probe 제한이 두 경우를 모두 42501 로 만들어 구분이 없었다.
+--   (authenticated 가 INSERT 를 시도할 수 있는 payments · question_messages ·
+--    shortform_posts 3개 테이블에서 실제로 재현된다.)
+--
+-- 어떻게 막는가: AFTER ROW 트리거는 RLS WITH CHECK 통과 **이후**에만 실행된다.
+--   권한 없는 시도는 가드에 닿기 전에 42501 로 끝나 상태가 새지 않는다.
+--   권한 있는 정당한 쓰기(멘토 정산 입금 등)는 종전대로 가드가 판정해
+--   ACCOUNT_DELETION_IN_PROGRESS 로 막는다 — 보호 강도는 그대로다.
+--
+-- 안전성: 가드는 NEW 를 읽기만 하고 고치지 않으므로 BEFORE 일 이유가 없다
+--   (AFTER 에서 반환값은 무시되지만 이 함수는 행을 바꾸지 않는다). 예외가 나면
+--   문 전체가 롤백되므로 잠깐 들어갔다 사라지는 행도 남지 않는다.
+--   워커 우회(ssambership.deletion_worker='on')와 대상 컬럼 인자(TG_ARGV[0])는 불변.
+--
+-- 멱등: 각 트리거를 drop if exists 후 재생성한다.
+
+drop trigger if exists adg_cash_wallets on public.cash_wallets;
+create trigger adg_cash_wallets after insert or update on public.cash_wallets
+  for each row execute function public.account_deletion_write_guard('user_id');
+
+drop trigger if exists adg_cash_ledger on public.cash_ledger;
+create trigger adg_cash_ledger after insert on public.cash_ledger
+  for each row execute function public.account_deletion_write_guard('user_id');
+
+drop trigger if exists adg_payments on public.payments;
+create trigger adg_payments after insert on public.payments
+  for each row execute function public.account_deletion_write_guard('user_id');
+
+drop trigger if exists adg_question_messages on public.question_messages;
+create trigger adg_question_messages after insert on public.question_messages
+  for each row execute function public.account_deletion_write_guard('author_id');
+
+drop trigger if exists adg_community_posts on public.community_posts;
+create trigger adg_community_posts after insert on public.community_posts
+  for each row execute function public.account_deletion_write_guard('author_id');
+
+drop trigger if exists adg_shortform_posts on public.shortform_posts;
+create trigger adg_shortform_posts after insert on public.shortform_posts
+  for each row execute function public.account_deletion_write_guard('author_id');

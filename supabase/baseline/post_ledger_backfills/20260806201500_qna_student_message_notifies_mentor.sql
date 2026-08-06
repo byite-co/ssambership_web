@@ -29,9 +29,12 @@
 --   (question_received:<thread_id>)과 절대 충돌하지 않는다.
 --
 -- 중복 방지: 스레드의 **첫 메시지**는 이 경로에서 알리지 않는다. 질문 생성 RPC
---   (qna_create_question_thread)가 같은 트랜잭션에서 이미 '새 질문' 알림을
---   보내기 때문이다 — 검증에서 무료질문 1건에 멘토 알림이 2건 생기는 것을
---   확인하고 막았다. 두 번째 메시지부터 이 경로가 동작한다.
+--   (qna_create_question_thread)가 이미 '새 질문' 알림을 보내기 때문이다 —
+--   검증에서 무료질문 1건에 멘토 알림이 2건 생기는 것을 확인하고 막았다.
+--   판정은 "이 스레드에 더 앞선 메시지가 있는가"로 하며, 첫 메시지를 스레드와
+--   같은 트랜잭션에서 만들든(p_first_message_body 제공) 나중에 따로 보내든
+--   (nullable — 무료질문 진입점이 그렇다) 동일하게 성립한다.
+--   두 번째 메시지부터 이 경로가 동작한다.
 
 create or replace function public.qna_emit_answer_notification(
   p_thread_id uuid,
@@ -109,19 +112,26 @@ begin
         select 1 from public.question_messages m
         where m.id = p_message_id and m.thread_id = p_thread_id and m.author_id = v_student
       ) then return; end if;
-      -- ★ 질문 생성 RPC 가 스레드와 함께 만든 '첫 메시지'는 알리지 않는다.
-      --   그 경로는 같은 트랜잭션에서 이미 '새 질문이 도착했어요'
+      -- ★ 스레드의 **첫 메시지**는 이 경로에서 알리지 않는다.
+      --   질문 생성 RPC(qna_create_question_thread)가 이미 '새 질문이 도착했어요'
       --   (question_received:<thread_id>)를 보내므로, 여기서 또 보내면 질문
       --   1건에 멘토 알림이 2건 생긴다(무료·구독 공통 — 검증에서 실제 확인).
-      --   판정 기준은 **스레드와 같은 트랜잭션에서 생성됐는가**다: created_at 이
-      --   트랜잭션 시각(now())이라 RPC 가 만든 첫 메시지만 스레드와 정확히 같고,
-      --   이후 사용자가 보내는 메시지는 별도 트랜잭션이라 반드시 달라진다.
-      if exists (
+      --
+      --   판정 기준은 **이 스레드에 이보다 앞선 메시지가 있는가**다.
+      --   앞선 것이 없으면 곧 첫 메시지 → 침묵, 있으면 → 알림.
+      --   (초안이던 '스레드와 같은 트랜잭션인가'(m2.created_at = t2.created_at)는
+      --    p_first_message_body 를 주지 않고 스레드만 만드는 경로에서 무너진다 —
+      --    free_question_entry.createFreeThread 의 firstMessageBody 는 nullable 이라
+      --    학생의 진짜 첫 메시지가 별도 트랜잭션으로 들어오고, 그러면 생성 알림과
+      --    이 알림이 겹쳐 다시 2건이 된다. 그 경로까지 덮으려면 순서 비교가 맞다.)
+      --   동률 created_at 도 (created_at, id) 튜플 비교로 전순서가 되어
+      --   2번째 메시지를 잘못 삼키지 않는다.
+      if not exists (
         select 1
-          from public.question_threads t2
-          join public.question_messages m2 on m2.id = p_message_id
-         where t2.id = p_thread_id
-           and m2.created_at = t2.created_at
+          from public.question_messages m_prev
+          join public.question_messages m_self on m_self.id = p_message_id
+         where m_prev.thread_id = p_thread_id
+           and (m_prev.created_at, m_prev.id) < (m_self.created_at, m_self.id)
       ) then return; end if;
       v_key := 'question_student_message:' || p_message_id::text;
       v_body_suffix := '님이 메시지를 보냈어요.';
