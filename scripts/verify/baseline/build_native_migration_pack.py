@@ -1,16 +1,20 @@
 #!/usr/bin/env python3
-"""build_native_migration_pack.py — PR #61 정식 migration pack(63본) 생성.
+"""build_native_migration_pack.py — 정식 migration pack 생성.
 
-구성 (지시서 §9):
-  1  baseline   : 20260701000000_pre_ledger_baseline.sql (생성기 산출물)
-  56 ledger     : supabase/baseline/ledger_replay/**   (version 보존, binary copy)
-  6  interleave : supabase/baseline/interleaves/**     (version 보존, binary copy)
-  = 63
+구성 (지시서 §9 + 2026-08-06 backfill 확장):
+  1  baseline              : 20260701000000_pre_ledger_baseline.sql (생성기 산출물)
+  56 ledger                : supabase/baseline/ledger_replay/**   (version 보존, binary copy)
+  6  interleave            : supabase/baseline/interleaves/**     (version 보존, binary copy)
+  N  post_ledger_backfill  : supabase/baseline/post_ledger_backfills/**
+                             (staging 직접 적용분의 정본 source — PR60 이후 version 만,
+                              개수는 디렉터리에서 파생한다. 현재 8)
+  = generator-owned 63+N (현재 71)
+  + PR60(20260804113000) 1본은 별도 소유 — integrated pack 총계는 63+N+1 (현재 72)
 
 금지: SQL 재포맷 · version 변경 · 내용 변경 · 현재시각 version · symlink ·
       source 삭제 후 migration 만 남기기.
 
-출력: supabase/migrations/*.sql (63본)
+출력: supabase/migrations/*.sql (generator-owned 전체)
       supabase/baseline/native_migration_pack_manifest.tsv
 
 PR #60 의 20260804113000 은 이 pack 에 포함하지 않는다 — PR #60 branch 소유다.
@@ -25,6 +29,7 @@ REPO = Path(__file__).resolve().parents[3]
 MIG = REPO / 'supabase/migrations'
 LEDGER_DIR = REPO / 'supabase/baseline/ledger_replay'
 INTER_DIR = REPO / 'supabase/baseline/interleaves'
+BACKFILL_DIR = REPO / 'supabase/baseline/post_ledger_backfills'
 BASELINE_OUT = MIG / '20260701000000_pre_ledger_baseline.sql'
 MANIFEST = REPO / 'supabase/baseline/native_migration_pack_manifest.tsv'
 REPAIR_PLAN = REPO / 'supabase/baseline/adoption_repair_plan.tsv'
@@ -62,6 +67,16 @@ def plan():
             ver, name = parse(src)
             items.append({'kind': kind, 'version': ver, 'name': name,
                           'source': src, 'output': MIG / src.name})
+    # post_ledger_backfill — 개수는 하드코딩하지 않고 source 디렉터리가 계획의
+    # 정본이다. 단 전부 PR60 이후 version 이어야 한다(아래 불변식).
+    if BACKFILL_DIR.exists():
+        for src in sorted(BACKFILL_DIR.glob('*.sql')):
+            ver, name = parse(src)
+            if ver <= PR60_VERSION:
+                sys.exit(f'FAIL: post_ledger_backfill {src.name} 의 version 이 '
+                         f'PR60({PR60_VERSION}) 이후가 아니다')
+            items.append({'kind': 'post_ledger_backfill', 'version': ver, 'name': name,
+                          'source': src, 'output': MIG / src.name})
     counts = {k: sum(1 for i in items if i['kind'] == k) for k in EXPECT}
     for k, want in EXPECT.items():
         if counts[k] != want:
@@ -95,7 +110,9 @@ def manifest_text(items):
             str(n), i['version'], i['kind'],
             str(i['source'].relative_to(REPO)), str(i['output'].relative_to(REPO)),
             sha256(sb), sha256(ob), str(len(sb)), str(len(ob)),
-            'applied_via_strategy_a' if i['version'] in sa else 'applied_existing_ledger',
+            ('applied_direct_backfill' if i['kind'] == 'post_ledger_backfill'
+             else 'applied_via_strategy_a' if i['version'] in sa
+             else 'applied_existing_ledger'),
             'yes' if i['version'] in sa else 'no']))
     return ('\n'.join(lines) + '\n').encode()
 
@@ -133,8 +150,12 @@ def main():
         return 0
     MANIFEST.write_bytes(mtext)
     counts = {k: sum(1 for i in items if i['kind'] == k) for k in EXPECT}
-    print(f"wrote {len(items)} migrations → supabase/migrations/  "
-          f"(baseline {counts['baseline']} · ledger {counts['ledger']} · interleave {counts['interleave']})")
+    nbf = sum(1 for i in items if i['kind'] == 'post_ledger_backfill')
+    print(f"wrote {len(items)} generator-owned migrations → supabase/migrations/  "
+          f"(baseline {counts['baseline']} · ledger {counts['ledger']} · "
+          f"interleave {counts['interleave']} · post_ledger_backfill {nbf})")
+    print(f'integrated pack total = generator-owned {len(items)} + PR60 1 '
+          f'= {len(items) + 1}')
     print(f'wrote {MANIFEST.relative_to(REPO)}')
     print(f'first={items[0]["version"]} last={items[-1]["version"]}')
     return 0

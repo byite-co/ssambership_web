@@ -53,20 +53,26 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 PG16 로컬 replay 실측(tables=79 functions=213 policies=178 buckets=13)이다.
-# PostgreSQL 17 + 실제 Supabase 플랫폼에서 이 워크플로가 처음 실행되기 전까지는 검증된 값이
-# 아니므로, 불일치는 즉시 실패로 보고해 사람이 원인을 판정하게 한다(자동 허용 폭 없음).
+# 기대치는 72본 pack 의 PG16 로컬 fresh replay 실측(tables=80 functions=214
+# policies=177 buckets=13)이며, PG17 CLI 재생에서도 같은 값이 재현됐다.
+# 64본 체계(79/213/178) 대비 델타는 post_ledger_backfill 8본으로 전부 설명된다:
+#   tables   +1  community_post_view_events            (20260806033556)
+#   functions+1  community_post_view_record_v2          (20260806033556;
+#                report_target_content_valid 는 생성(20260806033833) 후
+#                rls_private 이동·public drop(20260806075316)으로 상쇄)
+#   policies -1  post_reactions select 정책 2본 drop → 1본 통합 (20260806033409)
+# 불일치는 즉시 실패로 보고해 사람이 원인을 판정하게 한다(자동 허용 폭 없음).
 : > "$EV/structure_counts.txt"
 count_check(){ # count_check <label> <expected> <sql>
   local got; got="$(q "$3")"
   echo "$1=$got" >> "$EV/structure_counts.txt"
   [ "$got" = "$2" ] && say "$1=$got" || bad "$1=$got — PG16 replay 실측 기대치 $2 와 다르다"
 }
-count_check tables 79 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
+count_check tables 80 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
-count_check functions 213 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+count_check functions 214 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
-count_check policies 178 "select count(*) from pg_policies where schemaname='public'"
+count_check policies 177 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"
 
 echo "=== [5] M13 trigger function ACL (anon/authenticated EXECUTE 불가)"

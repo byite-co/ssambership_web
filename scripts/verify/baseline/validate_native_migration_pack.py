@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """validate_native_migration_pack.py — 정식 migration pack 정적 검증 (지시서 §11).
 
-기본은 PR #61 pack(63본) 검증. --with-pr60 <dir> 을 주면 임시 통합 pack(64본)을 검증한다.
+기대 개수·마지막 version 은 하드코딩하지 않고 파생한다:
+  generator-owned = manifest(native_migration_pack_manifest.tsv) 행 수
+  post_ledger_backfill = supabase/baseline/post_ledger_backfills/ 디렉터리(존재 시)
+  integrated 총계 = generator-owned + (PR60 존재 시 1)
+  최종 version = backfill 존재 시 backfill 최대값, 아니면 PR60(통합) / manifest 최대(단독)
+--with-pr60 <dir> 을 주면 해당 디렉터리를 통합 pack 으로 검증한다.
 
 검사: 파일 수 · version 형식/오름차순/중복 · source checksum · 생성물 최신 여부 ·
       ordering 제약 · adoption_repair_plan 대조 · 금지 내용 · transaction 경고 존재.
@@ -19,6 +24,7 @@ BASELINE_MANIFEST = REPO / 'supabase/baseline/native_baseline_manifest.json'
 VERSION_RE = re.compile(r'^(\d{14})_(.+)\.sql$')
 
 PR60_VERSION = '20260804113000'
+BACKFILL_DIR = REPO / 'supabase/baseline/post_ledger_backfills'
 M13_VERSION = '20260731100540'
 FN_HARDENING = '20260729000000'
 TBL_HARDENING = '20260802000000'
@@ -61,14 +67,30 @@ def main() -> int:
         pack_dir, with_pr60 = Path(args[i + 1]), True
 
     files = sorted(pack_dir.glob('*.sql'))
-    # PR #60(20260804113000) 병합 전에는 63본, 병합 후에는 64본이 정상이다.
-    # 어느 쪽인지는 디렉터리 실측으로 판정한다 — 플래그로 거짓말할 수 없다.
+    # 어느 상태인지는 디렉터리 실측으로 판정한다 — 플래그로 거짓말할 수 없다.
     if not with_pr60:
         with_pr60 = any(f.name.startswith(PR60_VERSION + '_') for f in files)
         if with_pr60:
-            print('  (통합 상태 감지: PR60 migration 존재 → 64본 기준으로 검증)')
-    expect_total = 64 if with_pr60 else 63
-    print(f'=== pack: {pack_dir}  files={len(files)} (expect {expect_total})')
+            print('  (통합 상태 감지: PR60 migration 존재)')
+    # 기대 개수 파생: generator-owned = manifest 행 수(생성기 산출 정본),
+    # integrated = + PR60 1. 하드코딩 금지 — backfill 확장 시 자동 추종.
+    if MANIFEST.exists():
+        gen_owned = len([r for r in
+                         MANIFEST.read_text(encoding='utf-8').splitlines()[1:]
+                         if r.strip()])
+    else:
+        gen_owned = 0   # manifest 부재는 아래 F 단계에서 별도 FAIL
+    backfill_files = sorted(BACKFILL_DIR.glob('*.sql')) if BACKFILL_DIR.exists() else []
+    backfill_versions = []
+    for f in backfill_files:
+        m = VERSION_RE.match(f.name)
+        if not m:
+            bad(f'post_ledger_backfill version 형식 위반: {f.name}'); continue
+        backfill_versions.append(m.group(1))
+    expect_total = gen_owned + (1 if with_pr60 else 0)
+    print(f'=== pack: {pack_dir}  files={len(files)} '
+          f'(expect {expect_total} = generator-owned {gen_owned}'
+          + (' + PR60 1' if with_pr60 else '') + ')')
     if len(files) != expect_total:
         bad(f'migration file count {len(files)} != {expect_total}')
 
@@ -98,10 +120,31 @@ def main() -> int:
     else:
         if PR60_VERSION not in vset:
             bad(f'통합 pack 에 PR60 version {PR60_VERSION} 이 없다')
-        elif versions[-1] != PR60_VERSION:
-            bad(f'마지막 version 이 {versions[-1]} — {PR60_VERSION} 이어야 한다')
         else:
-            ok(f'PR60 version 이 마지막 ({PR60_VERSION})')
+            ok(f'PR60 version 존재 ({PR60_VERSION})')
+        if backfill_versions:
+            # backfill 존재 상태: 8개 전부 존재 + 전부 PR60 이후 + 최종 version 은
+            # backfill 최대값(source 디렉터리에서 파생 — 하드코딩 없음).
+            miss = sorted(set(backfill_versions) - vset)
+            if miss:
+                bad(f'post_ledger_backfill version 누락 {miss}')
+            else:
+                ok(f'post_ledger_backfill {len(backfill_versions)}개 version 전부 존재')
+            not_after = sorted(v for v in backfill_versions if v <= PR60_VERSION)
+            if not_after:
+                bad(f'post_ledger_backfill 이 PR60 이후가 아님 {not_after}')
+            else:
+                ok('post_ledger_backfill 전부 PR60 이후 순서')
+            expected_last = max(backfill_versions)
+            if versions and versions[-1] != expected_last:
+                bad(f'마지막 version 이 {versions[-1]} — backfill 최대 {expected_last} 이어야 한다')
+            else:
+                ok(f'최종 version = backfill 최대 ({expected_last})')
+        else:
+            if versions and versions[-1] != PR60_VERSION:
+                bad(f'마지막 version 이 {versions[-1]} — {PR60_VERSION} 이어야 한다')
+            else:
+                ok(f'PR60 version 이 마지막 ({PR60_VERSION})')
 
     # C. 생성물 최신 여부 (직접 편집 탐지)
     for gen in ('build_native_baseline_migration.py', 'build_native_migration_pack.py'):
