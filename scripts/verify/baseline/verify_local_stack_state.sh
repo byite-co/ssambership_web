@@ -53,8 +53,10 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 72본 pack 의 PG16 로컬 fresh replay 실측(tables=80 functions=214
-# policies=177 buckets=13)이며, PG17 CLI 재생에서도 같은 값이 재현됐다.
+# 기대치는 73본 pack 의 PG16 로컬 fresh replay 실측(tables=80 functions=215
+# policies=177 buckets=13)이며, PG17 CLI 재생에서도 같은 값이 재현된다.
+# 72본→73본 델타: functions +1 = account_deletion_state_blocked
+#   (S1-1 · QA-A1 정산 가드 분리 — 20260806200000).
 # 64본 체계(79/213/178) 대비 델타는 post_ledger_backfill 8본으로 전부 설명된다:
 #   tables   +1  community_post_view_events            (20260806033556)
 #   functions+1  community_post_view_record_v2          (20260806033556;
@@ -70,7 +72,7 @@ count_check(){ # count_check <label> <expected> <sql>
 }
 count_check tables 80 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
-count_check functions 214 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+count_check functions 215 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
 count_check policies 177 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"
