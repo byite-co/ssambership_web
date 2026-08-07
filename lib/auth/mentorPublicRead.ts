@@ -77,6 +77,12 @@ function mapDirectoryRowToProfileRow(row: Record<string, unknown>): PublicMentor
       ? row.teaching_subjects.filter((subject): subject is string => typeof subject === "string")
       : null,
     intro_line: (row.intro_line as string | null) ?? null,
+    // D-ST-10 계약: 이 값은 독립 심사 결과가 아니라 **view 불변식의 반영**이다.
+    // api_web_v1.mentor_directory_v1 의 WHERE 가 이미 verification_status ∈ (approved,
+    // verified, active) 로 필터하므로, 이 함수가 반환하는 행은 정의상 승인 멘토뿐이다.
+    // 따라서 downstream mentorVerificationStatusAllowsActivity·assertMentorApprovedForAction
+    // 은 이 상수에 대해 항상 참을 돌려주는 **방어적 이중화**이지 별도 게이트가 아니다.
+    // 실차단은 view 의 WHERE 가 담당 — 그 계약은 __contract__/mentorDirectoryView 가 감시한다.
     verification_status: "approved",
     created_at: row.created_at == null ? null : String(row.created_at),
     verified_university_name: (row.verified_university_name as string | null) ?? null,
