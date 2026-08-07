@@ -8,6 +8,9 @@ on:
       - 'supabase/**'
       - 'scripts/verify/**'
       - '.github/workflows/db-migration-pack-verify.yml'
+      - '.github/workflows/db-adoption-repair.yml'
+      - '.github/workflows/db-apply-pr60.yml'
+      - '.github/workflows/db-apply-pending.yml'
   workflow_dispatch:
 
 permissions:

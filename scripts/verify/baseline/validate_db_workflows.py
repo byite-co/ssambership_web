@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """validate_db_workflows.py — DB 관련 GitHub Actions 워크플로 정적 검증 (지시서 §11·§21).
 
-이 저장소의 워크플로 중 부모 Supabase 프로젝트를 건드릴 수 있는 것은 두 개뿐이다:
+이 저장소의 워크플로 중 부모 Supabase 프로젝트를 건드릴 수 있는 것은 세 개뿐이다:
   .github/workflows/db-adoption-repair.yml   (Strategy A history repair)
   .github/workflows/db-apply-pr60.yml        (PR #60 guard 적용/롤백)
-둘 다 아래 조건을 전부 만족해야 한다. 하나라도 깨지면 실패한다.
+  .github/workflows/db-apply-pending.yml     (D-DB-1 pending 전량 적용)
+셋 다 아래 조건을 전부 만족해야 한다. 하나라도 깨지면 실패한다.
 
   R1  workflow_dispatch 전용 — push/pull_request/schedule 로 트리거되지 않는다
   R2  job 에 environment 승인 게이트가 있다
@@ -51,6 +52,13 @@ REMOTE_WF = {
         'confirmations': [
             'APPLY_PR60_20260804113000_TO_lbeqxarxothkmzqvpudy',
             'ROLLBACK_PR60_20260804113000_ON_lbeqxarxothkmzqvpudy',
+        ],
+    },
+    'db-apply-pending.yml': {
+        'environment': 'supabase-db-adoption',
+        'safe_mode': 'dry-run',
+        'confirmations': [
+            'APPLY_PENDING_MIGRATIONS_TO_lbeqxarxothkmzqvpudy',
         ],
     },
 }
@@ -225,6 +233,14 @@ MUTATIONS = [
     ('R9 --include-all 주입', 'db-apply-pr60.yml',
      lambda t: t.replace('supabase db push --db-url "$PGURL"',
                          'supabase db push --include-all --db-url "$PGURL"', 1)),
+    ('R2 environment 제거 (pending)', 'db-apply-pending.yml',
+     lambda t: t.replace('    environment: supabase-db-adoption   # 사람 승인 게이트\n', '', 1)),
+    ('R9 --include-all 주입 (pending)', 'db-apply-pending.yml',
+     lambda t: t.replace('supabase db push --db-url "$PGURL"',
+                         'supabase db push --include-all --db-url "$PGURL"', 1)),
+    ('R5 confirmation 상수 변조 (pending)', 'db-apply-pending.yml',
+     lambda t: t.replace('APPLY_PENDING_MIGRATIONS_TO_lbeqxarxothkmzqvpudy',
+                         'APPLY_PENDING_ANYTHING', 1)),
     ('R10 action pin 해제', 'db-migration-pack-verify.yml',
      lambda t: t.replace('actions/checkout@v4', 'actions/checkout@main', 1)),
     ('R11 CLI latest', 'db-migration-pack-verify.yml',
