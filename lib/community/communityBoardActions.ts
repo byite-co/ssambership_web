@@ -229,7 +229,9 @@ export async function toggleCommunityPostReactionAction(formData: FormData) {
   }
 
   const supabase = await createClient();
-  await togglePostReaction(supabase, user.id, postId, type);
+  // D-CM-6: 반환값을 폐기하지 않는다 — RLS 거부·경합·네트워크 오류가 성공처럼 보이던 무음 실패를
+  // reactionError 쿼리스트링으로 표면화한다.
+  const r = await togglePostReaction(supabase, user.id, postId, type);
 
   revalidateCommunityPaths({
     mutation: "reaction_toggle",
@@ -237,6 +239,10 @@ export async function toggleCommunityPostReactionAction(formData: FormData) {
     postId,
     extraPaths: [returnPath],
   });
+  if (!r.ok) {
+    const sep = returnPath.includes("?") ? "&" : "?";
+    redirect(`${returnPath}${sep}reactionError=1`);
+  }
   redirect(returnPath);
 }
 
@@ -299,12 +305,19 @@ export async function deleteBoardCommentAction(formData: FormData) {
   if (!UUID_RE.test(commentId)) redirect(returnPath);
 
   const supabase = await createClient();
-  await softDeleteBoardComment(supabase, user.id, commentId);
+  // D-CM-6: 삭제 결과를 검사한다. 0행 UPDATE(타인 댓글·비존재)나 RLS 거부를 성공으로 위장하지
+  // 않고 commentError=delete 로 표면화한다.
+  const r = await softDeleteBoardComment(supabase, user.id, commentId);
   revalidateCommunityPaths({
     mutation: "comment_delete",
     kind: "board",
     postId,
     extraPaths: [returnPath],
   });
+  if (!r.ok) {
+    const q = new URLSearchParams();
+    q.set("commentError", "delete");
+    redirect(`${returnPath}?${q.toString()}`);
+  }
   redirect(returnPath);
 }

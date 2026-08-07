@@ -91,6 +91,8 @@ export function CommunityBoardDetail(props: {
   liked: boolean;
   scrapped: boolean;
   commentErrorCode: string | null;
+  /** 좋아요·스크랩 토글 실패(reactionError 쿼리스트링) — D-CM-6 무음 실패 표면화. */
+  reactionError?: boolean;
   reportOk: boolean;
   reportErrorCode: string | null;
   /** 작성자가 멘토면 그 멘토의 user_id(찜 대상). 아니면 null → 버튼 숨김. */
@@ -216,6 +218,10 @@ export function CommunityBoardDetail(props: {
         <span className="ml-auto inline-flex items-center text-xs text-slate-400">{"\uC870\uD68C"} {props.post.viewCount}</span>
       </div>
 
+      {props.reactionError ? (
+        <StateBanner kind="error" message={"\uC694\uCCAD\uC744 \uCC98\uB9AC\uD558\uC9C0 \uBABB\uD588\uC5B4\uC694. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694."} />
+      ) : null}
+
       {props.canInteract ? (
         <details className="text-xs">
           <summary className="inline-flex w-fit cursor-pointer list-none items-center gap-1.5 rounded-full border border-slate-200 px-3 py-1.5 font-bold text-slate-500 transition hover:text-slate-700 [&::-webkit-details-marker]:hidden">
@@ -254,7 +260,11 @@ export function CommunityBoardDetail(props: {
             message={
               props.commentErrorCode === "policy"
                 ? "외부 연락처·대필 요청은 정책상 제한됩니다."
-                : "\uB313\uAE00 \uB4F1\uB85D\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4."
+                : props.commentErrorCode === "delete"
+                  ? "\uB313\uAE00\uC744 \uC0AD\uC81C\uD558\uC9C0 \uBABB\uD588\uC5B4\uC694. \uC7A0\uC2DC \uD6C4 \uB2E4\uC2DC \uC2DC\uB3C4\uD574 \uC8FC\uC138\uC694."
+                  : props.commentErrorCode === "account_blocked"
+                    ? "\uACC4\uC815 \uC0C1\uD0DC\uB85C \uC778\uD574 \uB313\uAE00\uC744 \uC791\uC131\uD560 \uC218 \uC5C6\uC5B4\uC694."
+                    : "\uB313\uAE00 \uB4F1\uB85D\uC5D0 \uC2E4\uD328\uD588\uC2B5\uB2C8\uB2E4."
             }
           />
         ) : null}

@@ -12,6 +12,7 @@ import {
   loadMyCommunityBoardPosts,
   loadMyShortformPosts,
 } from "@/lib/community/communityQueries";
+import { listUserScrapPosts } from "@/lib/community/communityBoardQueries";
 import { communityMePath, parseCommunityMeTab } from "@/lib/community/communityMeTab";
 import type { CommunityNavActive } from "@/components/community/CommunityNavTypes";
 import { createClient } from "@/lib/supabase/server";
@@ -67,14 +68,17 @@ export default async function CommunityMePage(props: PageProps) {
   if (user?.id) {
     const supabase = await createClient();
     const uid = user.id;
-    const [boardRes, shortRes, boardCount, shortCount] = await Promise.all([
+    const [boardRes, shortRes, boardCount, shortCount, scrapRes] = await Promise.all([
       loadMyCommunityBoardPosts(supabase, uid, 120),
       loadMyShortformPosts(supabase, uid, 120),
       countMyCommunityBoardPosts(supabase, uid),
       countMyShortformPosts(supabase, uid),
+      // D-CM-13: 스크랩 읽기 표면 배선 — 구현돼 있으나 호출부가 0곳이라 사장돼 있던 조회를 연결한다.
+      listUserScrapPosts(supabase, uid, 60),
     ]);
     if (boardRes.error) console.error("[community/me] loadMyCommunityBoardPosts", boardRes.error);
     if (shortRes.error) console.error("[community/me] loadMyShortformPosts", shortRes.error);
+    if (scrapRes.error) console.error("[community/me] listUserScrapPosts", scrapRes.error);
     const loadFailed = Boolean(boardRes.error || shortRes.error);
     activity = {
       // viewerId 를 넘겨야 관리자 숨김·삭제 배지가 작성자 본인 표면에서만 계산된다.
@@ -83,6 +87,8 @@ export default async function CommunityMePage(props: PageProps) {
       boardCount: boardCount,
       shortformCount: shortCount,
       recent: buildCommunityMePostsList(boardRes.rows, shortRes.rows, 3, uid),
+      scraps: scrapRes.posts,
+      scrapsError: Boolean(scrapRes.error),
       loadFailed,
     };
   }

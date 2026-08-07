@@ -107,32 +107,33 @@ export async function updateShortformPost(
   return id ? { ok: true, id } : { ok: false, error: "db" };
 }
 
+/**
+ * 숏폼 좋아요 원자 토글(D-CM-5). 게시판 post_reactions 과 동일하게 upsert(on conflict do nothing)
+ * 로 삽입을 시도하고, 삽입되면 active=true, 이미 있으면 그 행을 삭제해 active=false 로 접는다.
+ * 경합(더블클릭·멀티탭)에서도 UNIQUE(user_id,shortform_id,type) 위반(23505)을 던지지 않는다.
+ */
 export async function toggleShortformLike(
   supabase: SupabaseClient,
   userId: string,
   shortformId: string
 ): Promise<{ ok: true; active: boolean } | { ok: false; error: string }> {
-  const { data: existing, error: selectError } = await supabase
+  const { data: inserted, error: upsertError } = await supabase
     .from("shortform_reactions")
-    .select("id")
+    .upsert(
+      { user_id: userId, shortform_id: shortformId, type: "like" },
+      { onConflict: "user_id,shortform_id,type", ignoreDuplicates: true }
+    )
+    .select("id");
+  if (upsertError) return { ok: false, error: upsertError.message };
+
+  if (inserted && inserted.length > 0) return { ok: true, active: true };
+
+  const { error: deleteError } = await supabase
+    .from("shortform_reactions")
+    .delete()
     .eq("user_id", userId)
     .eq("shortform_id", shortformId)
-    .eq("type", "like")
-    .maybeSingle();
-
-  if (selectError) {
-    return { ok: false, error: selectError.message };
-  }
-
-  if (existing?.id) {
-    const { error } = await supabase.from("shortform_reactions").delete().eq("id", existing.id);
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, active: false };
-  }
-
-  const { error } = await supabase
-    .from("shortform_reactions")
-    .insert({ user_id: userId, shortform_id: shortformId, type: "like" });
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, active: true };
+    .eq("type", "like");
+  if (deleteError) return { ok: false, error: deleteError.message };
+  return { ok: true, active: false };
 }
