@@ -1,6 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchMentorProfileForPublicMentor, getMentorUserPublic } from "@/lib/auth/mentorPublicRead";
-import { fetchMentorMediaSample } from "@/lib/mentor/mentorProfileQueries";
 import type { UserRow } from "@/lib/types/user";
 
 type Row = Record<string, unknown>;
@@ -30,7 +29,6 @@ export type PublicMentorLoadResult =
       userError: string | null;
       reviews: MentorReviewsSummary;
       plans: MentorPlansLoad;
-      media: { rows: Row[]; table: string | null; error: string | null; probe: string };
       profileRow: Row | null;
       profileError: string | null;
     }
@@ -132,24 +130,20 @@ export async function loadPublicMentorBundle(
     return { kind: "not_mentor", message: "멘토 공개 프로필만 이 경로에서 표시합니다." };
   }
 
-  const [{ row: profileRow, error: profileError }, media, reviews, plans] = await Promise.all([
+  const [{ row: profileRow, error: profileError }, reviews, plans] = await Promise.all([
     fetchMentorProfileForPublicMentor(supabase, mentorId),
-    fetchMentorMediaSample(supabase, mentorId, 12),
     fetchReviewsSummary(supabase, mentorId),
     fetchPlansForMentor(supabase, mentorId),
   ]);
 
-  const mediaProbe = media.table
-    ? `${media.table} · ${media.rows.length}행`
-    : "미디어 테이블 probe 실패";
-
+  // D-MT-13: 미디어 번들 제거(fetchMentorMediaSample 스텁 폐기) — 공개 상세의 '대표 콘텐츠'는
+  // 미도입 기능이라 항상 빈 결과였다. 도입 시 정본 테이블과 함께 복원.
   return {
     kind: "ok",
     userRow,
     userError: userErr?.message ?? null,
     profileRow,
     profileError: profileError,
-    media: { ...media, probe: mediaProbe },
     reviews,
     plans,
   };

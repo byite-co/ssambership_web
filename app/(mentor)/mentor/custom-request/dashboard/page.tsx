@@ -43,9 +43,10 @@ export default async function MentorCustomRequestDashboardPage() {
       : typeof profileRow.reviews_count === "number"
         ? profileRow.reviews_count
         : 0;
-  const monthRevenueCash = Math.round(payouts.monthExpectedCents / 100);
+  // D-MT-3: 사문 monthExpectedCents(상시 0) 대신 settlementPayouts 실집계로 이번 달 수익 표시.
   const expectedSettlementCash = payouts.settlementPayouts.totals.expectedMentorAmount;
   const paidSettlementCash = payouts.settlementPayouts.totals.paidMentorAmount;
+  const monthRevenueCash = expectedSettlementCash + paidSettlementCash;
 
   const dashOrderIds = orders.rows
     .map((r) => (typeof (r as { id?: unknown }).id === "string" ? String((r as { id: string }).id) : ""))

@@ -108,14 +108,9 @@ export async function listMentorReviews(
 
   const { data, count, error } = await q.range(from, to);
   if (error) {
-    return {
-      items: [],
-      total: 0,
-      page,
-      limit,
-      avgRating: null,
-      distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
-    };
+    // D-MT-6: 조회 실패를 '후기 0건'(빈 결과)로 흡수하지 않는다. 호출부(GET /api/reviews)가
+    // 500 으로 표면화하도록 오류를 전파한다(공개 목록에서 실패/0건이 구분되지 않던 문제).
+    throw new Error(error.message);
   }
 
   const rows = mapRows(data as Record<string, unknown>[] | null);
@@ -337,11 +332,23 @@ export async function hideReview(
   return outcome.ok ? { ok: true } : { ok: false, error: outcome.error };
 }
 
+export type MentorReceivedReviewsResult = {
+  items: ReviewCardItem[];
+  /** 조회 실패 메시지. null 이면 성공(items 가 실제 목록 — 빈 배열은 '0건'). */
+  error: string | null;
+};
+
+/**
+ * 멘토가 받은 후기 목록.
+ *
+ * D-MT-6: 조회 error 를 로그 없이 빈 목록([])으로 흡수하지 않는다. 실패 시 error 를 채워
+ * 호출부가 '후기 0건'과 '조회 실패'를 구분하게 한다(알림 뱃지 unreadCount=null 규약과 동일).
+ */
 export async function listMentorReceivedReviews(
   supabase: SupabaseClient,
   mentorId: string,
   limit = 50
-): Promise<ReviewCardItem[]> {
+): Promise<MentorReceivedReviewsResult> {
   const { data, error } = await supabase
     .from("reviews")
     .select("*")
@@ -349,7 +356,11 @@ export async function listMentorReceivedReviews(
     .order("created_at", { ascending: false })
     .limit(Math.min(limit * 3, 150));
 
-  if (error || !data) return [];
+  if (error) {
+    console.error("[listMentorReceivedReviews]", error.message);
+    return { items: [], error: error.message };
+  }
+  if (!data) return { items: [], error: null };
 
   const rows = mapRows(data as Record<string, unknown>[]).filter(isPubliclyVisibleReview).slice(0, limit);
   const authors = await loadAuthorsMap(
@@ -357,5 +368,5 @@ export async function listMentorReceivedReviews(
     rows.map((r) => r.author_id)
   );
   const subject = await mentorFirstSubject(supabase, mentorId);
-  return rows.map((r) => toCard(r, authors.get(r.author_id), subject));
+  return { items: rows.map((r) => toCard(r, authors.get(r.author_id), subject)), error: null };
 }

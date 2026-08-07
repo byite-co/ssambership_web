@@ -3,8 +3,22 @@ import { setMentorSubscribeOpenAction } from "@/lib/mentor/mentorSubscribeOpenAc
 /**
  * 멘토 self "신규 구독 받기 / 그만 받기" 토글.
  * 표시·flag 쓰기만 — 기존 학생 구독·정산·환불·cap 과 무관.
+ *
+ * D-MT-9: `available=false`(조회 실패로 현재 상태 확정 불가)면 fail-closed 표시 +
+ * 토글 비활성 + 재시도 안내. 확정하지 못한 상태에서 토글을 눌러 잘못된 값으로 덮어쓰는 것을 막는다.
  */
-export function MentorSubscribeOpenToggle({ open }: { open: boolean }) {
+export function MentorSubscribeOpenToggle({ open, available = true }: { open: boolean; available?: boolean }) {
+  if (!available) {
+    return (
+      <section className="mb-6 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+        <h2 className="text-sm font-black text-amber-900">신규 구독 받기</h2>
+        <p className="mt-1 text-xs font-medium leading-relaxed text-amber-800">
+          구독 받기 설정을 불러오지 못했어요. 새 학생 유입을 막기 위해 잠시 마감으로 표시하고 있어요.
+          잠시 후 새로고침해 다시 확인해 주세요.
+        </p>
+      </section>
+    );
+  }
   return (
     <section className="mb-6 rounded-2xl border border-slate-200 bg-white px-5 py-4">
       <div className="flex items-center justify-between gap-3">

@@ -189,30 +189,24 @@ export type CustomOrderSettlementsBlock = {
 };
 
 export type MentorPayoutsBundle = {
-  payoutTable: string | null;
-  payoutError: string | null;
-  /** 이번 달 예상(= payouts 행 합, 기간·컬럼은 추정) */
-  monthExpectedCents: number;
   subSummary: { n: number; amountHint: string; error: string | null; table: string | null };
   customSummary: { n: number; amountHint: string; error: string | null; table: string | null };
   customOrderSettlements: CustomOrderSettlementsBlock;
-  /** 맞춤의뢰 정산 예정·지급 완료 행 */
+  /** 맞춤의뢰 정산 예정·지급 완료 행 — 대시보드 표시의 정본 소스 */
   settlementPayouts: MentorSettlementPayoutsBlock;
-  tableRows: Row[];
-  tableHint: string;
   periodStart: string;
   periodEnd: string;
 };
 
+/**
+ * D-MT-3: 사문 필드(payoutTable/payoutError/monthExpectedCents/tableRows/tableHint) 제거.
+ * 이 필드들은 후보 테이블 부재로 각각 상수(null·"정산 내역을 아직 찾을 수 없어요"·0·[])로만
+ * 반환되어, 소비 UI 가 payoutError 존재만 보고 정상 멘토에게도 영구 경고(오탐 경보)를 그렸다.
+ * 정산 표시는 settlementPayouts(정산 예정/지급 완료 실집계)로 일원화한다.
+ */
 export async function loadMentorPayoutsBundle(supabase: SupabaseClient, mentorId: string): Promise<MentorPayoutsBundle> {
   const { start, end } = monthBounds();
   const settlementPayouts = await loadMentorSettlementItemsForPayouts(supabase, mentorId);
-
-  // W4(C10): 후보 테이블 부재 실측(187 baseline 0) — 프로빙 제거, 현행 관측 동작
-  // (payoutTable null · monthExpectedCents 0 · tableRows 빈 결과) 고정. 기능 정본화는 비범위.
-  const monthExpectedCents = 0;
-  const tableRows: Row[] = [];
-  const tableHint = "이번 달 기준으로 예상되는 지급·정산 금액이에요.";
 
   // W4(C10): subscription_revenue_ledger/mentor_subscriptions 프로빙 제거 — 정본
   // public.subscriptions.mentor_id 단일 카운트(187 baseline 실측 · XW-10). 오류는 subSummary.error 로 표면화.
@@ -258,15 +252,10 @@ export async function loadMentorPayoutsBundle(supabase: SupabaseClient, mentorId
   }
 
   return {
-    payoutTable: null,
-    payoutError: "정산 내역을 아직 찾을 수 없어요",
-    monthExpectedCents,
     subSummary: { n: subN, amountHint: subHint, error: subErr, table: subTable },
     customSummary: { n: cusN, amountHint: cusHint, error: cusErr, table: cusTable },
     customOrderSettlements: { rows: customOrderSettlementRows, error: cusErr, table: cusTable },
     settlementPayouts,
-    tableRows,
-    tableHint,
     periodStart: start,
     periodEnd: end,
   };

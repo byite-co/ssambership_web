@@ -44,11 +44,10 @@ export function MentorDashboardBody({ data }: { data: MentorDashboardData }) {
   const newQuestions = threadStats.error ? "—" : String(threadStats.mentorQueueEstimate);
   const monthlyAnswers = threadStats.error ? "—" : String(threadStats.openThreads);
   const students = String(activeStudentCount);
-  const revenueCash =
-    payouts.payoutError || payouts.monthExpectedCents === 0
-      ? monthlyRevenueCash
-      : Math.round(payouts.monthExpectedCents / 100);
-  const revenue = formatCashKrw(revenueCash);
+  // D-MT-3: 사문 payoutError/monthExpectedCents 제거. 이번 달 수익은 cash_ledger 기반
+  // monthlyRevenueCash 를 그대로 쓰고, 경보는 settlementPayouts 의 실제 조회 오류로만 판정한다.
+  const settlementLoadFailed = Boolean(payouts.settlementPayouts.error);
+  const revenue = formatCashKrw(monthlyRevenueCash);
   const disputes = String(disputeCount);
 
   const recentOrders = customRecent.rows.slice(0, 3);
@@ -89,7 +88,7 @@ export function MentorDashboardBody({ data }: { data: MentorDashboardData }) {
         <KpiStatCard
           label="이번 달 수익"
           value={revenue}
-          sub={payouts.payoutError ? "정산 내역 확인 필요" : "지난 달 대비 —"}
+          sub={settlementLoadFailed ? "정산 내역 확인 필요" : "지난 달 대비 —"}
         />
         <KpiStatCard
           label="분쟁/신고"

@@ -12,7 +12,7 @@ import type {
 import { MentorRevenueChart, type MonthlyRevenue } from "@/components/mentor/mypage/MentorRevenueChart";
 import { MentorActivityControls } from "@/components/mentor/mypage/MentorActivityControls";
 import { MentorSubscribeOpenToggle } from "@/components/mentor/mypage/MentorSubscribeOpenToggle";
-import { loadMentorSubscribeOpen } from "@/lib/mentor/mentorSubscribeOpen";
+import { loadMentorSubscribeOpenState } from "@/lib/mentor/mentorSubscribeOpen";
 import { loadMentorCapUsage, type MentorCapUsage } from "@/lib/subscribe/mentorCapService";
 import { listMentorReceivedReviews, type ReviewCardItem } from "@/lib/reviews/reviewQueries";
 import { formatKoreanDate } from "@/lib/utils/formatDisplay";
@@ -158,8 +158,9 @@ export default async function MentorMypagePage(props: MypageProps) {
   const monthlyRevenue = await loadRecentMonthlyRevenue(supabase, user.id);
   const currentMonthLabel = monthlyRevenue[monthlyRevenue.length - 1]?.month ?? "이번 달";
   const capUsage = await loadMentorCapUsage(user.id);
-  const subscribeOpen = await loadMentorSubscribeOpen(supabase, user.id);
-  const recentReviews = await listMentorReceivedReviews(supabase, user.id, 3);
+  const subscribeOpen = await loadMentorSubscribeOpenState(supabase, user.id);
+  const recentReviewsResult = await listMentorReceivedReviews(supabase, user.id, 3);
+  const recentReviews = recentReviewsResult.items;
 
   const displayName = profile?.nickname?.trim() || profile?.full_name?.trim() || "멘토";
   const verification = verificationLabel(verificationStatus);
@@ -193,7 +194,7 @@ export default async function MentorMypagePage(props: MypageProps) {
 
       <MentorActivityControls info={activityInfo} flashOk={flashOk} flashErr={flashErr} />
 
-      <MentorSubscribeOpenToggle open={subscribeOpen} />
+      <MentorSubscribeOpenToggle open={subscribeOpen.open} available={subscribeOpen.ok} />
 
       <div className={`grid grid-cols-1 items-start lg:grid-cols-[1fr_300px] ${PAGE_COL_GAP}`}>
         {/* 좌 컬럼 */}
@@ -213,7 +214,7 @@ export default async function MentorMypagePage(props: MypageProps) {
         <aside className={`flex flex-col self-start ${PAGE_COL_GAP}`}>
           <SubscribersStatCard activeSubscribers={kpis.activeSubscribers} />
           <RatingStatCard ratingAvg={ratingAvg} reviewCount={reviewCount} />
-          <RecentReviewsCard reviews={recentReviews} />
+          <RecentReviewsCard reviews={recentReviews} loadFailed={recentReviewsResult.error != null} />
           <CapStatCard usage={capUsage} />
           <MentorSupportCard />
         </aside>
@@ -486,11 +487,14 @@ function MentorSupportCard() {
   );
 }
 
-function RecentReviewsCard({ reviews }: { reviews: ReviewCardItem[] }) {
+function RecentReviewsCard({ reviews, loadFailed = false }: { reviews: ReviewCardItem[]; loadFailed?: boolean }) {
   return (
     <article className={SURFACE_CARD}>
       <p className="text-[13px] font-medium text-slate-500">최근 후기</p>
-      {reviews.length === 0 ? (
+      {loadFailed ? (
+        // D-MT-6: 조회 실패를 '후기 0건'으로 흡수하지 않는다(사라진 것으로 오인 방지).
+        <p className="mt-3 text-[12px] leading-relaxed text-amber-700">후기를 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
+      ) : reviews.length === 0 ? (
         <p className="mt-3 text-[12px] leading-relaxed text-slate-400">아직 등록된 후기가 없어요</p>
       ) : (
         <ul className="mt-3 space-y-3">

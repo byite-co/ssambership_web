@@ -38,13 +38,17 @@ function ToggleRow(props: { title: string; note: string; toggle: Toggle }) {
   );
 }
 
-export function NotificationSettingsPanel(props: { initial: NotificationSettings }) {
+export function NotificationSettingsPanel(props: { initial: NotificationSettings; loadFailed?: boolean }) {
   const [settings, setSettings] = useState<NotificationSettings>(props.initial);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // D-MT-12: 설정 조회 실패 시 폼을 비활성화한다. 실제 설정이 아닌 placeholder 를 저장해
+  // 사용자의 기존 설정(예: 끈 알림)이 전부 on 으로 덮어써지는 것을 막는다.
+  const loadFailed = props.loadFailed ?? false;
 
   async function save(next: NotificationSettings) {
+    if (loadFailed) return; // placeholder 상태에서는 저장 금지(설정 유실 방지).
     setSaving(true);
     setError(null);
     setSaved(false);
@@ -79,7 +83,11 @@ export function NotificationSettingsPanel(props: { initial: NotificationSettings
         푸시 알림 채널과 종류별 수신 여부를 설정할 수 있어요. 변경 즉시 저장됩니다.
       </p>
 
-      {error ? (
+      {loadFailed ? (
+        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
+          현재 설정을 불러오지 못했어요. 잘못된 값으로 덮어쓰지 않도록 변경을 잠시 막아 두었어요. 새로고침해 다시 시도해 주세요.
+        </p>
+      ) : error ? (
         <p className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs font-bold text-red-900">{error}</p>
       ) : saved ? (
         <p className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-900">
@@ -91,7 +99,7 @@ export function NotificationSettingsPanel(props: { initial: NotificationSettings
         <ToggleRow
           title="푸시 알림 전체"
           note="끄면 모든 종류의 푸시가 발송되지 않아요"
-          toggle={{ label: "push", checked: settings.pushEnabled, onChange: togglePush, disabled: saving }}
+          toggle={{ label: "push", checked: settings.pushEnabled, onChange: togglePush, disabled: saving || loadFailed }}
         />
         {NOTIFICATION_GROUPS.map((key) => (
           <ToggleRow
@@ -102,7 +110,7 @@ export function NotificationSettingsPanel(props: { initial: NotificationSettings
               label: key,
               checked: settings.pushEnabled && settings.groups[key],
               onChange: (v) => toggleGroup(key, v),
-              disabled: saving || !settings.pushEnabled,
+              disabled: saving || loadFailed || !settings.pushEnabled,
             }}
           />
         ))}

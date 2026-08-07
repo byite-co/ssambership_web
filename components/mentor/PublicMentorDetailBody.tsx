@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { BadgeCheck } from "lucide-react";
-import { MentorContentsSection } from "@/components/mentor/MentorContentsList";
 import { MentorDetailCTASection } from "@/components/mentor/MentorDetailCTASection";
 import { MentorDetailHeaderActions } from "@/components/mentor/MentorDetailHeaderActions";
 import { MentorDetailSubjectTabs } from "@/components/mentor/MentorDetailSubjectTabs";
@@ -23,7 +22,6 @@ import { ReviewEligibilityBanner } from "@/components/reviews/ReviewEligibilityB
 import { ReviewWriteModal } from "@/components/reviews/ReviewWriteModal";
 import type { ReviewEligibilityResult } from "@/lib/reviews/checkReviewEligibility";
 import {
-  USER_UI_MENTOR_MEDIA_LOAD_FAILED,
   USER_UI_MENTOR_PROFILE_LOAD_FAILED,
   USER_UI_MENTOR_USER_LOAD_FAILED,
 } from "@/lib/constants/userFacingMessages";
@@ -283,12 +281,7 @@ export function PublicMentorDetailBody(props: {
 
           <MentorDetailSubjectTabs display={display} />
 
-          <MentorContentsSection
-            mentorId={mentorId}
-            rows={bundle.media.rows}
-            error={bundle.media.error}
-            loadFailedMessage={USER_UI_MENTOR_MEDIA_LOAD_FAILED}
-          />
+          {/* D-MT-13: 대표 콘텐츠(미디어) 섹션 제거 — 소스가 스텁이라 상시 빈 결과였다. */}
 
           <MentorReviewsCarousel mentorId={mentorId} />
 

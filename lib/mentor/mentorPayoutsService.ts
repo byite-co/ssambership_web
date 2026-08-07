@@ -357,17 +357,28 @@ export async function loadMentorPayoutBankAccount(
   };
 }
 
-export async function loadMentorPayoutSummary(supabase: SupabaseClient, mentorId: string): Promise<MentorPayoutSummary> {
-  const client = await readClient(supabase);
-  const ym = currentYm();
-  const [subLines, crLines, iqLines, bank] = await Promise.all([
+type MentorPayoutBankAccount = Awaited<ReturnType<typeof loadMentorPayoutBankAccount>>;
+
+/**
+ * D-MT-4: 구독·맞춤의뢰·개별질문 3소스 라인을 1회만 로드한다. 이전에는 summary·monthlyCards·
+ * pageData 가 각자 이 3개 로더를 다시 호출해 RPC 1종 + 테이블 3종을 각 3회(총 9회) 중복
+ * 조회했다. 로드는 여기 한 곳에서만 하고, 계산은 순수 함수(compute*)로 분리한다.
+ */
+async function loadAllPayoutLines(client: SupabaseClient, mentorId: string): Promise<MentorPayoutDetailLine[]> {
+  const [subLines, crLines, iqLines] = await Promise.all([
     loadSubscriptionLines(client, mentorId),
     loadCustomRequestLines(client, mentorId),
     loadIndividualQuestionLines(client, mentorId),
-    loadMentorPayoutBankAccount(client, mentorId),
   ]);
+  return [...subLines, ...crLines, ...iqLines];
+}
 
-  const all = [...subLines, ...crLines, ...iqLines];
+/** D-MT-4: 순수 계산(라인+계좌 → 요약). I/O 없음 — 로드된 라인을 주입받는다. */
+export function computeMentorPayoutSummary(
+  all: MentorPayoutDetailLine[],
+  bank: MentorPayoutBankAccount
+): MentorPayoutSummary {
+  const ym = currentYm();
   const thisMonthSubscription = sumNetByType(all, "subscription", ym);
   const thisMonthCustomRequest = sumNetByType(all, "custom_request", ym);
   const thisMonthIndividualQuestion = sumNetByType(all, "individual_question", ym);
@@ -416,19 +427,20 @@ export async function loadMentorPayoutSummary(supabase: SupabaseClient, mentorId
   };
 }
 
-export async function loadMentorPayoutMonthlyCards(
-  supabase: SupabaseClient,
-  mentorId: string,
-  months = 6
-): Promise<MentorPayoutMonthlyCard[]> {
+export async function loadMentorPayoutSummary(supabase: SupabaseClient, mentorId: string): Promise<MentorPayoutSummary> {
   const client = await readClient(supabase);
-  const [subLines, crLines, iqLines] = await Promise.all([
-    loadSubscriptionLines(client, mentorId),
-    loadCustomRequestLines(client, mentorId),
-    loadIndividualQuestionLines(client, mentorId),
+  const [all, bank] = await Promise.all([
+    loadAllPayoutLines(client, mentorId),
+    loadMentorPayoutBankAccount(client, mentorId),
   ]);
-  const all = [...subLines, ...crLines, ...iqLines];
+  return computeMentorPayoutSummary(all, bank);
+}
 
+/** D-MT-4: 순수 계산(라인 → 월별 카드). I/O 없음. */
+export function computeMentorPayoutMonthlyCards(
+  all: MentorPayoutDetailLine[],
+  months = 6
+): MentorPayoutMonthlyCard[] {
   const cards: MentorPayoutMonthlyCard[] = [];
   const now = new Date();
   for (let i = 0; i < months; i++) {
@@ -451,6 +463,16 @@ export async function loadMentorPayoutMonthlyCards(
     });
   }
   return cards;
+}
+
+export async function loadMentorPayoutMonthlyCards(
+  supabase: SupabaseClient,
+  mentorId: string,
+  months = 6
+): Promise<MentorPayoutMonthlyCard[]> {
+  const client = await readClient(supabase);
+  const all = await loadAllPayoutLines(client, mentorId);
+  return computeMentorPayoutMonthlyCards(all, months);
 }
 
 function pctChange(current: number, previous: number): number | null {
@@ -558,18 +580,17 @@ export async function loadMentorPayoutsPageData(
   const ym = currentYm();
   const prev = prevYm(ym);
 
-  const [summary, months, subLines, crLines, iqLines, lifetimePaid, performanceLines] =
-    await Promise.all([
-      loadMentorPayoutSummary(supabase, mentorId),
-      loadMentorPayoutMonthlyCards(supabase, mentorId, 6),
-      loadSubscriptionLines(client, mentorId),
-      loadCustomRequestLines(client, mentorId),
-      loadIndividualQuestionLines(client, mentorId),
-      loadLifetimePaidPayouts(client, mentorId),
-      loadPerformanceLines(client, mentorId),
-    ]);
+  // D-MT-4: 라인·계좌를 각 1회만 로드하고 summary/monthlyCards 는 순수 계산 함수에 주입한다
+  // (이전 9회 중복 조회 → 라인 1회 + 계좌 1회). lifetime/performance 는 별도 집계라 유지.
+  const [all, bank, lifetimePaid, performanceLines] = await Promise.all([
+    loadAllPayoutLines(client, mentorId),
+    loadMentorPayoutBankAccount(client, mentorId),
+    loadLifetimePaidPayouts(client, mentorId),
+    loadPerformanceLines(client, mentorId),
+  ]);
 
-  const all = [...subLines, ...crLines, ...iqLines];
+  const summary = computeMentorPayoutSummary(all, bank);
+  const months = computeMentorPayoutMonthlyCards(all, 6);
   const settlementLines = all.map(detailLineToSettlementRow).sort((a, b) => (a.date < b.date ? 1 : -1));
 
   const thisSub = sumNetByType(all, "subscription", ym);
@@ -624,13 +645,7 @@ export async function loadMentorPayoutDetail(
   opts: { month?: string | null; type?: PayoutLineType | "all" | null }
 ): Promise<MentorPayoutDetailResult> {
   const client = await readClient(supabase);
-  const [subLines, crLines, iqLines] = await Promise.all([
-    loadSubscriptionLines(client, mentorId),
-    loadCustomRequestLines(client, mentorId),
-    loadIndividualQuestionLines(client, mentorId),
-  ]);
-
-  let lines = [...subLines, ...crLines, ...iqLines];
+  let lines = await loadAllPayoutLines(client, mentorId);
   if (opts.type && opts.type !== "all") {
     lines = lines.filter((l) => l.type === opts.type);
   }

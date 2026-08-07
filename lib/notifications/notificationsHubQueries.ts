@@ -28,7 +28,6 @@ type QB = {
   limit: (n: number) => QB;
 };
 type QPageResult = { data: Row[] | null; error: { message: string } | null };
-type QCountResult = { count: number | null; error: { message: string } | null };
 
 const TABLE = "notifications";
 
@@ -152,16 +151,22 @@ export async function loadNotificationsHub(
     q.order(ORDER_COLUMN, { ascending }).order("id", { ascending });
 
   // 본인 전체 미읽음 수(뱃지) — 현재 페이지가 아니라 서버 count.
+  // D-MT-10: 앱 쿼리(notifications head count) 대신 DB 정본 RPC(notification_unread_count_self)로
+  // 통일한다. 뱃지 카운트 정본이 DB 함수와 앱 쿼리 두 벌로 갈리던 문제를 없앤다(앱 게이팅 타입
+  // 제외 규칙도 RPC 가 서버에서 강제). 실패/계약 불일치는 unreadCount=null(0건과 구분) + 로그.
   let unreadCount: number | null = null;
   {
-    const countBase = supabase.from(TABLE).select("id", { count: "exact", head: true }) as unknown as QB;
-    const cq = countBase.eq(USER_COLUMN, userId).not(READ_COLUMN, "is", true);
-    const { count, error: ce } = (await (cq as unknown as PromiseLike<QCountResult>)) as QCountResult;
+    const { data, error: ce } = await supabase.rpc("notification_unread_count_self");
     if (ce) {
-      // W4(C10): 표시 전용(뱃지) 명시적 degrade(성공 아님) — unreadCount=null 은 실패(0건과 구분), 로그로 표면화.
-      console.error("[loadNotificationsHub] unread count", ce.message);
+      console.error("[loadNotificationsHub] notification_unread_count_self", ce.message);
     } else {
-      unreadCount = count ?? 0;
+      const env = (data ?? {}) as { ok?: unknown; count?: unknown };
+      const parsed = typeof env.count === "number" ? env.count : Number(env.count);
+      if (env.ok === true && Number.isFinite(parsed)) {
+        unreadCount = parsed;
+      } else {
+        console.error("[loadNotificationsHub] notification_unread_count_self contract_mismatch");
+      }
     }
   }
   out.unreadCount = unreadCount;
