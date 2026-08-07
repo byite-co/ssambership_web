@@ -36,6 +36,8 @@ function formatDateKo(iso: string | null): string {
 
 const statusBadgeClass = (s: string) => {
   const u = s.toLowerCase();
+  // 적립중은 지급 대기와 다른 상태다 — 색까지 구분해야 목록에서 눈으로 갈린다.
+  if (/accruing/i.test(u)) return "bg-sky-50 text-sky-700 border-sky-100";
   if (/pending|on_hold|hold/i.test(u)) return "bg-amber-50 text-amber-700 border-amber-100";
   if (/paid|success|done/i.test(u)) return "bg-emerald-50 text-emerald-700 border-emerald-100";
   return "bg-slate-50 text-slate-600 border-slate-100";
@@ -119,6 +121,7 @@ export default async function AdminSettlementsPage() {
         `전체 ${summary.totalRows}건`,
         `지급 대기·보류·지급 가능(멘토 정산금 합계) ${formatWon(summary.pendingMentorAmountSum)}`,
         `지급 완료(멘토 정산금 합계) ${formatWon(summary.paidMentorAmountSum)}`,
+        `적립중(아직 지급 대상 아님) ${summary.accruingCount}건 · ${formatWon(summary.accruingMentorAmountSum)}`,
         `보류 ${summary.onHoldCount}건 · 취소 ${summary.cancelledCount}건`,
       ].join(" · ")
     : "정산 요약을 불러오지 못했습니다.";

@@ -67,33 +67,44 @@ async function captureVideoPosterDataUrl(file: File): Promise<string | null> {
   video.muted = true;
   video.playsInline = true;
   video.preload = "metadata";
-  try {
-    const ready = new Promise<void>((resolve, reject) => {
-      let settled = false;
-      const done = () => {
-        if (settled) return;
-        settled = true;
-        resolve();
-      };
-      const fail = () => {
-        if (settled) return;
-        settled = true;
-        reject(new Error("video-decode"));
-      };
-      video.onloadeddata = done;
-      video.onseeked = done;
-      video.onerror = fail;
-      // 디코딩이 끝나지 않는 코덱에서 영원히 매달리지 않게 한다.
-      setTimeout(fail, 8000);
-    });
-    video.src = objectUrl;
-    // 0초 프레임은 검은 화면인 경우가 많아 살짝 뒤로 옮긴다.
-    video.currentTime = 0.1;
-    await ready;
 
+  // 이벤트 하나를 기다리되, 디코딩이 끝나지 않는 코덱에 영원히 매달리지 않는다.
+  function waitFor(event: "loadedmetadata" | "seeked", ms: number): Promise<boolean> {
+    return new Promise<boolean>((resolve) => {
+      let settled = false;
+      const done = (ok: boolean) => {
+        if (settled) return;
+        settled = true;
+        video.removeEventListener(event, onEvent);
+        video.removeEventListener("error", onError);
+        resolve(ok);
+      };
+      const onEvent = () => done(true);
+      const onError = () => done(false);
+      video.addEventListener(event, onEvent, { once: true });
+      video.addEventListener("error", onError, { once: true });
+      setTimeout(() => done(false), ms);
+    });
+  }
+
+  try {
+    video.src = objectUrl;
+    // ① 먼저 메타데이터(길이·해상도)를 기다린다. 이걸 기다리지 않고 currentTime 을
+    //    설정하면 브라우저가 무시하거나 되돌려서 seek 이 일어나지 않는다.
+    if (!(await waitFor("loadedmetadata", 8000))) return null;
     const vw = video.videoWidth;
     const vh = video.videoHeight;
     if (!vw || !vh) return null;
+
+    // ② 0초 프레임은 검은 화면인 경우가 많아 살짝 뒤로 옮긴다(짧은 영상은 중간으로).
+    const duration = Number.isFinite(video.duration) && video.duration > 0 ? video.duration : 0;
+    const target = duration > 0 ? Math.min(0.1, duration / 2) : 0;
+    if (target > 0) {
+      video.currentTime = target;
+      // seek 이 실패해도 0초 프레임으로 진행한다 — 썸네일이 없는 것보다 낫다.
+      await waitFor("seeked", 8000);
+    }
+
     const targetW = Math.min(480, vw);
     const targetH = Math.max(1, Math.round((vh / vw) * targetW));
     const canvas = document.createElement("canvas");
