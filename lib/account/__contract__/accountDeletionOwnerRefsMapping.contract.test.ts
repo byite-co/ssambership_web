@@ -194,3 +194,82 @@ test("F1 방어: 형식 이탈 verdict 행(비문자열·빈 문자열)은 버�
     !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(FOREIGN_OWNER_MARKER)
   );
 });
+
+// ── S1-5 / QA-C11: owner_id 미기록 객체가 탈퇴 삭제 대상에서 빠지던 문제 ─────────
+//
+// 서버 사이드(service role) 업로드가 storage.objects.owner_id 를 남기지 않아
+// 실측상 student-id-images 2/6 · shortform-videos 1/1 등이 owner 미기록이다.
+// 181 이 `<uid>/` 경로 규약으로 이 객체들을 대상 귀속으로 판정해 돌려주더라도,
+// 183 verdict 가 'none'(= storage 소유자 기록 부재)으로 오면서 그 귀속 근거를
+// null 로 덮으면 buildDeletionPlan 이 unattributable 로 떨어뜨려 **탈퇴 계획
+// 자체가 차단**된다. 'none' 은 부재의 사실일 뿐 귀속의 부정이 아니다.
+test("S1-5: 181 이 대상 귀속으로 판정한 객체는 verdict 'none' 에도 귀속이 유지된다", () => {
+  const prefixOwned = { bucket: "community-post-images", path: `${UID}/server-uploaded.png` };
+  // 181 이 경로 규약/도메인 조인으로 대상 귀속을 판정해 돌려준 객체.
+  const base = buildObjectOwnershipFromOwnerRefRows(
+    UID,
+    [{ bucket_id: prefixOwned.bucket, name: prefixOwned.path }],
+    [...AUDITED]
+  );
+  // 183 은 storage 에 owner_id 가 없으므로 'none' 을 돌려준다.
+  const ownership = applyOwnerVerdicts(UID, base, [
+    { bucket_id: prefixOwned.bucket, name: prefixOwned.path, owner_state: "none" },
+  ]);
+  assert.equal(ownership.owners.get(storageObjectKey(prefixOwned)), UID);
+
+  const plan = buildDeletionPlan({
+    userId: UID,
+    dbRefs: [],                       // 도메인 테이블 조인으로는 안 잡히는 객체
+    inventory: [prefixOwned],         // prefix 스캔으로만 수집된다
+    uncoveredBuckets: [],
+    ownership,
+  });
+  assert.deepEqual(plan.refs.map(storageObjectKey), [storageObjectKey(prefixOwned)]);
+  assert.deepEqual(plan.ownerAttributed.map(storageObjectKey), [storageObjectKey(prefixOwned)]);
+  // 계획이 오염되면 워커가 real-run 을 시작하지 않는다 — 여기서 비어 있어야 탈퇴가 진행된다.
+  assert.deepEqual(plan.unattributable, []);
+  assert.deepEqual(plan.ownershipConflicts, []);
+});
+
+test("S1-5: 귀속 근거가 없는 객체는 종전대로 verdict 'none' 에서 null 이다(F1 오탐 방지 유지)", () => {
+  const orphan = { bucket: "community-post-images", path: "someone-else/x.png" };
+  const base = buildObjectOwnershipFromOwnerRefRows(UID, [], [...AUDITED]);
+  const ownership = applyOwnerVerdicts(UID, base, [
+    { bucket_id: orphan.bucket, name: orphan.path, owner_state: "none" },
+  ]);
+  assert.equal(ownership.owners.get(storageObjectKey(orphan)), null);
+
+  const plan = buildDeletionPlan({
+    userId: UID,
+    dbRefs: [],
+    inventory: [orphan],
+    uncoveredBuckets: [],
+    ownership,
+  });
+  // DB 조인도 owner 귀속도 아니다 → 삭제하지 않고 차단한다(과삭제 금지).
+  assert.deepEqual(plan.refs, []);
+  assert.deepEqual(plan.unattributable.map(storageObjectKey), [storageObjectKey(orphan)]);
+});
+
+test("S1-5: 'other' verdict 는 여전히 base 의 대상 귀속을 이긴다(과삭제 차단 불변)", () => {
+  const contested = { bucket: "question-room-attachments", path: "room1/shared.pdf" };
+  const base = buildObjectOwnershipFromOwnerRefRows(
+    UID,
+    [{ bucket_id: contested.bucket, name: contested.path }],
+    [...AUDITED]
+  );
+  const ownership = applyOwnerVerdicts(UID, base, [
+    { bucket_id: contested.bucket, name: contested.path, owner_state: "other" },
+  ]);
+  assert.equal(ownership.owners.get(storageObjectKey(contested)), FOREIGN_OWNER_MARKER);
+
+  const plan = buildDeletionPlan({
+    userId: UID,
+    dbRefs: [contested],
+    inventory: [],
+    uncoveredBuckets: [],
+    ownership,
+  });
+  assert.deepEqual(plan.refs, []);
+  assert.equal(plan.ownershipConflicts.length, 1);
+});

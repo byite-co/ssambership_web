@@ -53,8 +53,18 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 72본 pack 의 PG16 로컬 fresh replay 실측(tables=80 functions=214
-# policies=177 buckets=13)이며, PG17 CLI 재생에서도 같은 값이 재현됐다.
+# 기대치는 79본 pack(생성기 78 + PR60 1)의 PG16 로컬 fresh replay 실측
+# (tables=80 functions=216 policies=175 buckets=13)이며, PG17 CLI 재생에서도
+# 같은 값이 재현된다.
+# 72본→79본(S1 배치) 델타:
+#   functions +2 = account_deletion_state_blocked(S1-1/QA-A1)
+#                + content_reports_dedupe_open(S1-3/QA-B4)
+#   policies  -2 = community_posts SELECT 3중 중복 정책을 1개로 통합
+#                  (S1-2/QA-A4 — deleted_at 필터 누락 재발 방지)
+# ※ S1-1 은 adg_* 가드 트리거 6종을 BEFORE→AFTER 로 옮긴다(탈퇴상태 오라클 차단).
+#    트리거 재생성이라 위 4개 카운트는 바뀌지 않는다.
+# ※ S1-8(차단 목록 닉네임 뷰)은 오너 판단으로 S3 로 미뤘다 — api_web_v1 의
+#    SECURITY DEFINER 뷰는 계약대로 mentor_directory_v1 1종을 유지한다.
 # 64본 체계(79/213/178) 대비 델타는 post_ledger_backfill 8본으로 전부 설명된다:
 #   tables   +1  community_post_view_events            (20260806033556)
 #   functions+1  community_post_view_record_v2          (20260806033556;
@@ -70,9 +80,9 @@ count_check(){ # count_check <label> <expected> <sql>
 }
 count_check tables 80 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
-count_check functions 214 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+count_check functions 216 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
-count_check policies 177 "select count(*) from pg_policies where schemaname='public'"
+count_check policies 175 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"
 
 echo "=== [5] M13 trigger function ACL (anon/authenticated EXECUTE 불가)"

@@ -133,7 +133,7 @@ test("(1) community_post: hidden 처리 시 status='hidden' + anon에게 publish
   const { data: after } = await admin.from("community_posts").select("status").eq("id", postId).single();
   expect((after as { status: string }).status).toBe("hidden");
 
-  // anon SELECT — 일반 사용자에게 안 보이게 (RLS cp_select_published 가 status='published' 만 노출)
+  // anon SELECT — 일반 사용자에게 안 보이게 (RLS cp_select_visible 가 status='published' 만 노출)
   const r1 = await sb.from("community_posts").select("id").eq("id", postId);
   expect(r1.error).toBeFalsy();
   expect((r1.data ?? []).length, "hidden 처리 후 anon 미노출").toBe(0);

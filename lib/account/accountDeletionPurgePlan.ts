@@ -88,11 +88,21 @@ export const FOREIGN_OWNER_MARKER = "(foreign-owner)";
 
 /**
  * 183 verdict 행을 owners 맵에 반영한다(순수 — W5-f F1 OWNERSHIP_CONFLICT 감지 복원).
- *   'target' → 대상 uid · 'other' → FOREIGN_OWNER_MARKER · 'none' → null.
+ *   'target' → 대상 uid · 'other' → FOREIGN_OWNER_MARKER · 'none' → base 유지(없으면 null).
  * verdict 는 181 기반 base 보다 나중·객체별 실측이므로 같은 키를 덮어쓴다.
  * 형식 이탈 행(bucket_id/name 비문자열·빈 문자열)은 버리고, **미지의 owner_state 는
  * 조용히 지나가지 않고 던진다** — 소유 상태를 오독한 채 계획을 세우면 과삭제로 이어질
  * 수 있으므로 fail-closed 로 워커를 정지시킨다.
+ *
+ * ★ 'none' 만 덮어쓰지 않는다(S1-5/QA-C11) ★
+ *   'none' 은 "storage.objects 에 그 행이 없거나 owner_id 가 비어 있다"는 **부재**의
+ *   사실일 뿐, 다른 축의 귀속 근거를 부정하지 않는다. 181 이 (owner_id 외에)
+ *   첨부 도메인 테이블의 author_id · `<uid>/` 경로 규약으로 이미 대상 귀속을 판정한
+ *   객체를 여기서 null 로 덮으면 그 근거가 사라져 buildDeletionPlan 이
+ *   `unattributable` 로 떨어뜨리고, 계획 전체가 오염 판정돼 탈퇴가 **차단**된다.
+ *   서버 사이드 업로드가 owner_id 를 남기지 않는 실측 데이터(student-id-images
+ *   2/6 · shortform-videos 1/1 등)가 정확히 이 경우다. base 가 대상 귀속을
+ *   말하지 않는 객체에 대해서는 종전대로 null 을 싣는다(F1 오탐 방지 계약 유지).
  */
 export function applyOwnerVerdicts(
   userId: string,
@@ -112,7 +122,8 @@ export function applyOwnerVerdicts(
         owners.set(k, FOREIGN_OWNER_MARKER);
         break;
       case "none":
-        owners.set(k, null);
+        // 부재는 귀속 근거를 지우지 않는다 — base 가 대상 귀속이면 그대로 둔다.
+        if (owners.get(k) !== userId) owners.set(k, null);
         break;
       default:
         throw new Error(

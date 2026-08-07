@@ -11,8 +11,13 @@
  *    안 된다(내부 메모 유출 금지).
  *
  * RLS 전제(실측): 작성자 본인은 자신의 숨김 행을 읽을 수 있다.
- *  - community_posts  : cp_select_published — status='published' OR author_id=auth.uid() OR is_admin()
- *                       (supabase/sql/037_p1_community_board_v2.sql:301-308)
+ *  - community_posts  : cp_select_visible — deleted_at IS NULL AND (status='published'
+ *                       OR author_id=auth.uid()) OR is_admin()
+ *                       (S1-2 · supabase/baseline/post_ledger_backfills/
+ *                        20260806200500_community_posts_select_deleted_filter.sql —
+ *                        종전 3중 정책 cp_select_own·cp_select_published·"누구나 게시글 읽기"
+ *                        를 하나로 통합했다. 숨김(hidden) 글을 작성자 본인이 읽는 전제는
+ *                        그대로다 — soft-delete 된 글만 추가로 가려진다.)
  *  - shortform_posts  : sf_select_published — status='published' OR author_id=auth.uid()
  *                       OR creator_id=auth.uid() OR is_admin()
  *                       (supabase/sql/053_community_rls_legacy_select_cleanup.sql:18-25)
