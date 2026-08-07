@@ -1,6 +1,6 @@
 # 결함 110건 수정 매니페스트 (2026-08-07)
 
-done 103 · skipped 4 · ops 3 · pending 0 = **110** (중복·누락 0)
+done 103 · skipped 4 · ops 2 · deferred 1 · pending 0 = **110** (중복·누락 0)
 
 | ID | 심각도 | 웨이브 | 배치 | 상태 | 위치 |
 |----|----|----|----|----|----|
@@ -59,7 +59,7 @@ done 103 · skipped 4 · ops 3 · pending 0 = **110** (중복·누락 0)
 | D-DB-2 | risk | Wave 0 | W0-B | done | wave0 (PR#69) |
 | D-DB-3 | risk | Wave 2 | OPS-2 | ops |  |
 | D-DB-4 | risk | Wave 0 | W0-C | done | wave0 (PR#69) |
-| D-DB-5 | smell | Wave 2 | OPS-3 | ops |  |
+| D-DB-5 | smell | Wave 2 | OPS-3 | deferred | 오너 결정(2026-08-07): 이번 라운드 미도입 — C14(푸시)와 함께 후속 라운드 검토 |
 | D-IQ-1 | bug | Wave 1 | L3 | done | L·iq |
 | D-IQ-2 | risk | Wave 1 | L3 | done | L·iq |
 | D-IQ-3 | risk | Wave 1 | L3 | done | L·iq |
@@ -114,3 +114,11 @@ done 103 · skipped 4 · ops 3 · pending 0 = **110** (중복·누락 0)
 | D-ST-16 | smell | Wave 1 | L6 | done | L·student |
 | D-ST-17 | smell | Wave 1 | L6 | done | L·student |
 | D-ST-18 | smell | Wave 1 | L6 | done | L·student |
+## 오너 결정 로그 (2026-08-07)
+
+원격 실측 근거: `users.status` = NOT NULL · default `'active'` · CHECK {active, suspended, banned, deleted} · 현재 데이터 전원 active.
+
+1. **W0-A 미지 status 델타 — 거부 채택 + CHECK 4종 정합.** allowlist는 '미지값 방어'가 아니라 DB CHECK 4종에 정확히 맞춘다: `active`만 통과(만료된 `suspended` 포함), `suspended`/`banned`/`deleted`는 명시 거부. NULL→active 정규화와 CHECK 밖 값 거부는 제약상 도달 불가 방어선으로 유지(무해). `dormant`는 이 DB에 없는 상태값이므로 문서·테스트 예시로 쓰지 않는다. → wave0 `138e946` 반영.
+2. **W0-B verification_status 실노출 — 하지 않음(현행 유지 확정).** 상수 유지 + 뷰 불변식 계약 + 회귀 테스트가 정답. 부재 기반 차단(승인 멘토만 행 존재)으로 이미 완결. 향후 '검증 진행 중' 배지류 기능이 생기면 마이그레이션+개인정보 검토가 붙는 직렬 레인으로 재상정.
+3. **D-DB-1 순서 — 즉시, #69/#70 병합 전 적용.** 절차: ① 승인 경로(workflow_dispatch·Environment 승인·dry-run 선행 — PR #71 `db-apply-pending.yml`) ② '적용 시점 미적용 전량' 기준(9본 고정 아님) ③ 적용 후 원격 스모크 5종(정산 성공·삭제글 미노출·중복신고 멱등·학생메시지 알림·차단목록 RPC) ④ 그 다음 #69→#70 직렬 병합(매 병합 게이트). D-DB-3(유출 비밀번호 보호 토글)은 같은 창에 대시보드에서 실행.
+4. **부속 — D-DB-5 Realtime: 이번 라운드 미도입(보류).** 현행 새로고침/revalidate 기반은 결함이 아니라 설계. 도입은 화면별 UX 재설계가 붙는 기획 안건으로, C14(푸시)와 같은 묶음으로 후속 라운드에서 판단.
