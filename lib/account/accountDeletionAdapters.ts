@@ -75,15 +75,37 @@ export function makeBeginLocked(admin: SupabaseClient): DeletionDeps["beginLocke
   };
 }
 
-/** 175 account_deletion_record_error — attempts 증가 + backoff, 한도 초과 시 failed. */
+/**
+ * 175 account_deletion_record_error — attempts 증가 + backoff, 한도 초과 시 failed.
+ * RPC 가 `{ ok, state, … }` 를 돌려주므로 state==='failed' 를 워커에 전달한다(D-AU-4 unban 보상 트리거).
+ */
 export function makeRecordError(admin: SupabaseClient): DeletionDeps["recordError"] {
   return async (userId, err) => {
     // 오류 문자열에 비밀·토큰이 섞이지 않도록 상한만 두고 그대로 넘긴다(서버가 1000자로 자른다).
-    const { error } = await admin.rpc("account_deletion_record_error", {
+    const { data, error } = await admin.rpc("account_deletion_record_error", {
       p_user_id: userId,
       p_error: err.slice(0, 500),
     });
     if (error) throw new Error(`record_error failed: ${error.message}`);
+    const row = (data ?? {}) as { state?: string };
+    return { concludedFailed: row.state === "failed" };
+  };
+}
+
+/** GoTrue 밴 해제값 — 100년 밴(ACCOUNT_DELETION_BAN_DURATION)을 되돌린다. */
+export const ACCOUNT_DELETION_UNBAN_DURATION = "none";
+
+/**
+ * D-AU-4 보상: job 이 실패 종결되면 GoTrue 밴을 해제해 사용자가 다시 로그인할 수 있게 한다.
+ * updateUserById(uid, { ban_duration:'none' }) — locked 진입 시 건 100년 밴의 역연산.
+ * 실패는 예외로 던진다(워커가 삼켜 원 오류를 가리지 않되, 다음 사이클에 재시도 가능).
+ */
+export function makeUnbanOnFailure(admin: SupabaseClient): DeletionDeps["unbanOnFailure"] {
+  return async (userId) => {
+    const { error } = await admin.auth.admin.updateUserById(userId, {
+      ban_duration: ACCOUNT_DELETION_UNBAN_DURATION,
+    });
+    if (error) throw new Error(`unban_on_failure failed: ${error.message}`);
   };
 }
 
@@ -470,6 +492,7 @@ export function buildDeletionDeps(
     beginLocked: makeBeginLocked(admin),
     advance: makeAdvance(admin),
     recordError: makeRecordError(admin),
+    unbanOnFailure: makeUnbanOnFailure(admin),
     revokeSessions: makeRevokeSessions(admin),
     gatherDbRefs: makeGatherDbRefs(admin),
     listInventory: makeListInventory(admin),

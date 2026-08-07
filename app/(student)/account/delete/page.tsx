@@ -33,6 +33,8 @@ export default async function AccountDeletePage({ searchParams }: Props) {
   const sp = (await searchParams) ?? {};
   const actionError = typeof sp.error === "string" && sp.error ? sp.error : null;
   const justCanceled = sp.canceled === "1";
+  // D-AU-6: 탈퇴 요청 성공 시 붙는 ?requested=1 을 읽어 접수 확인 배너를 렌더한다.
+  const justRequested = sp.requested === "1";
 
   // 활성 saga job — 있으면 폼 대신 "요청 접수 + 취소 창" 패널을 보여준다(W5 §3-5).
   // 웹 즉시 삭제 경로를 폐지하면서 사용자 동선이 "즉시 완료" → "요청 접수 후 취소 가능"으로 바뀐다.
@@ -64,6 +66,15 @@ export default async function AccountDeletePage({ searchParams }: Props) {
         {justCanceled && !job ? (
           <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-900">
             탈퇴 요청을 취소했습니다. 계정은 그대로 유지됩니다.
+          </p>
+        ) : null}
+
+        {justRequested && !actionError ? (
+          <p
+            className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900"
+            role="status"
+          >
+            탈퇴 요청이 접수되었습니다. 아래 취소 창이 열려 있는 동안에는 요청을 철회할 수 있어요.
           </p>
         ) : null}
 

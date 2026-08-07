@@ -38,8 +38,10 @@ export async function requestPasswordResetAction(formData: FormData) {
   const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo });
 
   if (error) {
-    const code = error.message.length > 120 ? "reset_failed" : encodeURIComponent(error.message);
-    redirect(`/forgot-password?error=${code}`);
+    // 원문(레이트리밋·계정 존재 여부 등)이 비인증 표면에 반사되지 않도록
+    // Supabase 메시지는 콘솔에만 남기고, 화면에는 고정 code 만 넘긴다(admin 로그인 규약과 동일).
+    console.error("[passwordReset] resetPasswordForEmail failed:", error.message);
+    redirect("/forgot-password?error=reset_failed");
   }
 
   redirect("/forgot-password?sent=1");

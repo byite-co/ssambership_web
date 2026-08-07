@@ -13,13 +13,14 @@ export default async function ForgotPasswordPage(props: Props) {
   const privacyUrl = process.env.NEXT_PUBLIC_LEGAL_PRIVACY_URL ?? "/legal/privacy";
   const supportUrl = process.env.NEXT_PUBLIC_SUPPORT_URL;
 
+  // 화이트리스트 매핑 — Supabase 원문은 절대 화면에 싣지 않는다(오라클/설정 반사 방지, D-AU-2).
   const errUi =
     err === "empty_email"
       ? "이메일을 입력해 주세요."
       : err === "missing_site_url"
         ? "비밀번호 재설정 링크를 만들 사이트 주소(NEXT_PUBLIC_SITE_URL)가 설정되어 있지 않습니다. 운영 환경 변수를 확인해 주세요."
         : err
-          ? decodeURIComponent(err)
+          ? "재설정 메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요."
           : null;
 
   return (

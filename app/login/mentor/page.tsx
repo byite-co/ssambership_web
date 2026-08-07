@@ -1,7 +1,10 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { LoginSingleRoleCard } from "@/components/auth/LoginDualRolePanel";
+import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
+import { resolvePostLoginPath } from "@/lib/auth/getPostLoginPath";
 
 type Props = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 
@@ -9,6 +12,13 @@ export default async function LoginMentorPage(props: Props) {
   const sp = (await props.searchParams) ?? {};
   const n = sp.next;
   const initialNext = (typeof n === "string" ? n : Array.isArray(n) ? n[0] : null) ?? null;
+
+  // D-AU-12: 이미 로그인한 사용자는 로그인 폼을 다시 보지 않는다(/admin/login 과 대칭).
+  const { user, profile } = await getServerUserWithProfile();
+  if (user && profile) {
+    redirect(resolvePostLoginPath(initialNext, profile.role));
+  }
+
   const backToRolePicker = initialNext ? `/login?next=${encodeURIComponent(initialNext)}` : "/login";
 
   return (
