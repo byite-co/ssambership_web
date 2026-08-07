@@ -1,6 +1,6 @@
 # 결함 110건 수정 매니페스트 (2026-08-07)
 
-done 103 · partial 1 · skipped 4 · ops 1 · deferred 1 · pending 0 = **110** (중복·누락 0)
+done 104 · partial 1 · skipped 4 · ops 0 · deferred 1 · pending 0 = **110** (중복·누락 0)
 
 > 개정 2026-08-07(적대적 리뷰 반영): D-CM-4 skipped→done(v2 전환) · D-IQ-6 done→partial · D-CR-6 done→skipped · D-DB-1 ops→done(원격 적용 완료).
 
@@ -59,7 +59,7 @@ done 103 · partial 1 · skipped 4 · ops 1 · deferred 1 · pending 0 = **110**
 | D-CR-9 | smell | Wave 1 | L8 | done | L·customrequest |
 | D-DB-1 | bug | Wave 2 | OPS-1 | done | OPS 실행 완료 — db-apply-pending run 31175134612, pending 9본 적용·사후검증·스모크 5종 통과 (2026-08-07) |
 | D-DB-2 | risk | Wave 0 | W0-B | done | wave0 (PR#69) |
-| D-DB-3 | risk | Wave 2 | OPS-2 | ops |  |
+| D-DB-3 | risk | Wave 2 | OPS-2 | done | OPS 실행 완료 — 오너가 대시보드에서 Leaked Password Protection 활성 (2026-08-07, advisor auth_leaked_password_protection 경고 해소 실측) |
 | D-DB-4 | risk | Wave 0 | W0-C | done | wave0 (PR#69) |
 | D-DB-5 | smell | Wave 2 | OPS-3 | deferred | 오너 결정(2026-08-07): 이번 라운드 미도입 — C14(푸시)와 함께 후속 라운드 검토 |
 | D-IQ-1 | bug | Wave 1 | L3 | done | L·iq |
