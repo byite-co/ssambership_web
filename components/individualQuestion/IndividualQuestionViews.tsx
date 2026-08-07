@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { ChatBottomAnchor } from "@/components/qna/ChatBottomAnchor";
+import { IqAttachmentField } from "@/components/individualQuestion/IqAttachmentField";
 import { CheckCircle2, Clock, Inbox, MessageCircle, MessageCircleCheck, MessageSquareText, Paperclip, ReceiptText, ShieldCheck, WalletCards } from "lucide-react";
 import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -563,17 +564,11 @@ export function IndividualQuestionDetailView(props: {
                 className={`w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 ${accent.ring}`}
                 placeholder={actor === "mentor" ? "학생에게 보낼 답변·메시지를 작성하세요." : "멘토에게 보낼 메시지를 작성하세요."}
               />
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-bold text-slate-600">
-                  <Paperclip className={`h-4 w-4 ${accent.icon}`} aria-hidden />
-                  <span>파일 첨부</span>
-                  <input
-                    type="file"
-                    name="attachment"
-                    accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
-                    className="sr-only"
-                  />
-                </label>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <IqAttachmentField
+                  iconClassName={accent.icon}
+                  accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                />
                 <FormSubmitButton
                   idleLabel="보내기"
                   pendingLabel="전송 중..."
