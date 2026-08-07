@@ -14,7 +14,12 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 import type { SupabaseClient } from "@supabase/supabase-js";
+
+const here = dirname(fileURLToPath(import.meta.url));
 import {
   REVIEW_UPDATE_FAILED_MESSAGE,
   REVIEW_UPDATE_NOT_APPLIED_MESSAGE,
@@ -147,4 +152,15 @@ test("신규 문구는 1건뿐이고 기존 실패 문구와 구분된다", () =
     REVIEW_UPDATE_NOT_APPLIED_MESSAGE,
     "수정할 수 없는 후기예요. 검토 중이거나 이미 변경된 상태일 수 있어요."
   );
+});
+
+// D-MT-5 / D-DB-4 회귀 감시: 관리자 리뷰 숨김(hideReview)도 작성자 수정과 동일한 1행 계약을
+// 따라야 한다. error 만 검사하면 reviews_update_admin 정책 부재·id 부재 시 0행이 성공으로
+// 보고돼 숨김 조치가 유실된다. runtime 의존을 피해 소스에 대한 정적 계약으로 고정한다.
+test("hideReview 는 .select('id') + decideReviewUpdateOutcome 로 1행을 검증한다", () => {
+  const src = readFileSync(join(here, "..", "reviewQueries.ts"), "utf8");
+  const body = src.slice(src.indexOf("export async function hideReview"));
+  const fn = body.slice(0, body.indexOf("\n}"));
+  assert.match(fn, /\.update\(patch\)\.eq\("id", reviewId\)\.select\("id"\)/, "RETURNING id 회수");
+  assert.match(fn, /decideReviewUpdateOutcome\(reviewId, data, error\)/, "1행 판정 위임");
 });
