@@ -9,7 +9,8 @@ export type AdminKpiCard = {
   tone: "blue" | "amber" | "red" | "emerald";
 };
 
-export type AdminTrendPoint = { date: string; signups: number; cashKrw: number };
+// D-AD-11: 조회 실패는 0 이 아니라 null(—)로 구분한다.
+export type AdminTrendPoint = { date: string; signups: number | null; cashKrw: number | null };
 
 export type AdminIssueKind = "신고" | "콘텐츠검수" | "환불" | "분쟁";
 
@@ -36,34 +37,36 @@ function dayKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
-function pctChange(today: number, yesterday: number): string {
+function pctChange(today: number | null, yesterday: number | null): string {
+  if (today === null || yesterday === null) return "—";
   if (yesterday <= 0) return today > 0 ? "+100%" : "0%";
   const p = Math.round(((today - yesterday) / yesterday) * 100);
   return `${p >= 0 ? "+" : ""}${p}%`;
 }
 
+// D-AD-11: 조회 실패 시 0 이 아니라 null 을 반환해 '0건'과 '조회 실패'를 구분한다.
 async function countUsersCreatedBetween(
   supabase: SupabaseClient,
   from: Date,
   to: Date
-): Promise<number> {
+): Promise<number | null> {
   const { count, error } = await supabase
     .from("users")
     .select("*", { count: "exact", head: true })
     .gte("created_at", from.toISOString())
     .lt("created_at", to.toISOString());
-  if (error) return 0;
+  if (error) return null;
   return count ?? 0;
 }
 
-async function sumCashLedgerBetween(supabase: SupabaseClient, from: Date, to: Date): Promise<number> {
+async function sumCashLedgerBetween(supabase: SupabaseClient, from: Date, to: Date): Promise<number | null> {
   const { data, error } = await supabase
     .from("cash_ledger")
     .select("delta_cents, created_at")
     .gte("created_at", from.toISOString())
     .lt("created_at", to.toISOString())
     .limit(5000);
-  if (error) return 0;
+  if (error) return null;
   let sum = 0;
   for (const r of data ?? []) {
     const c = typeof (r as { delta_cents?: number }).delta_cents === "number" ? (r as { delta_cents: number }).delta_cents : 0;
@@ -83,14 +86,36 @@ export async function loadAdminDashboardExtended(supabase: SupabaseClient): Prom
   const yesterdayStart = new Date(todayStart);
   yesterdayStart.setDate(yesterdayStart.getDate() - 1);
 
-  const signupsToday = await countUsersCreatedBetween(supabase, todayStart, tomorrow);
-  const signupsYesterday = await countUsersCreatedBetween(supabase, yesterdayStart, todayStart);
-  const cashToday = await sumCashLedgerBetween(supabase, todayStart, tomorrow);
+  // D-AD-11: 순차 14+3 쿼리를 병렬로 실행해 TTFB 지연을 줄인다.
+  // 7일 추이 각 일자의 (가입수, 캐시합계)를 한 번에 모은다.
+  const dayWindows: Array<{ from: Date; to: Date; label: string }> = [];
+  for (let i = 6; i >= 0; i--) {
+    const d0 = new Date(todayStart);
+    d0.setDate(d0.getDate() - i);
+    const d1 = new Date(d0);
+    d1.setDate(d1.getDate() + 1);
+    dayWindows.push({ from: d0, to: d1, label: dayKey(d0).slice(5) });
+  }
+
+  const [signupsToday, signupsYesterday, cashToday, trendDays] = await Promise.all([
+    countUsersCreatedBetween(supabase, todayStart, tomorrow),
+    countUsersCreatedBetween(supabase, yesterdayStart, todayStart),
+    sumCashLedgerBetween(supabase, todayStart, tomorrow),
+    Promise.all(
+      dayWindows.map(async (w) => {
+        const [signups, cashKrw] = await Promise.all([
+          countUsersCreatedBetween(supabase, w.from, w.to),
+          sumCashLedgerBetween(supabase, w.from, w.to),
+        ]);
+        return { date: w.label, signups, cashKrw };
+      })
+    ),
+  ]);
 
   const kpis: AdminKpiCard[] = [
     {
       label: "오늘 신규 가입",
-      value: String(signupsToday),
+      value: signupsToday === null ? "—" : String(signupsToday),
       sub: `어제 대비 ${pctChange(signupsToday, signupsYesterday)}`,
       href: "/admin/audit-logs",
       tone: "blue",
@@ -111,23 +136,14 @@ export async function loadAdminDashboardExtended(supabase: SupabaseClient): Prom
     },
     {
       label: "금일 캐시 거래액",
-      value: `${new Intl.NumberFormat("ko-KR").format(cashToday)}원`,
-      sub: "원장 기준 추정",
+      value: cashToday === null ? "—" : `${new Intl.NumberFormat("ko-KR").format(cashToday)}원`,
+      sub: cashToday === null ? "조회 실패" : "원장 기준 추정",
       href: "/admin/refunds",
       tone: "emerald",
     },
   ];
 
-  const trend: AdminTrendPoint[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const d0 = new Date(todayStart);
-    d0.setDate(d0.getDate() - i);
-    const d1 = new Date(d0);
-    d1.setDate(d1.getDate() + 1);
-    const signups = await countUsersCreatedBetween(supabase, d0, d1);
-    const cashKrw = await sumCashLedgerBetween(supabase, d0, d1);
-    trend.push({ date: dayKey(d0).slice(5), signups, cashKrw });
-  }
+  const trend: AdminTrendPoint[] = trendDays;
 
   // 실집계만 사용 — KPI(신고 대기·분쟁 처리중)와 수치를 일치시킴. 임의 샘플값 제거.
   const donut = [

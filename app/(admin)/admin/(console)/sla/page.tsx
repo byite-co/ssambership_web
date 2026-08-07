@@ -45,35 +45,68 @@ export default async function AdminSlaPage() {
           <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-900">{sla.error}</p>
         ) : null}
 
+        {sla.partialErrors.length ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p className="font-bold">일부 지표를 불러오지 못했습니다.</p>
+            <ul className="mt-1 list-disc pl-5 text-xs text-amber-800">
+              {sla.partialErrors.map((msg) => (
+                <li key={msg}>{msg} (표시된 값이 실제 0이 아닐 수 있습니다.)</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-bold uppercase text-slate-500">신고 평균 응답시간</p>
-            <p className="mt-2 text-2xl font-black text-slate-900">{fmtHours(sla.reports.avgResponseHours)}</p>
+            <p className="mt-2 text-2xl font-black text-slate-900">{sla.reportsOk ? fmtHours(sla.reports.avgResponseHours) : "—"}</p>
             <p className="mt-1 text-xs text-slate-500">
-              처리 {sla.reports.resolvedCount}건 · 미처리 <strong className="text-amber-600">{sla.reports.openCount}</strong>건
+              {sla.reportsOk ? (
+                <>
+                  처리 {sla.reports.resolvedCount}건 · 미처리 <strong className="text-amber-600">{sla.reports.openCount}</strong>건
+                </>
+              ) : (
+                <span className="text-amber-700">조회 실패 — 값 확인 불가</span>
+              )}
             </p>
           </div>
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-xs font-bold uppercase text-slate-500">환불 평균 처리시간</p>
-            <p className="mt-2 text-2xl font-black text-slate-900">{fmtHours(sla.refunds.avgProcessHours)}</p>
+            <p className="mt-2 text-2xl font-black text-slate-900">{sla.refundsOk ? fmtHours(sla.refunds.avgProcessHours) : "—"}</p>
             <p className="mt-1 text-xs text-slate-500">
-              처리 {sla.refunds.processedCount}건 · 대기 <strong className="text-amber-600">{sla.refunds.pendingCount}</strong>건
+              {sla.refundsOk ? (
+                <>
+                  처리 {sla.refunds.processedCount}건 · 대기 <strong className="text-amber-600">{sla.refunds.pendingCount}</strong>건
+                </>
+              ) : (
+                <span className="text-amber-700">조회 실패 — 값 확인 불가</span>
+              )}
             </p>
           </div>
           <div
             className={`rounded-2xl border p-5 shadow-sm ${
-              sla.mentorSuspended.over > 0
-                ? "border-red-200 bg-red-50"
-                : sla.mentorSuspended.soon > 0
-                  ? "border-amber-200 bg-amber-50"
-                  : "border-slate-200 bg-white"
+              !sla.mentorSuspendedOk
+                ? "border-amber-200 bg-amber-50"
+                : sla.mentorSuspended.over > 0
+                  ? "border-red-200 bg-red-50"
+                  : sla.mentorSuspended.soon > 0
+                    ? "border-amber-200 bg-amber-50"
+                    : "border-slate-200 bg-white"
             }`}
           >
             <p className="text-xs font-bold uppercase text-slate-500">멘토중단 5일 SLA</p>
-            <p className="mt-2 text-2xl font-black text-slate-900">{sla.mentorSuspended.pending}건 대기</p>
+            <p className="mt-2 text-2xl font-black text-slate-900">
+              {sla.mentorSuspendedOk ? `${sla.mentorSuspended.pending}건 대기` : "—"}
+            </p>
             <p className="mt-1 text-xs font-bold">
-              <span className="text-amber-700">임박 {sla.mentorSuspended.soon}</span> ·{" "}
-              <span className="text-red-700">초과 {sla.mentorSuspended.over}</span>
+              {sla.mentorSuspendedOk ? (
+                <>
+                  <span className="text-amber-700">임박 {sla.mentorSuspended.soon}</span> ·{" "}
+                  <span className="text-red-700">초과 {sla.mentorSuspended.over}</span>
+                </>
+              ) : (
+                <span className="text-amber-700">조회 실패 — 값 확인 불가</span>
+              )}
             </p>
           </div>
         </div>
