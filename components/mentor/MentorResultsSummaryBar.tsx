@@ -8,7 +8,6 @@ const SORT_LABEL: Record<MentorsListFilters["sort"], string> = {
   price_asc: "가격낮은순",
   price_desc: "가격높은순",
   rating: "평점순",
-  response: "답변속도순",
 };
 
 export function MentorResultsSummaryBar(props: {

@@ -6,14 +6,15 @@ import {
   type VerifiedMajorCategory,
 } from "@/lib/mentor/schoolVerificationConstants";
 
+// D-ST-9 회귀 수정: 응답시간 데이터 소스(RPC N+1) 제거로 응답속도 정렬 폐기 —
+// sort=response 쿼리는 pickSort 화이트리스트 미포함으로 기본 정렬(popular)에 폴백한다.
 export type MentorsListSort =
   | "popular"
   | "new"
   | "review"
   | "price_asc"
   | "price_desc"
-  | "rating"
-  | "response";
+  | "rating";
 
 export type MentorsListView = "list" | "grid";
 
@@ -111,7 +112,7 @@ export const MENTOR_SORT_OPTIONS: { id: MentorsListSort; label: string }[] = [
   { id: "price_asc", label: "가격낮은순" },
 ];
 
-const SORTS: MentorsListSort[] = ["popular", "new", "review", "price_asc", "price_desc", "rating", "response"];
+const SORTS: MentorsListSort[] = ["popular", "new", "review", "price_asc", "price_desc", "rating"];
 
 function pickSort(v: string | undefined): MentorsListSort {
   if (v === "reviews" || v === "rating") return "review";

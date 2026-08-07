@@ -228,8 +228,8 @@
   "sev": "risk",
   "wave": "Wave 0",
   "batch": "W0-D",
-  "status": "skipped",
-  "branch": "wave1-community"
+  "status": "done",
+  "branch": "wave1-fixup (v2 RPC 전환)"
  },
  {
   "id": "D-CM-5",
@@ -380,8 +380,8 @@
   "sev": "smell",
   "wave": "Wave 1",
   "batch": "L8",
-  "status": "done",
-  "branch": "L·customrequest"
+  "status": "skipped",
+  "branch": "wave1-review — cache()는 요청 간 무효, 요청 간 캐시는 후속"
  },
  {
   "id": "D-CR-7",
@@ -412,8 +412,8 @@
   "sev": "bug",
   "wave": "Wave 2",
   "batch": "OPS-1",
-  "status": "ops",
-  "branch": ""
+  "status": "done",
+  "branch": "OPS 실행 완료 — db-apply-pending run 31175134612 (pending 9본, 2026-08-07)"
  },
  {
   "id": "D-DB-2",
@@ -444,8 +444,8 @@
   "sev": "smell",
   "wave": "Wave 2",
   "batch": "OPS-3",
-  "status": "ops",
-  "branch": ""
+  "status": "deferred",
+  "branch": "오너 결정 2026-08-07: 이번 라운드 미도입 — C14와 후속 검토"
  },
  {
   "id": "D-IQ-1",
@@ -492,8 +492,8 @@
   "sev": "smell",
   "wave": "Wave 1",
   "batch": "L3",
-  "status": "done",
-  "branch": "L·iq"
+  "status": "partial",
+  "branch": "L·iq — 멘토측만, RPC 스코프 확장은 마이그레이션 필요(오너 큐)"
  },
  {
   "id": "D-IQ-7",

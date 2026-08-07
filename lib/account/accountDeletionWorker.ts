@@ -115,15 +115,25 @@ function log(deps: DeletionDeps, msg: string, meta?: Record<string, unknown>) {
 /**
  * 오류 기록 래퍼(D-AU-4) — record_error 를 호출하고, 그 호출로 job 이 **실패 종결**되면
  * unban 보상을 건다. 모든 recordError 경로가 이 함수를 거쳐야 실패 종결 시 밴 해제가 보장된다.
- * 보상(unban) 실패는 삼켜서 원래의 정지·오류 경로를 가리지 않는다.
+ * 보상(unban) 실패는 원래의 정지·오류 경로를 가리지 않되, **무음으로 삼키지 않고** 반드시
+ * 로그 1건을 남긴다 — state='failed' 는 claim 가능 집합 밖이라 워커가 다시 집지 않으므로
+ * (자동 재시도 경로 없음) 이 로그가 유일한 흔적이고, 운영자가 보고 수동으로 밴을 해제해야 한다.
  */
 async function noteError(deps: DeletionDeps, userId: string, err: string): Promise<void> {
   const outcome = await deps.recordError(userId, err);
   if (outcome && outcome.concludedFailed === true && deps.unbanOnFailure) {
     try {
       await deps.unbanOnFailure(userId);
-    } catch {
-      /* 보상 실패는 원 오류/정지 판정을 가리지 않는다(다음 운영 사이클에서 재시도 가능). */
+    } catch (cause) {
+      // 식별 가능한 요약만 싣는다(오류 원문 전체 금지 — record_error 상한 관행과 동일하게 절단).
+      const reason = (cause instanceof Error ? cause.message : String(cause)).slice(0, 200);
+      // 기존 로깅 채널(deps.log) 우선 — cron 배선처럼 log 미주입이면 console.error 로 남긴다.
+      // marker+userId+요약만 실어 Storage 경로·시크릿이 섞일 여지를 없앤다.
+      if (deps.log) {
+        log(deps, "unban_on_failure_failed", { userId, reason });
+      } else {
+        console.error("[account-deletion-worker] unban_on_failure_failed", { userId, reason });
+      }
     }
   }
 }

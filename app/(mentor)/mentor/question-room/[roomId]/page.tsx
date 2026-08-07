@@ -44,15 +44,27 @@ export default async function MentorQuestionRoomDetailPage(props: Props) {
   const threadFromQuery = typeof sp.thread === "string" && sp.thread.length ? sp.thread : null;
   // D-QR-8: 학생 방 상세와 동일하게 ?thread= 는 정본 thread 상세 경로로 정규화 redirect 한다.
   // (역할별 좌우비대칭 제거 — 멘토도 공유·복귀 URL 이 정본 경로로 수렴.)
+  // thread 만 경로 세그먼트로 승격하고 나머지 쿼리(ok/error/kind/t/dNote 등 액션 피드백·초안)는
+  // 전부 보존해 함께 넘긴다 — 연결노트 액션(kind=note)이 room+?thread= 로 복귀하므로,
+  // 여기서 폐기하면 성공/실패 피드백과 오류 시 초안이 무음 소실된다.
   if (threadFromQuery) {
-    redirect(threadDetailPath("/mentor/question-room", roomId, threadFromQuery));
+    const preservedQuery = new URLSearchParams();
+    for (const [key, value] of Object.entries(sp)) {
+      if (key === "thread" || typeof value !== "string" || !value.length) continue;
+      preservedQuery.set(key, value);
+    }
+    const canonicalPath = threadDetailPath("/mentor/question-room", roomId, threadFromQuery);
+    const qs = preservedQuery.toString();
+    redirect(qs ? `${canonicalPath}?${qs}` : canonicalPath);
   }
   const okMessage = typeof sp.ok === "string" && sp.ok.length ? sp.ok : null;
   const rawActionError = typeof sp.error === "string" && sp.error.length ? sp.error : null;
   const errorMessageUi = rawActionError ? mapDataErrorMessage(rawActionError) : null;
   const feedbackKind = sp.kind === "thread" || sp.kind === "message" || sp.kind === "note" ? sp.kind : undefined;
   const dMessageQ = paramToDraft(typeof sp.dMessage === "string" ? sp.dMessage : undefined);
+  const dNoteQ = paramToDraft(typeof sp.dNote === "string" ? sp.dNote : undefined);
   const draftMessageBody = feedbackKind === "message" && rawActionError ? (dMessageQ ?? "") : undefined;
+  const draftNoteBody = feedbackKind === "note" && rawActionError ? (dNoteQ ?? "") : undefined;
   const formRevision = typeof sp.t === "string" && sp.t.length ? sp.t : "0";
 
   const { user } = await requireRole("mentor");
@@ -151,6 +163,7 @@ export default async function MentorQuestionRoomDetailPage(props: Props) {
         roomHrefBase="/mentor/question-room"
         initialNoteText={initialNoteText}
         draftMessageBody={draftMessageBody}
+        draftNoteBody={draftNoteBody}
         formRevision={formRevision}
         subscriptionContext={subscriptionContext}
         studentWeeklyUsage={studentWeeklyUsage}

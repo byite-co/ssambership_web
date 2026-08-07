@@ -82,12 +82,13 @@ export async function bulkUpdateDisputesAction(formData: FormData) {
     patch.resolved_at = new Date().toISOString();
     patch.resolved_by = user.id;
   }
-  // D-AD-2: 현재 상태 게이트 — 이미 종결(resolved/dismissed)된 분쟁을 덮어쓰지 않음(단건 statusIn 규약과 일치).
+  // D-AD-2: 현재 상태 게이트 — 종말 상태(resolved/dismissed/sanction_permanent)만 덮어쓰지 않음
+  // (단건 statusIn 규약과 일치). sanction_7d/30d 는 기간 제재 중에도 전이 가능해야 한다(출구 보장).
   const { data, error } = await admin
     .from("disputes")
     .update(patch)
     .in("id", ids)
-    .in("status", ["open", "under_review", "escalated"])
+    .in("status", ["open", "under_review", "escalated", "sanction_7d", "sanction_30d"])
     .select("id");
   // D-AD-3: DB 원문 대신 표시용 문구만 URL 로 노출.
   if (error) redirect(backUrl(path, "error", toAdminDisplayError(error.message, "disputes") ?? "일괄 처리에 실패했습니다."));

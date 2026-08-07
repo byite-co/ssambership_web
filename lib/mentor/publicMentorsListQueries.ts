@@ -128,7 +128,6 @@ export const PUBLIC_MENTORS_RLS_HINT =
 export type MentorListStats = {
   totalAnswers: number | null;
   connectedStudents: number | null;
-  avgResponseLabel: string;
   satisfactionLabel: string;
 };
 
@@ -423,18 +422,6 @@ function sortKey(f: MentorsListSort): (a: MentorPublicListCard, b: MentorPublicL
       return (a, b) => (b.reviewCount ?? -1e9) - (a.reviewCount ?? -1e9);
     case "rating":
       return (a, b) => (b.avgRating ?? -1) - (a.avgRating ?? -1);
-    case "response":
-      return (a, b) => {
-        const parseMin = (label: string) => {
-          const m = label.match(/(\d+)\s*분/);
-          if (m) return Number(m[1]);
-          const h = label.match(/(\d+)\s*시간/);
-          if (h) return Number(h[1]) * 60;
-          if (label.includes("48시간 이상")) return 49 * 60;
-          return Number.POSITIVE_INFINITY;
-        };
-        return parseMin(a.stats.avgResponseLabel) - parseMin(b.stats.avgResponseLabel);
-      };
     case "price_desc":
       return (a, b) => (b.minPriceKrw ?? -1) - (a.minPriceKrw ?? -1);
     case "price_asc":
@@ -449,11 +436,13 @@ function sortKey(f: MentorsListSort): (a: MentorPublicListCard, b: MentorPublicL
   }
 }
 
-// D-ST-9: 목록 카드(MentorCard)는 stats.connectedStudents 와 stats.avgResponseLabel 를 렌더하지
-// 않는다(카드 통계 문구는 totalAnswers>=5 일 때만 나오는데 totalAnswers 는 항상 null 이라 항상
-// "신규 멘토 …" 고정 문구다). 따라서 렌더에 쓰이지 않는 (1) subscriptions 최대 3000행 스캔
-// (connectedStudents) 과 (2) 멘토 1인당 get_mentor_avg_response_hours RPC N+1 을 제거한다.
+// D-ST-9: 목록 카드(MentorCard)는 stats.connectedStudents 를 렌더하지 않는다(카드 통계 문구는
+// totalAnswers>=5 일 때만 나오는데 totalAnswers 는 항상 null 이라 항상 "신규 멘토 …" 고정 문구다).
+// 따라서 렌더에 쓰이지 않는 (1) subscriptions 최대 3000행 스캔(connectedStudents) 과
+// (2) 멘토 1인당 get_mentor_avg_response_hours RPC N+1 을 제거한다.
 // satisfactionLabel 만 이미 조회한 reviewMap 으로 계산한다(추가 왕복 없음).
+// D-ST-9 회귀 수정: 데이터 소스가 사라져 "—" 고정이던 평균 응답 라벨과 그 라벨을 파싱하던
+// 응답속도 정렬(전 행 동률 no-op)을 함께 제거 — sort=response 는 기본 정렬로 폴백한다.
 function buildMentorListStats(
   mentorIds: string[],
   reviewMap: Map<string, { count: number | null; avg: number | null }>
@@ -466,7 +455,6 @@ function buildMentorListStats(
     out.set(id, {
       totalAnswers: null,
       connectedStudents: null,
-      avgResponseLabel: "—",
       satisfactionLabel,
     });
   }
@@ -587,7 +575,6 @@ export async function loadPublicMentorsList(
       stats: statsMap.get(u.id) ?? {
         totalAnswers: null,
         connectedStudents: null,
-        avgResponseLabel: "—",
         satisfactionLabel: rev.avg != null ? `${Math.round((rev.avg / 5) * 100)}%` : "—",
       },
       subscriptionClosed: capMap.get(u.id)?.isFull ?? false,

@@ -8,6 +8,7 @@ import { fetchActiveOpenDisputeOrderIdSet } from "@/lib/customRequest/orderDispu
 import { classifyMentorOrderBrowseTab } from "@/lib/customRequest/mentorOrderBrowseTabClassify";
 import { fetchMentorCustomRequestOrdersFromPrimaryTable } from "@/lib/home/mentorDashboardQueries";
 import { loadMentorPayoutsBundle } from "@/lib/mentor/mentorPayoutsQueries";
+import { aggregateSettlementTotalsInPeriod } from "@/lib/mentor/settlementPeriodTotals";
 import { fetchMentorProfileRow } from "@/lib/mentor/mentorProfileQueries";
 import { fetchMentorWorkspaceCounts, mentorWorkspaceSidebarCounts } from "@/lib/customRequest/mentorCounts";
 import { enrichMentorDashboardOrderRows } from "@/lib/customRequest/mentorDashboardOrderEnrichment";
@@ -44,9 +45,18 @@ export default async function MentorCustomRequestDashboardPage() {
         ? profileRow.reviews_count
         : 0;
   // D-MT-3: 사문 monthExpectedCents(상시 0) 대신 settlementPayouts 실집계로 이번 달 수익 표시.
+  // D-MT-3 회귀 수정: totals 는 월 경계 없는 전 기간(최근 200행) 합계라 '이번 달 수익' KPI 에
+  // 그대로 쓰면 라벨과 집계 기간이 어긋난다. KPI 는 bundle 의 monthBounds(periodStart/periodEnd)로
+  // 당월 정산 행만 걸러 재집계한다. '진행 중 정산'/'완료(정산 예정)' 분해 행(월 표기 없는
+  // 수익 영역)은 기존 전 기간 totals 를 그대로 쓴다.
   const expectedSettlementCash = payouts.settlementPayouts.totals.expectedMentorAmount;
   const paidSettlementCash = payouts.settlementPayouts.totals.paidMentorAmount;
-  const monthRevenueCash = expectedSettlementCash + paidSettlementCash;
+  const monthSettlementTotals = aggregateSettlementTotalsInPeriod(
+    payouts.settlementPayouts.lines.map((line) => line.settlement),
+    payouts.periodStart,
+    payouts.periodEnd
+  );
+  const monthRevenueCash = monthSettlementTotals.expectedMentorAmount + monthSettlementTotals.paidMentorAmount;
 
   const dashOrderIds = orders.rows
     .map((r) => (typeof (r as { id?: unknown }).id === "string" ? String((r as { id: string }).id) : ""))

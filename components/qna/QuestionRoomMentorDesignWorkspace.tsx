@@ -1,5 +1,6 @@
 "use client";
 
+import { FREE_TRIAL_PRIORITY_LABEL } from "@/lib/qna/freeTrialPriorityLabel";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
@@ -154,6 +155,8 @@ export function QuestionRoomMentorDesignWorkspace(props: {
   messageCountsByThreadId?: Record<string, number>;
   lastMessageByThreadId?: Record<string, Row>;
   unreadCountsByRoomId?: Record<string, number>;
+  /** 무료 체험(무료 질문권) 스레드 id — 목록 최상단 고정 + 우선 답변 배지 표시용 (D-QR-9) */
+  freeTrialThreadIds?: string[];
   roomHrefBase?: string;
   draftMessageBody?: string;
   draftNoteBody?: string;
@@ -198,6 +201,13 @@ export function QuestionRoomMentorDesignWorkspace(props: {
     [props.threads.rows, statusFilter]
   );
 
+  // D-QR-9: 서버(loadFreeTrialThreadIdsForMentorRoom)가 내려준 무료 체험 스레드 id.
+  // freeTrialPriority.ts 는 server-only 체인이라 클라이언트에선 id 집합만 받아 고정 정렬한다.
+  const freeTrialIdSet = useMemo(
+    () => new Set(props.freeTrialThreadIds ?? []),
+    [props.freeTrialThreadIds]
+  );
+
   const sortedThreads = useMemo(() => {
     const list = [...filteredThreads];
     list.sort((a, b) => {
@@ -205,8 +215,16 @@ export function QuestionRoomMentorDesignWorkspace(props: {
       const tb = new Date(String(b.created_at ?? 0)).getTime();
       return sort === "newest" ? tb - ta : ta - tb;
     });
-    return list;
-  }, [filteredThreads, sort]);
+    if (freeTrialIdSet.size === 0) return list;
+    // 무료 체험 스레드 최상단 고정 — 그룹 내부는 위의 newest/oldest 정렬을 그대로 유지(안정 분할).
+    const free: Row[] = [];
+    const rest: Row[] = [];
+    for (const t of list) {
+      const id = t?.id != null ? String(t.id) : "";
+      (id && freeTrialIdSet.has(id) ? free : rest).push(t);
+    }
+    return free.length ? [...free, ...rest] : list;
+  }, [filteredThreads, sort, freeTrialIdSet]);
 
   // ★질문 목록 페이지네이션 (이미 로드된 배열 클라이언트 slice). 모바일 3 / 데스크탑 4.
   // SSR 스냅샷=데스크탑 → hydration 후 보정(useMediaQuery).
@@ -642,6 +660,7 @@ export function QuestionRoomMentorDesignWorkspace(props: {
                     const chip = threadSubjectChip(t, subjectChipsRoom);
                     const msgCount = props.messageCountsByThreadId?.[id] ?? 0;
                     const views = threadViewCount(t);
+                    const isFreeTrial = freeTrialIdSet.has(id);
                     return (
                       <Link
                         key={id}
@@ -650,6 +669,11 @@ export function QuestionRoomMentorDesignWorkspace(props: {
                         className={listCardClassName(THREAD_TONE_TO_CARD_TONE[status.tone], true, "block")}
                       >
                         <div className="flex flex-wrap items-center gap-2">
+                          {isFreeTrial ? (
+                            <span className="inline-flex shrink-0 items-center rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-black text-amber-800">
+                              {FREE_TRIAL_PRIORITY_LABEL}
+                            </span>
+                          ) : null}
                           {chip.map((c) => (
                             <span
                               key={c}

@@ -50,7 +50,7 @@ function makeSupabase(roomRow: Record<string, unknown>, subs: SubsResult, seen: 
   } as unknown as SupabaseClient;
 }
 
-test("D-QR-11: 무료 질문권 방(subscription_id 없음)은 편집 허용 — subscriptions 조회조차 하지 않는다", async () => {
+test("D-QR-11: 무료 질문권 방 = 링크 없음 + 구독 이력 0건일 때만 편집 허용(이력 조회는 항상 수행)", async () => {
   const seen = { subsQueried: false };
   const supabase = makeSupabase(
     { id: ROOM, student_id: STUDENT, mentor_id: MENTOR, subscription_id: null },
@@ -58,8 +58,47 @@ test("D-QR-11: 무료 질문권 방(subscription_id 없음)은 편집 허용 —
     seen
   );
   const r = await assertConnectionNoteWriteAllowed(supabase, ROOM, "student");
-  assert.equal(r.ok, true, "무료 방은 '만료' 차단 대상이 아니다");
-  assert.equal(seen.subsQueried, false, "무료 방은 구독 조회 없이 즉시 허용");
+  assert.equal(r.ok, true, "구독 이력이 전혀 없는 무료 방은 '만료' 차단 대상이 아니다");
+  assert.equal(seen.subsQueried, true, "링크 부재만으로 단정하지 않고 (student, mentor) 이력을 조회한다");
+});
+
+test("D-QR-11 회귀 고정: 링크 NULL(FK set null 회귀)이라도 비활성 구독 이력이 있으면 차단", async () => {
+  // e2e/connection-note-guard.spec.ts (B) 정본: subscription_id 없는 방 + expired/canceled/refunded/past_due → ok=false.
+  for (const status of ["expired", "canceled", "refunded", "past_due"]) {
+    const seen = { subsQueried: false };
+    const supabase = makeSupabase(
+      { id: ROOM, student_id: STUDENT, mentor_id: MENTOR, subscription_id: null },
+      { data: [{ status }], error: null },
+      seen
+    );
+    const r = await assertConnectionNoteWriteAllowed(supabase, ROOM, "student");
+    assert.equal(r.ok, false, `${status}: 링크 NULL 이어도 차단(fail-open 금지)`);
+    if (!r.ok) assert.match(r.userMessage, /만료/);
+    assert.equal(seen.subsQueried, true);
+  }
+});
+
+test("D-QR-11: 링크 NULL + 활성 구독 이력 존재 — 허용", async () => {
+  const seen = { subsQueried: false };
+  const supabase = makeSupabase(
+    { id: ROOM, student_id: STUDENT, mentor_id: MENTOR, subscription_id: null },
+    { data: [{ status: "expired" }, { status: "active" }], error: null },
+    seen
+  );
+  const r = await assertConnectionNoteWriteAllowed(supabase, ROOM, "mentor");
+  assert.equal(r.ok, true);
+});
+
+test("D-QR-11: 구독 이력 조회 오류는 fail-closed — 링크 NULL 이어도 차단", async () => {
+  const seen = { subsQueried: false };
+  const supabase = makeSupabase(
+    { id: ROOM, student_id: STUDENT, mentor_id: MENTOR, subscription_id: null },
+    { data: null, error: { message: "boom" } },
+    seen
+  );
+  const r = await assertConnectionNoteWriteAllowed(supabase, ROOM, "student");
+  assert.equal(r.ok, false, "조회 오류에서 허용으로 열리면 안 된다");
+  if (!r.ok) assert.match(r.userMessage, /구독 상태를 확인하지 못했어요/);
 });
 
 test("D-QR-11: 구독 이력 있으나 비활성 방은 여전히 차단(만료 메시지)", async () => {

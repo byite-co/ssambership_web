@@ -228,6 +228,22 @@ export async function softDeleteBoardComment(
   return { ok: true };
 }
 
-export async function incrementPostView(supabase: SupabaseClient, postId: string): Promise<void> {
-  await supabase.rpc("increment_community_post_view", { p_post_id: postId });
+/**
+ * 게시글 조회수 v2 (D-CM-4) — community_post_view_record_v2 의 (post, event_key) 멱등 계약.
+ * event_key 는 호출부(route)가 viewEventKeyFor(글+뷰어+시간버킷)로 결정적으로 파생해 넘긴다.
+ * 구 v1 RPC(increment_community_post_view)는 멱등키가 없어 웹 경로에서는 더 호출하지 않는다
+ * — DB 함수 자체는 구버전 앱 호환용으로 유지(정리 별도 과제, 마이그레이션 20260806033556 주석).
+ * 구 구현은 rpc 오류를 확인하지 않아 실패가 무음이었다 — 이제 ok 를 반환해 라우트가 처리한다.
+ */
+export async function recordPostViewV2(
+  supabase: SupabaseClient,
+  postId: string,
+  eventKey: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { error } = await supabase.rpc("community_post_view_record_v2", {
+    p_post_id: postId,
+    p_event_key: eventKey,
+  });
+  if (error) return { ok: false, error: "db" };
+  return { ok: true };
 }

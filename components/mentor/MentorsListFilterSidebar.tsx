@@ -26,7 +26,7 @@ export function MentorsListFilterSidebar(props: {
   const schoolOptions = props.schoolOptions ?? MENTOR_SCHOOL_OPTIONS;
   const mentorTypeOptions = props.mentorTypeOptions ?? MENTOR_TYPE_OPTIONS;
   const [extraSort, setExtraSort] = useState(
-    props.filters.sort === "rating" || props.filters.sort === "response" ? props.filters.sort : "",
+    props.filters.sort === "rating" ? props.filters.sort : "",
   );
   const [subjectOpen, setSubjectOpen] = useState(true);
   const [gradesOpen, setGradesOpen] = useState(true);
@@ -203,17 +203,6 @@ export function MentorsListFilterSidebar(props: {
           <fieldset>
             <legend className="text-[12px] font-black text-slate-900">추가 필터</legend>
             <div className="mt-2 space-y-2">
-              <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-slate-700">
-                <input
-                  type="radio"
-                  name="sortExtra"
-                  value="response"
-                  checked={extraSort === "response"}
-                  onChange={() => setExtraSort("response")}
-                  className="accent-[#2563EB]"
-                />
-                답변 속도 빠른 순
-              </label>
               <label className="flex cursor-pointer items-center gap-2 text-[12px] font-medium text-slate-700">
                 <input
                   type="radio"

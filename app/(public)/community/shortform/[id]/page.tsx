@@ -9,6 +9,8 @@ import {
   getShortformReactionFlags,
   incrementShortformView,
 } from "@/lib/community/communityShortformQueries";
+import { anonViewerKeyFromRequestHeaders } from "@/lib/community/viewEventKey";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { VideoOff } from "lucide-react";
 import { BlockUserButton } from "@/components/blocks/BlockUserButton";
@@ -46,7 +48,10 @@ export default async function CommunityShortformDetailPage(props: Props) {
   // 숨김 상태에서는 조회수를 올리지 않는다(공개되지 않은 콘텐츠의 지표 왜곡 방지).
   if (item && !moderationNotice) {
     // D-CM-3: 뷰어·시간버킷 기반 결정적 event_key(멱등) — 로그인 uid 를 넘겨 새로고침 중복 계수 방지.
-    await incrementShortformView(supabase, id, user?.id ?? null);
+    // 비로그인은 상수 "anon" 폴백이 (글, 시간버킷)당 전세계 1회 계수 회귀를 만들었으므로,
+    // 요청 헤더(첫 홉 IP + UA) sha256 익명키로 뷰어를 구분한다(원본 미저장·미로깅).
+    const viewerId = user?.id ?? anonViewerKeyFromRequestHeaders(await headers());
+    await incrementShortformView(supabase, id, viewerId);
   }
 
   const { rows: rawComments, error: commentsQueryError } = item

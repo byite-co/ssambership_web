@@ -109,7 +109,7 @@ export async function setDisputeUnderReviewAction(formData: FormData) {
   redirect(okUrl(disputeId, "reviewing"));
 }
 
-/** 해결: 진행 중 → resolved */
+/** 해결: 진행 중·기간 제재(sanction_7d/30d) → resolved */
 export async function resolveDisputeAction(formData: FormData) {
   const { user } = await requireRole("admin");
   const disputeId = textFromForm(formData.get("disputeId"));
@@ -128,7 +128,14 @@ export async function resolveDisputeAction(formData: FormData) {
   patch.resolved_at = new Date().toISOString();
   patch.resolved_by = user.id;
 
-  const { touched, errorMsg } = await runDisputeUpdate(disputeId, patch, ["open", "under_review", "escalated"]);
+  // D-AD-2: sanction_7d/30d 도 해결 전이 허용 — 종말 상태는 resolved/dismissed/sanction_permanent 뿐.
+  const { touched, errorMsg } = await runDisputeUpdate(disputeId, patch, [
+    "open",
+    "under_review",
+    "escalated",
+    "sanction_7d",
+    "sanction_30d",
+  ]);
   if (errorMsg) redirect(errUrlDetail(disputeId, safeMsg(errorMsg)));
   if (!touched) redirect(errUrlDetail(disputeId, safeMsg("이미 종료되었거나 변경할 수 없는 상태입니다.")));
 
@@ -165,7 +172,14 @@ export async function dismissDisputeAction(formData: FormData) {
   patch.resolved_at = new Date().toISOString();
   patch.resolved_by = user.id;
 
-  const { touched, errorMsg } = await runDisputeUpdate(disputeId, patch, ["open", "under_review", "escalated"]);
+  // D-AD-2: sanction_7d/30d 도 기각 전이 허용 — 종말 상태는 resolved/dismissed/sanction_permanent 뿐.
+  const { touched, errorMsg } = await runDisputeUpdate(disputeId, patch, [
+    "open",
+    "under_review",
+    "escalated",
+    "sanction_7d",
+    "sanction_30d",
+  ]);
   if (errorMsg) redirect(errUrlDetail(disputeId, safeMsg(errorMsg)));
   if (!touched) redirect(errUrlDetail(disputeId, safeMsg("이미 종료되었거나 변경할 수 없는 상태입니다.")));
 

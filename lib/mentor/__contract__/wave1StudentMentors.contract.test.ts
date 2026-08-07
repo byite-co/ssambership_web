@@ -22,6 +22,20 @@ test("D-ST-9: 렌더되지 않는 subscriptions 집계·응답시간 N+1 제거"
   assert.ok(!q.includes('from("subscriptions")'), "connectedStudents subscriptions 스캔 잔존");
 });
 
+test("D-ST-9 회귀: 데이터 소스 없는 'response' 정렬·avgResponseLabel 일괄 제거", () => {
+  // 응답시간 RPC 제거 후 avgResponseLabel 은 "—" 고정이었고, 이를 파싱하던 'response' 정렬은
+  // 전 행 동률 no-op — 정렬 옵션·라벨·파싱 코드가 되살아나지 않게 소스 스캔으로 고정한다.
+  const q = read("lib/mentor/publicMentorsListQueries.ts");
+  assert.ok(!q.includes("avgResponseLabel"), "목록 stats 에 avgResponseLabel 고정 세팅/파싱 잔존");
+  assert.ok(!q.includes('case "response"'), "sortKey 'response' 분기 잔존(no-op 정렬)");
+  const sp = read("lib/mentor/mentorsListSearchParams.ts");
+  assert.ok(!sp.includes('"response"'), "MentorsListSort/SORTS 에 response 잔존 — sort=response 는 기본 정렬 폴백이어야 함");
+  const sidebar = read("components/mentor/MentorsListFilterSidebar.tsx");
+  assert.ok(!sidebar.includes("답변 속도 빠른 순"), "사이드바 '답변 속도 빠른 순' 라디오 잔존");
+  const summary = read("components/mentor/MentorResultsSummaryBar.tsx");
+  assert.ok(!summary.includes("답변속도순"), "요약 바 '답변속도순' 정렬 라벨 잔존");
+});
+
 test("D-ST-17: 찜 조회 오류는 메시지 정규식이 아니라 error.code 로 판정한다", () => {
   const q = read("lib/mentor/mentorFavorites.ts");
   assert.ok(q.includes('error.code === "42P01"'), "PostgREST code 기반 판정이 없음");

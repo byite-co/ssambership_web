@@ -31,7 +31,15 @@ export function normalizeModerationTargetType(raw: string | null | undefined): M
  * (community_comments post_type='shortform')에 있으면 community_comment.
  * 어느 쪽도 아니거나 양쪽 모두면 null(수동 검토). */
 export async function resolveLegacyCommentTargetType(targetId: string): Promise<ModerationTargetType | null> {
-  const admin = createServiceRoleClient();
+  // D-AD-4: service role 키 부재는 500 대신 null(수동 검토)로 강등 — 관리자 신고 상세
+  // (adminReportEvidence → reports/[id])가 증거 조회 실패로 죽지 않게 한다.
+  // applyContentModeration 의 fail-closed 패턴과 동일.
+  let admin: ReturnType<typeof createServiceRoleClient>;
+  try {
+    admin = createServiceRoleClient();
+  } catch {
+    return null;
+  }
   const [board, shortform] = await Promise.all([
     admin.from("comments").select("id").eq("id", targetId).maybeSingle(),
     admin

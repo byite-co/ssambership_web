@@ -248,6 +248,8 @@ export async function getShortformDraft(
  * event_key 는 (글 + 뷰어 + 시간버킷)에서 결정적으로 파생한다(D-CM-3, viewEventKeyFor).
  * 구현이 매 호출 crypto.randomUUID() 를 넘겨 같은 뷰어의 새로고침·재검증·프리페치가 전부
  * 별개 조회로 계수돼 멱등 계약이 무력화됐다. 이제 같은 뷰어·같은 시간대 재조회는 1회로 접힌다.
+ * viewerId: 로그인 uid, 비로그인은 호출부가 헤더 기반 익명키(anonViewerKeyFromHeaders)를
+ * 넘긴다 — null 은 최후 폴백 "anon"(전세계 1버킷 과보정)으로 접히므로 지양(D-CM-3 회귀).
  * 실패는 조용히 무시하되(계수는 비핵심) 같은 impression 에서 새 key 로 재시도하지 않는다.
  */
 export async function incrementShortformView(
