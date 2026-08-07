@@ -12,7 +12,7 @@ function formatDate(iso: string): string {
   return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
 }
 
-export function MentorReviewsManage(props: { initialItems: ReviewCardItem[] }) {
+export function MentorReviewsManage(props: { initialItems: ReviewCardItem[]; loadFailed?: boolean }) {
   const router = useRouter();
   const [items, setItems] = useState(props.initialItems);
   const [replyDraft, setReplyDraft] = useState<Record<string, string>>({});
@@ -64,7 +64,16 @@ export function MentorReviewsManage(props: { initialItems: ReviewCardItem[] }) {
 
       {error ? <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-900">{error}</p> : null}
 
-      {!items.length ? (
+      {props.loadFailed ? (
+        // D-MT-6: 조회 실패를 '후기 0건' 빈 상태로 흡수하지 않는다 — 실패임을 명시하고 재시도 안내.
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-amber-300 bg-amber-50 px-6 py-16 text-center">
+          <Star className="h-12 w-12 text-amber-400" strokeWidth={1.5} aria-hidden />
+          <h3 className="mt-4 text-lg font-black text-amber-900">후기를 불러오지 못했어요</h3>
+          <p className="mt-2 max-w-md text-sm font-medium text-amber-800">
+            일시적인 오류일 수 있어요. 잠시 후 새로고침해 다시 시도해 주세요.
+          </p>
+        </div>
+      ) : !items.length ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 px-6 py-16 text-center">
           <Star className="h-12 w-12 text-slate-400" strokeWidth={1.5} aria-hidden />
           <h3 className="mt-4 text-lg font-black text-slate-900">아직 받은 후기가 없어요</h3>

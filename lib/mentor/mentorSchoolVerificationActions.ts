@@ -8,6 +8,8 @@ import {
   buildMentorSchoolVerificationObjectPath,
   formatStudentIdImageStoredRef,
   safeStudentIdImageFileExtension,
+  STUDENT_ID_IMAGE_MAX_BYTES,
+  STUDENT_ID_IMAGE_MAX_BYTES_LABEL,
   STUDENT_ID_IMAGES_BUCKET,
 } from "@/lib/storage/studentIdImageStorage";
 import { validateJpgPngPdfMagicBytes } from "@/lib/storage/uploadMagicBytes";
@@ -32,6 +34,11 @@ export async function submitMentorSchoolVerificationAction(formData: FormData) {
 
   if (!file || file.size <= 0) {
     redirectWith("error", "학교·전공 증명 서류 파일을 선택해 주세요.");
+  }
+  // D-MT-7: 같은 student-id-images 버킷을 쓰는 학생증 경로와 동일한 크기 상한을 적용한다
+  // (임의 크기 파일이 arrayBuffer 로 전량 적재되던 스토리지·메모리 비대칭 제거).
+  if (file.size > STUDENT_ID_IMAGE_MAX_BYTES) {
+    redirectWith("error", `학교·전공 증명 서류는 최대 ${STUDENT_ID_IMAGE_MAX_BYTES_LABEL}까지 업로드할 수 있습니다.`);
   }
   const extension = safeStudentIdImageFileExtension(file.name);
   if (!extension) {

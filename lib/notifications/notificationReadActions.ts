@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { createClient } from "@/lib/supabase/server";
 
@@ -72,7 +73,14 @@ export async function markAllNotificationsReadAction(): Promise<{ ok: boolean; c
   return { ok: true, count: typeof data === "number" ? data : 0 };
 }
 
-/** 폼(progressive-enhancement)용 래퍼 — 서버 RPC 로 본인 전체 미읽음 처리 후 목록 갱신. */
+/**
+ * 폼(progressive-enhancement)용 래퍼 — 서버 RPC 로 본인 전체 미읽음 처리 후 목록 갱신.
+ * D-MT-11: RPC 실패 시 {ok:false} 를 무시하지 않고 ?error= 로 리다이렉트해 표면화한다
+ * (단건 읽음의 contract_mismatch 처리와 동일하게 실패를 조용히 삼키지 않는다).
+ */
 export async function markAllNotificationsReadFormAction(): Promise<void> {
-  await markAllNotificationsReadAction();
+  const res = await markAllNotificationsReadAction();
+  if (!res.ok) {
+    redirect("/notifications?error=mark_all_failed");
+  }
 }

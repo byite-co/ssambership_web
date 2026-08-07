@@ -9,12 +9,12 @@ export default async function NotificationSettingsPage() {
   if (!user) {
     redirect(`/login?next=${encodeURIComponent("/settings/notifications")}`);
   }
-  const initial = await getMyNotificationSettings();
+  const { settings, loadFailed } = await getMyNotificationSettings();
 
   return (
     <main className="mx-auto w-full max-w-2xl px-4 py-8">
       <h1 className="mb-6 text-xl font-black tracking-tight text-slate-900">알림 설정</h1>
-      <NotificationSettingsPanel initial={initial} />
+      <NotificationSettingsPanel initial={settings} loadFailed={loadFailed} />
     </main>
   );
 }

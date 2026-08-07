@@ -19,8 +19,10 @@ export function NotificationsHubView(props: {
   filter: Filter;
   category: NotificationCategory;
   role: AppRole;
+  /** D-MT-11: '모두 읽음' 처리 실패로 리다이렉트되어 온 경우 true. */
+  actionError?: boolean;
 }) {
-  const { hub, filter, category, role } = props;
+  const { hub, filter, category, role, actionError } = props;
   if (hub.error) {
     console.error("[NotificationsHubView] hub.error", hub.error, hub.probe);
   }
@@ -55,6 +57,12 @@ export function NotificationsHubView(props: {
         </div>
         <NotificationFilterTabs current={filter} category={category} />
       </header>
+
+      {actionError ? (
+        <p className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-900">
+          모두 읽음 처리에 실패했어요. 잠시 후 다시 시도해 주세요.
+        </p>
+      ) : null}
 
       {/* P2-26: 카테고리 서브탭 — URL(category) 구동, 선택 시 cursor 초기화(서버 필터). */}
       <div

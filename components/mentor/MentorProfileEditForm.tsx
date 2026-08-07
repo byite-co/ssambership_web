@@ -13,14 +13,13 @@ import {
   mentorPlanCashKrw,
   mentorSubscriptionPriceRule,
 } from "@/lib/subscribe/mentorPlanPricing";
-import { Camera, HelpCircle, PlayCircle, Info, LayoutGrid, Video, Plus, User, FileText, BookOpen, Coins, ShieldCheck, Lock } from "lucide-react";
+import { Camera, HelpCircle, Info, User, FileText, BookOpen, Coins, ShieldCheck, Lock } from "lucide-react";
 import { MentorSubjectCheckboxes } from "@/components/subjects/MentorSubjectCheckboxes";
 import { subjectCodesFromText } from "@/lib/subjects/subjectCatalog";
 
-type Q = { 
-  row: Record<string, unknown> | null; 
-  err: string | null; 
-  media: { rows: Record<string, unknown>[]; table: string | null; error: string | null };
+type Q = {
+  row: Record<string, unknown> | null;
+  err: string | null;
   byTier?: Record<string, Record<string, unknown> | null> | null;
 };
 type I = {
@@ -611,74 +610,8 @@ export function MentorProfileEditForm(props: {
             ) : null}
           </section>
 
-          {/* 6. 대표 콘텐츠 설정 */}
-          <section className="space-y-6 rounded-2xl border border-l-[4px] border-slate-300 border-l-[#059669] bg-white p-5 shadow-[0_1px_4px_rgba(0,0,0,0.05)] sm:p-6">
-            <SectionHeader number="6" title="대표 콘텐츠 설정" optional icon={<LayoutGrid className="h-4 w-4" aria-hidden />} />
-            
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <button 
-                type="button" 
-                disabled
-                className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-6 opacity-75 cursor-not-allowed"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-100">
-                  <LayoutGrid className="h-6 w-6 text-slate-400" />
-                </div>
-                <div className="text-center">
-                  <p className="text-sm font-bold text-slate-700">커뮤니티 게시글 추가</p>
-                  <p className="mt-1 text-[11px] font-medium text-slate-400">작성한 글을 대표 콘텐츠로 등록</p>
-                </div>
-                <div className="mt-2 flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">
-                  <Plus className="h-3 w-3" /> 준비 중
-                </div>
-              </button>
-
-              <button 
-                type="button" 
-                disabled
-                className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-slate-200 bg-slate-50/50 p-6 opacity-75 cursor-not-allowed"
-              >
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white shadow-sm ring-1 ring-slate-100">
-                  <Video className="h-6 w-6 text-slate-400" />
-                </div>
-                <div className="text-center">
-                  <p className="text-sm font-bold text-slate-700">숏폼 영상 추가</p>
-                  <p className="mt-1 text-[11px] font-medium text-slate-400">업로드한 숏폼을 대표 콘텐츠로 등록</p>
-                </div>
-                <div className="mt-2 flex items-center gap-1 rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-bold text-slate-500">
-                  <Plus className="h-3 w-3" /> 준비 중
-                </div>
-              </button>
-            </div>
-            
-            <p className="text-[11px] font-medium text-slate-400 text-center bg-slate-50 py-2 rounded-lg border border-slate-100 border-dashed">
-              대표 콘텐츠 연결 기능은 준비 중입니다. (게시글 및 숏폼 선택 기능)
-            </p>
-
-            <div className="rounded-xl border border-slate-100 bg-white p-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-slate-500">현재 등록된 대표 콘텐츠 ({query.media.rows.length})</h4>
-              </div>
-              {query.media.rows.length > 0 ? (
-                <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-                  {query.media.rows.map((r, i) => (
-                    <div key={i} className="group relative aspect-video overflow-hidden rounded-lg bg-slate-100 ring-1 ring-slate-200 transition hover:ring-emerald-500">
-                      <div className="absolute inset-0 flex items-center justify-center bg-black/5">
-                        <PlayCircle className="h-8 w-8 text-white/80" />
-                      </div>
-                      <button type="button" className="absolute right-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-black/50 text-white opacity-0 transition group-hover:opacity-100">
-                        <Plus className="h-3 w-3 rotate-45" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="mt-4 flex flex-col items-center justify-center rounded-lg border border-slate-50 bg-slate-50/30 py-10">
-                  <p className="text-xs font-medium text-slate-400">등록된 콘텐츠가 없습니다. 위 버튼을 통해 추가해주세요.</p>
-                </div>
-              )}
-            </div>
-          </section>
+          {/* D-MT-13: '대표 콘텐츠 설정' 섹션 제거 — 미디어 소스(fetchMentorMediaSample)가
+              스텁이라 항상 빈 결과/준비 중 UI 만 렌더하던 미도입 기능. 도입 시 정본 테이블과 함께 복원. */}
 
           <div className="flex items-center gap-3 rounded-xl bg-emerald-50/50 p-4">
             <Info className="h-5 w-5 text-emerald-500" />
@@ -716,8 +649,8 @@ export function MentorProfileEditForm(props: {
             <MentorPublicProfilePreviewCard
               variant="preview"
               display={previewDisplay}
-              stats={{ mediaCount: query.media.rows.length, byTier: query.byTier }}
-              mediaPreviewSlots={query.media.rows.length}
+              stats={{ mediaCount: 0, byTier: query.byTier }}
+              mediaPreviewSlots={0}
               footerNote="실제 학생에게 보이는 공개 프로필과 동일한 요약입니다."
             />
           </div>
