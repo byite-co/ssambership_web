@@ -1,0 +1,184 @@
+<!doctype html><html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>쌤버십 웹 결함 110건 — 병렬 수정 작업 순서 계획 (2026-08-07)</title>
+<style>
+:root{--bg:#F6F7F9;--panel:#FFFFFF;--ink:#18202F;--muted:#5C6675;--line:#DCE1E9;--line2:#ECEFF4;
+--app:#1A56DB;--app-bg:#E7EDFB;--sb:#1F8A63;--sb-bg:#E2F3EC;
+--bug:#B62525;--bug-bg:#FAE5E5;--risk:#BA4A0F;--risk-bg:#FBE9DE;--smell:#A85B08;--smell-bg:#FAEEDC;
+--w0:#7233DD;--w0-bg:#EFE8FC;--w1:#1A56DB;--w1-bg:#E7EDFB;--w2:#0E756D;--w2-bg:#DCF0EE;
+--shadow:0 1px 2px rgba(24,32,47,.05),0 4px 14px rgba(24,32,47,.05);}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#12161E;--panel:#1A2029;--ink:#E8ECF3;--muted:#9AA5B4;--line:#2C3542;--line2:#222A36;
+--app:#8AA0FF;--app-bg:#242E52;--sb:#3ECF8E;--sb-bg:#163327;
+--bug:#F58F8F;--bug-bg:#3E1B1B;--risk:#F5A876;--risk-bg:#3B2415;--smell:#F0B96B;--smell-bg:#3A2B14;
+--w0:#C4A5FF;--w0-bg:#2C2046;--w1:#8AA0FF;--w1-bg:#242E52;--w2:#6FD3CB;--w2-bg:#123230;
+--shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);}}
+:root[data-theme="dark"]{--bg:#12161E;--panel:#1A2029;--ink:#E8ECF3;--muted:#9AA5B4;--line:#2C3542;--line2:#222A36;
+--app:#8AA0FF;--app-bg:#242E52;--sb:#3ECF8E;--sb-bg:#163327;--bug:#F58F8F;--bug-bg:#3E1B1B;--risk:#F5A876;--risk-bg:#3B2415;--smell:#F0B96B;--smell-bg:#3A2B14;--w0:#C4A5FF;--w0-bg:#2C2046;--w1:#8AA0FF;--w1-bg:#242E52;--w2:#6FD3CB;--w2-bg:#123230;--shadow:0 1px 2px rgba(0,0,0,.3),0 4px 14px rgba(0,0,0,.25);}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;margin:0;line-height:1.55;font-size:14px}
+.wrap{max-width:1080px;margin:0 auto;padding:32px 20px 80px}
+.eyebrow{font-size:11px;letter-spacing:.14em;color:var(--muted);text-transform:uppercase;font-weight:700}
+h1{font-size:clamp(21px,3.2vw,28px);margin:6px 0 8px;font-weight:800;letter-spacing:-.02em}
+.sub{color:var(--muted);max-width:82ch;margin:0 0 4px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:18px 0 6px;font-size:12.5px}
+.flow .step{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:6px 12px;font-weight:700;box-shadow:var(--shadow)}
+.flow .step b{font-variant-numeric:tabular-nums}
+.flow .arr{color:var(--muted);font-weight:800}
+.rules{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 18px;box-shadow:var(--shadow);margin:18px 0 8px}
+.rules h3{margin:0 0 8px;font-size:13px;font-weight:800}
+.rules ol{margin:0;padding-left:20px}
+.rules li{margin:5px 0;font-size:12.8px}
+.rules b{color:var(--ink)}
+.wave{margin:26px 0}
+.wh{display:flex;align-items:baseline;gap:10px;margin-bottom:4px}
+.wtag{flex:none;font-size:12px;font-weight:800;border-radius:6px;padding:2px 10px}
+.wave:nth-of-type(1) .wtag{color:var(--w0);background:var(--w0-bg)}
+.wave:nth-of-type(2) .wtag{color:var(--w1);background:var(--w1-bg)}
+.wave:nth-of-type(3) .wtag{color:var(--w2);background:var(--w2-bg)}
+.wh h2{font-size:16px;font-weight:800;margin:0}
+.wnote{color:var(--muted);font-size:12.5px;margin:0 0 12px;max-width:100ch}
+.batches{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:10px}
+.batch{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;box-shadow:var(--shadow)}
+.bh{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.bid{flex:none;font-family:ui-monospace,Menlo,monospace;font-size:11px;font-weight:800;color:var(--app);background:var(--app-bg);border-radius:5px;padding:1px 7px}
+.bt{font-weight:700;font-size:13.5px}
+.bn{margin-left:auto;font-size:11px;color:var(--muted);font-weight:700;font-variant-numeric:tabular-nums}
+.files{margin:7px 0 0;display:flex;flex-wrap:wrap;gap:4px}
+.files code{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;background:var(--line2);color:var(--muted);border-radius:4px;padding:1px 6px;overflow-wrap:anywhere}
+.items{margin:8px 0 0;display:flex;flex-wrap:wrap;gap:3px}
+.ic{font-family:ui-monospace,Menlo,monospace;font-size:10px;font-weight:800;border-radius:4px;padding:1px 5px;cursor:default}
+.ic-bug{color:var(--bug);background:var(--bug-bg)}
+.ic-risk{color:var(--risk);background:var(--risk-bg)}
+.ic-smell{color:var(--smell);background:var(--smell-bg)}
+.why{margin:8px 0 0;font-size:12px;color:var(--muted)}
+.meta{margin:7px 0 0;display:flex;flex-wrap:wrap;gap:6px;font-size:11px}
+.dep{color:var(--risk);background:var(--risk-bg);border-radius:5px;padding:1px 7px;font-weight:700}
+.en{color:var(--sb);background:var(--sb-bg);border-radius:5px;padding:1px 7px;font-weight:700}
+.legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11.5px;color:var(--muted);margin-top:10px}
+footer{margin-top:32px;border-top:1px solid var(--line);padding-top:14px;font-size:12px;color:var(--muted);max-width:96ch}
+</style></head><body><div class="wrap">
+<header>
+<div class="eyebrow">Remediation Plan · 결함 110건 · 병렬 작업 순서</div>
+<h1>쌤버십 웹 결함 <span style="color:var(--app)">110건 병렬 수정</span> 작업 순서 계획</h1>
+<p class="sub">110건 결함을 병렬로 수정하기 위한 작업 순서 계획입니다. 각 항목의 근거 파일을 추출해 <strong>파일 충돌 그래프(union-find)</strong>를 만든 결과, 공유 헬퍼 6개가 여러 도메인을 하나로 묶는 <strong>절단점(cut vertex)</strong>이었습니다. 이 헬퍼들을 <strong>Wave 0에서 먼저 확정</strong>하면 나머지가 도메인별 독립 배치로 쪼개져 8갈래 병렬이 가능해집니다. 병렬의 불변식은 <strong>'한 배치가 건드리는 파일 집합은 다른 병렬 배치와 겹치지 않는다'</strong>이며, 각 배치는 격리된 git worktree에서 작업하고 배치 끝마다 tsc·계약 테스트로 회귀 검증합니다.</p>
+<div class="flow">
+<span class="step" style="color:var(--w0)">Wave 0 · 공유계약 <b>5</b>배치</span>
+<span class="arr">→</span>
+<span class="step" style="color:var(--w1)">Wave 1 · 도메인 <b>8</b>배치 병렬</span>
+<span class="arr">→</span>
+<span class="step" style="color:var(--w2)">Wave 2 · 운영·DB <b>3</b>배치</span>
+</div>
+<div class="legend"><span>칩 색 = 심각도: <span class="ic ic-bug">결함</span> <span class="ic ic-risk">잠재</span> <span class="ic ic-smell">특이점</span></span><span>전제=선행 필요 · 활성화=이 배치가 풀어주는 후속</span></div>
+</header>
+<div class="rules"><h3>병렬 작업 불변식 (버그 발생 요인 차단 규칙)</h3><ol><li><b>파일 비겹침 = 병렬 단위.</b> 같은 파일을 건드리는 항목은 반드시 한 배치(worker) 안에서 순차 처리해 동시 편집 충돌·덮어쓰기를 원천 차단한다.</li><li><b>공유 계약 먼저.</b> fail-closed 헬퍼·정본 유틸·뷰 노출 계약처럼 여러 도메인이 재사용하는 코드는 Wave 0에서 확정한다. 이후 웨이브는 '호출만 추가'라 충돌하지 않는다.</li><li><b>fail-open→closed 전환은 헬퍼+직접 호출부를 같은 배치에.</b> 헬퍼가 새 에러 상태를 돌려주면 호출부가 그것을 처리해야 하므로 분리하면 중간 상태에서 빌드가 깨진다.</li><li><b>DEAD 코드 삭제는 배치 마지막에.</b> 같은 파일의 다른 수정과 겹치면 삭제가 수정을 되돌린다. 독립 파일 삭제는 아무 때나 안전.</li><li><b>DB·운영 작업은 코드와 분리한 마지막 웨이브.</b> 원격 마이그레이션 적용·대시보드 토글은 PR 병합 후 사람 승인 경로로만 실행한다.</li><li><b>웨이브 경계마다 빌드 게이트.</b> 각 웨이브 병합 후 tsc 0·계약 테스트 그린을 확인하고 다음 웨이브를 연다.</li></ol></div>
+<section class="wave">
+      <div class="wh"><span class="wtag">Wave 0</span><h2>공유 계약·헬퍼 확정 (절단점 선처리 · 배치 5개 병렬)</h2></div>
+      <p class="wnote">이 배치들끼리는 파일이 겹치지 않아 동시 진행 가능. 완료가 Wave 1 전체의 전제. 여기서 손대는 파일이 뒤 웨이브에서 재사용되므로 반드시 먼저 끝내고 병합한다.</p>
+      <div class="batches"><div class="batch">
+          <div class="bh"><span class="bid">W0-A</span><span class="bt">계정 상태 게이트 fail-closed 통일</span><span class="bn">1건</span></div>
+          <div class="files"><code>lib/auth/accountStatus.ts</code><code>lib/appSession/appSurfaceAccountGate.ts</code></div>
+          <div class="items"><span class="ic ic-risk" title="웹 계정상태 게이트는 미지 status를 active로 통과(앱 표면은 거부) — fail-open 비대칭">D-AU-3</span></div>
+          <div class="why">미지 status를 active로 통과하던 웹 게이트를 앱 표면과 동일한 allowlist로 수렴. 이후 개별질문·숏폼댓글은 이 헬퍼를 &#x27;호출만&#x27; 추가하면 된다.</div>
+          <div class="meta"><span class="en">활성화 → D-IQ-3, D-CM-7</span></div>
+        </div><div class="batch">
+          <div class="bh"><span class="bid">W0-B</span><span class="bt">멘토 디렉터리 뷰 노출 계약</span><span class="bn">2건</span></div>
+          <div class="files"><code>lib/auth/mentorPublicRead.ts</code></div>
+          <div class="items"><span class="ic ic-risk" title="api_web_v1.mentor_directory_v1 — SECURITY DEFINER 뷰 (어드바이저 ERROR)">D-DB-2</span><span class="ic ic-risk" title="verification_status 를 어댑터가 &#x27;approved&#x27; 로 하드코딩 — 승인 게이트가 사실상 무조건 통과">D-ST-10</span></div>
+          <div class="why">verification_status를 &#x27;approved&#x27; 상수로 채우던 것을 뷰 실제값으로 바꾸고 배치 조회 결과를 재사용하도록 계약 확정. 승인 게이트·상세 차단·N+1이 모두 이 계약에 의존.</div>
+          <div class="meta"><span class="en">활성화 → D-ST-8, D-ST-9, D-ST-11, D-QR-6, SB 승인 게이트</span></div>
+        </div><div class="batch">
+          <div class="bh"><span class="bid">W0-C</span><span class="bt">리뷰 쓰기 RETURNING 규약</span><span class="bn">2건</span></div>
+          <div class="files"><code>lib/reviews/reviewQueries.ts</code><code>lib/reviews/reviewUpdateResult.ts</code></div>
+          <div class="items"><span class="ic ic-bug" title="리뷰 숨김 API가 0행 갱신을 성공으로 보고(fail-open)">D-MT-5</span><span class="ic ic-risk" title="관리자 리뷰 숨김이 RLS 정책(reviews_update_admin) 존속에 전적으로 의존">D-DB-4</span></div>
+          <div class="why">0행 UPDATE를 성공으로 보고하던 hideReview를 runReviewUpdate 규약(정확히 1행 검증)으로 수렴. 관리자 리뷰 조치가 이 규약을 공유.</div>
+          <div class="meta"><span class="en">활성화 → D-AD-3(리뷰 조치), D-MT-6</span></div>
+        </div><div class="batch">
+          <div class="bh"><span class="bid">W0-D</span><span class="bt">조회수 멱등 유틸 공용화</span><span class="bn">2건</span></div>
+          <div class="files"><code>lib/community/(새 유틸) viewEventKey.ts</code></div>
+          <div class="items"><span class="ic ic-risk" title="숏폼 조회수 v2의 멱등키가 호출마다 새로 생성되어 멱등 계약이 무력화">D-CM-3</span><span class="ic ic-risk" title="게시판 조회수 엔드포인트가 무인증·무제한이고 실패는 삼켜짐">D-CM-4</span></div>
+          <div class="why">게시판 v1·숏폼 v2 조회수의 event_key를 (뷰어+게시글+시간버킷) 결정적 파생으로 통일. 신규 파일이라 충돌 없이 선확정.</div>
+          <div class="meta"><span class="en">활성화 → 커뮤니티 배치의 board/shortform 조회수</span></div>
+        </div><div class="batch">
+          <div class="bh"><span class="bid">W0-E</span><span class="bt">표시명 조회 실패/빈결과 구분 규약</span><span class="bn">1건</span></div>
+          <div class="files"><code>lib/qna/(표시명 조회 공통)</code><code>get_mentor_student_nicknames 소비 규약</code></div>
+          <div class="items"><span class="ic ic-smell" title="조회 실패를 표면화하지 않고 정상 화면처럼 강등(무음 실패)">D-QR-7</span></div>
+          <div class="why">RLS로 빈 결과가 온 것과 실제 오류를 구분하는 반환 규약 확립. 질문방·개별질문이 동일 규약으로 표시명을 처리.</div>
+          <div class="meta"><span class="en">활성화 → D-IQ-6, D-QR-3</span></div>
+        </div></div>
+    </section><section class="wave">
+      <div class="wh"><span class="wtag">Wave 1</span><h2>도메인별 독립 배치 (8 worker 병렬 · 서로 파일 비겹침)</h2></div>
+      <p class="wnote">Wave 0 병합 후 착수. 8개 배치의 파일 집합이 서로 겹치지 않음을 충돌 그래프로 확인했다. 각 배치는 내부적으로는 파일 공유가 있어 순차 처리하되, 배치 간에는 완전 병렬. 각 배치 끝에 도메인 계약 테스트·e2e 실행.</p>
+      <div class="batches"><div class="batch">
+          <div class="bh"><span class="bid">L1</span><span class="bt">커뮤니티 (게시판·숏폼·차단·댓글 이중테이블)</span><span class="bn">14건</span></div>
+          <div class="files"><code>app/api/community/posts/route.ts</code><code>lib/community/communityBoard*.ts</code><code>lib/community/communityShortform*.ts</code><code>lib/community/communityMutations.ts</code><code>lib/community/comment*.ts</code><code>components/community/*</code></div>
+          <div class="items"><span class="ic ic-bug" title="게시판 더보기/탭 전환 API에 차단 필터가 없어 차단한 사용자의 글이 다시 나타남">D-CM-1</span><span class="ic ic-smell" title="목록 API가 오류를 200으로 감싸고 클라이언트는 그 필드를 읽지 않음">D-CM-2</span><span class="ic ic-risk" title="좋아요·스크랩 토글이 비원자적(select→delete/insert) — 경합 시 23505/토글 유실">D-CM-5</span><span class="ic ic-bug" title="좋아요/스크랩·댓글 삭제 실패가 성공처럼 보임(반환값 폐기)">D-CM-6</span><span class="ic ic-bug" title="숏폼 댓글에는 계정 상태 게이트가 없음(게시판 댓글과 비대칭)">D-CM-7</span><span class="ic ic-smell" title="댓글 이중 테이블 구조 + 숏폼 댓글은 삭제 경로 자체가 없음">D-CM-8</span><span class="ic ic-risk" title="숏폼 피드의 published 필터가 JS 후처리이고 폴백 분기에서는 아예 생략됨">D-CM-9</span><span class="ic ic-smell" title="숏폼 목록의 서명 URL fan-out(48건 × 2버킷 = 요청당 최대 96회)">D-CM-10</span><span class="ic ic-risk" title="레거시 외부 http video_url이 검증 없이 그대로 재생 대상이 됨">D-CM-11</span><span class="ic ic-smell" title="숏폼 상세가 댓글 조회 오류를 버려 &#x27;댓글 없음&#x27;으로 표시">D-CM-12</span><span class="ic ic-smell" title="스크랩: 쓰기는 동작하지만 읽기 표면이 없음(구현된 조회 함수는 사문)">D-CM-13</span><span class="ic ic-risk" title="사문 멘토 통합 작성 폼 + 컬럼 프로빙 INSERT가 잔존">D-CM-14</span><span class="ic ic-smell" title="사문 상세 컴포넌트가 게시판 댓글을 잘못된 테이블에 쓰도록 배선되어 있음">D-CM-15</span><span class="ic ic-smell" title="숏폼 상세에 신고 접점이 없음(액션은 shortform을 지원)">D-CM-16</span></div>
+          <div class="why">11개짜리 최대 요소. 차단 필터 API 이관·조회수 계약 적용·좋아요 원자 토글·숏폼 계정게이트·댓글 정본화·DEAD 3종 삭제를 한 worker가 순차로. 삭제(D-CM-14/15)는 맨 마지막.</div>
+          <div class="meta"><span class="dep">전제 · W0-A, W0-D</span></div>
+        </div><div class="batch">
+          <div class="bh"><span class="bid">L2</span><span class="bt">질문방 · 연결노트</span><span class="bn">13건</span></div>
+          <div class="files"><code>lib/qna/*</code><code>app/(student)/question-room/**</code><code>app/(mentor)/mentor/question-room/**</code><code>app/api/question-room/**</code><code>components/qna/*</code></div>
+          <div class="items"><span class="ic ic-risk" title="오답 플래그 API가 UI 미연결인 채 외부 호출만 가능">D-QR-1</span><span class="ic ic-risk" title="사문(死文) 직접 UPDATE 헬퍼가 RPC-정본 상태전이 정책을 우회할 수 있음">D-QR-2</span><span class="ic ic-smell" title="weekly-usage 배치 분기가 사문이고 응답 스키마도 단건과 불일치">D-QR-3</span><span class="ic ic-smell" title="주간 사용량 RPC의 이중 N+1 (SSR 멘토 수만큼 + 클라이언트가 같은 값을 재요청)">D-QR-4</span><span class="ic ic-smell" title="동일한 question_messages 쿼리를 렌더당 2회 중복 실행">D-QR-5</span><span class="ic ic-smell" title="mentor_directory_v1 배치 조회 후 멘토별 단건 조회를 또 수행(N+1)">D-QR-6</span><span class="ic ic-smell" title="?thread= 경로 계약이 학생/멘토 좌우 비대칭">D-QR-8</span><span class="ic ic-bug" title="무료체험 스레드 우선정렬이 멘토 &#x27;스레드 상세&#x27;에서는 사라짐">D-QR-9</span><span class="ic ic-risk" title="무료체험 스레드 판정이 ±15분 시각 근접 휴리스틱 + service-role RLS 우회">D-QR-10</span><span class="ic ic-bug" title="무료 질문권으로 만든 방에서는 연결노트를 영구히 작성할 수 없음">D-QR-11</span><span class="ic ic-smell" title="쓰기 액션 1회에 mentor_student_rooms를 3회, 서버 왕복 6~9회">D-QR-12</span><span class="ic ic-smell" title="미읽음 배지 기준이 학생/멘토 정반대이면서 이름만 같음">D-QR-13</span><span class="ic ic-smell" title="미사용 service-role 팩토리·별칭 export 잔존">D-QR-14</span></div>
+          <div class="why">10개짜리 요소. 무료방 노트 차단(QR-11/12)·무료체험 정렬 누락(QR-9)·N+1·무음실패·경로 비대칭·DEAD 삭제(QR-2/14). 상태전이는 RPC 정본 유지.</div>
+          <div class="meta"><span class="dep">전제 · W0-B(QR-6), W0-E(QR-3)</span></div>
+        </div><div class="batch">
+          <div class="bh"><span class="bid">L3</span><span class="bt">개별질문</span><span class="bn">8건</span></div>
+          <div class="files"><code>lib/individualQuestion/*</code><code>components/individualQuestion/*</code></div>
+          <div class="items"><span class="ic ic-bug" title="expires_at 기록이 best-effort라 실패 시 질문이 영구히 만료되지 않음">D-IQ-1</span><span class="ic ic-risk" title="만료 배치의 head-of-line blocking — 영구 skip 행이 배치 한도를 잠식">D-IQ-2</span><span class="ic ic-risk" title="개별질문 도메인 전체에 계정 상태(정지·탈퇴 진행) 게이트가 없음">D-IQ-3</span><span class="ic ic-risk" title="대화·상태전이 전 경로가 service-role로 실행되어 RLS 방어가 없음">D-IQ-4</span><span class="ic ic-smell" title="지정형은 v1 RPC, 공개형만 v2 — 자격조건 계약 비대칭">D-IQ-5</span><span class="ic ic-smell" title="표시명 조회가 RLS로 걸러져도 오류 없이 &#x27;학생&#x27;/&#x27;멘토&#x27;로 폴백">D-IQ-6</span><span class="ic ic-smell" title="질문 생성 시 첨부 업로드 실패가 질문만 남기고 조용히 유실">D-IQ-7</span><span class="ic ic-smell" title="사문 공개질문 브라우즈 카드 — claim 중복 경로">D-IQ-8</span></div>
+          <div class="why">만료 미기록 금전잠금(IQ-1)·계정게이트 부재(IQ-3)·service-role 남용(IQ-4)·v1/v2 비대칭(IQ-5)·DEAD(IQ-8). IQ-1은 최우선.</div>
+          <div class="meta"><span class="dep">전제 · W0-A(IQ-3), W0-E(IQ-6)</span></div>
+        </div><div class="batch">
+          <div class="bh"><span class="bid">L4</span><span class="bt">관리자 콘솔</span><span class="bn">13건</span></div>
+          <div class="files"><code>lib/admin/*</code><code>app/(admin)/**</code><code>components/admin/*</code></div>
+          <div class="items"><span class="ic ic-bug" title="멘토 cap 변경이 service-role 키 부재 시 세션 폴백 + 0행을 성공 처리">D-AD-1</span><span class="ic ic-bug" title="분쟁 일괄 상태 변경에 현재 상태 게이트가 없어 종결 건도 덮어씀">D-AD-2</span><span class="ic ic-risk" title="일괄 처리 에러 원문을 URL 로 그대로 노출">D-AD-3</span><span class="ic ic-risk" title="service-role 클라이언트를 try 없이 생성하는 액션들(키 부재 시 500)">D-AD-4</span><span class="ic ic-smell" title="분쟁 예치 분배 확정이 admin_action_logs 를 남기지 않음">D-AD-5</span><span class="ic ic-bug" title="분쟁 제재의 계정 반영 실패가 예외로 삼켜지고 성공으로 리다이렉트">D-AD-6</span><span class="ic ic-risk" title="정산 보류 해제가 두 문장 비트랜잭션">D-AD-7</span><span class="ic ic-smell" title="대시보드 &#x27;감사 로그&#x27; 지표가 verification_logs 전체 건수">D-AD-8</span><span class="ic ic-smell" title="정산 화면 진입 시 refresh RPC 실패가 무음">D-AD-9</span><span class="ic ic-smell" title="SLA 대시보드가 블록별 try/catch 로 실패를 0으로 표시">D-AD-10</span><span class="ic ic-smell" title="대시보드 7일 추이가 순차 14쿼리 + 오류를 0으로 대체">D-AD-11</span><span class="ic ic-risk" title="환불 일괄 처리가 건별 RPC 순차 호출(비트랜잭션·부분 실패)">D-AD-12</span><span class="ic ic-smell" title="신고 운영 메모 액션·구 승인 표가 도달 불가(DEAD)">D-AD-13</span></div>
+          <div class="why">cap 무음무효(AD-1)·제재 미집행 은폐(AD-6)·일괄 상태게이트(AD-2)를 우선. adminWriteClient(fail-closed)·toAdminDisplayError를 전 액션에 표준 적용. DEAD(AD-13) 마지막.</div>
+          <div class="meta"><span class="dep">전제 · W0-C(AD-3)</span></div>
+        </div><div class="batch">
+          <div class="bh"><span class="bid">L5</span><span class="bt">멘토 콘솔 · 정산 · 알림 · 리뷰관리</span><span class="bn">13건</span></div>
+          <div class="files"><code>lib/mentor/*</code><code>lib/reviews/*(조회부)</code><code>lib/notifications/*</code><code>app/(mentor)/**</code><code>app/api/mentor/**</code></div>
+          <div class="items"><span class="ic ic-bug" title="정산 상세 &#x27;개별질문&#x27; 필터가 무시되고 전체가 표시됨">D-MT-1</span><span class="ic ic-smell" title="정산 monthly·summary API 라우트가 사문">D-MT-2</span><span class="ic ic-bug" title="맞춤의뢰 대시보드에 &#x27;정산 내역 확인 필요&#x27;가 항상 표시됨">D-MT-3</span><span class="ic ic-smell" title="정산 페이지가 동일 3소스 라인 로더를 3중 호출(9쿼리)">D-MT-4</span><span class="ic ic-smell" title="받은 후기 목록이 조회 실패를 빈 목록으로 흡수">D-MT-6</span><span class="ic ic-risk" title="학교인증 서류 업로드에 파일 크기 상한 없음">D-MT-7</span><span class="ic ic-bug" title="&#x27;신규 구독 받기&#x27; 토글 실패가 무음(성공처럼 보임)">D-MT-8</span><span class="ic ic-risk" title="구독 오픈 여부 읽기가 fail-open(true)">D-MT-9</span><span class="ic ic-smell" title="알림 인프라 미배선 — 미읽음 카운트 RPC·outbox 워커 호출부 0">D-MT-10</span><span class="ic ic-smell" title="&#x27;모두 읽음&#x27; 폼 경로가 실패를 삼킴">D-MT-11</span><span class="ic ic-risk" title="알림 설정 로드 실패가 &#x27;전부 켜짐&#x27; 기본값으로 보임">D-MT-12</span><span class="ic ic-smell" title="프로필 미디어 조회가 스텁이라 관련 화면 3곳이 영구 공백">D-MT-13</span><span class="ic ic-risk" title="후기 자격 판정이 DB 정본을 쓰지 않고 TS 재구현 + 오류를 빈 배열로 흡수">D-MT-14</span></div>
+          <div class="why">정산 필터 오독(MT-1)·정산 오탐경보(MT-3)·구독토글 무음(MT-8/9)·파일크기상한(MT-7). 정산 로더 중복(MT-4) 리팩터는 배치 안에서 신중히.</div>
+          <div class="meta"><span class="dep">전제 · W0-B, W0-C(MT-6)</span></div>
+        </div><div class="batch">
+          <div class="bh"><span class="bid">L6</span><span class="bt">학생 핵심 (랜딩·멘토찾기·구독·캐시·마이페이지)</span><span class="bn">18건</span></div>
+          <div class="files"><code>app/page.tsx</code><code>lib/landing/*</code><code>lib/mentor/publicMentors*.ts</code><code>lib/subscribe/*</code><code>lib/cash/*</code><code>app/(student)/mypage|wallet/**</code><code>app/(student)/subscribe/**</code></div>
+          <div class="items"><span class="ic ic-smell" title="랜딩이 매 SSR마다 부재 테이블 7회를 프로빙">D-ST-1</span><span class="ic ic-bug" title="랜딩 요금제 카드가 아무 멘토들의 mentor_plans 15행을 섞어 표시">D-ST-2</span><span class="ic ic-smell" title="랜딩이 동일 count 쿼리를 두 벌로 중복 실행">D-ST-3</span><span class="ic ic-smell" title="랜딩 데이터 로드 실패를 통째로 삼켜 &#x27;텅 빈 정상 화면&#x27;으로 렌더">D-ST-4</span><span class="ic ic-bug" title="개별질문 건수 조회 실패를 0으로 낙하 — 같은 페이지의 다른 카운트 정책과 정반대">D-ST-5</span><span class="ic ic-smell" title="지갑 잔액 중복 조회 + 5행 표시에 원장 80행 과다 조회 + 미사용 패키지 쿼리">D-ST-6</span><span class="ic ic-risk" title="/mypage 에 역할 가드가 없어 멘토가 학생 마이페이지에 진입 → 구독 카드 403">D-ST-7</span><span class="ic ic-bug" title="멘토 검색·필터·정렬·페이지네이션이 상위 200행 인메모리 처리 — 그 밖의 멘토는 검색 불가">D-ST-8</span><span class="ic ic-smell" title="목록 통계 배치의 N+1 RPC와, 렌더되지 않는 3000행 subscriptions 집계">D-ST-9</span><span class="ic ic-risk" title="구독 cap 집계가 서비스키 부재·집계 실패 시 &#x27;미마감&#x27;으로 fail-open">D-ST-11</span><span class="ic ic-smell" title="영구 빈 결과를 반환하는 스텁 2종이 3개 화면에서 계속 호출됨">D-ST-12</span><span class="ic ic-bug" title="캐시 사용내역 기간·종류 필터가 서버 미적용 + 최근 250행 안에서만 동작(잘림 표시 없음)">D-ST-13</span><span class="ic ic-risk" title="충전 실패 화면만 Toss 원문 메시지를 그대로 노출 (성공 경로 정책과 비대칭)">D-ST-14</span><span class="ic ic-smell" title="충전 금액 정본이 하드코딩 상수, DB cash_topup_packages 는 조회만 하고 아무도 안 씀">D-ST-15</span><span class="ic ic-smell" title="해지 예약 만료와 미납 만료가 동일 event_type=&#x27;expired&#x27; 로 기록 (&#x27;canceled&#x27; 는 사문)">D-ST-16</span><span class="ic ic-smell" title="찜 목록 조회 오류를 메시지 정규식으로 판단해 조용히 빈 목록으로 흡수">D-ST-17</span><span class="ic ic-smell" title="마이페이지 활성 구독 카드가 멘토 1인당 쿼리 2회 N+1 + 잔여 질문은 실사용 미반영 정적 라벨">D-ST-18</span><span class="ic ic-smell" title="랜딩이 커뮤니티 글·숏폼을 조회하지만 렌더에 전혀 쓰지 않음">D-CM-17</span></div>
+          <div class="why">멘토 검색 인메모리 200행(ST-8)·랜딩 가격 오표시(ST-2)·cap fail-open(ST-11)·캐시 필터 미적용(ST-13). D-CM-17(랜딩의 커뮤니티 미사용쿼리 제거)은 landingPageQueries 소유라 여기 포함. 규모가 커 필요 시 랜딩/캐시 2 sub-worker로 분할 가능(파일 비겹침).</div>
+          <div class="meta"><span class="dep">전제 · W0-B(ST-8/9/11)</span></div>
+        </div><div class="batch">
+          <div class="bh"><span class="bid">L7</span><span class="bt">인증 · 세션 · 계정 삭제</span><span class="bn">11건</span></div>
+          <div class="files"><code>components/auth/*</code><code>lib/auth/*(게이트 제외)</code><code>lib/account/*</code><code>app/login/**</code><code>app/signup/**</code><code>app/(student)/account/delete/**</code></div>
+          <div class="items"><span class="ic ic-bug" title="비밀번호 재설정 완료 후 멘토도 학생 로그인 화면으로 보냄">D-AU-1</span><span class="ic ic-risk" title="비밀번호 재설정 실패 시 Supabase 원문 오류를 쿼리스트링으로 그대로 노출">D-AU-2</span><span class="ic ic-risk" title="탈퇴 워커의 100년 ban에 해제 경로가 코드상 존재하지 않음">D-AU-4</span><span class="ic ic-smell" title="/goodbye 탈퇴 완료 페이지가 고아 — 도달 경로 0, 내용도 현행 saga와 불일치">D-AU-5</span><span class="ic ic-smell" title="탈퇴 요청 성공이 붙이는 ?requested=1 을 페이지가 읽지 않음">D-AU-6</span><span class="ic ic-smell" title="사문 인증 헬퍼 2종 — 목적지 계산·가입 검증의 두 번째 구현이 방치됨">D-AU-7</span><span class="ic ic-smell" title="인증 화면 미사용 컴포넌트 3종">D-AU-8</span><span class="ic ic-risk" title="만14세 미만 보호자 동의가 본인확인 없는 placeholder로 기록됨">D-AU-9</span><span class="ic ic-risk" title="로그인 후 이동을 150ms 고정 타이머에 의존">D-AU-10</span><span class="ic ic-smell" title="로그인 실패 시 DB 오류 원문을 사용자 화면에 노출">D-AU-11</span><span class="ic ic-smell" title="/login/* 은 이미 로그인한 사용자를 밀어내지 않음(/admin/login 과 비대칭)">D-AU-12</span></div>
+          <div class="why">재설정 후 역할 오이동(AU-1)·오류원문 노출(AU-2/11)·탈퇴 100년밴 해제경로 부재(AU-4)·미성년 동의 placeholder(AU-9)·로그인 레이스(AU-10)·DEAD/미사용(AU-7/8). accountStatus.ts는 W0-A 소유라 제외.</div>
+          <div class="meta"><span class="dep">전제 · —</span></div>
+        </div><div class="batch">
+          <div class="bh"><span class="bid">L8</span><span class="bt">맞춤의뢰 · 분쟁 · 환불</span><span class="bn">9건</span></div>
+          <div class="files"><code>lib/customRequest/*</code><code>lib/disputes/*</code><code>app/(mentor)/mentor/custom-request/**</code><code>app/(*)/custom-request/**</code></div>
+          <div class="items"><span class="ic ic-risk" title="납품 버전 번호가 비원자적(read-max → +1)">D-CR-1</span><span class="ic ic-smell" title="학생 주문 목록의 소유 FK 컬럼 프로빙 잔존(요청당 +7 쿼리)">D-CR-2</span><span class="ic ic-risk" title="사문(死文) service-role 정산 INSERT/DELETE 헬퍼 잔존">D-CR-3</span><span class="ic ic-smell" title="구 멘토 작업파일 화면 일체가 DEAD(액션 2종 + 뷰 + 검토패널)">D-CR-4</span><span class="ic ic-smell" title="지원서 비교 화면 N+1(지원자 1명당 프로필·users 2쿼리 순차)">D-CR-5</span><span class="ic ic-smell" title="멘토 워크스페이스 카운트가 페이지마다 전량 재조회(200×3 + 분쟁 + enrich)">D-CR-6</span><span class="ic ic-bug" title="주문 보강 시 post 조회를 12건으로 잘라 13번째 이후 주문의 제목이 비게 됨">D-CR-7</span><span class="ic ic-smell" title="공개 랜딩이 항상 빈 배열을 반환하는 카테고리 로더를 호출">D-CR-8</span><span class="ic ic-smell" title="분쟁 상세의 환불·모더레이션 로그 연계가 코드상 고정 null">D-CR-9</span></div>
+          <div class="why">납품 버전 경합(CR-1)·post 12건 잘림(CR-7)·N+1·소유FK 프로빙·정산 헬퍼/작업파일화면 DEAD(CR-3/4). 완전 독립 도메인.</div>
+          <div class="meta"><span class="dep">전제 · —</span></div>
+        </div></div>
+    </section><section class="wave">
+      <div class="wh"><span class="wtag">Wave 2</span><h2>운영 · DB · 설계 결정 (코드 병합 후 · 사람 승인)</h2></div>
+      <p class="wnote">코드 PR이 아니라 원격 DB·대시보드·정책 결정이 필요한 항목. Wave 0/1 병합·검증 후 승인된 경로로만 실행.</p>
+      <div class="batches"><div class="batch">
+          <div class="bh"><span class="bid">OPS-1</span><span class="bt">원격 마이그레이션 9본 적용</span><span class="bn">1건</span></div>
+          <div class="files"><code>supabase/migrations (원격)</code></div>
+          <div class="items"><span class="ic ic-bug" title="원격 DB 마이그레이션 9본 미적용 — main 코드 기대 동작이 스테이징에서 미발효">D-DB-1</span></div>
+          <div class="why">main이 기대하는 서버 동작을 스테이징에 발효. W0-B가 뷰 컬럼 추가 마이그레이션을 요구하면 함께 적용.</div>
+          <div class="meta"><span class="dep">전제 · 전 웨이브 병합</span></div>
+        </div><div class="batch">
+          <div class="bh"><span class="bid">OPS-2</span><span class="bt">Auth 유출 비밀번호 보호 활성</span><span class="bn">1건</span></div>
+          <div class="files"><code>Supabase 대시보드 Auth 설정</code></div>
+          <div class="items"><span class="ic ic-risk" title="Auth 유출 비밀번호 보호(Leaked Password Protection) 비활성">D-DB-3</span></div>
+          <div class="why">코드 변경 아님. 대시보드 토글 1회.</div>
+          <div class="meta"><span class="dep">전제 · —</span></div>
+        </div><div class="batch">
+          <div class="bh"><span class="bid">OPS-3</span><span class="bt">Realtime 도입 여부 결정</span><span class="bn">1건</span></div>
+          <div class="files"><code>설계 결정</code></div>
+          <div class="items"><span class="ic ic-smell" title="웹 전면 Realtime 미사용 — 채팅·알림이 전부 새로고침 기반">D-DB-5</span></div>
+          <div class="why">질문방·알림 실시간화는 아키텍처 결정 사항. 채택 시 별도 스코프로 재계획.</div>
+          <div class="meta"><span class="dep">전제 · —</span></div>
+        </div></div>
+    </section>
+<footer>파일 충돌 그래프(union-find)는 각 결함의 근거 file:line에서 추출했다. 근거에는 '수정 대상'과 '비대칭을 지적하기 위한 대조 대상'이 섞여 있어, 병렬 배치는 <b>보수적(대조 파일까지 잠재 충돌로 간주)</b>으로 묶었다 — 과충돌은 병렬성만 낮출 뿐 병합 버그를 만들지 않는다. Wave 1의 8개 배치는 서로 파일이 겹치지 않음을 확인했고, 각 배치는 격리 worktree에서 작업 후 배치 끝에 tsc·계약 테스트로 검증한다. L6(학생 핵심)만 18건으로 커, 필요 시 랜딩/캐시 2개 sub-worker로 분할 가능(파일 비겹침 유지).</footer>
+</div></body></html>
