@@ -12,11 +12,20 @@ import {
   shortformVideoExtForMime,
   shortformVideoRefBelongsToUser,
 } from "@/lib/community/shortformVideoRef";
+import { isAllowedExternalMediaUrl, parseAllowedMediaHosts } from "@/lib/community/shortformExternalMedia";
 
 export { shortformVideoRefBelongsToUser };
 
 function formatStorageRef(bucket: string, path: string): string {
   return `${bucket}/${path.replace(/^\/+/, "")}`;
+}
+
+/**
+ * 외부 http(s) 미디어 URL 허용 호스트(D-CM-11). 자사 Supabase Storage 호스트만 allowlist 로
+ * 둔다. 판정 로직은 순수 leaf(shortformExternalMedia)로 분리해 계약 테스트로 잠근다.
+ */
+function allowedExternalMediaHosts(): Set<string> {
+  return parseAllowedMediaHosts([process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_URL]);
 }
 
 function parseStorageRef(stored: string | null | undefined, bucket: string): { bucket: string; path: string } | null {
@@ -51,7 +60,11 @@ async function resolveShortformStorageUrl(
   const raw = typeof stored === "string" ? stored.trim() : "";
   if (!raw) return null;
   const ref = parseStorageRef(raw, bucket);
-  if (!ref) return raw.startsWith("http://") || raw.startsWith("https://") ? raw : null;
+  if (!ref) {
+    // 버킷 형식이 아닌 레거시 외부 URL — 허용 호스트(자사 Storage)만 렌더한다(D-CM-11).
+    const isExternal = raw.startsWith("http://") || raw.startsWith("https://");
+    return isExternal && isAllowedExternalMediaUrl(raw, allowedExternalMediaHosts()) ? raw : null;
+  }
 
   const signed = await createSignedStorageUrl(supabase, ref.bucket, ref.path);
   if (signed.error || !signed.url) return null;

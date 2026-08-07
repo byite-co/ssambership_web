@@ -33,9 +33,37 @@ export function UpdatePasswordClient() {
         setLoading(false);
         return;
       }
+
+      // D-AU-1: 재설정 세션의 역할을 읽어 역할별 로그인 경로로 보낸다.
+      // (구 동작은 무조건 /login/student 로 보내, 멘토가 학생 로그인 카드에 서서
+      //  역할 불일치 signOut 을 당했다.) 새 비밀번호로 다시 로그인하도록 재설정
+      //  세션은 정리하고 이동한다.
+      let loginPath = "/login/student";
+      try {
+        const { data: userData } = await supabase.auth.getUser();
+        const uid = userData?.user?.id ?? null;
+        if (uid) {
+          const { data: prof } = await supabase
+            .from("users")
+            .select("role")
+            .eq("id", uid)
+            .maybeSingle();
+          const role = (prof as { role?: string } | null)?.role;
+          if (role === "mentor") loginPath = "/login/mentor";
+          else if (role === "admin") loginPath = "/admin/login";
+        }
+      } catch {
+        /* 역할 조회 실패 시 학생 로그인 폴백(기존 동작) */
+      }
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        /* */
+      }
+
       setMsg("비밀번호가 변경되었습니다. 잠시 후 로그인 화면으로 이동합니다.");
       window.setTimeout(() => {
-        window.location.assign("/login/student");
+        window.location.assign(loginPath);
       }, 1200);
     } catch (ex) {
       setErr(mapSupabaseAuthError(ex instanceof Error ? ex.message : String(ex)));

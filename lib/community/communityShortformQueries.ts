@@ -12,6 +12,7 @@ import {
   resolveShortformThumbnailUrl,
   resolveShortformVideoUrl,
 } from "@/lib/community/communityShortformStorage";
+import { viewEventKeyFor } from "@/lib/community/viewEventKey";
 
 type Row = Record<string, unknown>;
 
@@ -104,6 +105,19 @@ async function resolveShortformCardMedia(
   };
 }
 
+/**
+ * 목록 카드용 미디어 해석(D-CM-10) — 썸네일만 서명한다. 목록(limit 48)에서 카드마다 영상까지
+ * 서명하면 요청당 최대 96회 Storage createSignedUrl fan-out 이 나는데, 목록 카드는 영상을
+ * 재생하지 않으므로(상세에서 발급) 영상 서명이 불필요하다. videoUrl 은 null 로 비운다.
+ */
+async function resolveShortformCardThumbnailOnly(
+  supabase: SupabaseClient,
+  card: ShortformCard
+): Promise<ShortformCard> {
+  const thumbnailUrl = await resolveShortformThumbnailUrl(supabase, card.thumbnailUrl);
+  return { ...card, thumbnailUrl, videoUrl: null };
+}
+
 export type ShortformFeedSort = "all" | "latest" | "popular";
 
 function buildShortformFeedQuery(
@@ -119,6 +133,10 @@ function buildShortformFeedQuery(
           .order("view_count", { ascending: false })
           .order("created_at", { ascending: false })
       : supabase.from("shortform_posts").select("*").order("created_at", { ascending: false });
+  // D-CM-9: published 필터를 쿼리 조건으로 올린다(구현은 정상 경로에서만 JS 후처리했고 폴백
+  // 분기에서는 아예 생략돼 작성자 본인 draft/hidden 이 공개 피드로 새어 나갔다). 레거시 null
+  // status 행은 공개로 간주하던 기존 동작을 보존하려고 `status IS NULL` 도 함께 허용한다.
+  q = q.or("status.eq.published,status.is.null");
   q = q.limit(opts.limit);
   if (opts.category && opts.category !== "all") q = q.eq("category", opts.category);
   return q;
@@ -133,17 +151,23 @@ export async function listShortformFeed(
   const q = buildShortformFeedQuery(supabase, { category: opts.category, limit, sort });
   const { data, error } = await q;
   if (error) {
+    // 카테고리 조건 쿼리 실패 시 카테고리 없이 재조회. D-CM-9: published 필터는 쿼리
+    // 빌더가 이미 강제하므로(정상·폴백 동일) draft/hidden 이 폴백으로 새지 않는다.
     const fb = await buildShortformFeedQuery(supabase, { limit, sort });
     if (fb.error) return { items: [], error: fb.error.message };
     const fbRows = (fb.data as Row[]) ?? [];
     const userMap = await shortformAuthorNameMap(supabase, fbRows);
-    const cards = await Promise.all(fbRows.map((r) => resolveShortformCardMedia(supabase, mapShortformRow(r, userMap))));
+    // D-CM-10: 목록은 썸네일만 서명(영상 서명 fan-out 제거).
+    const cards = await Promise.all(
+      fbRows.map((r) => resolveShortformCardThumbnailOnly(supabase, mapShortformRow(r, userMap)))
+    );
     return { items: cards, error: null };
   }
   const rows = (data as Row[]) ?? [];
-  const published = rows.filter((r) => !r.status || r.status === "published");
-  const userMap = await shortformAuthorNameMap(supabase, published);
-  const cards = await Promise.all(published.map((r) => resolveShortformCardMedia(supabase, mapShortformRow(r, userMap))));
+  const userMap = await shortformAuthorNameMap(supabase, rows);
+  const cards = await Promise.all(
+    rows.map((r) => resolveShortformCardThumbnailOnly(supabase, mapShortformRow(r, userMap)))
+  );
   return { items: cards, error: null };
 }
 
@@ -221,10 +245,20 @@ export async function getShortformDraft(
 
 /**
  * 숏폼 view 계수 v2 (수렴 §10.5) — impression 당 event key 1개의 멱등 계약.
- * 서버 렌더 1회 = impression 1회이므로 호출 시점에 key 를 생성한다. 실패는
- * 조용히 무시하되(계수는 비핵심) 같은 impression 에서 새 key 로 재시도하지 않는다.
- * legacy increment_shortform_post_view 는 EXECUTE 회수됨.
+ * event_key 는 (글 + 뷰어 + 시간버킷)에서 결정적으로 파생한다(D-CM-3, viewEventKeyFor).
+ * 구현이 매 호출 crypto.randomUUID() 를 넘겨 같은 뷰어의 새로고침·재검증·프리페치가 전부
+ * 별개 조회로 계수돼 멱등 계약이 무력화됐다. 이제 같은 뷰어·같은 시간대 재조회는 1회로 접힌다.
+ * viewerId: 로그인 uid, 비로그인은 호출부가 헤더 기반 익명키(anonViewerKeyFromHeaders)를
+ * 넘긴다 — null 은 최후 폴백 "anon"(전세계 1버킷 과보정)으로 접히므로 지양(D-CM-3 회귀).
+ * 실패는 조용히 무시하되(계수는 비핵심) 같은 impression 에서 새 key 로 재시도하지 않는다.
  */
-export async function incrementShortformView(supabase: SupabaseClient, id: string): Promise<void> {
-  await supabase.rpc("shortform_view_record_v2", { p_post_id: id, p_event_key: crypto.randomUUID() });
+export async function incrementShortformView(
+  supabase: SupabaseClient,
+  id: string,
+  viewerId: string | null | undefined
+): Promise<void> {
+  await supabase.rpc("shortform_view_record_v2", {
+    p_post_id: id,
+    p_event_key: viewEventKeyFor(id, viewerId ?? null),
+  });
 }

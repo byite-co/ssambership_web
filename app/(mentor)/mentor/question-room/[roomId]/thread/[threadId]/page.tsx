@@ -13,12 +13,12 @@ import {
   loadStudentDisplaysForQuestionRooms,
 } from "@/lib/qna/questionRoomMentorContext";
 import {
-  loadLastMessageByThreadId,
-  loadMessageCountsByThreadId,
+  loadMessageStatsByThreadId,
   loadQuestionRoomSubscriptionContext,
 } from "@/lib/qna/questionRoomStudentContext";
 import { fetchWeeklyQuestionUsagePairParty } from "@/lib/qna/weeklyQuestionUsage";
 import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
+import { loadFreeTrialThreadIdsForMentorRoom, sortThreadsFreeTrialFirst } from "@/lib/qna/freeTrialPriority";
 import {
   loadLastAttachmentByThreadId,
   loadThreadAttachmentsWithUrls,
@@ -84,24 +84,31 @@ export default async function MentorQuestionThreadDetailPage(props: Props) {
 
   const [
     studentDisplays,
-    messageCountsByThreadId,
-    lastMessageByThreadId,
+    messageStats,
     unreadCountsByRoomId,
     attachments,
     lastAttachmentByThreadId,
   ] = await Promise.all([
     loadStudentDisplaysForQuestionRooms(supabase, listBundle.rooms.rows),
-    loadMessageCountsByThreadId(supabase, threadIds),
-    loadLastMessageByThreadId(supabase, threadIds),
+    loadMessageStatsByThreadId(supabase, threadIds),
     loadMentorUnreadCountsByRoomId(supabase, roomIds),
     loadThreadAttachmentsWithUrls(supabase, resolvedThreadId),
     loadLastAttachmentByThreadId(supabase, threadIds),
   ]);
+  const messageCountsByThreadId = messageStats.counts;
+  const lastMessageByThreadId = messageStats.last;
 
   const initialNoteText = extractNoteText(bundle.notes.rows[0]);
 
   const currentRoom = listBundle.rooms.rows.find((r) => r && String(r.id) === String(roomId)) ?? null;
   const studentId = currentRoom ? partyUserIdFromRoomRow(currentRoom, "student") : null;
+
+  // D-QR-9: 방 상세와 동일하게 무료 체험 스레드를 최상단 고정 + 배지용 id 를 주입한다.
+  // (스레드 상세에서만 정렬·배지가 사라져 우선 처리 대상을 놓치던 문제 제거.)
+  const freeTrialThreadIds = await loadFreeTrialThreadIdsForMentorRoom(supabase, user.id, studentId, roomId);
+  const sortedThreadRows = sortThreadsFreeTrialFirst(bundle.threads.rows, freeTrialThreadIds);
+  const threads = { ...bundle.threads, rows: sortedThreadRows };
+
   const [subscriptionContext, weeklyUsageResult] = studentId
     ? await Promise.all([
         loadQuestionRoomSubscriptionContext(supabase, studentId, currentRoom),
@@ -129,13 +136,14 @@ export default async function MentorQuestionThreadDetailPage(props: Props) {
         title="질문방"
         subtitle=""
         rooms={listBundle.rooms}
-        threads={bundle.threads}
+        threads={threads}
         messages={bundle.messages}
         attachments={attachments}
         lastAttachmentByThreadId={lastAttachmentByThreadId}
         notes={bundle.notes}
         roomId={roomId}
         threadId={resolvedThreadId}
+        freeTrialThreadIds={freeTrialThreadIds}
         listPreviewsByRoomId={listBundle.listPreviewsByRoomId}
         studentDisplays={studentDisplays}
         messageCountsByThreadId={messageCountsByThreadId}

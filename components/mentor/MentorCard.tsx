@@ -17,13 +17,11 @@ import {
 
 function formatStatLine(card: MentorPublicListCard): string {
   const ans = card.stats.totalAnswers;
-  // 표본이 적은 신규 멘토는 과장될 수 있는 통계(만족도·응답시간)를 숨기고 중립 문구로 표시
+  // 표본이 적은 신규 멘토는 과장될 수 있는 통계(만족도)를 숨기고 중립 문구로 표시
   if (ans == null || ans < 5) return "신규 멘토 · 곧 활동 내역이 쌓여요";
   const parts: string[] = [];
   const sat = card.stats.satisfactionLabel;
   if (sat && sat !== "—") parts.push(`답변 만족도 ${sat}`);
-  const resp = card.stats.avgResponseLabel;
-  if (resp && resp !== "—" && !resp.includes("48시간 이상")) parts.push(`평균 답변 시간 ${resp}`);
   parts.push(`누적 답변 ${ans.toLocaleString("ko-KR")}개`);
   return parts.join(" · ");
 }

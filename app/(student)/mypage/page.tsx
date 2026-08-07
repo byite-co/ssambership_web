@@ -1,13 +1,12 @@
-import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { Bell, HelpCircle, Star } from "lucide-react";
-import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
+import { requireRole } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
 import { fetchWalletBalanceByUserId } from "@/lib/cash/cashQueries";
 import { parseWalletBalanceKrw } from "@/lib/cash/parseWalletBalanceKrw";
 import { loadStudentMypageBundle } from "@/lib/mypage/mypageQueries";
-import { loadWalletChargePageData } from "@/lib/cash/walletRouteData";
+import { loadMypageWalletPreview } from "@/lib/cash/walletRouteData";
 import {
   ledgerAmountLabel,
   ledgerAt,
@@ -31,29 +30,30 @@ function SectionTitle(props: { title: string; hint?: ReactNode }) {
 }
 
 export default async function StudentMyPage() {
-  const { user, profile, error: profileLoadError } = await getServerUserWithProfile();
-  if (!user) {
-    redirect(`/login/student?next=${encodeURIComponent("/mypage")}`);
-  }
+  // D-ST-7: 학생 전용 화면 — requireRole('student') 로 역할을 가드한다(멘토는 멘토 홈으로 리다이렉트).
+  // 구: `!user` 만 검사해 멘토가 진입하면 /api/mypage/active-subscriptions 가 403, student_id 기준
+  // 카운트가 무의미한 0으로 채워졌다.
+  const { user, profile } = await requireRole("student");
 
   const supabase = await createClient();
-  const [bundle, activeSubs, balance, walletData] = await Promise.all([
-    loadStudentMypageBundle(supabase, user.id, profile, profileLoadError?.message ?? null),
+  const [bundle, activeSubs, balance, walletPreview] = await Promise.all([
+    loadStudentMypageBundle(supabase, user.id, profile, null),
     countActiveSubscriptionsForStudent(supabase, user.id),
     fetchWalletBalanceByUserId(supabase, user.id),
-    loadWalletChargePageData(supabase, user.id),
+    loadMypageWalletPreview(supabase, user.id),
   ]);
   const cashBalanceKrw = parseWalletBalanceKrw(balance.row);
 
   const activeMentorCount = activeSubs.error ? 0 : activeSubs.count;
   const paymentCount = bundle.payments.valueText || "0";
 
-  // 개별질문 건수 — 표시용 카운트(학생이 보낸 지정/공개 합계). 계산 로직 변경 없음.
+  // D-ST-5: 개별질문 건수 조회 오류는 0 이 아니라 null(→ '—')로 표기한다(같은 페이지의 다른
+  // 카운트 정책과 일치 · 데이터 유실 오인 방지).
   const iqCountRes = await supabase
     .from("individual_questions")
     .select("id", { count: "exact", head: true })
     .eq("student_id", user.id);
-  const individualQuestionCount = iqCountRes.error ? 0 : iqCountRes.count ?? 0;
+  const individualQuestionCount = iqCountRes.error ? null : iqCountRes.count ?? null;
 
   const { roomCount } = bundle;
   const displayName = profile?.full_name?.trim() || profile?.nickname?.trim() || user.email || "학생";
@@ -81,13 +81,13 @@ export default async function StudentMyPage() {
         </p>
         <div className="mt-4 space-y-2">
           <p className="text-xs font-bold text-slate-500">최근 내역</p>
-          {walletData.ledgerPreview.error ? (
+          {walletPreview.ledgerPreview.error ? (
             <p className="text-xs text-red-700">내역을 불러오지 못했습니다.</p>
-          ) : walletData.ledgerPreview.rows.length === 0 ? (
+          ) : walletPreview.ledgerPreview.rows.length === 0 ? (
             <p className="text-xs text-slate-500">최근 사용 내역이 없습니다.</p>
           ) : (
             <ul className="divide-y divide-slate-100 text-sm">
-              {walletData.ledgerPreview.rows.slice(0, 5).map((row, i) => {
+              {walletPreview.ledgerPreview.rows.slice(0, 5).map((row, i) => {
                 const r = row as Record<string, unknown>;
                 const credit = ledgerIsCredit(r);
                 return (
@@ -214,16 +214,13 @@ export default async function StudentMyPage() {
                     <p className="mt-1 truncate text-sm font-medium text-slate-500">
                       {[emailLine, schoolLine].filter(Boolean).join(" · ")}
                     </p>
-                    {profileLoadError ? (
-                      <p className="mt-2 text-xs font-semibold text-amber-700">{profileLoadError.message}</p>
-                    ) : null}
                   </div>
                 </div>
                 <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {[
                     { label: "질문방", value: String(roomCount.n ?? 0) },
                     { label: "구독", value: String(activeMentorCount) },
-                    { label: "개별질문", value: String(individualQuestionCount) },
+                    { label: "개별질문", value: individualQuestionCount == null ? "—" : String(individualQuestionCount) },
                     { label: "의뢰·결제", value: paymentCount },
                   ].map((item) => (
                     <div

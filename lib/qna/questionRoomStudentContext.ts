@@ -120,22 +120,31 @@ export async function loadQuestionRoomSubscriptionContext(
   };
 }
 
-export async function loadMessageCountsByThreadId(
+/**
+ * D-QR-5: 스레드별 메시지 개수 + 최신 메시지를 한 번의 조회로 함께 파생한다.
+ * 구 동작은 loadMessageCountsByThreadId 와 loadLastMessageByThreadId 가 각각
+ * fetchMessagesForThreads(같은 threadIds) 를 호출해 동일 쿼리를 렌더당 2회 던졌다.
+ * fetchMessagesForThreads 는 created_at 오름차순이라 마지막 순회 값이 곧 최신 메시지다.
+ */
+export async function loadMessageStatsByThreadId(
   supabase: SupabaseClient,
   threadIds: string[]
-): Promise<Record<string, number>> {
-  const out: Record<string, number> = {};
-  for (const id of threadIds) out[id] = 0;
-  if (threadIds.length === 0) return out;
+): Promise<{ counts: Record<string, number>; last: Record<string, Row> }> {
+  const counts: Record<string, number> = {};
+  const last: Record<string, Row> = {};
+  for (const id of threadIds) counts[id] = 0;
+  if (threadIds.length === 0) return { counts, last };
 
   const pack = await fetchMessagesForThreads(supabase, threadIds);
-  if (pack.error) return out;
+  if (pack.error) return { counts, last };
 
   for (const m of pack.rows) {
     const tid = typeof m.thread_id === "string" ? m.thread_id : null;
-    if (tid) out[tid] = (out[tid] ?? 0) + 1;
+    if (!tid) continue;
+    counts[tid] = (counts[tid] ?? 0) + 1;
+    last[tid] = m; // 오름차순 정렬 → 마지막 대입이 최신
   }
-  return out;
+  return { counts, last };
 }
 
 export async function loadUnreadCountsByRoomId(
@@ -155,20 +164,6 @@ export async function loadUnreadCountsByRoomId(
     if (readQuestionThreadWorkflowStatus(t) === "answered") {
       out[rid] = (out[rid] ?? 0) + 1;
     }
-  }
-  return out;
-}
-
-export async function loadLastMessageByThreadId(
-  supabase: SupabaseClient,
-  threadIds: string[]
-): Promise<Record<string, Row>> {
-  const out: Record<string, Row> = {};
-  if (threadIds.length === 0) return out;
-  const pack = await fetchMessagesForThreads(supabase, threadIds);
-  for (const m of pack.rows) {
-    const tid = typeof m.thread_id === "string" ? m.thread_id : null;
-    if (tid) out[tid] = m;
   }
   return out;
 }

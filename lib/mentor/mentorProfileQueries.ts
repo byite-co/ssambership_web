@@ -13,22 +13,10 @@ export async function fetchMentorProfileRow(
   return { row: (data as Row) ?? null, error: null };
 }
 
-/**
- * W4(C10): 후보 테이블 부재 실측(187 baseline 0 — mentor_media/mentor_content_links/
- * mentor_link_items 모두 CREATE 없음) — 프로빙 제거, 현행 관측 동작(빈 결과) 고정.
- * 기능 정본화는 비범위. 소비처(공개 멘토 상세·프로필 편집·멘토 채널)는 기존과 동일하게
- * 빈 상태를 렌더한다.
- */
-export async function fetchMentorMediaSample(
-  supabase: SupabaseClient,
-  userId: string,
-  limit = 12
-): Promise<{ rows: Row[]; table: string | null; error: string | null }> {
-  void supabase;
-  void userId;
-  void limit;
-  return { rows: [], table: null, error: null };
-}
+// D-MT-13: fetchMentorMediaSample 스텁 제거 — 후보 테이블 부재(mentor_media/mentor_content_links/
+// mentor_link_items 모두 미생성)로 항상 빈 결과({rows:[],table:null})만 반환하던 미도입 기능.
+// 이를 쓰던 3곳(프로필 편집 미디어 섹션·공개 멘토 상세 번들·/mentor/channel 라우트)과 관련 빈 UI 를
+// 함께 제거했다. 미디어 기능 도입 시 정본 테이블과 함께 복원한다.
 
 /** 폼 initial 용(문자열) */
 export function getProfileFieldString(row: Row | null, keys: string[], fallback = ""): string {

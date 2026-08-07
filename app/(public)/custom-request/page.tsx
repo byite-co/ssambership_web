@@ -7,7 +7,7 @@ import { CustomRequestCategoryGrid } from "@/components/customRequest/CustomRequ
 import { CustomRequestPostListTable } from "@/components/customRequest/CustomRequestPostListTable";
 import { CustomRequestTrustBanner } from "@/components/customRequest/CustomRequestTrustBanner";
 import { createClient } from "@/lib/supabase/server";
-import { loadCustomRequestCategories, loadRecentCustomRequestPosts } from "@/lib/customRequest/customRequestQueries";
+import { loadRecentCustomRequestPosts } from "@/lib/customRequest/customRequestQueries";
 import { isCustomRequestFeatureEnabled } from "@/lib/shell/featureFlags";
 
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
@@ -22,10 +22,8 @@ export default async function CustomRequestPublicPage() {
   const isMentor = role === "mentor";
   const isLoggedIn = Boolean(user);
 
-  const [recent, cats] = await Promise.all([
-    loadRecentCustomRequestPosts(supabase, 3),
-    loadCustomRequestCategories(supabase),
-  ]);
+  // D-CR-8: 항상 빈 배열을 반환하던 사문 카테고리 로더 호출 제거 — 카테고리는 정적 상수(CustomRequestCategoryGrid).
+  const recent = await loadRecentCustomRequestPosts(supabase, 3);
 
   const registerHref = isMentor ? "/mentor/custom-request/dashboard" : "/custom-request/new";
   const registerLabel = isMentor ? "내 진행 의뢰 보기" : "의뢰 요청 등록하기";
@@ -68,7 +66,7 @@ export default async function CustomRequestPublicPage() {
 
         <section className="band scroll-mt-24" id="categories">
           <div className="wrap">
-            <CustomRequestCategoryGrid fromTable={cats} />
+            <CustomRequestCategoryGrid />
           </div>
         </section>
 

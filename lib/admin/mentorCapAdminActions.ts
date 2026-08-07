@@ -2,11 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { logAdminAction } from "@/lib/admin/adminActionLog";
+import { resolveAdminWriteClient } from "@/lib/admin/adminWriteClient";
 import { MENTOR_CAP_LIMIT_DEFAULT } from "@/lib/subscribe/mentorCapService";
 
 const TABLE = "mentor_profiles";
@@ -31,14 +31,15 @@ export async function updateMentorCapLimitAction(formData: FormData) {
   }
   const capLimit = Math.round(parsed * 10) / 10; // 소수 1자리
 
-  let admin: SupabaseClient;
-  try {
-    admin = createServiceRoleClient();
-  } catch {
-    admin = await createClient();
+  // D-AD-1: service role 없으면 세션 폴백 금지(fail-closed). mentor_profiles 에는 관리자 UPDATE
+  // 정책이 없어 세션 경로에서는 0행 갱신이 error 없이 "성공"으로 보였다.
+  const resolved = resolveAdminWriteClient(() => createServiceRoleClient());
+  if (!resolved.ok) {
+    redirect(detailPath(mentorUserId) + "?capError=" + encodeURIComponent(resolved.message));
   }
+  const admin = resolved.client;
 
-  const { error } = await admin
+  const { data, error } = await admin
     .from(TABLE)
     .update({ cap_limit: capLimit })
     .eq("user_id", mentorUserId)
@@ -49,6 +50,15 @@ export async function updateMentorCapLimitAction(formData: FormData) {
       detailPath(mentorUserId) +
         "?capError=" +
         encodeURIComponent("cap 상한 저장에 실패했습니다. (마이그레이션 050 적용 여부 확인)")
+    );
+  }
+
+  // D-AD-1: 반환 행수 검증 — 0행이면 저장이 실제로 반영되지 않은 것이므로 실패 처리.
+  if (((data as unknown[] | null)?.length ?? 0) === 0) {
+    redirect(
+      detailPath(mentorUserId) +
+        "?capError=" +
+        encodeURIComponent("cap 상한을 저장하지 못했습니다. 대상 멘토를 찾을 수 없습니다.")
     );
   }
 

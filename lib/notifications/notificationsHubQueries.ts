@@ -10,10 +10,19 @@ import {
   isNotificationReadRow,
   type NotificationCursor,
 } from "@/lib/notifications/notificationCursor";
+import {
+  applyUnreadScope,
+  NOTIFICATION_READ_COLUMN,
+  NOTIFICATION_USER_COLUMN,
+  type NotificationUnreadScopeBuilder,
+} from "@/lib/notifications/notificationUnreadScope";
 
 // 커서·읽음판정 순수 로직은 notificationCursor.ts 로 이동해 계약 테스트로 회귀 방지. 여기서 re-export.
 export { BOOL_READ_COLS, decodeNotificationCursor, encodeNotificationCursor, isNotificationReadRow };
 export type { NotificationCursor };
+// 미읽음 술어(목록·뱃지 공용)는 notificationUnreadScope.ts 로 이동(D-MT-10 회귀 방지). 여기서 re-export.
+export { applyUnreadScope };
+export type { NotificationUnreadScopeBuilder };
 
 type Row = Record<string, unknown>;
 
@@ -35,8 +44,9 @@ const TABLE = "notifications";
 // W4(C10): 컬럼 후보 프로빙(수신자 FK 6종·읽음 7종·유형 7종·정렬 4종 순회) 제거 —
 // 정본 고정: 수신자 user_id(132 정본 writer 가 set) · 읽음 is_read+read_at(133 정본 술어
 // `is_read is distinct from true`) · 유형 type · 정렬 created_at (187 baseline 실측).
-const USER_COLUMN = "user_id";
-const READ_COLUMN = "is_read";
+// 수신자·읽음 컬럼 정의는 notificationUnreadScope.ts 단일 정본에서 가져온다(D-MT-10).
+const USER_COLUMN = NOTIFICATION_USER_COLUMN;
+const READ_COLUMN = NOTIFICATION_READ_COLUMN;
 const TYPE_COLUMN = "type";
 // 키셋 정렬 기준. 동률은 항상 id(uuid, 유니크)로 안정화한다.
 const ORDER_COLUMN = "created_at";
@@ -138,11 +148,8 @@ export async function loadNotificationsHub(
   const categoryTypes = notificationCategoryTypeList(options.category ?? "all");
   // 스코프(수신자 → 읽음 여부 → 카테고리 event type 집합) 적용기 — cursor 이전 단계.
   const withScope = (q: QB): QB => {
-    let qq = q.eq(USER_COLUMN, userId);
-    if (options.filter === "unread") {
-      // 정본 미읽음 술어(133): is_read is distinct from true
-      qq = qq.not(READ_COLUMN, "is", true);
-    }
+    // 정본 미읽음 술어(133): is_read is distinct from true — 뱃지 count 와 같은 함수를 거친다(D-MT-10).
+    let qq = options.filter === "unread" ? applyUnreadScope(q, userId) : q.eq(USER_COLUMN, userId);
     if (categoryTypes) {
       qq = qq.in(TYPE_COLUMN, categoryTypes);
     }
@@ -152,13 +159,18 @@ export async function loadNotificationsHub(
     q.order(ORDER_COLUMN, { ascending }).order("id", { ascending });
 
   // 본인 전체 미읽음 수(뱃지) — 현재 페이지가 아니라 서버 count.
+  // D-MT-10 회귀 수정: DB RPC(notification_unread_count_self)는 앱 게이팅 타입
+  // (new_order_message/new_application)을 제외하고 수신자 매칭도 7컬럼 OR 로 더 넓어 웹 목록
+  // 술어와 갈린다 — 해당 타입 미읽음만 있으면 목록엔 안읽음이 보이는데 뱃지·'모두 읽음'이
+  // 사라졌다. 웹 허브 뱃지는 목록과 동일 술어(applyUnreadScope)의 직접 count 로 고정한다.
+  // RPC 는 앱(모바일) 표면 정본으로 남긴다. 실패는 기존 정책대로 unreadCount=null(0건과
+  // 구분) + 로그 — 카운트 실패를 0으로 삼키지 않는다(W4(C10) 명시적 degrade).
   let unreadCount: number | null = null;
   {
     const countBase = supabase.from(TABLE).select("id", { count: "exact", head: true }) as unknown as QB;
-    const cq = countBase.eq(USER_COLUMN, userId).not(READ_COLUMN, "is", true);
+    const cq = applyUnreadScope(countBase, userId);
     const { count, error: ce } = (await (cq as unknown as PromiseLike<QCountResult>)) as QCountResult;
     if (ce) {
-      // W4(C10): 표시 전용(뱃지) 명시적 degrade(성공 아님) — unreadCount=null 은 실패(0건과 구분), 로그로 표면화.
       console.error("[loadNotificationsHub] unread count", ce.message);
     } else {
       unreadCount = count ?? 0;

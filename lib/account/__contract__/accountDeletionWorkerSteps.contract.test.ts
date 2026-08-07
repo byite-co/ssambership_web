@@ -409,6 +409,102 @@ test("auth_soft_deleted → completed 로 마무리", async () => {
   ]);
 });
 
+// ── D-AU-4: 실패 종결 시 unban 보상 ──────────────────────────────────────────
+
+test("실패 종결(recordError concludedFailed) 시 unbanOnFailure 보상이 호출된다", async () => {
+  const calls: Calls = [];
+  const deps = makeDeps(calls, {
+    uncoveredBuckets: async () => ["shortform-videos"],
+    recordError: async (_u, err) => {
+      calls.push(`recordError:${err}`);
+      return { concludedFailed: true };
+    },
+    unbanOnFailure: async () => {
+      calls.push("unbanOnFailure");
+    },
+  });
+  const result = await runAccountDeletionJob({ userId: "u1", state: "locked", dryRun: false }, deps);
+
+  assert.equal(result.stopped, "uncovered_buckets");
+  assert.ok(calls.includes("unbanOnFailure"), "실패 종결 시 100년 밴을 해제한다");
+  assert.ok(
+    calls.findIndex((c) => c.startsWith("recordError")) < calls.indexOf("unbanOnFailure"),
+    "record_error 로 실패 종결을 확인한 뒤 unban 한다"
+  );
+});
+
+test("실패 종결이 아니면(recordError void) unbanOnFailure 는 호출되지 않는다", async () => {
+  const calls: Calls = [];
+  const deps = makeDeps(calls, {
+    uncoveredBuckets: async () => ["shortform-videos"],
+    // recordError 는 기본 fixture(void 반환) 사용 — concludedFailed 신호 없음.
+    unbanOnFailure: async () => {
+      calls.push("unbanOnFailure");
+    },
+  });
+  const result = await runAccountDeletionJob({ userId: "u1", state: "locked", dryRun: false }, deps);
+
+  assert.equal(result.stopped, "uncovered_buckets");
+  assert.ok(!calls.includes("unbanOnFailure"), "진행 중(재시도 가능) 오류는 밴을 풀지 않는다");
+});
+
+test("unbanOnFailure 실패는 원 정지 판정을 가리지 않는다", async () => {
+  const calls: Calls = [];
+  const deps = makeDeps(calls, {
+    uncoveredBuckets: async () => ["shortform-videos"],
+    recordError: async () => ({ concludedFailed: true }),
+    unbanOnFailure: async () => {
+      calls.push("unbanOnFailure");
+      throw new Error("gotrue down");
+    },
+    log: () => {}, // 보상 실패 로그는 아래 전용 테스트가 고정한다 — 여기서는 판정만 본다.
+  });
+  const result = await runAccountDeletionJob({ userId: "u1", state: "locked", dryRun: false }, deps);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.stopped, "uncovered_buckets", "보상 실패가 정지 사유를 덮어쓰지 않는다");
+  assert.ok(calls.includes("unbanOnFailure"));
+});
+
+test("unbanOnFailure 실패는 무음이 아니다 — deps.log 에 marker+userId 로그 정확히 1건", async () => {
+  const calls: Calls = [];
+  const logged: Array<{ msg: string; meta?: Record<string, unknown> }> = [];
+  const deps = makeDeps(calls, {
+    uncoveredBuckets: async () => ["shortform-videos"],
+    recordError: async () => ({ concludedFailed: true }),
+    unbanOnFailure: async () => {
+      throw new Error("gotrue down");
+    },
+    log: (msg, meta) => logged.push({ msg, meta }),
+  });
+  await runAccountDeletionJob({ userId: "u1", state: "locked", dryRun: false }, deps);
+
+  const entries = logged.filter((l) => l.msg === "unban_on_failure_failed");
+  assert.equal(entries.length, 1, "failed 는 재클레임 불가라 이 로그가 유일한 흔적이다");
+  assert.equal(entries[0].meta?.userId, "u1", "수동 밴 해제를 위해 userId 를 싣는다");
+});
+
+test("unbanOnFailure 실패: deps.log 미주입이면 console.error 로 1건 남긴다", async (t) => {
+  const errors: unknown[][] = [];
+  t.mock.method(console, "error", (...args: unknown[]) => {
+    errors.push(args);
+  });
+  const calls: Calls = [];
+  const deps = makeDeps(calls, {
+    uncoveredBuckets: async () => ["shortform-videos"],
+    recordError: async () => ({ concludedFailed: true }),
+    unbanOnFailure: async () => {
+      throw new Error("gotrue down");
+    },
+    // log 미주입 — cron 배선(워커 log 비주입)과 동일한 조건.
+  });
+  await runAccountDeletionJob({ userId: "u1", state: "locked", dryRun: false }, deps);
+
+  const entries = errors.filter((args) => String(args[0]).includes("unban_on_failure_failed"));
+  assert.equal(entries.length, 1, "log 채널이 없어도 무음 금지 — console.error 1건");
+  assert.equal((entries[0][1] as Record<string, unknown> | undefined)?.userId, "u1");
+});
+
 test("이미 completed 인 job 재호출은 무해(파괴 동작 0)", async () => {
   const calls: Calls = [];
   const deps = makeDeps(calls);

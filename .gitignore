@@ -39,3 +39,6 @@ screenshots_final/
 screenshots_*/
 screenshots*.zip
 shots_*.zip
+
+# Claude Code 로컬 상태(에이전트 worktree 등) — 커밋 금지
+.claude/

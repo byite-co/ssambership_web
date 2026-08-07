@@ -4,7 +4,7 @@ import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
 import { buildMentorProfileDisplay, mentorVerificationKo } from "@/lib/mentor/mentorDisplayFields";
-import { fetchMentorMediaSample, fetchMentorProfileRow } from "@/lib/mentor/mentorProfileQueries";
+import { fetchMentorProfileRow } from "@/lib/mentor/mentorProfileQueries";
 import { fetchMentorIndividualQuestionPrice } from "@/lib/individualQuestion/individualQuestionPricing";
 import { cashKrwFromAmountCents } from "@/lib/subscribe/mentorPlanPricing";
 import { fetchPlansForMentor } from "@/lib/mentor/publicMentorBundle";
@@ -22,7 +22,6 @@ export default async function MentorProfileEditPage(props: PageProps) {
   const supabase = await createClient();
   const { row, error: re } = await fetchMentorProfileRow(supabase, user.id);
   const { data: userRow } = await getUserProfileById(supabase, user.id);
-  const media = await fetchMentorMediaSample(supabase, user.id, 8);
   const plans = await fetchPlansForMentor(supabase, user.id);
   const { byTier } = assignPlansByTier(plans.rows);
   const iqPrice = await fetchMentorIndividualQuestionPrice(supabase, user.id);
@@ -85,7 +84,7 @@ export default async function MentorProfileEditPage(props: PageProps) {
       </div>
       <MentorProfileEditForm
         initial={initial}
-        query={{ row, err: re, media: { rows: media.rows, table: media.table, error: null }, byTier }}
+        query={{ row, err: re, byTier }}
         accountEmail={userRow?.email ?? user.email ?? null}
         ok={ok}
         errorMessage={err ? mapDataErrorMessage(err) : null}

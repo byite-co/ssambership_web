@@ -193,7 +193,10 @@ export function QuestionRoomStudentDesignWorkspace(props: {
   const [weeklyUsage, setWeeklyUsage] = useState<WeeklyUsageSnapshot | null>(
     () => (mentorId ? (props.initialUsageByMentorId?.[mentorId] ?? null) : null)
   );
-  const [usageLoading, setUsageLoading] = useState(() => Boolean(mentorId));
+  // D-QR-4: SSR 스냅샷이 있으면 로딩 표시 없이 즉시 확정(재조회 안 함).
+  const [usageLoading, setUsageLoading] = useState(
+    () => Boolean(mentorId) && !(mentorId ? props.initialUsageByMentorId?.[mentorId] : null)
+  );
   const [usageByMentorId, setUsageByMentorId] = useState<Record<string, WeeklyUsageSnapshot>>(
     props.initialUsageByMentorId ?? {}
   );
@@ -204,7 +207,8 @@ export function QuestionRoomStudentDesignWorkspace(props: {
   if (prevUsageMentor !== mentorId) {
     setPrevUsageMentor(mentorId);
     if (initialUsageForMentor) setWeeklyUsage(initialUsageForMentor);
-    if (mentorId) setUsageLoading(true);
+    // SSR 스냅샷이 있으면 로딩 없이 확정, 없으면 아래 effect 가 채운다.
+    if (mentorId) setUsageLoading(!initialUsageForMentor);
   }
 
   // 순수 fetch(설정 없음)와 결과 반영을 분리 — effect 본문에서 동기 setState 없이(await 이후에만) 반영.
@@ -230,8 +234,14 @@ export function QuestionRoomStudentDesignWorkspace(props: {
     [mentorId]
   );
 
+  // D-QR-4: SSR 스냅샷(initialUsageByMentorId)이 있으면 재조회하지 않는다.
+  //  구 동작은 SSR 이 이미 준 값을 마운트 직후 HTTP 로 전원 재요청(방 N개 = RPC 2N회)했다.
+  //  이제 스냅샷이 없는 멘토만 채워 넣는다.
+  const initialUsage = props.initialUsageByMentorId;
   useEffect(() => {
     if (!mentorId) return;
+    // SSR 스냅샷이 있으면 재조회하지 않는다(로딩 상태는 렌더 파생 리셋에서 이미 확정).
+    if (initialUsage?.[mentorId]) return;
     let cancelled = false;
     (async () => {
       const usage = await fetchUsageForMentor(mentorId);
@@ -242,14 +252,16 @@ export function QuestionRoomStudentDesignWorkspace(props: {
     return () => {
       cancelled = true;
     };
-  }, [mentorId, fetchUsageForMentor, applyUsageForMentor]);
+  }, [mentorId, initialUsage, fetchUsageForMentor, applyUsageForMentor]);
 
   useEffect(() => {
     const ids = new Set<string>();
     for (const r of props.rooms.rows) {
       const mid = partyUserIdFromRoomRow(r, "mentor");
-      if (mid && mid !== mentorId) ids.add(mid);
+      // SSR 스냅샷이 없는 멘토만 보충 조회(현재 선택 멘토는 위 effect 담당).
+      if (mid && mid !== mentorId && !initialUsage?.[mid]) ids.add(mid);
     }
+    if (ids.size === 0) return;
     let cancelled = false;
     for (const mid of ids) {
       void fetchUsageForMentor(mid).then((usage) => {
@@ -259,7 +271,7 @@ export function QuestionRoomStudentDesignWorkspace(props: {
     return () => {
       cancelled = true;
     };
-  }, [props.rooms.rows, mentorId, fetchUsageForMentor, applyUsageForMentor]);
+  }, [props.rooms.rows, mentorId, initialUsage, fetchUsageForMentor, applyUsageForMentor]);
 
   const filteredRooms = useMemo(() => {
     const q = search.trim().toLowerCase();

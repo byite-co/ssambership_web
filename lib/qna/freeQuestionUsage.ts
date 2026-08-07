@@ -189,63 +189,6 @@ export async function assertFreeQuestionAllowedAndRecord(
 }
 
 /**
- * `free_question_usage` 에 thread_id 가 없으므로, 사용 시각과 스레드 created_at 을 1:1 근접 매칭한다.
- * (폼: usage 기록 → 스레드 생성 / API: 스레드 생성 → usage 기록 — 양방향 허용)
- */
-export const FREE_QUESTION_THREAD_PAIR_MAX_MS = 15 * 60 * 1000;
-
-function parseRowTimestamp(v: unknown): number | null {
-  if (typeof v !== "string" || !v.trim()) {
-    return null;
-  }
-  const t = Date.parse(v);
-  return Number.isNaN(t) ? null : t;
-}
-
-function pairFreeUsageRowsToThreadIds(
-  usages: readonly { created_at: unknown }[],
-  threads: readonly { id: unknown; created_at: unknown }[],
-  maxMs: number
-): Set<string> {
-  const paired = new Set<string>();
-  const usedThreadIds = new Set<string>();
-
-  for (const usage of usages) {
-    const usageTs = parseRowTimestamp(usage.created_at);
-    if (usageTs == null) {
-      continue;
-    }
-
-    let bestId: string | null = null;
-    let bestDiff = Infinity;
-
-    for (const thread of threads) {
-      const threadId =
-        typeof thread.id === "string" ? thread.id : thread.id != null ? String(thread.id) : "";
-      if (!threadId || usedThreadIds.has(threadId)) {
-        continue;
-      }
-      const threadTs = parseRowTimestamp(thread.created_at);
-      if (threadTs == null) {
-        continue;
-      }
-      const diff = Math.abs(threadTs - usageTs);
-      if (diff <= maxMs && diff < bestDiff) {
-        bestDiff = diff;
-        bestId = threadId;
-      }
-    }
-
-    if (bestId) {
-      paired.add(bestId);
-      usedThreadIds.add(bestId);
-    }
-  }
-
-  return paired;
-}
-
-/**
  * 무료 스레드 짝짓기용 usage 조회 — service_role 전용.
  * `free_question_usage` RLS는 student_id=auth.uid() select만 허용하므로 멘토 세션에서도
  * 동작하도록 service_role 로 읽는다.
@@ -307,26 +250,13 @@ export async function loadFreeQuestionThreadIdsInRoom(
     if (tid) roomThreadIds.add(tid);
   }
 
-  // 1) thread_id 정본 링크가 있는 행은 정확 매칭(이 room 소속만).
+  // D-QR-10: thread_id 정본 링크가 있는 행만 인정한다(이 room 소속만).
+  // 구 "링크 없는 레거시 행 ±15분 시각 근접 폴백" 은 유료 스레드를 무료체험으로 오분류할 수 있어
+  // 제거했다(P1-8A 136 이후 usage 행은 항상 thread_id FK+UNIQUE 로 정본 링크된다).
   const result = new Set<string>();
-  const legacyUsages: { created_at: unknown }[] = [];
   for (const u of usages) {
     const linked = typeof u.thread_id === "string" ? u.thread_id : u.thread_id != null ? String(u.thread_id) : "";
-    if (linked) {
-      if (roomThreadIds.has(linked)) result.add(linked);
-    } else {
-      legacyUsages.push({ created_at: u.created_at });
-    }
-  }
-
-  // 2) 링크 없는 레거시 행만 이미 매칭되지 않은 thread 에 시각 근접 폴백.
-  if (legacyUsages.length > 0) {
-    const remainingThreads = (threads as { id: unknown; created_at: unknown }[]).filter((t) => {
-      const tid = typeof t.id === "string" ? t.id : t.id != null ? String(t.id) : "";
-      return tid && !result.has(tid);
-    });
-    const paired = pairFreeUsageRowsToThreadIds(legacyUsages, remainingThreads, FREE_QUESTION_THREAD_PAIR_MAX_MS);
-    paired.forEach((id) => result.add(id));
+    if (linked && roomThreadIds.has(linked)) result.add(linked);
   }
 
   return { ids: result, error: null };

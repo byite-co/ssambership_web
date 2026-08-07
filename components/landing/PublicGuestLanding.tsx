@@ -56,13 +56,19 @@ const DEFAULT_HERO_CTAS: HeroCtas = {
   secondary: { href: "/signup", label: "무료 체험 시작하기" },
 };
 
-export function PublicGuestLanding(props: { stats: LandingPublicStats; heroCtas?: HeroCtas }) {
+export function PublicGuestLanding(props: { stats: LandingPublicStats; heroCtas?: HeroCtas; loadError?: boolean }) {
   const STATS = buildStats(props.stats);
   // 실수치가 없으면("준비 중") 통계 블록 전체를 숨김 — 빈 값 노출 방지
   const showStats = STATS.every((s) => s.value !== "준비 중");
   const heroCtas = props.heroCtas ?? DEFAULT_HERO_CTAS;
   return (
     <div className="w-full">
+      {/* D-ST-4: 데이터 로드 실패 시 '텅 빈 정상 화면'으로 오인되지 않도록 배너 노출 */}
+      {props.loadError ? (
+        <div className="bg-amber-50 px-4 py-3 text-center text-sm font-semibold text-amber-900" role="status">
+          일시적으로 정보를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.
+        </div>
+      ) : null}
       {/* Section 1 — Hero */}
       <section className="bg-white">
         <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 sm:px-6 sm:py-18 lg:grid-cols-2 lg:items-center lg:gap-12 lg:px-8 lg:py-24">

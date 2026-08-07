@@ -26,6 +26,7 @@ export default async function CommunityBoardDetailPage(props: Props) {
   const commentErrorCode = typeof sp.commentError === "string" ? sp.commentError : null;
   const reportOk = sp.reportOk === "1" || sp.reportOk === "true";
   const reportErrorCode = typeof sp.reportError === "string" ? sp.reportError : null;
+  const reactionError = sp.reactionError === "1" || sp.reactionError === "true";
 
   const supabase = await createClient();
   const { user } = await getServerUserWithProfile();
@@ -102,6 +103,7 @@ export default async function CommunityBoardDetailPage(props: Props) {
               liked={reactions.liked}
               scrapped={reactions.scrapped}
               commentErrorCode={commentErrorCode}
+              reactionError={reactionError}
               reportOk={reportOk}
               reportErrorCode={reportErrorCode}
               authorMentorId={authorMentorId}

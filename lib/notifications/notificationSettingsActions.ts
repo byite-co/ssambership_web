@@ -10,18 +10,40 @@ import {
   type NotificationSettings,
 } from "@/lib/notifications/notificationSettingsModel";
 
-/** 본인 알림 설정 조회(없으면 기본 전부 on). RLS: 본인 행만. */
-export async function getMyNotificationSettings(): Promise<NotificationSettings> {
+export type MyNotificationSettingsResult = {
+  settings: NotificationSettings;
+  /**
+   * D-MT-12: 조회 실패 여부. true 면 `settings` 는 기본값 placeholder 이며 사용자의 실제
+   * 설정이 아니다(폼을 비활성화하고 재시도를 안내해야 한다). false + 행 없음은 정상적인
+   * '기본값(전부 on)'을 뜻한다.
+   */
+  loadFailed: boolean;
+};
+
+/**
+ * 본인 알림 설정 조회(행 없으면 기본 전부 on). RLS: 본인 행만.
+ *
+ * D-MT-12: 조회 실패(error)를 defaultNotificationSettings()(전부 on)로 흡수하지 않는다.
+ * 실패를 그대로 저장하면 알림을 끈 사용자의 설정이 전부 on 으로 덮어써진다(설정 유실).
+ * 행 없음(기본값)과 조회 실패를 loadFailed 로 구분해 반환한다.
+ */
+export async function getMyNotificationSettings(): Promise<MyNotificationSettingsResult> {
   const { user } = await getServerAuthUser();
-  if (!user) return defaultNotificationSettings();
+  if (!user) return { settings: defaultNotificationSettings(), loadFailed: true };
   const supabase = await createClient();
   const { data, error } = await supabase
     .from("notification_settings")
     .select("push_enabled, groups")
     .eq("user_id", user.id)
     .maybeSingle();
-  if (error) return defaultNotificationSettings();
-  return notificationSettingsFromRow(data as { push_enabled?: unknown; groups?: unknown } | null);
+  if (error) {
+    console.error("[getMyNotificationSettings]", error.message);
+    return { settings: defaultNotificationSettings(), loadFailed: true };
+  }
+  return {
+    settings: notificationSettingsFromRow(data as { push_enabled?: unknown; groups?: unknown } | null),
+    loadFailed: false,
+  };
 }
 
 /**

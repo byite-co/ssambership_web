@@ -254,6 +254,12 @@ export function WalletLedgerPageBody(props: { data: WalletLedgerPageData }) {
       </section>
 
       <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+        {/* D-ST-13: 안전 상한 도달 시 조용히 자르지 않고 명시한다(과거 내역 유실 오인 방지). */}
+        {data.filter.truncated ? (
+          <p className="mb-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-900">
+            내역이 매우 많아 일부만 표시했습니다. 기간을 좁혀서 조회해 주세요.
+          </p>
+        ) : null}
         {data.ledger.error ? (
           <p className="text-sm text-red-700">사용 내역을 불러오지 못했습니다.</p>
         ) : ledgerRows.length === 0 ? (

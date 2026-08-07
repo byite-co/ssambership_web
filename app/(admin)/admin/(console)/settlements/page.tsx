@@ -113,7 +113,9 @@ function SettlementTable({ rows }: { rows: AdminSettlementListItem[] }) {
 
 export default async function AdminSettlementsPage() {
   const supabase = await createClient();
-  await refreshSubscriptionSettlementItemsBestEffort();
+  // D-AD-9: refresh 실패를 무음 처리하지 않는다 — 실패 시 상단에 동기화 실패 배너를 노출해
+  // 낡은 스냅샷을 최신 데이터로 오인하지 않게 한다.
+  const refresh = await refreshSubscriptionSettlementItemsBestEffort();
   const { rows, summary, queryOk, byMentorHint } = await loadAdminSettlementsList(supabase, 50);
 
   const summaryBody = queryOk
@@ -153,6 +155,15 @@ export default async function AdminSettlementsPage() {
       ]}
     >
       <div className="max-w-6xl mx-auto space-y-6 pb-12">
+        {!refresh.ok ? (
+          <div className="rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900">
+            <p className="font-bold">정산 동기화에 실패했습니다.</p>
+            <p className="mt-1 text-xs text-amber-800">
+              아래 정산 내역이 최신 상태가 아닐 수 있습니다. 서버 설정(서비스 키) 또는 연결 상태를 확인한 뒤 새로고침해 주세요.
+            </p>
+          </div>
+        ) : null}
+
         {!queryOk ? (
           <div className="rounded-xl border border-red-200 bg-red-50/60 p-5 text-sm text-red-950">
             <p className="font-bold">목록을 불러오지 못했습니다.</p>

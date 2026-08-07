@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { logAdminAction } from "@/lib/admin/adminActionLog";
+import { resolveAdminWriteClient } from "@/lib/admin/adminWriteClient";
+import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 
 function idsFromForm(formData: FormData): string[] {
   return formData
@@ -31,7 +33,10 @@ export async function bulkUpdateContentReportsAction(formData: FormData) {
     redirect(backUrl(path, "error", "허용되지 않은 일괄 처리입니다."));
   }
 
-  const admin = createServiceRoleClient();
+  // D-AD-4: service role 없으면 fail-closed(한글 안내) — 미가공 500 방지.
+  const resolved = resolveAdminWriteClient(() => createServiceRoleClient());
+  if (!resolved.ok) redirect(backUrl(path, "error", resolved.message));
+  const admin = resolved.client;
   const patch: Record<string, unknown> = { status: nextStatus };
   if (nextStatus === "resolved" || nextStatus === "dismissed") {
     patch.resolved_at = new Date().toISOString();
@@ -43,7 +48,8 @@ export async function bulkUpdateContentReportsAction(formData: FormData) {
     .in("id", ids)
     .in("status", ["pending", "reviewing"])
     .select("id");
-  if (error) redirect(backUrl(path, "error", error.message));
+  // D-AD-3: DB 원문 대신 표시용 문구만 URL 로 노출.
+  if (error) redirect(backUrl(path, "error", toAdminDisplayError(error.message, "reports") ?? "일괄 처리에 실패했습니다."));
 
   const n = (data as unknown[] | null)?.length ?? 0;
   await logAdminAction(admin, {
@@ -67,14 +73,25 @@ export async function bulkUpdateDisputesAction(formData: FormData) {
     redirect(backUrl(path, "error", "허용되지 않은 일괄 처리입니다."));
   }
 
-  const admin = createServiceRoleClient();
+  // D-AD-4: service role 없으면 fail-closed(한글 안내).
+  const resolved = resolveAdminWriteClient(() => createServiceRoleClient());
+  if (!resolved.ok) redirect(backUrl(path, "error", resolved.message));
+  const admin = resolved.client;
   const patch: Record<string, unknown> = { status: nextStatus };
   if (nextStatus === "resolved" || nextStatus === "dismissed") {
     patch.resolved_at = new Date().toISOString();
     patch.resolved_by = user.id;
   }
-  const { data, error } = await admin.from("disputes").update(patch).in("id", ids).select("id");
-  if (error) redirect(backUrl(path, "error", error.message));
+  // D-AD-2: 현재 상태 게이트 — 종말 상태(resolved/dismissed/sanction_permanent)만 덮어쓰지 않음
+  // (단건 statusIn 규약과 일치). sanction_7d/30d 는 기간 제재 중에도 전이 가능해야 한다(출구 보장).
+  const { data, error } = await admin
+    .from("disputes")
+    .update(patch)
+    .in("id", ids)
+    .in("status", ["open", "under_review", "escalated", "sanction_7d", "sanction_30d"])
+    .select("id");
+  // D-AD-3: DB 원문 대신 표시용 문구만 URL 로 노출.
+  if (error) redirect(backUrl(path, "error", toAdminDisplayError(error.message, "disputes") ?? "일괄 처리에 실패했습니다."));
 
   const n = (data as unknown[] | null)?.length ?? 0;
   await logAdminAction(admin, {
@@ -98,10 +115,14 @@ export async function bulkProcessRefundsAction(formData: FormData) {
     redirect(backUrl(path, "error", "허용되지 않은 일괄 처리입니다."));
   }
 
-  const admin = createServiceRoleClient();
+  // D-AD-4: service role 없으면 fail-closed(한글 안내).
+  const resolved = resolveAdminWriteClient(() => createServiceRoleClient());
+  if (!resolved.ok) redirect(backUrl(path, "error", resolved.message));
+  const admin = resolved.client;
   const rpc = decision === "approve" ? "approve_refund_request_admin" : "reject_refund_request_admin";
   let success = 0;
-  let failed = 0;
+  // D-AD-12: 실패한 refundId 를 식별해 로그·안내에 남긴다(재시도 시 전량 재실행 방지).
+  const failedIds: string[] = [];
   for (const refundId of ids) {
     const { data, error } = await admin.rpc(rpc, {
       p_refund_id: refundId,
@@ -109,15 +130,16 @@ export async function bulkProcessRefundsAction(formData: FormData) {
       p_admin_note: `일괄 ${decision === "approve" ? "승인" : "거절"}`,
     });
     const payload = (data ?? null) as { ok?: boolean } | null;
-    if (error || !payload?.ok) failed += 1;
+    if (error || !payload?.ok) failedIds.push(refundId);
     else success += 1;
   }
+  const failed = failedIds.length;
 
   await logAdminAction(admin, {
     adminId: user.id,
     actionType: `refund_bulk_${decision}`,
     targetType: "refund",
-    detail: { requested: ids.length, success, failed },
+    detail: { requested: ids.length, success, failed, failedIds },
   });
   revalidatePath(path);
   revalidatePath("/admin/dashboard");
@@ -125,7 +147,9 @@ export async function bulkProcessRefundsAction(formData: FormData) {
     backUrl(
       path,
       failed > 0 ? "error" : "ok",
-      `일괄 ${decision === "approve" ? "승인" : "거절"}: 성공 ${success}건${failed ? `, 실패 ${failed}건` : ""}.`
+      `일괄 ${decision === "approve" ? "승인" : "거절"}: 성공 ${success}건${
+        failed ? `, 실패 ${failed}건(미처리: ${failedIds.join(", ")})` : ""
+      }.`
     )
   );
 }

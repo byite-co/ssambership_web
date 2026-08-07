@@ -52,6 +52,8 @@ async function loadRelationshipRows(
 ): Promise<{
   subscriptions: SubscriptionRelationRow[];
   individualQuestions: IndividualQuestionRelationRow[];
+  /** D-MT-14: 관계 쿼리 중 하나라도 실패하면 true — 무음 false 대신 '판정 불가'로 전파. */
+  lookupFailed: boolean;
 }> {
   // coalesce(claimed, designated) = mentor
   //   ⟺ (claimed = mentor) OR (claimed IS NULL AND designated = mentor)
@@ -86,9 +88,21 @@ async function loadRelationshipRows(
     ...(iqDesignated.error ? [] : ((iqDesignated.data ?? []) as IndividualQuestionRelationRow[])),
   ];
 
+  // D-MT-14: 관계 쿼리 오류를 빈 배열로 흡수하면 자격 있는 학생이 이유 없이 '작성 불가'로
+  // 조용히 거부된다(fail-closed 무음). 실패 여부를 별도 신호로 올려 '판정 불가'로 전파한다.
+  const lookupFailed = Boolean(subs.error || iqClaimed.error || iqDesignated.error);
+  if (lookupFailed) {
+    console.error("[loadRelationshipRows]", {
+      subs: subs.error?.message,
+      iqClaimed: iqClaimed.error?.message,
+      iqDesignated: iqDesignated.error?.message,
+    });
+  }
+
   return {
     subscriptions: subs.error ? [] : ((subs.data ?? []) as SubscriptionRelationRow[]),
     individualQuestions,
+    lookupFailed,
   };
 }
 
@@ -117,7 +131,18 @@ export async function checkReviewEligibility(
     return decideReviewEligibility({ existingReview: own.review, relationshipEligible: true });
   }
 
-  const rows = await loadRelationshipRows(supabase, authorId, mentorId);
+  const { lookupFailed, ...rows } = await loadRelationshipRows(supabase, authorId, mentorId);
+  // D-MT-14: 관계 조회가 실패했으면 '판정 불가'로 반환한다(무음 false 금지 — 자격 있는
+  // 학생이 조용히 거부되지 않게). 기존 후기 조회 실패(LOOKUP_FAILED)와 동일 규약.
+  if (lookupFailed) {
+    return {
+      eligible: false,
+      mode: "create",
+      existingReviewId: null,
+      canEdit: false,
+      reason: REVIEW_ELIGIBILITY_REASON.LOOKUP_FAILED,
+    };
+  }
   const relationshipEligible = hasRelationshipEligibility({ mentorId, ...rows });
 
   return decideReviewEligibility({ existingReview: null, relationshipEligible });

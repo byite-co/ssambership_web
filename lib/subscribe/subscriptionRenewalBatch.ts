@@ -155,9 +155,12 @@ async function markCanceledAtPeriodEnd(
 ): Promise<boolean> {
   const subscriptionId = getSubscriptionId(row);
   if (!subscriptionId) return false;
+  // D-ST-16: 사용자 자발 해지(예약 만료)는 'canceled' 로 기록한다. 미납 만료(markExpired)의
+  // 'expired' 와 event_type 으로 구분되어야 환불·정산·CS 분석에서 오분류되지 않는다.
+  // ('canceled' 는 064 event_type CHECK 에 포함된 허용값이다.)
   const eventId = await upsertTerminalBillingEvent(supabase, {
     row,
-    eventType: "expired",
+    eventType: "canceled",
     idempotencyKey: `sub_cancel:${subscriptionId}:${periodKeyFromRow(row)}`,
     atIso,
   });

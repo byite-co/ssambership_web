@@ -8,7 +8,10 @@ export async function loadFavoriteMentorIdsForUser(
 ): Promise<{ ids: Set<string>; error: string | null }> {
   const { data, error } = await supabase.from(TABLE).select("mentor_id").eq("user_id", userId);
   if (error) {
-    if (/does not exist|relation/i.test(error.message)) {
+    // D-ST-17: 문자열(메시지) 정규식으로 오류를 정상 결과로 위장하지 않는다.
+    // favorites 테이블 자체가 없는 배포(42P01 undefined_table)만 '찜 기능 미배포'로 간주해
+    // 빈 목록으로 흡수하고, 그 외 오류(권한·네트워크 등)는 error 를 그대로 전파한다.
+    if (error.code === "42P01") {
       return { ids: new Set(), error: null };
     }
     return { ids: new Set(), error: error.message };

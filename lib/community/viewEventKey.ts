@@ -7,10 +7,12 @@
  * crypto.randomUUID() 를 써 멱등 계약이 사실상 무력화됐고, 구 게시판은 event_key 없는 v1
  * (increment_community_post_view)이라 계수 조작에 무방비였다.
  *
- * 이 키는 암호학적 비밀이 아니라 **중복 제거 버킷 식별자**다. 브라우저·서버 양쪽에서 동기로
- * 동작해야 하므로 Web Crypto(async)가 아니라 결정적 128-bit 해시(cyrb128)로 UUID 형태
- * 문자열을 만든다. RPC 는 이 값을 UNIQUE(event_key)로만 사용한다.
+ * 이 키는 암호학적 비밀이 아니라 **중복 제거 버킷 식별자**다. UUID 파생은 동기 결정적
+ * 128-bit 해시(cyrb128)로 하고, RPC 는 이 값을 UNIQUE(event_key)로만 사용한다.
+ * 익명 뷰어 키(anonViewerKeyFromHeaders)는 node:crypto sha256 을 쓰므로 이 모듈은
+ * 서버·테스트 전용이다 — 클라이언트 번들에서 import 하지 않는다(키 파생은 전부 서버 수행).
  */
+import { createHash } from "node:crypto";
 
 /** cyrb128 — 문자열 → 128-bit(4×32) 결정적 해시. 비암호. */
 function cyrb128(str: string): [number, number, number, number] {
@@ -54,7 +56,35 @@ export function hourBucket(now: Date = new Date()): string {
   return now.toISOString().slice(0, 13);
 }
 
-/** 뷰어 식별자: 로그인 시 uid, 비로그인 시 클라이언트가 보관한 익명 세션 id. */
+/**
+ * 뷰어 식별자: 로그인 시 uid, 비로그인 시 anonViewerKeyFromHeaders 로 파생한 익명 키.
+ * viewerId 미전달(null) 시 최후 폴백 "anon" — 전세계 비로그인 뷰어가 한 버킷으로 접히므로
+ * 호출부는 비로그인이라도 가능한 한 익명 키를 넘겨야 한다(D-CM-3 회귀 방지).
+ */
 export function viewEventKeyFor(postId: string, viewerId: string | null | undefined, now: Date = new Date()): string {
   return deriveViewEventKey([postId, viewerId ?? "anon", hourBucket(now)]);
+}
+
+/**
+ * 비로그인 뷰어 키 (D-CM-3 회귀 수정): 첫 홉 IP + User-Agent 를 sha256 해싱해
+ * "anonh:<hex16>" 을 만든다. 상수 "anon" 폴백은 (게시글, 시간버킷)당 전세계 1회만
+ * 계수되는 과보정이라, 두 값이 **모두** 없을 때만 폴백한다.
+ * 원본 IP·UA 는 저장·로깅하지 않는다 — event_key 파생에 해시만 쓴다.
+ */
+export function anonViewerKeyFromHeaders(ip: string | null | undefined, ua: string | null | undefined): string {
+  const ipPart = ip?.trim() ?? "";
+  const uaPart = ua?.trim() ?? "";
+  if (!ipPart && !uaPart) return "anon";
+  const hex = createHash("sha256").update(`${ipPart}|${uaPart}`).digest("hex");
+  return `anonh:${hex.slice(0, 16)}`;
+}
+
+/**
+ * 요청 헤더 → 익명 뷰어 키. x-forwarded-for 는 "client, proxy1, proxy2" 형태이므로
+ * 첫 홉만 취한다. Fetch Headers·next/headers 양쪽과 호환되는 최소 인터페이스만 받는다.
+ */
+export function anonViewerKeyFromRequestHeaders(h: { get(name: string): string | null }): string {
+  const xff = h.get("x-forwarded-for");
+  const firstHop = xff ? (xff.split(",")[0] ?? "").trim() : "";
+  return anonViewerKeyFromHeaders(firstHop || null, h.get("user-agent"));
 }

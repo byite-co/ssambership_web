@@ -23,28 +23,10 @@ import { shortOrderIdForDisplay } from "@/lib/utils/formatOrderIdForDisplay";
 
 type Row = Record<string, unknown>;
 
-/** `orderAccess.canAccessOrder` 학생 분기와 동일 순서 */
-export const STUDENT_ORDER_OWNER_FK_CANDIDATES = [
-  "student_id",
-  "buyer_id",
-  "user_id",
-  "client_id",
-  "author_id",
-  "requester_id",
-] as const;
-
 const CUSTOM_REQUEST_ORDERS_TABLE = "custom_request_orders" as const;
 
-async function listExistingStudentOwnerColumns(supabase: SupabaseClient, table: string): Promise<string[]> {
-  const out: string[] = [];
-  for (const col of STUDENT_ORDER_OWNER_FK_CANDIDATES) {
-    const { error } = await supabase.from(table).select(col).limit(1);
-    if (!error) {
-      out.push(col);
-    }
-  }
-  return out;
-}
+// D-CR-2: 소유 FK 컬럼 프로빙(요청당 +7 쿼리) 제거 — custom_request_orders.student_id(NOT NULL, 003)
+// 단일 정본 컬럼으로 고정. 주문 상세·멘토 목록 조회부(findOrderForPostAndStudent 등)와 동일한 정본화.
 
 function pickDeadlineRaw(row: Row): unknown {
   for (const k of ["proposed_due", "delivery_at", "deliver_by", "due_at", "deadline", "expected_delivery_at"] as const) {
@@ -162,8 +144,8 @@ function formatAmountLine(row: Row): string {
 }
 
 /**
- * `public.custom_request_orders` 만 조회. 학생 소유 FK 컬럼(스키마에 존재하는 것들)으로 OR 필터.
- * RLS 오탐 대비로 클라이언트에서 `canAccessOrder` 재검증.
+ * `public.custom_request_orders` 만 조회. D-CR-2: 학생 소유 정본 컬럼 `student_id` 단일 필터.
+ * RLS 오탐 대비로 클라이언트에서 `canAccessOrder` 재검증(방어적).
  */
 export async function fetchStudentCustomRequestOrdersFromPrimaryTable(
   supabase: SupabaseClient,
@@ -171,32 +153,28 @@ export async function fetchStudentCustomRequestOrdersFromPrimaryTable(
   limit = 80
 ): Promise<{ rows: Row[]; error: string | null; probe: string }> {
   const t = CUSTOM_REQUEST_ORDERS_TABLE;
-  const { error: pe } = await supabase.from(t).select("id").limit(1);
-  if (pe) {
-    return { rows: [], error: pe.message, probe: "" };
-  }
+  const probe = `${t}.student_id`;
 
-  const ownerCols = await listExistingStudentOwnerColumns(supabase, t);
-  if (ownerCols.length === 0) {
-    return { rows: [], error: null, probe: "" };
-  }
-
-  const orFilter = ownerCols.map((c) => `${c}.eq.${studentUserId}`).join(",");
-
-  const o1 = await supabase.from(t).select("*").or(orFilter).order("updated_at", { ascending: false }).limit(limit);
+  const o1 = await supabase
+    .from(t)
+    .select("*")
+    .eq("student_id", studentUserId)
+    .order("updated_at", { ascending: false })
+    .limit(limit);
   if (o1.error) {
+    // updated_at 컬럼 부재 등 정렬 관련 오류만 무정렬로 1회 재시도, 그 외는 오류 그대로 반환.
     if (!/order|column/i.test(o1.error.message)) {
       return { rows: [], error: o1.error.message, probe: "" };
     }
-    const o2 = await supabase.from(t).select("*").or(orFilter).limit(limit);
+    const o2 = await supabase.from(t).select("*").eq("student_id", studentUserId).limit(limit);
     if (o2.error) {
       return { rows: [], error: o2.error.message, probe: "" };
     }
     const raw = ((o2.data as Row[]) ?? []).filter((r) => canAccessOrder(r, studentUserId, "student").ok);
-    return { rows: raw, error: null, probe: "" };
+    return { rows: raw, error: null, probe };
   }
   const raw = ((o1.data as Row[]) ?? []).filter((r) => canAccessOrder(r, studentUserId, "student").ok);
-  return { rows: raw, error: null, probe: "" };
+  return { rows: raw, error: null, probe };
 }
 
 export type StudentCustomOrderListRowView = {

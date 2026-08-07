@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import type { CommunityMeDraftItem, CommunityMePostListItem } from "@/lib/community/communityQueries";
+import type { CommunityBoardPostCard } from "@/lib/community/communityBoardQueries";
+import { CommunityPostCard } from "@/components/community/CommunityPostCard";
 import type { CommunityMeTab } from "@/lib/community/communityMeTab";
 import { communityMePath } from "@/lib/community/communityMeTab";
 import type { AppRole } from "@/lib/types/user";
@@ -15,8 +17,38 @@ export type CommunityMeActivityPayload = {
   boardCount: number | null;
   shortformCount: number | null;
   recent: CommunityMePostListItem[];
+  /** D-CM-13: 스크랩한 게시글 카드(최신순). */
+  scraps: CommunityBoardPostCard[];
+  /** 스크랩 조회 실패(빈 목록과 구분). */
+  scrapsError: boolean;
   loadFailed: boolean;
 };
+
+/** D-CM-13: 스크랩 탭 본문 — 조회 실패·빈 목록·목록을 구분해 렌더한다. */
+function ScrapsPanelBody(props: { activity: CommunityMeActivityPayload | null }) {
+  const act = props.activity;
+  if (act?.scrapsError) {
+    return <p className="text-amber-900">스크랩 목록을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>;
+  }
+  const scraps = act?.scraps ?? [];
+  if (scraps.length === 0) {
+    return (
+      <>
+        <p>아직 스크랩한 글이 없어요. 게시글 상세에서 「스크랩」을 누르면 여기에 모입니다.</p>
+        <NavHint />
+      </>
+    );
+  }
+  return (
+    <ul className="mt-2 space-y-3">
+      {scraps.map((post) => (
+        <li key={post.id}>
+          <CommunityPostCard post={post} />
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 function Panel(props: { title: string; children: ReactNode }) {
   return (
@@ -130,7 +162,7 @@ export function CommunityMeTabPanels(props: {
       overview: "요약과 탭별 화면은 로그인 후 이용할 수 있어요.",
       posts: "내 게시글 탭은 로그인 후 이용할 수 있어요.",
       drafts: "임시저장 목록은 로그인 후 이용할 수 있어요.",
-      scraps: "스크랩 목록은 데이터 연결 후 표시될 예정이에요. 로그인 후에도 내용이 비어 있을 수 있어요.",
+      scraps: "스크랩한 글 목록은 로그인 후 이용할 수 있어요.",
     };
     return (
       <Panel title="로그인이 필요해요">
@@ -208,8 +240,7 @@ export function CommunityMeTabPanels(props: {
     if (tab === "scraps") {
       return (
         <Panel title="스크랩">
-          <p className="text-sm">스크랩한 콘텐츠 목록은 데이터 연결 후 이 탭에 표시될 예정이에요.</p>
-          <NavHint />
+          <ScrapsPanelBody activity={act} />
         </Panel>
       );
     }
@@ -272,8 +303,7 @@ export function CommunityMeTabPanels(props: {
   if (tab === "scraps") {
     return (
       <Panel title="스크랩">
-        <p className="text-sm">스크랩한 콘텐츠 목록은 데이터 연결 후 이 탭에 표시될 예정이에요.</p>
-        <NavHint />
+        <ScrapsPanelBody activity={act} />
       </Panel>
     );
   }

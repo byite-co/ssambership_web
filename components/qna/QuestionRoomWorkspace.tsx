@@ -221,6 +221,7 @@ export function QuestionRoomWorkspace(props: {
         messageCountsByThreadId={props.messageCountsByThreadId}
         lastMessageByThreadId={props.lastMessageByThreadId}
         unreadCountsByRoomId={props.unreadCountsByRoomId}
+        freeTrialThreadIds={props.freeTrialThreadIds}
         roomHrefBase={roomBase}
         draftMessageBody={props.draftMessageBody}
         draftNoteBody={props.draftNoteBody}

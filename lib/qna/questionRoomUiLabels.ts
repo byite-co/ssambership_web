@@ -2,7 +2,7 @@ import {
   readQuestionThreadWorkflowStatus,
   workflowStatusLabel,
   workflowStatusTone,
-} from "@/lib/qna/questionThreadStatus";
+} from "./questionThreadStatus.ts";
 
 /**
  * 질문방 UI 라벨·탭 분류 — pending/answered/confirmed 우선, 레거시 open/closed/archived 호환.

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 // W4(C10): custom_request_applications 정본 테이블·mentor_id 정본 컬럼 고정(003, 187 baseline) — 프로빙 제거
-import { loadCustomPostById, pickDisplayField } from "@/lib/customRequest/customRequestQueries";
+import { pickDisplayField } from "@/lib/customRequest/customRequestQueries";
 import { pickOrderStudentId } from "@/lib/customRequest/orderRoomMutations";
 import { maskStudentName } from "@/lib/reviews/reviewDisplay";
 
@@ -94,13 +94,22 @@ export async function enrichMentorDashboardOrderRows(
     }
   }
 
+  // D-CR-7: slice(0,12) 절단 제거 — custom_request_posts 를 in(postIds) 단일 배치로 조회해
+  // 13번째 이후 주문의 제목·마감 힌트 누락(빈 제목)을 막는다. RLS로 막힌 post 는 조용히 생략(표시 전용 강등).
   const postsById = new Map<string, Row>();
-  await Promise.all(
-    postIds.slice(0, 12).map(async (pid) => {
-      const { row } = await loadCustomPostById(supabase, pid);
-      if (row) postsById.set(pid, row);
-    })
-  );
+  if (postIds.length > 0) {
+    const { data, error } = await supabase
+      .from("custom_request_posts")
+      .select("*")
+      .in("id", postIds);
+    if (error) {
+      console.error("[enrichMentorDashboardOrderRows] posts query failed", error.message);
+    }
+    for (const row of (data as Row[] | null) ?? []) {
+      const pid = typeof row.id === "string" ? row.id : "";
+      if (pid) postsById.set(pid, row);
+    }
+  }
 
   const usersById = new Map<string, { full_name: string | null; nickname: string | null }>();
   if (studentIds.length > 0) {

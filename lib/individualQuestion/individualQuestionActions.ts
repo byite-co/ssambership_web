@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole, requireQnaActor } from "@/lib/auth/routeGuard";
+import { assertAccountActive } from "@/lib/auth/accountStatus";
 import { assertMentorApprovedForAction } from "@/lib/mentor/mentorVerificationGate";
 import { fetchMentorIndividualQuestionPrice } from "@/lib/individualQuestion/individualQuestionPricing";
 import { type IndividualQuestionEscrowResult } from "@/lib/individualQuestion/individualQuestionTypes";
@@ -20,6 +21,10 @@ import { normalizeSubjectCode } from "@/lib/subjects/subjectCatalog";
 
 const STUDENT_LIST_PATH = "/individual-questions";
 const MENTOR_LIST_PATH = "/mentor/individual-questions";
+
+// [D-IQ-7] 질문 생성 후 첨부 업로드만 실패했을 때 학생에게 보여줄 복구 안내(원인 상세 비노출).
+const ATTACHMENT_RETRY_HINT =
+  "질문은 등록됐지만 첨부 파일 업로드에 실패했어요. 아래 대화 입력창에서 파일을 다시 첨부해 멘토에게 보낼 수 있어요.";
 
 type IndividualQuestionRpcResult = IndividualQuestionEscrowResult | IndividualQuestionEscrowResult[] | null;
 
@@ -140,6 +145,10 @@ export async function createDirectIndividualQuestionAction(formData: FormData) {
   if (!title || !body) actionError(returnPath, "제목과 내용을 모두 입력해 주세요.");
 
   const supabase = await createClient();
+  // [D-IQ-3] 계정 상태 게이트 — requireRole 직후. 정지·탈퇴 진행 계정의 에스크로 결제 차단.
+  const acctGate = await assertAccountActive(supabase, user.id);
+  if (!acctGate.ok) actionError(returnPath, acctGate.userMessage);
+
   const approval = await assertMentorApprovedForAction(supabase, mentorId);
   if (!approval.ok) actionError(mentorFallbackPath, "승인된 멘토에게만 개별 질문을 보낼 수 있어요.");
 
@@ -153,7 +162,9 @@ export async function createDirectIndividualQuestionAction(formData: FormData) {
   const safeBody = maskContactInUserText(body);
 
   const admin = createServiceRoleClient();
-  const { data, error } = await admin.rpc("create_individual_question_with_hold", {
+  // [D-IQ-5] 지정형도 공개형과 동일하게 v2 RPC로 통일. 자격조건은 지정형에 무의미하므로 null 전달
+  // (v2 내부에서 type<>'open'이면 자격조건을 강제 null 처리 — 동작 동일, 계약만 단일화).
+  const { data, error } = await admin.rpc("create_individual_question_with_hold_v2", {
     p_student_id: user.id,
     p_question_type: "direct",
     p_mentor_id: mentorId,
@@ -163,6 +174,8 @@ export async function createDirectIndividualQuestionAction(formData: FormData) {
     p_body: safeBody,
     p_price_cents: price.amountCents,
     p_idempotency_key: idempotencyKey,
+    p_required_school_tier: null,
+    p_required_major_category: null,
   });
 
   const result = firstRpcResult(data as IndividualQuestionRpcResult);
@@ -182,7 +195,9 @@ export async function createDirectIndividualQuestionAction(formData: FormData) {
       file: attachment,
     });
     if (!upload.ok) {
-      redirect(`${STUDENT_LIST_PATH}/${result.question_id}?created=1&warning=${encodeURIComponent(upload.error)}`);
+      // [D-IQ-7] 질문은 등록(홀드)됐지만 첨부만 실패한 경우 — 근거 이미지가 유실되지 않도록
+      // 대화 입력창에서 다시 첨부하도록 안내한다(원인 상세 대신 복구 경로를 노출).
+      redirect(`${STUDENT_LIST_PATH}/${result.question_id}?created=1&warning=${encodeURIComponent(ATTACHMENT_RETRY_HINT)}`);
     }
   }
 
@@ -213,6 +228,11 @@ export async function createOpenIndividualQuestionAction(formData: FormData) {
   if (!priceCash) {
     actionError(returnPath, "예치할 금액을 0보다 큰 캐시로 입력해 주세요.");
   }
+
+  // [D-IQ-3] 계정 상태 게이트 — 세션 클라이언트(RLS)로 본인 상태 확인. 정지·탈퇴 진행 계정 차단.
+  const supabase = await createClient();
+  const acctGate = await assertAccountActive(supabase, user.id);
+  if (!acctGate.ok) actionError(returnPath, acctGate.userMessage);
 
   const admin = createServiceRoleClient();
   const catalogs = await loadSchoolClassificationCatalogs(admin);
@@ -257,7 +277,8 @@ export async function createOpenIndividualQuestionAction(formData: FormData) {
       file: attachment,
     });
     if (!upload.ok) {
-      redirect(`${STUDENT_LIST_PATH}/${result.question_id}?created=1&warning=${encodeURIComponent(upload.error)}`);
+      // [D-IQ-7] 질문은 등록(홀드)됐지만 첨부만 실패 — 대화 입력창에서 재첨부하도록 안내.
+      redirect(`${STUDENT_LIST_PATH}/${result.question_id}?created=1&warning=${encodeURIComponent(ATTACHMENT_RETRY_HINT)}`);
     }
   }
 
@@ -272,6 +293,10 @@ export async function claimOpenIndividualQuestionAction(formData: FormData) {
   if (!questionId) actionError(MENTOR_LIST_PATH, "질문 정보가 올바르지 않습니다.");
 
   const supabase = await createClient();
+  // [D-IQ-3] 계정 상태 게이트 — 정지·탈퇴 진행 멘토의 claim 차단.
+  const acctGate = await assertAccountActive(supabase, user.id);
+  if (!acctGate.ok) actionError(MENTOR_LIST_PATH, acctGate.userMessage);
+
   const approval = await assertMentorApprovedForAction(supabase, user.id);
   if (!approval.ok) actionError(MENTOR_LIST_PATH, "승인 완료 후 공개 질문을 가져갈 수 있어요.");
 
@@ -324,8 +349,15 @@ export async function sendIndividualQuestionMessageAction(formData: FormData) {
   if (!questionId) actionError(listPath, "질문 정보가 올바르지 않습니다.");
   if (!body && !hasAttachment) actionError(detailPath, "보낼 내용을 입력하거나 파일을 첨부해 주세요.");
 
+  // [D-IQ-3] 계정 상태 게이트 — 정지·탈퇴 진행 계정의 대화 write 차단.
+  const supabase = await createClient();
+  const acctGate = await assertAccountActive(supabase, user.id);
+  if (!acctGate.ok) actionError(detailPath, acctGate.userMessage);
+
+  // [D-IQ-4] 조회·party 판정은 세션 클라이언트(RLS iq_select_party)로 — 당사자가 아니면 RLS가
+  // 0행을 돌려줘 곧바로 차단된다(이중 방어). service-role은 write(메시지 insert·첨부)에만 쓴다.
   const admin = createServiceRoleClient();
-  const { data: question, error: questionError } = await admin
+  const { data: question, error: questionError } = await supabase
     .from("individual_questions")
     .select(PARTY_COLUMNS)
     .eq("id", questionId)
@@ -388,11 +420,16 @@ export async function confirmIndividualQuestionAnswerByMentorAction(formData: Fo
   if (!questionId) actionError(MENTOR_LIST_PATH, "질문 정보가 올바르지 않습니다.");
 
   const supabase = await createClient();
+  // [D-IQ-3] 계정 상태 게이트 — 정지·탈퇴 진행 멘토의 답변 확정 차단.
+  const acctGate = await assertAccountActive(supabase, user.id);
+  if (!acctGate.ok) actionError(detailPath, acctGate.userMessage);
+
   const approval = await assertMentorApprovedForAction(supabase, user.id);
   if (!approval.ok) actionError(detailPath, "승인 완료 후 답변을 확정할 수 있어요.");
 
+  // [D-IQ-4] party 판정은 세션 클라이언트(RLS)로 — 당사자가 아니면 0행. status 전이 write만 service-role.
   const admin = createServiceRoleClient();
-  const { data: question, error: questionError } = await admin
+  const { data: question, error: questionError } = await supabase
     .from("individual_questions")
     .select(PARTY_COLUMNS)
     .eq("id", questionId)
@@ -441,8 +478,14 @@ export async function confirmIndividualQuestionAnswerAction(formData: FormData) 
   const detailPath = questionId ? `${STUDENT_LIST_PATH}/${encodeURIComponent(questionId)}` : STUDENT_LIST_PATH;
   if (!questionId) actionError(STUDENT_LIST_PATH, "질문 정보가 올바르지 않습니다.");
 
+  // [D-IQ-3] 계정 상태 게이트 — 정지·탈퇴 진행 학생의 [해결 완료](정산) 차단.
+  const supabase = await createClient();
+  const acctGate = await assertAccountActive(supabase, user.id);
+  if (!acctGate.ok) actionError(detailPath, acctGate.userMessage);
+
+  // [D-IQ-4] 조회·소유 판정은 세션 클라이언트(RLS)로 — 본인 질문만 보인다. 지급은 070 RPC(service-role).
   const admin = createServiceRoleClient();
-  const { data: question, error: questionError } = await admin
+  const { data: question, error: questionError } = await supabase
     .from("individual_questions")
     .select("id, student_id, status, designated_mentor_id, claimed_mentor_id, release_ledger_id")
     .eq("id", questionId)

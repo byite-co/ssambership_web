@@ -137,7 +137,12 @@ export function RoleLoginForm({
       } catch {
         /* */
       }
-      setError(`프로필을 불러오는 중 오류: ${mapDataErrorMessage(profErr)}`);
+      // D-AU-11: DB/RLS 원문(테이블·정책명 등 스키마 힌트)을 인증 표면에 노출하지 않는다.
+      // 원문은 콘솔에만 남기고, 화면은 프로필 부재 경로와 동일한 고정 문구로 통일한다.
+      console.error("[login] profile load error:", mapDataErrorMessage(profErr));
+      setError(
+        "로그인에 문제가 생겼어요. 잠시 후 다시 시도하거나, 계속되면 고객센터에 문의해 주세요."
+      );
       setLoading(false);
       return;
     }
@@ -178,16 +183,27 @@ export function RoleLoginForm({
     const fromQuery = safeInternalNextPath(initialNext);
     const nextPath = resolvePostLoginPath(fromQuery ?? null, profile.role);
 
+    /**
+     * D-AU-10: 고정 150ms 타이머 의존을 제거한다. 쿠키 기록 완료를 상수 지연으로
+     * 추정하던 구조는 느린 기기에서 임계값 아래로 떨어지면 목적지 레이아웃의
+     * requireRole 이 비로그인으로 판정해 로그인 화면으로 튕겼다.
+     *
+     * 대신 세션이 실제로 브라우저 저장소(@supabase/ssr 쿠키)에 실렸는지 확인하고 이동한다.
+     * 방금 이 세션으로 getUserProfileById(인증 라운드트립)가 성공했으므로 쿠키는 이미
+     * 활성 상태다 — getSession 으로 한 번 더 확정한 뒤 전체 문서 네비게이션을 건다.
+     *
+     * 한계: 서버 액션/라우트로 옮겨 Set-Cookie 응답과 redirect 를 한 왕복으로 처리하는 것이
+     * 이상적이나(듀얼 패널·역할별 notice UX 보존을 위해 클라이언트 검증을 유지), 이 개선은
+     * 상수 지연 추정을 이벤트 기반 확정으로 대체하는 범위에 한정한다.
+     */
+    try {
+      await supabase.auth.getSession();
+    } catch {
+      /* getSession 실패해도 이미 인증 라운드트립이 성공했으므로 그대로 진행 */
+    }
     setSuccess("로그인에 성공했습니다. 이동합니다.");
     setLoading(false);
-    /**
-     * `router.push`만 쓰면 브라우저에 방금 쓴 세션 쿠키가 다음 RSC 요청에 아직 안 실릴 수 있어
-     * `(mentor)` 레이아웃의 `requireRole`이 비로그인으로 판단하는 레이스가 난다.
-     * 전체 문서 네비게이션으로 확실히 같은 쿠키 저장소를 쓰는 요청을 보낸다.
-     */
-    window.setTimeout(() => {
-      window.location.assign(nextPath);
-    }, 150);
+    window.location.assign(nextPath);
   }
 
   return (
