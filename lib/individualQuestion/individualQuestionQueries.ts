@@ -3,6 +3,12 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IndividualQuestionStatus } from "@/lib/individualQuestion/individualQuestionTypes";
 import { signIndividualQuestionAttachment } from "@/lib/individualQuestion/individualQuestionAttachmentStorage";
+import { fetchStudentDisplayNames, type StudentDisplayResult } from "@/lib/qna/studentDisplayNames";
+
+// [D-IQ-6] 멘토 세션은 RLS(users_select_own)로 학생 users 행을 직접 못 읽는다. 직접 select 는
+// 조용히 빈 결과 → 전원 '학생' 폴백으로 강등되어 운영자가 실패인지 정상인지 구분할 수 없었다.
+// 질문방과 동일하게 표시명 전용 RPC(get_mentor_student_nicknames, 오류/빈결과 구분)로 통일한다.
+const STUDENT_DISPLAY_FAILURE_LABEL = "표시 실패";
 
 // 표시 헬퍼는 individualQuestionFormat.ts를 단일 소스로 사용한다. (client/server 공용)
 export {
@@ -143,6 +149,22 @@ function enrichQuestions(rows: IndividualQuestionRow[], names: Map<string, UserN
   });
 }
 
+/**
+ * [D-IQ-6] 멘토 화면에서 상대(학생) 표시명을 RPC 결과로 덮어쓴다. RPC 오류(error:true)는
+ * '표시 실패'로 노출해 무음 강등을 없앤다. 정상 빈결과(관계 없음)만 익명 라벨로 남는다.
+ */
+function applyStudentDisplay(
+  items: IndividualQuestionListItem[],
+  studentDisplay: StudentDisplayResult
+): IndividualQuestionListItem[] {
+  return items.map((item) => ({
+    ...item,
+    studentName: studentDisplay.error
+      ? STUDENT_DISPLAY_FAILURE_LABEL
+      : studentDisplay.byId[item.student_id]?.displayName ?? item.studentName,
+  }));
+}
+
 export async function fetchStudentDirectIndividualQuestions(
   supabase: SupabaseClient,
   studentId: string
@@ -202,7 +224,12 @@ export async function fetchMentorDirectIndividualQuestions(
     supabase,
     rows.flatMap((row) => [row.student_id, row.designated_mentor_id ?? ""])
   );
-  return { rows: enrichQuestions(rows, names), error: null };
+  // [D-IQ-6] 멘토 화면의 상대(학생) 표시명은 전용 RPC로 — RLS 무음 강등 제거.
+  const studentDisplay = await fetchStudentDisplayNames(
+    supabase,
+    rows.map((row) => row.student_id)
+  );
+  return { rows: applyStudentDisplay(enrichQuestions(rows, names), studentDisplay), error: null };
 }
 
 export async function fetchMentorOwnedIndividualQuestions(
@@ -222,7 +249,12 @@ export async function fetchMentorOwnedIndividualQuestions(
     supabase,
     rows.flatMap((row) => [row.student_id, row.designated_mentor_id ?? row.claimed_mentor_id ?? ""])
   );
-  return { rows: enrichQuestions(rows, names), error: null };
+  // [D-IQ-6] 멘토 화면의 상대(학생) 표시명은 전용 RPC로 — RLS 무음 강등 제거.
+  const studentDisplay = await fetchStudentDisplayNames(
+    supabase,
+    rows.map((row) => row.student_id)
+  );
+  return { rows: applyStudentDisplay(enrichQuestions(rows, names), studentDisplay), error: null };
 }
 
 export async function fetchOpenIndividualQuestionsForMentor(
@@ -303,7 +335,10 @@ export async function fetchIndividualQuestionDetail(
     ].filter(Boolean)
   );
 
-  const [enriched] = enrichQuestions([row], names);
+  // [D-IQ-6] 상대(학생) 표시명은 전용 RPC로 덮어쓴다 — 멘토 세션에서 학생명이 무음 강등되지 않게.
+  // (학생 세션에서는 자기 학생명이 상대 표시로 쓰이지 않으므로 영향 없음.)
+  const studentDisplay = await fetchStudentDisplayNames(supabase, [row.student_id]);
+  const [enriched] = applyStudentDisplay(enrichQuestions([row], names), studentDisplay);
   const signedAttachments = await Promise.all(
     attachments.map(async (attachment) => ({
       ...attachment,
