@@ -76,16 +76,6 @@ export async function loadMyQuestionRooms(
 }
 
 /**
- * P0: 한 방(`mentor_student_rooms.id` = `roomId`)에 속한 질문 스레드.
- */
-export const loadQuestionThreads = fetchThreadsForRoom;
-
-/**
- * P0: 한 스레드의 메시지(`question_messages`, 시간 오름차순).
- */
-export const loadQuestionThreadMessages = fetchMessagesForThread;
-
-/**
  * 페이지 게이트: roomId 행이 현재 사용자(학생·멘토 party)와 일치하는지.
  * RLS와 별도로 서버에서 한 번 더 거른다. 목록 조회 `fetchRoomsForUser`와 동일한 id 열 별칭을 허용한다.
  */

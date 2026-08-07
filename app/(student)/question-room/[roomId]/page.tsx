@@ -12,8 +12,7 @@ import {
 import { loadMentorDisplaysForQuestionRooms, roomSubjectChips } from "@/lib/qna/questionRoomStudentDisplay";
 import {
   loadInitialWeeklyUsageSnapshots,
-  loadLastMessageByThreadId,
-  loadMessageCountsByThreadId,
+  loadMessageStatsByThreadId,
   loadQuestionRoomSubscriptionContext,
   loadUnreadCountsByRoomId,
 } from "@/lib/qna/questionRoomStudentContext";
@@ -84,20 +83,20 @@ export default async function StudentQuestionRoomDetailPage(props: Props) {
   const [
     subscriptionContext,
     initialUsageByMentorId,
-    messageCountsByThreadId,
-    lastMessageByThreadId,
+    messageStats,
     unreadCountsByRoomId,
     attachments,
     lastAttachmentByThreadId,
   ] = await Promise.all([
     loadQuestionRoomSubscriptionContext(supabase, user.id, currentRoom),
     loadInitialWeeklyUsageSnapshots(supabase, user.id, listBundle.rooms.rows),
-    loadMessageCountsByThreadId(supabase, threadIds),
-    loadLastMessageByThreadId(supabase, threadIds),
+    loadMessageStatsByThreadId(supabase, threadIds),
     loadUnreadCountsByRoomId(supabase, roomIds),
     loadThreadAttachmentsWithUrls(supabase, resolvedThreadId),
     loadLastAttachmentByThreadId(supabase, threadIds),
   ]);
+  const messageCountsByThreadId = messageStats.counts;
+  const lastMessageByThreadId = messageStats.last;
 
   const subjectOptions = currentRoom ? roomSubjectChips(currentRoom, mentorDisplays, 8) : [];
 

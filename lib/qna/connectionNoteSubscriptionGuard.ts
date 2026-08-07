@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
+import { partyUserIdFromRoomRow } from "./questionRoomUiLabels.ts";
 
 /**
  * 연결노트 쓰기(작성·수정·삭제) 가드 — 활성 구독이 있을 때만 통과.
@@ -13,7 +13,19 @@ import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
  *  active 판정: subscriptions(student_id, mentor_id) 에 status='active' 행 존재.
  *  (subscribeCheckoutService의 findActiveSubscriptionForPair와 동등한 시그널을
  *   여기서 직접 보고, server-only 모듈 체인을 피해 테스트 가능성을 높인다.)
+ *
+ *  D-QR-11: 무료 질문권 방(ensure_free_question_room 으로 생성 — subscription_id 링크 없음)은
+ *  구독이 "만료"된 게 아니라 애초에 구독 이력이 없는 방이다. 이런 방까지 '구독 만료' 로 차단하면
+ *  무료 체험 사용자는 연결노트를 한 번도 못 쓴다. 방 행의 subscription_id 가 비어 있으면 무료 방으로
+ *  보고 편집을 허용한다(정본: mentor_student_rooms.subscription_id 는 구독 확정 시에만 채워진다 —
+ *  20260730105244_core_private_room_ensure.sql §13.1). 구독 이력이 있으나 현재 비활성인 방만
+ *  '만료' 로 차단한다.
  */
+export function roomHasNoSubscriptionLink(row: Record<string, unknown>): boolean {
+  const ref = row.subscription_id;
+  return ref == null || String(ref).trim() === "";
+}
+
 export async function assertConnectionNoteWriteAllowed(
   supabase: SupabaseClient,
   roomId: string,
@@ -37,6 +49,11 @@ export async function assertConnectionNoteWriteAllowed(
   const mentorId = partyUserIdFromRoomRow(row, "mentor");
   if (!studentId || !mentorId) {
     return { ok: false, userMessage: "질문방 정보(학생·멘토)를 확인할 수 없어요. 잠시 후 다시 시도해 주세요." };
+  }
+
+  // D-QR-11: 무료 질문권 방(구독 링크 없음)은 '만료' 대상이 아니므로 편집 허용.
+  if (roomHasNoSubscriptionLink(row)) {
+    return { ok: true };
   }
 
   const { data: subs, error: subErr } = await supabase
