@@ -6,6 +6,12 @@ import {
   weeklyUsageToSnapshot,
 } from "@/lib/qna/weeklyQuestionUsage";
 
+/**
+ * 단건 계약: `?mentorId=` → { ok, usage: { ...snapshot, limitLabel } }.
+ * D-QR-3: 호출부 0 이던 `?mentorIds=` 배치 분기(limitLabel 누락·다른 응답 모양)는 제거했다 —
+ * 두 응답 계약이 한 라우트에 공존해 향후 배치화 시 클라이언트 파싱이 깨지던 표면을 없앴다.
+ */
+
 export async function GET(req: Request) {
   const session = await getQnaApiSession();
   if (!session.ok) {
@@ -20,23 +26,6 @@ export async function GET(req: Request) {
 
   const url = new URL(req.url);
   const mentorId = url.searchParams.get("mentorId")?.trim();
-  const mentorIdsParam = url.searchParams.get("mentorIds")?.trim();
-
-  if (mentorIdsParam) {
-    const ids = mentorIdsParam.split(",").map((s) => s.trim()).filter(Boolean);
-    const usageMap: Record<string, ReturnType<typeof weeklyUsageToSnapshot>> = {};
-    await Promise.all(
-      ids.map(async (mid) => {
-        const { usage } = await fetchWeeklyQuestionUsageSelf(
-          session.supabase,
-          session.user.id,
-          mid
-        );
-        usageMap[mid] = weeklyUsageToSnapshot(usage);
-      })
-    );
-    return NextResponse.json({ ok: true, usageByMentorId: usageMap });
-  }
 
   if (!mentorId) {
     return NextResponse.json({ ok: false, error: "mentorId가 필요합니다." }, { status: 400 });

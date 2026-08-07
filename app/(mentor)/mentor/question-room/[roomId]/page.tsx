@@ -1,4 +1,5 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
+import { threadDetailPath } from "@/lib/qna/formatQuestionRoomDisplay";
 import { PageScaffold } from "@/components/shell/PageScaffold";
 import { QuestionRoomWorkspace } from "@/components/qna/QuestionRoomWorkspace";
 import { requireRole } from "@/lib/auth/routeGuard";
@@ -9,8 +10,7 @@ import {
   loadStudentDisplaysForQuestionRooms,
 } from "@/lib/qna/questionRoomMentorContext";
 import {
-  loadLastMessageByThreadId,
-  loadMessageCountsByThreadId,
+  loadMessageStatsByThreadId,
   loadQuestionRoomSubscriptionContext,
 } from "@/lib/qna/questionRoomStudentContext";
 import { fetchWeeklyQuestionUsagePairParty } from "@/lib/qna/weeklyQuestionUsage";
@@ -42,6 +42,11 @@ export default async function MentorQuestionRoomDetailPage(props: Props) {
   const { roomId } = await props.params;
   const sp = (await props.searchParams) ?? {};
   const threadFromQuery = typeof sp.thread === "string" && sp.thread.length ? sp.thread : null;
+  // D-QR-8: 학생 방 상세와 동일하게 ?thread= 는 정본 thread 상세 경로로 정규화 redirect 한다.
+  // (역할별 좌우비대칭 제거 — 멘토도 공유·복귀 URL 이 정본 경로로 수렴.)
+  if (threadFromQuery) {
+    redirect(threadDetailPath("/mentor/question-room", roomId, threadFromQuery));
+  }
   const okMessage = typeof sp.ok === "string" && sp.ok.length ? sp.ok : null;
   const rawActionError = typeof sp.error === "string" && sp.error.length ? sp.error : null;
   const errorMessageUi = rawActionError ? mapDataErrorMessage(rawActionError) : null;
@@ -72,17 +77,17 @@ export default async function MentorQuestionRoomDetailPage(props: Props) {
 
   const [
     studentDisplays,
-    messageCountsByThreadId,
-    lastMessageByThreadId,
+    messageStats,
     unreadCountsByRoomId,
     lastAttachmentByThreadId,
   ] = await Promise.all([
     loadStudentDisplaysForQuestionRooms(supabase, listBundle.rooms.rows),
-    loadMessageCountsByThreadId(supabase, threadIds),
-    loadLastMessageByThreadId(supabase, threadIds),
+    loadMessageStatsByThreadId(supabase, threadIds),
     loadMentorUnreadCountsByRoomId(supabase, roomIds),
     loadLastAttachmentByThreadId(supabase, threadIds),
   ]);
+  const messageCountsByThreadId = messageStats.counts;
+  const lastMessageByThreadId = messageStats.last;
 
   const initialNoteText = extractNoteText(bundle.notes.rows[0]);
 

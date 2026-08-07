@@ -3,6 +3,7 @@ import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
 import { fetchThreadsForRooms } from "@/lib/qna/questionRoomQueries";
 import { readQuestionThreadWorkflowStatus } from "@/lib/qna/questionThreadStatus";
 import { threadMentorStudentRoomId } from "@/lib/qna/questionThreadRoomRef";
+import { ANON_STUDENT_LABEL, fetchStudentDisplayNames } from "@/lib/qna/studentDisplayNames";
 
 type Row = Record<string, unknown>;
 
@@ -17,24 +18,20 @@ export async function loadStudentDisplaysForQuestionRooms(
     const sid = partyUserIdFromRoomRow(r, "student");
     if (sid) ids.add(sid);
   }
-  const out: StudentDisplayById = {};
   const idList = [...ids];
-  if (idList.length === 0) return out;
-  try {
-    const { data } = await supabase.rpc("get_mentor_student_nicknames", { p_student_ids: idList });
-    const rows = (data as Row[]) ?? [];
-    for (const id of idList) {
-      const row = rows.find((u) => u.id === id);
-      const name =
-        (row && typeof row.full_name === "string" && row.full_name.trim()) ||
-        (row && typeof row.nickname === "string" && row.nickname.trim()) ||
-        "이름 미설정";
-      out[id] = { displayName: name, initial: name.slice(0, 1) };
-    }
-  } catch {
-    for (const id of idList) out[id] = { displayName: "이름 미설정", initial: "?" };
+  if (idList.length === 0) return {};
+
+  // D-QR-7: 표시명 조회를 Wave 0 공용 규약(fetchStudentDisplayNames)에 위임한다.
+  //  구 동작은 RPC error 를 구조분해조차 하지 않아, 권한·배포 오류로 조회가 실패해도 전원
+  //  '이름 미설정' 으로 조용히 강등돼 운영·사용자 모두 실패를 인지 못 했다. 이제 오류를 명시
+  //  로그로 표면화하고(정상 빈결과와 구분), 익명 라벨은 안전 폴백으로만 쓴다.
+  const { byId, error } = await fetchStudentDisplayNames(supabase, idList);
+  if (error) {
+    console.error("[loadStudentDisplaysForQuestionRooms] get_mentor_student_nicknames failed", {
+      studentCount: idList.length,
+    });
   }
-  return out;
+  return byId;
 }
 
 /** 멘토 기준: 답변 대기(pending) 스레드 수 = 안읽음 */
@@ -69,5 +66,5 @@ export function studentLabelForRoom(
     const v = room[k];
     if (typeof v === "string" && v.trim()) return v.trim();
   }
-  return "이름 미설정";
+  return ANON_STUDENT_LABEL;
 }
