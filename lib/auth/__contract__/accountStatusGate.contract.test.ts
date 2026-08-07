@@ -52,16 +52,20 @@ test("C9 §11.5 판정식 — 상태별 통과/거부 (fail-closed)", async () =
       expectOk: true,
     },
     {
-      name: "allowlist 밖 status(dormant) → 거부 (D-AU-3: 미지 값 fail-open 제거)",
+      name: "allowlist 밖 비어있지 않은 status(dormant) → 거부 (D-AU-3: 미지 값 fail-open 제거)",
       row: { status: "dormant" },
       expectOk: false,
       expectReason: "status_unknown",
     },
     {
-      name: "NULL status → 거부 (D-AU-3: 게이트는 allowlist)",
+      name: "NULL status → 통과 (리뷰 구멍 2: 뷰 COALESCE(status,'active') 정합 — 정상 활성 기본값)",
       row: { status: null },
-      expectOk: false,
-      expectReason: "status_unknown",
+      expectOk: true,
+    },
+    {
+      name: "빈 문자열 status → 통과 (NULL 과 동일 정규화)",
+      row: { status: "   " },
+      expectOk: true,
     },
     {
       name: "suspended_until 해석 불가 → 거부(만료 판정 불가 = 유효 정지 취급)",

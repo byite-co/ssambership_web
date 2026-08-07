@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { strictAccountStatusDecision, strictDeletionDecision } from "../appSession/appSurfaceAccountGate.ts";
+import {
+  strictAccountStatusDecision,
+  strictDeletionDecision,
+  type AppSurfaceAccountRow,
+} from "../appSession/appSurfaceAccountGate.ts";
 
 /**
  * 계정 상태(active / suspended / banned) 판정 + 핵심 액션 차단 메시지.
@@ -95,19 +99,35 @@ export type AccountActiveGateDeps = {
 };
 
 /**
+ * 웹 게이트 status 정규화 — DB 정본(`api_web_v1.mentor_directory_v1` 등)이 쓰는
+ * `COALESCE(status,'active')` 와 동일하게 **NULL/빈 문자열을 정상 active 로 취급**한다.
+ * users.status 는 스키마상 NULL 이 정상 활성 계정의 기본값이므로(뷰 WHERE 도 그렇게 판정),
+ * 이를 거부하면 정상 사용자의 웹 쓰기가 차단된다(리뷰 구멍 2). 앱 표면 strict 게이트는
+ * NULL 을 거부하지만(더 엄격), 웹은 이 정규화로 뷰 불변식과 정합을 맞춘다.
+ * 정규화 이후 남는 allowlist 밖 **비어있지 않은** 미지 status(dormant·deleted 등)만 거부한다.
+ */
+function coalesceWebStatusRow(row: AccountStatusInfo | null): AppSurfaceAccountRow | null {
+  if (!row) return row;
+  const raw = typeof row.status === "string" ? row.status.trim() : row.status;
+  const normalized = raw === null || raw === undefined || raw === "" ? "active" : raw;
+  return { status: normalized, suspended_until: row.suspended_until };
+}
+
+/**
  * DI 코어 — **fail-closed** + **status allowlist**(계약 §11.5, D-AU-3).
- * 쓰기 게이트는 앱 표면과 동일하게 `strictAccountStatusDecision`(allowlist)로 판정한다:
- * 허용은 `active` 와 만료된 `suspended` 뿐이고, banned·유효 suspended·allowlist 밖 status
- * (dormant·deleted·inactive·NULL 등)·행 부재·조회 오류·형식 오류는 전부 거부한다.
- * 구 동작은 effectiveAccountStatus 의 "미지 값 → active" coalesce 를 써서 새 상태값이
- * 도입되면 조용히 fail-open 됐다 — 이 폴백을 게이트에서 제거했다(표시용 함수는 그대로 유지).
+ * 쓰기 게이트는 앱 표면과 동일하게 `strictAccountStatusDecision`(allowlist)로 판정하되,
+ * NULL/빈 status 는 뷰와 동일하게 active 로 선정규화한다(coalesceWebStatusRow — 리뷰 구멍 2).
+ * 허용은 `active`(NULL/'' 포함) 와 만료된 `suspended` 뿐이고, banned·유효 suspended·
+ * allowlist 밖 비어있지 않은 status(dormant·deleted·inactive 등)·행 부재·조회 오류·형식
+ * 오류는 전부 거부한다. 구 동작은 effectiveAccountStatus 의 "미지 값 → active" coalesce 를 써서
+ * 새 상태값이 도입되면 조용히 fail-open 됐다 — 이 폴백을 게이트에서 제거했다(표시용 함수는 유지).
  * 탈퇴 write-block 은 strictDeletionDecision 재사용. 오류 상세·원문 응답은 반환·기록하지 않는다.
  */
 export async function assertAccountActiveCore(deps: AccountActiveGateDeps): Promise<AccountGateResult> {
   try {
     const account = await deps.fetchAccountRow();
     const now = deps.now ? deps.now() : new Date();
-    const statusDecision = strictAccountStatusDecision(account.row, account.error, now);
+    const statusDecision = strictAccountStatusDecision(coalesceWebStatusRow(account.row), account.error, now);
     if (!statusDecision.ok) {
       switch (statusDecision.reason) {
         case "query_error":
