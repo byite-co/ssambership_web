@@ -6,7 +6,20 @@ import { API_WEB_V1_SCHEMA } from "@/lib/apiWebV1/rpc";
 
 export const SUBSCRIPTION_SETTLEMENT_ITEMS_TABLE = "subscription_settlement_items" as const;
 
-export type SubscriptionSettlementItemStatus = "pending" | "paid" | "hold" | "canceled";
+/**
+ * 구독 정산 항목 상태. DB CHECK 는 ('accruing','pending','paid','hold','canceled') 5종이다.
+ *
+ * ★ accruing = 구독 사이클이 아직 안 끝나 **지급 불가**한 적립 상태다. 종전 매핑은
+ *   미지값을 전부 pending 으로 접어서 적립중 금액이 "지급 대기"로 표시되고 지급 예정
+ *   합계에도 들어갔다 — 아직 받을 수 없는 돈이 받을 수 있는 돈으로 보였다(QA-A2).
+ *   오너 판단 2026-08-06: **적립중과 지급 예정을 구분해 보여준다.**
+ */
+export type SubscriptionSettlementItemStatus =
+  | "accruing"
+  | "pending"
+  | "paid"
+  | "hold"
+  | "canceled";
 export type SubscriptionSettlementItemRow = Record<string, unknown>;
 
 const SELECT_COLUMNS = [
@@ -43,6 +56,7 @@ export function minorCentsToCash(value: unknown): number {
 
 export function subscriptionSettlementStatus(value: unknown): SubscriptionSettlementItemStatus {
   const status = String(value ?? "pending").trim().toLowerCase();
+  if (status === "accruing") return "accruing";
   if (status === "paid") return "paid";
   if (status === "hold" || status === "on_hold") return "hold";
   if (status === "canceled" || status === "cancelled") return "canceled";
@@ -51,6 +65,8 @@ export function subscriptionSettlementStatus(value: unknown): SubscriptionSettle
 
 export function subscriptionSettlementStatusLabel(value: unknown): string {
   switch (subscriptionSettlementStatus(value)) {
+    case "accruing":
+      return "\uC801\uB9BD\uC911";
     case "paid":
       return "\uC9C0\uAE09 \uC644\uB8CC";
     case "hold":

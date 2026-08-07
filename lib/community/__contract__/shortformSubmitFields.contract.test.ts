@@ -37,10 +37,10 @@ test("JS 비활성 폴백: 빈 hidden + submitter 값 공존 — 어느 순서�
   assert.equal(resolveShortformIntent(["DRAFT", "draft"]), "draft");
 });
 
-test("허용 키 10종만 계약에 존재", () => {
+test("허용 키 11종만 계약에 존재", () => {
   assert.deepEqual(
     [...SHORTFORM_SUBMIT_ALLOWED_KEYS].sort(),
-    ["body", "category", "draftId", "intent", "requestId", "rightsAck", "source", "title", "videoRef", "videoUrl"],
+    ["body", "category", "draftId", "intent", "requestId", "rightsAck", "source", "thumbnailRef", "title", "videoRef", "videoUrl"],
   );
 });
 

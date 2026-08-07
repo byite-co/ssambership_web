@@ -832,6 +832,10 @@ const COSI_TABLE = "custom_order_settlement_items" as const;
 export function adminSettlementStatusLabel(status: string): string {
   const s = status.trim().toLowerCase();
   const map: Record<string, string> = {
+    // 구독 정산 항목은 사이클이 끝나기 전까지 accruing(지급 불가)이다. 목록에 정상적으로
+    // 섞여 들어오므로, 없으면 fallback 이 "accruing (확인 필요)"를 찍어 운영자가
+    // 정상 행을 이상 징후로 오인한다(QA-A2).
+    accruing: "적립중",
     pending: "지급 대기",
     on_hold: "보류",
     hold: "보류",
@@ -856,7 +860,10 @@ export type AdminSettlementSummary = {
   totalRows: number;
   pendingMentorAmountSum: number;
   paidMentorAmountSum: number;
+  /** 적립중(지급 불가) 멘토 정산금 합계 — pendingMentorAmountSum 과 겹치지 않는다. */
+  accruingMentorAmountSum: number;
   pendingCount: number;
+  accruingCount: number;
   onHoldCount: number;
   payableCount: number;
   paidCount: number;
@@ -888,7 +895,9 @@ function emptySettlementSummary(): AdminSettlementSummary {
     totalRows: 0,
     pendingMentorAmountSum: 0,
     paidMentorAmountSum: 0,
+    accruingMentorAmountSum: 0,
     pendingCount: 0,
+    accruingCount: 0,
     onHoldCount: 0,
     payableCount: 0,
     paidCount: 0,
@@ -908,7 +917,11 @@ function summarizeSettlementRows(rows: AdminSettlementListItem[]): AdminSettleme
     if (st === "paid") {
       s.paidMentorAmountSum += m;
     }
-    if (st === "pending") s.pendingCount += 1;
+    if (st === "accruing") {
+      s.accruingMentorAmountSum += m;
+    }
+    if (st === "accruing") s.accruingCount += 1;
+    else if (st === "pending") s.pendingCount += 1;
     else if (st === "on_hold" || st === "hold") s.onHoldCount += 1;
     else if (st === "payable") s.payableCount += 1;
     else if (st === "paid") s.paidCount += 1;

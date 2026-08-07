@@ -4,6 +4,8 @@
 // (클라 쪽에서 video picker input 에 name 을 주지 않아 구조적으로 폼 제출에 실리지 않고,
 //  서버 쪽에서도 문자열이 아닌 값은 빈 값으로 취급한다 — 이중 안전망).
 
+import { resolveComposeIntent, type ComposeIntent } from "./composeIntent.ts";
+
 export const SHORTFORM_SUBMIT_ALLOWED_KEYS = [
   "title",
   "category",
@@ -13,11 +15,12 @@ export const SHORTFORM_SUBMIT_ALLOWED_KEYS = [
   "draftId",
   "videoUrl",
   "videoRef",
+  "thumbnailRef",
   "requestId",
   "intent",
 ] as const;
 
-export type ShortformSubmitIntent = "draft" | "publish";
+export type ShortformSubmitIntent = ComposeIntent;
 
 export type ShortformSubmitFields = {
   intent: ShortformSubmitIntent;
@@ -29,6 +32,8 @@ export type ShortformSubmitFields = {
   draftId: string;
   videoUrl: string;
   videoRef: string;
+  /** QA-C15: 클라가 영상 첫 프레임으로 만들어 먼저 올린 썸네일의 stored ref. */
+  thumbnailRef: string;
   requestId: string;
 };
 
@@ -40,10 +45,7 @@ export type ShortformSubmitFields = {
  * - 유효값이 하나도 없으면 publish(기존 기본값 유지).
  */
 export function resolveShortformIntent(values: unknown[]): ShortformSubmitIntent {
-  for (const v of values) {
-    if (v === "draft" || v === "publish") return v;
-  }
-  return "publish";
+  return resolveComposeIntent(values);
 }
 
 function trimmed(formData: FormData, key: string): string {
@@ -65,6 +67,7 @@ export function extractShortformSubmitFields(formData: FormData): ShortformSubmi
     draftId: trimmed(formData, "draftId"),
     videoUrl: trimmed(formData, "videoUrl"),
     videoRef: trimmed(formData, "videoRef"),
+    thumbnailRef: trimmed(formData, "thumbnailRef"),
     requestId: trimmed(formData, "requestId"),
   };
 }

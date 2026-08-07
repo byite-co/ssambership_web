@@ -5,6 +5,14 @@
 // 지급일: 매월 23일 통합 후불.
 
 export const PAYOUT_DAY_OF_MONTH = 23;
+
+/**
+ * UI 표기용 지급일 문구 — **여기서만 만든다**. 화면에 날짜를 직접 적어 두면 계산과
+ * 어긋나도 아무도 모른다. 실제로 정산 카드는 23일을 계산해 보여주는데 안내 문구만
+ * "매월 10일"로 박혀 있어 멘토에게 모순된 두 날짜가 동시에 노출됐다(QA-C12).
+ * 오너 판단 2026-08-06: 23일이 정본이고 문구를 고친다.
+ */
+export const PAYOUT_DAY_LABEL = `매월 ${PAYOUT_DAY_OF_MONTH}일`;
 export const WITHHOLDING_RATE = 0.033;
 
 export type PayoutSourceType = "subscription" | "individual_question" | "custom_request";

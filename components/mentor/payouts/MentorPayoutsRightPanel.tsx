@@ -3,6 +3,7 @@ import { PAGE_COL_GAP, SURFACE_CARD } from "@/lib/ui/surfaceCard";
 import {
   MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
   MENTOR_SUBSCRIPTION_PLATFORM_SHARE,
+  PAYOUT_DAY_LABEL,
 } from "@/lib/mentor/mentorPayoutsConstants";
 import type { MentorPayoutMonthlyCard, MentorPayoutScheduleInfo } from "@/lib/mentor/mentorPayoutsTypes";
 import { MentorPayoutsMonthlyAreaChartLazy } from "./MentorPayoutsChartLazy";
@@ -52,7 +53,7 @@ export function MentorPayoutsRightPanel(props: Props) {
         <dl className="mt-3 space-y-3">
           <div className="flex items-start justify-between gap-3">
             <dt className="shrink-0 text-[11px] font-medium text-slate-400">지급일</dt>
-            <dd className="text-right text-[13px] font-medium text-slate-700">매월 10일 · 등록 계좌</dd>
+            <dd className="text-right text-[13px] font-medium text-slate-700">{PAYOUT_DAY_LABEL} · 등록 계좌</dd>
           </div>
           <div className="flex items-start justify-between gap-3">
             <dt className="shrink-0 text-[11px] font-medium text-slate-400">수수료</dt>

@@ -1,6 +1,9 @@
 import Link from "next/link";
 import {
   CUSTOM_REQUEST_PLATFORM_FEE_LABEL,
+  MENTOR_CUSTOM_REQUEST_SHARE,
+  MENTOR_SUBSCRIPTION_SHARE,
+  PAYOUT_DAY_LABEL,
   SUBSCRIPTION_PLATFORM_FEE_LABEL,
 } from "@/lib/mentor/mentorPayoutsConstants";
 import type { MentorPayoutScheduleInfo, MentorPayoutSummary } from "@/lib/mentor/mentorPayoutsTypes";
@@ -87,11 +90,15 @@ export function MentorPayoutsLeftSidebar(props: Props) {
           <h3 className="text-sm font-extrabold text-slate-900">정산 안내</h3>
         </div>
         <ul className="mt-3 space-y-2.5 text-xs leading-relaxed text-slate-600">
-          <li>정산은 매월 10일에 진행됩니다.</li>
+          <li>정산은 {PAYOUT_DAY_LABEL}에 진행됩니다.</li>
           <li>수수료는 유형별로 상이하며, 정산 시 차감됩니다.</li>
           <li>환불/취소 건은 익월 정산에 반영될 수 있습니다.</li>
         </ul>
-        <p className="mt-3 text-[10px] text-slate-500">구독 멘토 몫 70% · 맞춤의뢰 멘토 몫 80%</p>
+        {/* 잠금값에서 끌어온다 — 하드코딩된 70%/80%는 실제 지급 비율(85%/95%)과 달랐다. */}
+        <p className="mt-3 text-[10px] text-slate-500">
+          구독 멘토 몫 {Math.round(MENTOR_SUBSCRIPTION_SHARE * 100)}% · 맞춤의뢰 멘토 몫{" "}
+          {Math.round(MENTOR_CUSTOM_REQUEST_SHARE * 100)}%
+        </p>
         <Link href="/support" className="mt-3 inline-flex text-xs font-bold text-[#059669] hover:underline">
           정산 가이드 보기 &gt;
         </Link>

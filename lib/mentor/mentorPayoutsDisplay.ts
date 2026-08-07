@@ -10,6 +10,7 @@ import {
   MENTOR_SUBSCRIPTION_PLATFORM_SHARE,
   SUBSCRIPTION_PLATFORM_FEE_LABEL,
 } from "@/lib/mentor/mentorPayoutsConstants";
+import { isAccruingPayoutStatus } from "@/lib/mentor/payoutLineStatus";
 import type {
   MentorPayoutDetailLine,
   MentorPayoutScheduleInfo,
@@ -98,6 +99,8 @@ function mapLineStatusToUi(status: string, net: number): PayoutUiStatus {
   if (s.includes("취소") || s.includes("cancel") || net < 0) return "cancelled";
   if (s.includes("완료") || s.includes("paid") || s.includes("지급")) return "paid";
   if (s.includes("보류") || s.includes("hold")) return "hold";
+  // 적립중은 "지급 예정"과 다른 칩으로 보여준다 — 아직 받을 수 없는 돈이다(QA-A2).
+  if (isAccruingPayoutStatus(status)) return "accruing";
   return "scheduled";
 }
 
