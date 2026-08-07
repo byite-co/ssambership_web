@@ -264,6 +264,21 @@ export async function applyCustomOrderDisputeSplitAdminAction(formData: FormData
     redirect(errUrlDetail(disputeId, safeMsg(split.error)));
   }
 
+  // D-AD-5: 실제 돈이 움직이는 조치이므로 감사 트레일 정본(admin_action_logs)에 기록한다.
+  let logClient: SupabaseClient;
+  try {
+    logClient = createServiceRoleClient();
+  } catch {
+    logClient = await createClient();
+  }
+  await logAdminAction(logClient, {
+    adminId: user.id,
+    actionType: "dispute_custom_order_split",
+    targetType: "dispute",
+    targetId: disputeId,
+    detail: { orderId, mentorGrossWon: mentorParsed, studentRefundWon: studentParsed },
+  });
+
   revalidatePath(LIST_PATH);
   revalidatePath("/admin");
   revalidatePath(`/admin/disputes/${disputeId}`);

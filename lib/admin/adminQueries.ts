@@ -205,13 +205,11 @@ export async function loadAdminDashboardSummary(supabase: SupabaseClient): Promi
     settlementPendingCount = sp.count;
   }
 
-  // W4(C10): 구 후보 순회([audit_logs, audit_events, verification_logs, admin_audit_logs])는
-  // 앞 2개가 187 baseline 부재라 항상 verification_logs 로 결정론적으로 귀결됐다(실측).
-  // 프로빙을 제거하고 현행 관측 지표(verification_logs 전체 건수)로 고정한다. 이 지표의 의미
-  // 정본화(예: admin_action_logs 기반 감사 트레일 지표로 교체)는 오너 결정 사항 — W4 비범위.
+  // D-AD-8: 관리자 조치 감사 트레일 정본은 admin_action_logs 다. 무관한 verification_logs 전체
+  // 건수 대신 admin_action_logs 건수를 센다(관리자 select 정책 존재 · 040 SQL).
   let auditLogCount: number | null = null;
   {
-    const t = await countAll(supabase, "verification_logs");
+    const t = await countAll(supabase, "admin_action_logs");
     if (t.n === null) {
       auditLogCount = null;
       errors.auditLogs = dashboardErrorMessage(t.error ?? undefined);

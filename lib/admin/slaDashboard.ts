@@ -29,6 +29,14 @@ export type SlaDashboard = {
   };
   slaDays: number;
   error: string | null;
+  /** D-AD-10: 블록별 실패(조회 실패)를 모아 partial 경고로 표면화. 비어 있으면 전 블록 정상. */
+  partialErrors: string[];
+  /** 신고 블록 조회 실패 여부(값이 실제 0인지 실패인지 구분). */
+  reportsOk: boolean;
+  /** 환불 블록 조회 실패 여부. */
+  refundsOk: boolean;
+  /** 멘토 중단 블록 조회 실패 여부. */
+  mentorSuspendedOk: boolean;
 };
 
 export async function loadSlaDashboard(now: Date = new Date()): Promise<SlaDashboard> {
@@ -38,6 +46,10 @@ export async function loadSlaDashboard(now: Date = new Date()): Promise<SlaDashb
     mentorSuspended: { pending: 0, soon: 0, over: 0, rows: [] },
     slaDays: REFUND_SLA_DAYS,
     error: null,
+    partialErrors: [],
+    reportsOk: true,
+    refundsOk: true,
+    mentorSuspendedOk: true,
   };
 
   let admin;
@@ -47,60 +59,65 @@ export async function loadSlaDashboard(now: Date = new Date()): Promise<SlaDashb
     return { ...base, error: e instanceof Error ? e.message : "서비스 키 오류" };
   }
 
-  // 신고 응답시간
+  // 신고 응답시간 — 반환 error 를 검사해 실패를 0 으로 위장하지 않는다.
   try {
-    const { data: resolved } = await admin
+    const { data: resolved, error: resolvedErr } = await admin
       .from("content_reports")
       .select("created_at, resolved_at, status")
       .in("status", ["resolved", "dismissed"])
       .not("resolved_at", "is", null)
       .order("resolved_at", { ascending: false })
       .limit(500);
+    const { count: openCount, error: openErr } = await admin
+      .from("content_reports")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["pending", "reviewing"]);
+    if (resolvedErr || openErr) throw resolvedErr ?? openErr;
     const resolvedRows = (resolved as Array<{ created_at: string | null; resolved_at: string | null }>) ?? [];
     base.reports.avgResponseHours = avgHours(
       resolvedRows.map((r) => ({ start: r.created_at, end: r.resolved_at }))
     );
     base.reports.resolvedCount = resolvedRows.length;
-    const { count: openCount } = await admin
-      .from("content_reports")
-      .select("id", { count: "exact", head: true })
-      .in("status", ["pending", "reviewing"]);
     base.reports.openCount = openCount ?? 0;
   } catch {
-    /* skip */
+    base.reportsOk = false;
+    base.partialErrors.push("신고 지표를 불러오지 못했습니다.");
   }
 
   // 환불 처리시간
   try {
-    const { data: processed } = await admin
+    const { data: processed, error: processedErr } = await admin
       .from("refunds")
       .select("created_at, processed_at, status")
       .not("processed_at", "is", null)
       .order("processed_at", { ascending: false })
       .limit(500);
+    const { count: pendingCount, error: pendingErr } = await admin
+      .from("refunds")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "pending");
+    if (processedErr || pendingErr) throw processedErr ?? pendingErr;
     const processedRows = (processed as Array<{ created_at: string | null; processed_at: string | null }>) ?? [];
     base.refunds.avgProcessHours = avgHours(
       processedRows.map((r) => ({ start: r.created_at, end: r.processed_at }))
     );
     base.refunds.processedCount = processedRows.length;
-    const { count: pendingCount } = await admin
-      .from("refunds")
-      .select("id", { count: "exact", head: true })
-      .eq("status", "pending");
     base.refunds.pendingCount = pendingCount ?? 0;
   } catch {
-    /* skip */
+    base.refundsOk = false;
+    base.partialErrors.push("환불 지표를 불러오지 못했습니다.");
   }
 
   // 멘토 중단 5일 SLA 잔여
   try {
-    const { data: ms } = await admin
+    const { data: ms, error: msErr } = await admin
       .from("refunds")
       .select("id, created_at, status")
       .eq("status", "pending")
       .eq("request_type", "subscription_mentor_suspended")
       .order("created_at", { ascending: true })
       .limit(200);
+    if (msErr) throw msErr;
     const msRows = (ms as Array<{ id: string; created_at: string | null; status: string }>) ?? [];
     base.mentorSuspended.pending = msRows.length;
     for (const r of msRows) {
@@ -116,7 +133,8 @@ export async function loadSlaDashboard(now: Date = new Date()): Promise<SlaDashb
       });
     }
   } catch {
-    /* skip */
+    base.mentorSuspendedOk = false;
+    base.partialErrors.push("멘토 중단 환불 지표를 불러오지 못했습니다.");
   }
 
   return base;

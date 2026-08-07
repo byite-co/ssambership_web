@@ -6,8 +6,10 @@ import { requireRole } from "@/lib/auth/routeGuard";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { updateContentReportStatusAction, updateContentReportModerationAction } from "@/lib/admin/adminReportActions";
 import { loadAdminReportEvidence, type AdminReportEvidence } from "@/lib/admin/adminReportEvidence";
+import { loadAdminReportNotes } from "@/lib/admin/adminCaseNotes";
 import { contentReportStatusLabel } from "@/lib/admin/contentReportLabels";
 import { FormSubmitButton } from "@/components/common/FormSubmitButton";
+import { AdminCaseNotesPanel } from "@/components/admin/AdminCaseNotesPanel";
 
 const TABLE = "content_reports" as const;
 
@@ -162,6 +164,10 @@ export default async function AdminReportDetailPage(props: Props) {
     ? await loadAdminReportEvidence(evidenceClient, fieldStr(row, "target_type"), fieldStr(row, "target_id"))
     : null;
 
+  // D-AD-13: 신고 케이스 운영 메모 배선 — 분쟁에만 있던 메모 패널을 신고 상세에도 연결해
+  // saveContentReportAdminNoteAction 의 도달 불가(DEAD)를 해소한다.
+  const reportNotes = row ? await loadAdminReportNotes(supabase, id) : null;
+
   const status = fieldStr(row, "status") ?? "";
 
   return (
@@ -275,6 +281,15 @@ export default async function AdminReportDetailPage(props: Props) {
               </form>
             </div>
           </section>
+        ) : null}
+
+        {row && reportNotes ? (
+          <AdminCaseNotesPanel
+            targetKind="content_report"
+            targetId={id}
+            notes={reportNotes}
+            legacyNote={fieldStr(row, "admin_note")}
+          />
         ) : null}
 
         {row ? (
