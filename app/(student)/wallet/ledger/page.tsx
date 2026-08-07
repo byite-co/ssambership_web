@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { createClient } from "@/lib/supabase/server";
-import { fetchWalletBalanceByUserId } from "@/lib/cash/cashQueries";
 import { parseWalletBalanceKrw } from "@/lib/cash/parseWalletBalanceKrw";
 import { loadWalletLedgerPageData } from "@/lib/cash/walletRouteData";
 import { StudentDashboardShell } from "@/components/mypage/StudentDashboardShell";
@@ -25,14 +24,13 @@ export default async function WalletLedgerPage(props: Props) {
   const to = (Array.isArray(sp.to) ? sp.to[0] : sp.to) ?? null;
   const kind = (Array.isArray(sp.kind) ? sp.kind[0] : sp.kind) ?? null;
 
-  const balance = await fetchWalletBalanceByUserId(supabase, user.id);
-  const cashBalanceKrw = parseWalletBalanceKrw(balance.row);
-
+  // D-ST-6: 잔액은 로더가 한 번만 조회한다(구: 페이지·로더 이중 조회로 시점차 발생).
   const data = await loadWalletLedgerPageData(supabase, user.id, {
     from: from ?? undefined,
     to: to ?? undefined,
-    kind: kind ?? undefined
+    kind: kind ?? undefined,
   });
+  const cashBalanceKrw = parseWalletBalanceKrw(data.balance.row);
 
   return (
     <StudentDashboardShell

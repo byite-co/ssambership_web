@@ -97,7 +97,9 @@ function SubscriptionRow({ item }: { item: ActiveSubscriptionCard }) {
               <dd className="mt-0.5 font-bold text-slate-900">{item.nextBillingDisplayLabel}</dd>
             </div>
             <div>
-              <dt className="font-semibold text-slate-500">남은 질문</dt>
+              {/* D-ST-18: 실사용 잔여가 아니라 플랜 기준 주간 한도 라벨이므로 '남은 질문'(잔여 오인)
+                  대신 '주간 질문 한도'로 표기한다. */}
+              <dt className="font-semibold text-slate-500">주간 질문 한도</dt>
               <dd className="mt-0.5 font-bold text-slate-900">{item.questionsRemainingLabel}</dd>
             </div>
             <div>

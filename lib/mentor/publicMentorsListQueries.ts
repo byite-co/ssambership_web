@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { loadMentorDirectoryUserRows, loadMentorProfilesForDirectory } from "@/lib/auth/mentorPublicRead";
+import { loadMentorProfilesForDirectory, type PublicMentorProfileRow } from "@/lib/auth/mentorPublicRead";
+import { API_WEB_V1_SCHEMA } from "@/lib/apiWebV1/rpc";
+import type { UserRow } from "@/lib/types/user";
 import { buildMentorProfileDisplay, type MentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
 import type { MentorsListFilters, MentorsListSort } from "@/lib/mentor/mentorsListSearchParams";
 import { MENTORS_PAGE_SIZE } from "@/lib/mentor/mentorsListSearchParams";
@@ -8,7 +10,6 @@ import { rowsFromSupabaseData } from "@/lib/qna/safeSelect";
 import { assignPlansByTier, type PlansByTier, type SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
 import { loadMentorCapUsageBatch, type MentorCapUsage } from "@/lib/subscribe/mentorCapService";
 import { mentorVerificationStatusAllowsActivity } from "@/lib/mentor/mentorVerificationGate";
-import { formatAvgResponseHoursLabel, loadMentorAvgResponseHours } from "@/lib/mentor/avgResponseHoursDisplay";
 import { getMajorSubjects, getMinorSubjects } from "@/lib/subjects/subjectCatalog";
 import { mentorPlanCashKrw } from "@/lib/subscribe/mentorPlanPricing";
 import {
@@ -21,6 +22,98 @@ import type {
   MentorTypeFilter,
 } from "@/lib/mentor/mentorsListSearchParams";
 type Row = Record<string, unknown>;
+
+// D-ST-8: 인메모리 200행 캡을 제거하기 위한 상수·유틸.
+// PostgREST 기본 max-rows(1000)와 URL 길이 상한 때문에 디렉터리 전량은 range 로 순회하고,
+// 다운스트림 `.in()` 배치는 청크로 나눈다.
+const DIRECTORY_BATCH = 1000;
+const DIRECTORY_SAFETY_MAX = 10000;
+const IN_CHUNK = 200;
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
+/** mentor_directory_v1 행 → 최소 UserRow(목록이 소비하는 id·status·created_at·nickname 만). */
+function directoryRowToUserRow(row: Row): UserRow {
+  const createdAt = row.created_at == null ? new Date().toISOString() : String(row.created_at);
+  return {
+    id: String(row.mentor_id),
+    role: "mentor",
+    status: "active",
+    full_name: null,
+    nickname: typeof row.nickname === "string" ? row.nickname : null,
+    email: null,
+    grade_level: null,
+    student_status: null,
+    birth_date: null,
+    terms_agreed_at: null,
+    privacy_agreed_at: null,
+    marketing_agreed: false,
+    created_at: createdAt,
+    updated_at: createdAt,
+  };
+}
+
+/**
+ * D-ST-8: mentor_directory_v1 전량을 created_at desc 로 range 순회한다(구: `.limit(200)` 캡으로
+ * 201번째 이후 멘토가 어떤 검색·필터·페이지로도 안 나오던 버그). 안전 상한(10000) 도달 시
+ * truncated=true 로 표면화한다.
+ */
+async function fetchAllDirectoryUserRows(
+  supabase: SupabaseClient
+): Promise<{ users: UserRow[]; error: string | null; probe: string; truncated: boolean }> {
+  const users: UserRow[] = [];
+  let truncated = false;
+  for (let offset = 0; offset < DIRECTORY_SAFETY_MAX; offset += DIRECTORY_BATCH) {
+    const end = Math.min(offset + DIRECTORY_BATCH, DIRECTORY_SAFETY_MAX) - 1;
+    const { data, error } = await supabase
+      .schema(API_WEB_V1_SCHEMA)
+      .from("mentor_directory_v1")
+      .select("mentor_id, nickname, created_at")
+      .order("created_at", { ascending: false })
+      .range(offset, end);
+    if (error) {
+      console.error("[mentors] mentor_directory_v1 range read failed", {
+        message: error.message,
+        code: error.code,
+        offset,
+      });
+      return { users: [], error: error.message || "mentor_directory_v1 failed", probe: `api_web_v1.mentor_directory_v1: ${error.message}`, truncated: false };
+    }
+    const rows = rowsFromSupabaseData(data) as Row[];
+    for (const row of rows) {
+      if (row.mentor_id != null) users.push(directoryRowToUserRow(row));
+    }
+    if (rows.length < end - offset + 1) break; // 더 없음
+    if (offset + DIRECTORY_BATCH >= DIRECTORY_SAFETY_MAX) truncated = true;
+  }
+  return { users, error: null, probe: `api_web_v1.mentor_directory_v1(V3) · 전량 순회 ${users.length}행`, truncated };
+}
+
+/**
+ * D-ST-8: 프로필 배치 조회를 청크로 나눈다(단일 `.in()` 은 PostgREST max-rows 로 1000행에서
+ * 잘려 멘토가 1000명을 넘으면 프로필이 누락됐다). Wave0 loadMentorProfilesForDirectory 재사용.
+ */
+async function loadProfilesForDirectoryChunked(
+  supabase: SupabaseClient,
+  ids: string[]
+): Promise<{ byUser: Map<string, PublicMentorProfileRow>; error: string | null; probe: string }> {
+  const byUser = new Map<string, PublicMentorProfileRow>();
+  if (!ids.length) return { byUser, error: null, probe: "skip" };
+  let firstError: string | null = null;
+  for (const idChunk of chunk(ids, 500)) {
+    const batch = await loadMentorProfilesForDirectory(supabase, idChunk);
+    if (batch.error) {
+      firstError = firstError ?? batch.error;
+      continue;
+    }
+    for (const [uid, row] of batch.byUser) byUser.set(uid, row);
+  }
+  return { byUser, error: firstError, probe: "api_web_v1.mentor_directory_v1(V3) · 청크 배치" };
+}
 
 type PublicMentorsListOptions = {
   fetchLimit?: number;
@@ -108,35 +201,39 @@ async function batchReviewStats(
   const empty = new Map<string, { count: number | null; avg: number | null }>();
   if (!mentorIds.length) return { map: empty, probe: "멘토 id 없음" };
 
-  const { data, error } = await supabase
-    .from("reviews")
-    .select("mentor_id, rating")
-    .in("mentor_id", mentorIds)
-    .eq("is_hidden", false)
-    .eq("is_blinded", false)
-    .limit(2500);
-  if (error) {
-    // 표시 전용 degrade: 리뷰 통계 없이 카드 렌더(빈 결과와 구분되도록 로그·probe에 오류 기록)
-    console.error("[mentors] batchReviewStats: reviews query failed", error.message);
-    return { map: empty, probe: `reviews.mentor_id 오류: ${error.message}` };
-  }
+  // D-ST-8: id 청크로 나눠 조회(단일 `.in()` + limit 2500 은 멘토 다수 시 잘렸다).
   const acc = new Map<string, { c: number; rs: number; rn: number }>();
-  const reviewRows = rowsFromSupabaseData(data) as Row[];
-  for (const row of reviewRows) {
-    const id = String(row.mentor_id);
-    const s = acc.get(id) ?? { c: 0, rs: 0, rn: 0 };
-    s.c += 1;
-    if (typeof row.rating === "number") {
-      s.rs += row.rating;
-      s.rn += 1;
+  let totalRows = 0;
+  for (const idChunk of chunk(mentorIds, IN_CHUNK)) {
+    const { data, error } = await supabase
+      .from("reviews")
+      .select("mentor_id, rating")
+      .in("mentor_id", idChunk)
+      .eq("is_hidden", false)
+      .eq("is_blinded", false);
+    if (error) {
+      // 표시 전용 degrade: 리뷰 통계 없이 카드 렌더(빈 결과와 구분되도록 로그·probe에 오류 기록)
+      console.error("[mentors] batchReviewStats: reviews query failed", error.message);
+      return { map: empty, probe: `reviews.mentor_id 오류: ${error.message}` };
     }
-    acc.set(id, s);
+    const reviewRows = rowsFromSupabaseData(data) as Row[];
+    totalRows += reviewRows.length;
+    for (const row of reviewRows) {
+      const id = String(row.mentor_id);
+      const s = acc.get(id) ?? { c: 0, rs: 0, rn: 0 };
+      s.c += 1;
+      if (typeof row.rating === "number") {
+        s.rs += row.rating;
+        s.rn += 1;
+      }
+      acc.set(id, s);
+    }
   }
   const map = new Map<string, { count: number | null; avg: number | null }>();
   for (const [id, s] of acc) {
     map.set(id, { count: s.c, avg: s.rn ? s.rs / s.rn : null });
   }
-  return { map, probe: "reviews.mentor_id · hidden/blinded 제외 · 최대 2500행 집계" };
+  return { map, probe: `reviews.mentor_id · hidden/blinded 제외 · ${totalRows}행 집계` };
 }
 
 type MentorPlanBatch = { label: string; byTier: PlansByTier; probe: string };
@@ -151,23 +248,29 @@ async function batchPlanLabels(
   supabase: SupabaseClient,
   mentorIds: string[]
 ): Promise<{ byMentor: Map<string, MentorPlanBatch>; probe: string }> {
-  const { data, error } = await supabase
-    .from("mentor_plans")
-    .select("*")
-    .in("mentor_id", mentorIds)
-    .limit(800);
-  if (error) {
-    console.error("[mentors] batchPlanLabels: mentor_plans query failed", error.message);
-    return { byMentor: new Map(), probe: `mentor_plans.mentor_id 오류: ${error.message}` };
-  }
-  const rows = rowsFromSupabaseData(data) as Row[];
+  // D-ST-8: id 청크로 나눠 조회(단일 `.in()` + limit 800 은 멘토 다수 시 플랜이 잘려 가격
+  // 라벨·priceBand 필터가 틀렸다).
+  const mentorIdSet = new Set(mentorIds);
   const rowsByMentor = new Map<string, Row[]>();
-  for (const row of rows) {
-    const mid = String(row.mentor_id);
-    if (!mentorIds.includes(mid)) continue;
-    const list = rowsByMentor.get(mid) ?? [];
-    list.push(row);
-    rowsByMentor.set(mid, list);
+  let totalRows = 0;
+  for (const idChunk of chunk(mentorIds, IN_CHUNK)) {
+    const { data, error } = await supabase
+      .from("mentor_plans")
+      .select("*")
+      .in("mentor_id", idChunk);
+    if (error) {
+      console.error("[mentors] batchPlanLabels: mentor_plans query failed", error.message);
+      return { byMentor: new Map(), probe: `mentor_plans.mentor_id 오류: ${error.message}` };
+    }
+    const rows = rowsFromSupabaseData(data) as Row[];
+    totalRows += rows.length;
+    for (const row of rows) {
+      const mid = String(row.mentor_id);
+      if (!mentorIdSet.has(mid)) continue;
+      const list = rowsByMentor.get(mid) ?? [];
+      list.push(row);
+      rowsByMentor.set(mid, list);
+    }
   }
   const out = new Map<string, MentorPlanBatch>();
   for (const [mid, mentorRows] of rowsByMentor) {
@@ -191,7 +294,7 @@ async function batchPlanLabels(
       probe: "mentor_plans.mentor_id",
     });
   }
-  return { byMentor: out, probe: `mentor_plans.mentor_id · 행 ${rows.length}` };
+  return { byMentor: out, probe: `mentor_plans.mentor_id · 행 ${totalRows}` };
 }
 
 function formatMoney(n: number): string {
@@ -346,11 +449,15 @@ function sortKey(f: MentorsListSort): (a: MentorPublicListCard, b: MentorPublicL
   }
 }
 
-async function batchMentorListStats(
-  supabase: SupabaseClient,
+// D-ST-9: 목록 카드(MentorCard)는 stats.connectedStudents 와 stats.avgResponseLabel 를 렌더하지
+// 않는다(카드 통계 문구는 totalAnswers>=5 일 때만 나오는데 totalAnswers 는 항상 null 이라 항상
+// "신규 멘토 …" 고정 문구다). 따라서 렌더에 쓰이지 않는 (1) subscriptions 최대 3000행 스캔
+// (connectedStudents) 과 (2) 멘토 1인당 get_mentor_avg_response_hours RPC N+1 을 제거한다.
+// satisfactionLabel 만 이미 조회한 reviewMap 으로 계산한다(추가 왕복 없음).
+function buildMentorListStats(
   mentorIds: string[],
   reviewMap: Map<string, { count: number | null; avg: number | null }>
-): Promise<Map<string, MentorListStats>> {
+): Map<string, MentorListStats> {
   const out = new Map<string, MentorListStats>();
   for (const id of mentorIds) {
     const rev = reviewMap.get(id);
@@ -363,53 +470,6 @@ async function batchMentorListStats(
       satisfactionLabel,
     });
   }
-  if (!mentorIds.length) return out;
-
-  // W4(C10): mentor_profiles 통계 컬럼(total_answers/connected_students/avg_response_minutes/
-  // satisfaction_* 등) select 블록과 mentor_stats/mentor_directory_stats 프로빙 루프 삭제 —
-  // 후보 컬럼·테이블 부재 실측(187 baseline 0)으로 해당 select 는 항상 42703/42P01 실패였고
-  // 무음 skip 되던 영구 사문 코드. 프로빙 제거, 현행 관측 동작(기본값 유지) 고정. 기능 정본화는 비범위.
-
-  // W4(C10): subscriptions/mentor_subscriptions/user_subscriptions 프로빙 제거 — 정본
-  // public.subscriptions.mentor_id 단일 쿼리(187 baseline 실측 · XW-10). 현행 동작대로
-  // status 무필터 행 수를 유지한다. 오류 시 console.error 후 skip — connectedStudents 는
-  // 목록 카드 표시 전용 degrade(성공 아님).
-  {
-    const { data, error } = await supabase
-      .from("subscriptions")
-      .select("mentor_id")
-      .in("mentor_id", mentorIds)
-      .limit(3000);
-    if (error) {
-      console.error("[mentors] batchMentorListStats: subscriptions query failed", error.message);
-    } else {
-      const counts = new Map<string, number>();
-      for (const row of (data as Row[]) ?? []) {
-        const id = String(row.mentor_id);
-        counts.set(id, (counts.get(id) ?? 0) + 1);
-      }
-      for (const [id, c] of counts) {
-        const prev = out.get(id);
-        if (prev && prev.connectedStudents == null) {
-          out.set(id, { ...prev, connectedStudents: c });
-        }
-      }
-    }
-  }
-
-  const responseEntries = await Promise.all(
-    mentorIds.map(async (id) => [id, await loadMentorAvgResponseHours(supabase, id)] as const)
-  );
-  for (const [id, hours] of responseEntries) {
-    if (hours == null) continue;
-    const label = formatAvgResponseHoursLabel(hours);
-    if (label === "—") continue;
-    const prev = out.get(id);
-    if (prev) {
-      out.set(id, { ...prev, avgResponseLabel: label });
-    }
-  }
-
   return out;
 }
 
@@ -422,7 +482,8 @@ export async function loadPublicMentorsList(
   filters: MentorsListFilters,
   opts?: PublicMentorsListOptions
 ): Promise<PublicMentorsListResult> {
-  const fetchLimit = opts?.fetchLimit ?? 200;
+  // D-ST-8: fetchLimit(구 인메모리 캡)은 더 이상 캡으로 쓰지 않는다 — 디렉터리 전량을 순회한다.
+  void opts?.fetchLimit;
   const pageSize = opts?.pageSize ?? MENTORS_PAGE_SIZE;
   const page = filters.page;
   const diagnostics: string[] = [];
@@ -435,13 +496,12 @@ export async function loadPublicMentorsList(
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? process.env.SUPABASE_ANON_KEY;
   diagnostics.push(`supabase_config: URL=${Boolean(url)}, Key=${Boolean(anonKey)}`);
 
-  const dir = await loadMentorDirectoryUserRows(supabase, fetchLimit);
+  const dir = await fetchAllDirectoryUserRows(supabase);
   diagnostics.push(dir.probe);
   if (dir.error) {
     console.error("[mentors] loadPublicMentorsList: directory users failed", {
       error: dir.error,
       probe: dir.probe,
-      usedRpc: dir.usedRpc,
       supabaseConfig: { url: Boolean(url), key: Boolean(anonKey) },
       diagnostics,
     });
@@ -456,6 +516,9 @@ export async function loadPublicMentorsList(
       onlySelfVisibleHint: false,
     };
   }
+  if (dir.truncated) {
+    console.warn("[mentors] loadPublicMentorsList: directory truncated at safety cap", DIRECTORY_SAFETY_MAX);
+  }
 
   const users = dir.users;
   diagnostics.push(`mentors(디렉터리): ${users.length}행`);
@@ -465,7 +528,7 @@ export async function loadPublicMentorsList(
   const profileByUser = new Map<string, Row>();
 
   if (ids.length) {
-    const pBatch = await loadMentorProfilesForDirectory(supabase, ids);
+    const pBatch = await loadProfilesForDirectoryChunked(supabase, ids);
     diagnostics.push(pBatch.probe);
     if (pBatch.error) {
       profilesError = pBatch.error;
@@ -484,7 +547,7 @@ export async function loadPublicMentorsList(
   diagnostics.push(`reviews: ${revBatch.probe}`);
   diagnostics.push(`plans: ${planBatch.probe}`);
 
-  const statsMap = await batchMentorListStats(supabase, ids, revBatch.map);
+  const statsMap = buildMentorListStats(ids, revBatch.map);
   const capMap =
     ids.length > 0 ? await loadMentorCapUsageBatch(ids) : new Map<string, MentorCapUsage>();
 

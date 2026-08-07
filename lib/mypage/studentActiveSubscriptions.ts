@@ -1,7 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getMentorUserPublic, loadMentorProfilesForDirectory } from "@/lib/auth/mentorPublicRead";
-import { fetchPlansForMentor } from "@/lib/mentor/publicMentorBundle";
+import { loadMentorProfilesForDirectory } from "@/lib/auth/mentorPublicRead";
 import { buildMentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
+import type { UserRow } from "@/lib/types/user";
 import { rowsFromSupabaseData } from "@/lib/qna/safeSelect";
 import { getSubscribeCatalogPlan } from "@/lib/subscribe/subscribePlanCatalog";
 import {
@@ -110,22 +110,79 @@ export function formatQuestionsRemainingLabel(tier: SubscribePlanTier | null): s
   return "—";
 }
 
-async function planRowsByMentorId(
+// D-ST-18: 멘토별 fetchPlansForMentor N+1 을 mentor_plans 단일 배치 조회로 합친다(공개 목록의
+// batchPlanLabels 와 동일 패턴 — 학생 세션이 public.mentor_plans 를 읽을 수 있다). display-only:
+// 다음 결제 금액 "표시"만 권장가로 낙하하며, 실차감은 갱신 배치가 서버에서 재계산한다.
+async function planTierRowsByMentorIdBatch(
   supabase: SupabaseClient,
   mentorIds: string[]
 ): Promise<Map<string, Partial<Record<SubscribePlanTier, Row>>>> {
   const out = new Map<string, Partial<Record<SubscribePlanTier, Row>>>();
-  await Promise.all(
-    mentorIds.map(async (mentorId) => {
-      const plans = await fetchPlansForMentor(supabase, mentorId);
-      if (plans.error) {
-        // W4(C10): display-only degrade — 다음 결제 금액 "표시"만 권장가(CLAUDE.md 정본 폴백)로
-        // 낙하하며 성공으로 위장하지 않는다(로그 유지). 실차감은 갱신 배치가 서버에서 재계산.
-        console.error("[loadActiveSubscriptionsForStudent] mentor plans", { mentorId, error: plans.error });
-      }
-      out.set(mentorId, assignPlansByTier(plans.rows).byTier as Partial<Record<SubscribePlanTier, Row>>);
-    })
-  );
+  if (!mentorIds.length) return out;
+  const { data, error } = await supabase
+    .from("mentor_plans")
+    .select("*")
+    .in("mentor_id", mentorIds)
+    .limit(2000);
+  if (error) {
+    console.error("[loadActiveSubscriptionsForStudent] mentor plans batch", error.message);
+    return out;
+  }
+  const rowsByMentor = new Map<string, Row[]>();
+  for (const row of rowsFromSupabaseData(data) as Row[]) {
+    const mid = String(row.mentor_id ?? "");
+    if (!mid) continue;
+    const list = rowsByMentor.get(mid) ?? [];
+    list.push(row);
+    rowsByMentor.set(mid, list);
+  }
+  for (const [mid, rows] of rowsByMentor) {
+    out.set(mid, assignPlansByTier(rows).byTier as Partial<Record<SubscribePlanTier, Row>>);
+  }
+  return out;
+}
+
+/** V6 소비 형상에 맞춘 최소 UserRow — mentor_directory_v1 nickname 배치용(displayName 만 소비). */
+function minimalMentorUserRow(mentorId: string, nickname: unknown): UserRow {
+  return {
+    id: mentorId,
+    role: "mentor",
+    status: "active",
+    full_name: null,
+    nickname: typeof nickname === "string" ? nickname : null,
+    email: null,
+    grade_level: null,
+    student_status: null,
+    birth_date: null,
+    terms_agreed_at: null,
+    privacy_agreed_at: null,
+    marketing_agreed: false,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+// D-ST-18: 멘토별 단건 공개 유저 조회(N+1)를 mentor_directory_v1 nickname 단일 배치로 합친다.
+async function mentorUserRowsByIdBatch(
+  supabase: SupabaseClient,
+  mentorIds: string[]
+): Promise<Map<string, UserRow>> {
+  const out = new Map<string, UserRow>();
+  if (!mentorIds.length) return out;
+  const { data, error } = await supabase
+    .schema(API_WEB_V1_SCHEMA)
+    .from("mentor_directory_v1")
+    .select("mentor_id, nickname")
+    .in("mentor_id", mentorIds);
+  if (error) {
+    console.warn("[loadActiveSubscriptionsForStudent] mentor nicknames batch", error.message);
+    return out;
+  }
+  for (const row of rowsFromSupabaseData(data) as Row[]) {
+    const id = String(row.mentor_id ?? "");
+    if (!id) continue;
+    out.set(id, minimalMentorUserRow(id, row.nickname));
+  }
   return out;
 }
 
@@ -142,18 +199,11 @@ export async function loadActiveSubscriptionsForStudent(
   const rows = loaded.rows.filter((r) => String(r.status ?? "").toLowerCase() === "active");
   const mentorIds = [...new Set(rows.map((r) => String(r.mentor_id ?? "").trim()).filter(Boolean))];
 
-  const [profilesLoad, planRowsByMentor] = await Promise.all([
+  const [profilesLoad, planRowsByMentor, usersByMentor] = await Promise.all([
     loadMentorProfilesForDirectory(supabase, mentorIds),
-    planRowsByMentorId(supabase, mentorIds),
+    planTierRowsByMentorIdBatch(supabase, mentorIds),
+    mentorUserRowsByIdBatch(supabase, mentorIds),
   ]);
-
-  const usersByMentor = new Map<string, Awaited<ReturnType<typeof getMentorUserPublic>>["data"]>();
-  await Promise.all(
-    mentorIds.map(async (mentorId) => {
-      const { data: userRow } = await getMentorUserPublic(supabase, mentorId);
-      usersByMentor.set(mentorId, userRow);
-    })
-  );
 
   const items: ActiveSubscriptionCard[] = rows.map((row) => {
     const subscriptionId = String(row.id ?? "");

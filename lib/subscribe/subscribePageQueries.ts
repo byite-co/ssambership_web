@@ -79,12 +79,10 @@ export function weeklyQuestionsLabel(row: Row | null): string {
   return "질문 한도는 구독 플랜에 따라 달라요";
 }
 
-// W4(C10): 후보 테이블 부재 실측(187 baseline 0 — promotions/site_notices/notices/active_promotions
-// 전부 없음) — 프로빙 제거, 현행 관측 동작(빈 결과) 고정. 기능 정본화(app_notices·promotion_campaigns
-// 연결)는 비범위.
-function emptyPromotionsLoad(): PromotionsLoad {
-  return { rows: [], table: null, probe: "프로모션 데이터 소스 미연결(W4 C10 고정)", error: null };
-}
+// D-ST-12: 영구 빈 결과를 반환하던 프로모션 스텁과 loadStudentSubscribePage 반환의 promotions
+// 필드를 제거했다. 프로모션 데이터 소스는 미연결이고 이 값은 /subscribe 렌더에 소비되지 않아,
+// '데이터 없음'과 '기능 미구현'을 구분할 수 없는 사장 코드였다. 정본 테이블
+// 연결(app_notices·promotion_campaigns)은 비범위. `PromotionsLoad` 타입은 유지한다.
 
 // S2-2 전환 W1(C1 — 계약 §17 #15): 구 SUB_TABLES/PAY_TABLES 페어 프로빙
 // (`fetchSubscriptionForPair`·`fetchLatestPaymentProbe`)은 결과 필드가 모든 호출부에서
@@ -104,7 +102,6 @@ export type StudentSubscribePageData =
       plans: MentorPlansLoad;
       byTier: PlansByTier;
       fillProbe: string;
-      promotions: PromotionsLoad;
     };
 
 export async function loadStudentSubscribePage(
@@ -127,7 +124,6 @@ export async function loadStudentSubscribePage(
     fetchMentorProfileForPublicMentor(supabase, mentorId),
     fetchPlansForMentor(supabase, mentorId),
   ]);
-  const promotions = emptyPromotionsLoad();
 
   const { byTier, fillProbe } = assignPlansByTier((plans.rows as Row[]) ?? []);
   const display = buildMentorProfileDisplay(profileRow, userRow);
@@ -141,6 +137,5 @@ export async function loadStudentSubscribePage(
     plans,
     byTier,
     fillProbe,
-    promotions,
   };
 }
