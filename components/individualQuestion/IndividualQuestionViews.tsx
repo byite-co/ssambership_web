@@ -1,5 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { ChatBottomAnchor } from "@/components/qna/ChatBottomAnchor";
+import { IqAttachmentField } from "@/components/individualQuestion/IqAttachmentField";
 import { CheckCircle2, Clock, Inbox, MessageCircle, MessageCircleCheck, MessageSquareText, Paperclip, ReceiptText, ShieldCheck, WalletCards } from "lucide-react";
 import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -244,6 +246,8 @@ export function IndividualQuestionDetailView(props: {
   flash?: string | null;
   warning?: string | null;
   transfer?: { roomId: string | null; threadId: string | null; transferredAt?: string | null } | null;
+  /** ?sent=1 복귀 — 내 메시지(텍스트·첨부) 전송 직후에만 대화 최하단 정렬. */
+  justSent?: boolean;
 }) {
   const { detail, actor } = props;
   const transferThreadHref =
@@ -264,6 +268,17 @@ export function IndividualQuestionDetailView(props: {
     list.push(att);
     attachmentsByMessage.set(att.message_id, list);
   }
+
+  // 전송 직후 하단 정렬 판정 — 마지막 메시지가 내 것일 때만(열람·상대 갱신에는 미개입).
+  const lastMessage = detail.messages[detail.messages.length - 1] ?? null;
+  const lastMessageRole: "student" | "mentor" | "unknown" = lastMessage
+    ? lastMessage.author_id === detail.student_id
+      ? "student"
+      : mentorUserId && lastMessage.author_id === mentorUserId
+        ? "mentor"
+        : lastMessage.authorRole
+    : "unknown";
+  const scrollToLatest = Boolean(props.justSent) && lastMessageRole === actor;
 
   const status = (detail.status ?? "").toLowerCase();
   const terminal = status === "released" || status === "refunded" || status === "expired" || status === "canceled";
@@ -347,7 +362,7 @@ export function IndividualQuestionDetailView(props: {
 
   return (
     <div className="cr-landing cr-detail-v5 cr-detail-shell mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
-      <article className="cr-detail-card">
+      <article className="cr-detail-card" data-chat-scroll-scope>
         {/* 큰 상태 문장이 주인공: 지금 무슨 상태고 누구 차례인지 사람 말로(주문방과 통일). */}
         <header className="cr-detail-header">
           {isStudent ? (
@@ -534,6 +549,7 @@ export function IndividualQuestionDetailView(props: {
               ) : null}
             </div>
           )}
+          <ChatBottomAnchor anchorKey={lastMessage?.id ?? null} active={scrollToLatest} />
         </section>
 
         {/* 메시지 입력바 — 멘토·학생 공통(서버가 작성자 판별) */}
@@ -548,17 +564,11 @@ export function IndividualQuestionDetailView(props: {
                 className={`w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm leading-7 text-slate-900 outline-none transition placeholder:text-slate-400 focus:ring-4 ${accent.ring}`}
                 placeholder={actor === "mentor" ? "학생에게 보낼 답변·메시지를 작성하세요." : "멘토에게 보낼 메시지를 작성하세요."}
               />
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-bold text-slate-600">
-                  <Paperclip className={`h-4 w-4 ${accent.icon}`} aria-hidden />
-                  <span>파일 첨부</span>
-                  <input
-                    type="file"
-                    name="attachment"
-                    accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
-                    className="sr-only"
-                  />
-                </label>
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <IqAttachmentField
+                  iconClassName={accent.icon}
+                  accept=".jpg,.jpeg,.png,.pdf,image/jpeg,image/png,application/pdf"
+                />
                 <FormSubmitButton
                   idleLabel="보내기"
                   pendingLabel="전송 중..."

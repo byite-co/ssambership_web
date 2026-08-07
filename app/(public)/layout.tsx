@@ -21,7 +21,9 @@ export default async function PublicLayout({ children }: { children: ReactNode }
   }
 
   return (
-    <AppShell area="public" sessionRole={sessionRole} userProfile={profile}>
+    // 멘토가 공용 라우트(커뮤니티 등)를 볼 때도 멘토 강조색(초록)을 유지한다 —
+    // data-shell-area 가 accent 변수를 결정(색 체계 v2 C3). 학생·비로그인은 기본(파랑) 그대로.
+    <AppShell area={sessionRole === "mentor" ? "mentor" : "public"} sessionRole={sessionRole} userProfile={profile}>
       {children}
       <SiteFooter />
     </AppShell>

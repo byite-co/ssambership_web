@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { useFormStatus } from "react-dom";
+import { ChatBottomAnchor } from "@/components/qna/ChatBottomAnchor";
 import { ConnectionNotesPanel } from "@/components/qna/ConnectionNotesPanel";
 import { ArrowLeft, ChevronLeft, ChevronRight, Download, Eye, FileText, MessageCircle, Search, Send, User } from "lucide-react";
 import { QuestionRoomAttachmentButton } from "@/components/qna/QuestionRoomAttachmentButton";
@@ -161,7 +162,7 @@ export function QuestionRoomMentorDesignWorkspace(props: {
   draftMessageBody?: string;
   draftNoteBody?: string;
   formRevision?: string;
-  actionFeedback?: { ok: string | null; error: string | null };
+  actionFeedback?: { kind?: string; ok: string | null; error: string | null };
   /** true: 질문 상세(톡방) 화면 — 중앙 채팅 + 우측 연결노트만 */
   threadDetailMode?: boolean;
   /** 톡방에서 질문 목록(2단계)으로 돌아가는 경로 */
@@ -275,6 +276,17 @@ export function QuestionRoomMentorDesignWorkspace(props: {
   const chatTimeline = useMemo(
     () => buildChatTimeline(props.messages.rows, standalone),
     [props.messages.rows, standalone]
+  );
+
+  // 내 전송 직후(kind=message 성공 복귀)에만 최하단 정렬 — 첨부 전송도 텍스트와 동일 체감.
+  const lastTimelineItem = chatTimeline[chatTimeline.length - 1] ?? null;
+  const lastTimelineMine = lastTimelineItem
+    ? lastTimelineItem.kind === "attachment"
+      ? lastTimelineItem.attachment.authorId === props.currentUserId
+      : messageAuthorId(lastTimelineItem.message) === props.currentUserId
+    : false;
+  const scrollToLatest = Boolean(
+    props.actionFeedback?.kind === "message" && props.actionFeedback?.ok && lastTimelineMine
   );
 
   /* 연결 노트 패널 (공용 컴포넌트 — 멘토/학생 통합) */
@@ -428,6 +440,7 @@ export function QuestionRoomMentorDesignWorkspace(props: {
             );
           })
         )}
+        <ChatBottomAnchor anchorKey={lastTimelineItem?.key ?? null} active={scrollToLatest} />
       </div>
 
       <div className="shrink-0 border-t border-slate-200 bg-white p-3">
@@ -583,7 +596,9 @@ export function QuestionRoomMentorDesignWorkspace(props: {
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col border-slate-200 bg-white lg:border-r">
+        {/* min-h-0: 모바일(세로 flex)에서 min-height:auto 가 내용 크기로 고정되면 main 이
+            고정 높이 셸 밖으로 자라 스레드 목록 스크롤이 죽는다(데스크톱 가로 배치는 무증상). */}
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col border-slate-200 bg-white lg:border-r">
           <header className="shrink-0 border-b border-slate-100 px-6 py-5">
             <div className="flex gap-4">
               <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 border-white bg-slate-50 shadow-md ring-1 ring-slate-100">

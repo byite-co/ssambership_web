@@ -203,6 +203,11 @@ export function RoleLoginForm({
     }
     setSuccess("로그인에 성공했습니다. 이동합니다.");
     setLoading(false);
+    // 실기기 방어: 입력 포커스(소프트 키보드)가 남은 채 전체 문서 네비게이션을 하면
+    // 일부 모바일 브라우저에서 다음 화면의 터치 스크롤이 잠기는 사례가 있어, 이동 전에 해제한다.
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
     window.location.assign(nextPath);
   }
 
