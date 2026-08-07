@@ -74,7 +74,8 @@ export function accountBlockMessage(
 export type AccountGateDenyReason =
   | "banned"
   | "suspended"
-  | "status_unknown" // allowlist 밖 status(예: dormant·deleted·inactive·NULL) — 확인 불가는 곧 거부(D-AU-3)
+  | "deleted" // users.status='deleted' (CHECK 4종 중 하나) — 탈퇴 완료 계정 명시 거부
+  | "status_unknown" // CHECK 밖 가상 값 — 제약상 도달 불가 방어선(확인 불가는 곧 거부)
   | "deletion_blocked" // 탈퇴 write-block (§11.5 ACCOUNT_DELETION_IN_PROGRESS 계열)
   | "row_missing" // users 행 부재 — 확인 불가는 곧 거부
   | "unverifiable"; // 조회 오류·예외·형식 오류 — 확인 불가는 곧 거부
@@ -86,6 +87,7 @@ const UNVERIFIABLE_MESSAGE =
 const DELETION_IN_PROGRESS_MESSAGE = "탈퇴 처리가 진행 중인 계정이라 이 작업을 할 수 없어요.";
 const STATUS_UNKNOWN_MESSAGE =
   "계정 상태를 확인할 수 없어 이 작업을 할 수 없어요. 문의가 필요하면 고객센터로 연락해 주세요.";
+const DELETED_MESSAGE = "이미 탈퇴 처리된 계정이라 이 작업을 할 수 없어요.";
 
 function deny(reason: AccountGateDenyReason, userMessage: string): AccountGateResult {
   return { ok: false, reason, userMessage };
@@ -99,12 +101,12 @@ export type AccountActiveGateDeps = {
 };
 
 /**
- * 웹 게이트 status 정규화 — DB 정본(`api_web_v1.mentor_directory_v1` 등)이 쓰는
- * `COALESCE(status,'active')` 와 동일하게 **NULL/빈 문자열을 정상 active 로 취급**한다.
- * users.status 는 스키마상 NULL 이 정상 활성 계정의 기본값이므로(뷰 WHERE 도 그렇게 판정),
- * 이를 거부하면 정상 사용자의 웹 쓰기가 차단된다(리뷰 구멍 2). 앱 표면 strict 게이트는
- * NULL 을 거부하지만(더 엄격), 웹은 이 정규화로 뷰 불변식과 정합을 맞춘다.
- * 정규화 이후 남는 allowlist 밖 **비어있지 않은** 미지 status(dormant·deleted 등)만 거부한다.
+ * 웹 게이트 status 정규화 — DB 정본(`api_web_v1.mentor_directory_v1` 등)의
+ * `COALESCE(status,'active')` 와 동일하게 NULL/빈 문자열을 active 로 정규화한다.
+ * 원격 실측(2026-08-07) 기준 users.status 는 **NOT NULL · default 'active' ·
+ * CHECK (active/suspended/banned/deleted)** 이므로 NULL/'' 은 제약상 존재할 수 없는
+ * **도달 불가 방어선**이다(오너 결정 1 — 무해하므로 뷰 정합용으로 유지). 앱 표면
+ * strict 게이트는 NULL 을 거부하지만(더 엄격), 웹은 이 정규화로 뷰 식과 정합을 맞춘다.
  */
 function coalesceWebStatusRow(row: AccountStatusInfo | null): AppSurfaceAccountRow | null {
   if (!row) return row;
@@ -114,13 +116,13 @@ function coalesceWebStatusRow(row: AccountStatusInfo | null): AppSurfaceAccountR
 }
 
 /**
- * DI 코어 — **fail-closed** + **status allowlist**(계약 §11.5, D-AU-3).
- * 쓰기 게이트는 앱 표면과 동일하게 `strictAccountStatusDecision`(allowlist)로 판정하되,
- * NULL/빈 status 는 뷰와 동일하게 active 로 선정규화한다(coalesceWebStatusRow — 리뷰 구멍 2).
- * 허용은 `active`(NULL/'' 포함) 와 만료된 `suspended` 뿐이고, banned·유효 suspended·
- * allowlist 밖 비어있지 않은 status(dormant·deleted·inactive 등)·행 부재·조회 오류·형식
- * 오류는 전부 거부한다. 구 동작은 effectiveAccountStatus 의 "미지 값 → active" coalesce 를 써서
- * 새 상태값이 도입되면 조용히 fail-open 됐다 — 이 폴백을 게이트에서 제거했다(표시용 함수는 유지).
+ * DI 코어 — **fail-closed** + **status allowlist**(계약 §11.5, D-AU-3, 오너 결정 1).
+ * allowlist 는 users.status 의 DB CHECK 4종(active/suspended/banned/deleted)에 정확히
+ * 맞춘다: 통과는 `active`(및 만료된 `suspended`)뿐이고 suspended·banned·deleted 는 각각
+ * **명시 거부**한다. CHECK 밖 값·NULL/'' 은 제약상 도달 불가 방어선이다(전자는
+ * status_unknown 거부, 후자는 coalesceWebStatusRow 로 active 정규화 — 뷰 정합).
+ * 구 동작은 effectiveAccountStatus 의 "미지 값 → active" coalesce 를 써서 새 상태값이
+ * 도입되면 조용히 fail-open 됐다 — 이 폴백을 게이트에서 제거했다(표시용 함수는 유지).
  * 탈퇴 write-block 은 strictDeletionDecision 재사용. 오류 상세·원문 응답은 반환·기록하지 않는다.
  */
 export async function assertAccountActiveCore(deps: AccountActiveGateDeps): Promise<AccountGateResult> {
@@ -129,6 +131,8 @@ export async function assertAccountActiveCore(deps: AccountActiveGateDeps): Prom
     const now = deps.now ? deps.now() : new Date();
     const statusDecision = strictAccountStatusDecision(coalesceWebStatusRow(account.row), account.error, now);
     if (!statusDecision.ok) {
+      const rawStatus =
+        typeof account.row?.status === "string" ? account.row.status.trim().toLowerCase() : null;
       switch (statusDecision.reason) {
         case "query_error":
           return deny("unverifiable", UNVERIFIABLE_MESSAGE);
@@ -142,8 +146,11 @@ export async function assertAccountActiveCore(deps: AccountActiveGateDeps): Prom
             "suspended",
             accountBlockMessage(account.row ?? { status: "suspended" }, now) ?? STATUS_UNKNOWN_MESSAGE,
           );
-        default: // status_unknown
-          return deny("status_unknown", STATUS_UNKNOWN_MESSAGE);
+        default:
+          // CHECK 4종 중 deleted 는 명시 거부, 그 외(CHECK 밖 가상 값)는 도달 불가 방어선
+          return rawStatus === "deleted"
+            ? deny("deleted", DELETED_MESSAGE)
+            : deny("status_unknown", STATUS_UNKNOWN_MESSAGE);
       }
     }
     const deletion = await deps.fetchDeletionStatus();
