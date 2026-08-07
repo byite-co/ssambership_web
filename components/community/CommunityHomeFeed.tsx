@@ -45,6 +45,9 @@ export function CommunityHomeFeed(props: Props) {
   const [cursor, setCursor] = useState<string | null>(props.initialCursor);
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(!props.initialCursor);
+  // D-CM-2: API 오류(5xx·error 필드)를 '글 없음/더 이상 없음'으로 위장하지 않고 재시도 UI 로 표면화.
+  const [loadError, setLoadError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const paginate = props.paginate ?? false;
@@ -78,16 +81,26 @@ export function CommunityHomeFeed(props: Props) {
     let cancelled = false;
     (async () => {
       setLoading(true);
+      setLoadError(false);
       try {
         const q = new URLSearchParams({ category, limit: "12" });
         if (sortTab !== "all") q.set("tab", sortTab);
         const res = await fetch(`/api/community/posts?${q.toString()}`);
-        const json = (await res.json()) as { posts: CommunityBoardPostCard[]; nextCursor: string | null };
-        if (!cancelled) {
-          setPosts(json.posts);
-          setCursor(json.nextCursor);
-          setDone(!json.nextCursor);
+        const json = (await res.json()) as {
+          posts: CommunityBoardPostCard[];
+          nextCursor: string | null;
+          error?: string | null;
+        };
+        if (cancelled) return;
+        if (!res.ok || json.error) {
+          setLoadError(true);
+          return;
         }
+        setPosts(json.posts);
+        setCursor(json.nextCursor);
+        setDone(!json.nextCursor);
+      } catch {
+        if (!cancelled) setLoadError(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -95,11 +108,12 @@ export function CommunityHomeFeed(props: Props) {
     return () => {
       cancelled = true;
     };
-  }, [props.initialCategory, props.initialSort, category, sortTab]);
+  }, [props.initialCategory, props.initialSort, category, sortTab, reloadKey]);
 
   const loadMore = useCallback(async () => {
     if (loading || done || !cursor) return;
     setLoading(true);
+    setLoadError(false);
     try {
       const q = new URLSearchParams({ category, cursor, limit: "12" });
       if (sortTab !== "all") q.set("tab", sortTab);
@@ -107,10 +121,18 @@ export function CommunityHomeFeed(props: Props) {
       const json = (await res.json()) as {
         posts: CommunityBoardPostCard[];
         nextCursor: string | null;
+        error?: string | null;
       };
+      // D-CM-2: 오류면 cursor·done 을 건드리지 않고(재시도 가능) 오류 UI 만 띄운다.
+      if (!res.ok || json.error) {
+        setLoadError(true);
+        return;
+      }
       setPosts((prev) => [...prev, ...json.posts]);
       setCursor(json.nextCursor);
       setDone(!json.nextCursor);
+    } catch {
+      setLoadError(true);
     } finally {
       setLoading(false);
     }
@@ -121,13 +143,20 @@ export function CommunityHomeFeed(props: Props) {
     if (!el) return;
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries[0]?.isIntersecting) void loadMore();
+        // 오류 상태에서는 자동 재요청을 멈춘다(무한 재시도 루프 방지 — 사용자가 재시도 버튼으로 진행).
+        if (entries[0]?.isIntersecting && !loadError) void loadMore();
       },
       { rootMargin: "200px" }
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [loadMore]);
+  }, [loadMore, loadError]);
+
+  function retry() {
+    setLoadError(false);
+    if (cursor) void loadMore();
+    else setReloadKey((k) => k + 1);
+  }
 
   function onTab(slug: string) {
     const p = new URLSearchParams(searchParams.toString());
@@ -168,7 +197,21 @@ export function CommunityHomeFeed(props: Props) {
         })}
       </nav>
 
-      {posts.length === 0 ? (
+      {loadError ? (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-red-200 bg-red-50 px-6 py-10 text-center">
+          <p className="text-sm font-bold text-red-900">글을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.</p>
+          <button
+            type="button"
+            onClick={retry}
+            disabled={loading}
+            className="inline-flex min-h-[40px] items-center justify-center rounded-xl border border-red-300 bg-white px-4 text-sm font-extrabold text-red-800 hover:bg-red-100 disabled:opacity-50"
+          >
+            {loading ? "다시 시도 중…" : "다시 시도"}
+          </button>
+        </div>
+      ) : null}
+
+      {!loadError && posts.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-white px-6 py-16 text-center">
           <PenLine className="h-12 w-12 text-slate-400" strokeWidth={1.5} aria-hidden />
           <h3 className="mt-4 text-lg font-black text-slate-900">아직 게시글이 없어요</h3>

@@ -1,75 +1,14 @@
-import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-
-type MutationResult =
-  | { ok: true; id: string; row: Record<string, unknown> | null }
-  | { ok: false; error: string };
-
-function isMissingColumnError(err: PostgrestError | null): boolean {
-  if (!err) return false;
-  return /column|does not exist|schema cache/i.test(err.message);
-}
-
-async function insertWithCandidates(
-  supabase: SupabaseClient,
-  table: string,
-  payloads: Record<string, unknown>[]
-): Promise<{ row: Record<string, unknown> | null; error: string | null }> {
-  let lastError = "insert 후보를 모두 실패했습니다.";
-  for (let attemptIndex = 0; attemptIndex < payloads.length; attemptIndex++) {
-    const payload = payloads[attemptIndex];
-    const { data, error } = await supabase.from(table).insert(payload).select("*").limit(1).maybeSingle();
-    if (!error) {
-      return { row: (data as Record<string, unknown> | null) ?? null, error: null };
-    }
-    lastError = error.message;
-    if (!isMissingColumnError(error)) {
-      return { row: null, error: error.message };
-    }
-  }
-  console.warn("[communityMutations] insertWithCandidates all attempts failed", {
-    table,
-    attempts: payloads.length,
-  });
-  return { row: null, error: lastError };
-}
-
-type ComposeInput = {
-  title: string;
-  body: string;
-  category: string;
-  source: string;
-};
-
-function toResult(row: Record<string, unknown> | null, err: string | null): MutationResult {
-  if (err) return { ok: false, error: err };
-  const id = row && typeof row.id === "string" ? row.id : null;
-  if (!id) return { ok: false, error: "저장은 되었으나 id를 확인할 수 없습니다." };
-  return { ok: true, id, row };
-}
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * shortform_posts — community_posts와 테이블을 분리 유지. 컬럼명 후보만 시도.
+ * 숏폼 댓글(및 레거시 board 경로) 정본 저장 — `public.community_comments`.
+ *
+ * D-CM-14 정리: 구 `insertMentorShortformPost`(컬럼 후보 payload 6종을 순차 시도하는 프로빙
+ * INSERT)와 그 헬퍼(insertWithCandidates)는 현행 스키마와 불일치하고 어떤 후보가 성공하는지에
+ * 따라 저장 컬럼이 달라져 RPC-정본 정책을 우회했다. 유일한 호출부였던 사장 폼(MentorCommunity
+ * ComposeForm)·액션(communityComposeActions)과 함께 삭제했다. 숏폼 작성 정본은
+ * communityShortformActions → communityShortformMutations 이다.
  */
-export async function insertMentorShortformPost(
-  supabase: SupabaseClient,
-  userId: string,
-  input: ComposeInput
-): Promise<MutationResult> {
-  const { title, body, category, source } = input;
-  const t = "shortform_posts";
-
-  const payloads: Record<string, unknown>[] = [
-    { title, body, category, source, author_id: userId, author_role: "mentor" },
-    { title, body, category, source, author_id: userId, author_role: "mentor", rights_confirmed: true },
-    { title, content: body, category, source_url: source, author_id: userId, author_role: "mentor", rights_confirmed: true },
-    { title, text: body, category, source, user_id: userId, author_role: "mentor", rights_ack: true },
-    { title, body, category, attribution: source, user_id: userId, author_role: "mentor", legal_use_confirmed: true },
-    { title, content: body, category, source, user_id: userId, author_role: "mentor" },
-  ];
-
-  const { row, error } = await insertWithCandidates(supabase, t, payloads);
-  return toResult(row, error);
-}
 
 export type InsertCommunityCommentInput = {
   postType: "board" | "shortform";

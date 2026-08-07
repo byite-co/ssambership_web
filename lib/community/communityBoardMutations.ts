@@ -144,29 +144,38 @@ export async function updateCommunityBoardPost(
   return { ok: true, id, removedImageRefs: removed };
 }
 
+/**
+ * 좋아요·스크랩 원자 토글(D-CM-5). 구 select→delete/insert 는 두 요청이 겹치면 양쪽 다 insert 를
+ * 시도해 UNIQUE(user_id,post_id,type) 위반(23505)이나 토글 유실을 냈다. 이제 upsert(on conflict
+ * do nothing) 로 삽입을 시도하고, 실제로 삽입됐으면 active=true, 이미 있어 삽입되지 않았으면 그 행을
+ * 삭제해 active=false 로 접는다. 경합 시에도 23505 를 던지지 않는다.
+ */
 export async function togglePostReaction(
   supabase: SupabaseClient,
   userId: string,
   postId: string,
   type: "like" | "scrap"
 ): Promise<{ ok: true; active: boolean } | { ok: false; error: string }> {
-  const { data: existing } = await supabase
+  const { data: inserted, error: upsertError } = await supabase
     .from("post_reactions")
-    .select("id")
+    .upsert(
+      { user_id: userId, post_id: postId, type },
+      { onConflict: "user_id,post_id,type", ignoreDuplicates: true }
+    )
+    .select("id");
+  if (upsertError) return { ok: false, error: upsertError.message };
+
+  // 삽입된 행이 있으면 새로 켠 것(active). 없으면 이미 존재 → 삭제로 토글 off.
+  if (inserted && inserted.length > 0) return { ok: true, active: true };
+
+  const { error: deleteError } = await supabase
+    .from("post_reactions")
+    .delete()
     .eq("user_id", userId)
     .eq("post_id", postId)
-    .eq("type", type)
-    .maybeSingle();
-
-  if (existing?.id) {
-    const { error } = await supabase.from("post_reactions").delete().eq("id", existing.id);
-    if (error) return { ok: false, error: error.message };
-    return { ok: true, active: false };
-  }
-
-  const { error } = await supabase.from("post_reactions").insert({ user_id: userId, post_id: postId, type });
-  if (error) return { ok: false, error: error.message };
-  return { ok: true, active: true };
+    .eq("type", type);
+  if (deleteError) return { ok: false, error: deleteError.message };
+  return { ok: true, active: false };
 }
 
 export async function insertBoardComment(
@@ -199,17 +208,23 @@ export async function insertBoardComment(
   return { ok: true };
 }
 
+/**
+ * \uB313\uAE00 soft-delete(\uC791\uC131\uC790 \uC804\uC6A9). \uAD6C \uAD6C\uD604\uC740 0\uD589 UPDATE(\uD0C0\uC778 \uB313\uAE00\u00B7\uBE44\uC874\uC7AC id)\uB3C4 ok:true \uB85C \uC131\uACF5
+ * \uC704\uC7A5\uD588\uB2E4(D-CM-6). `.select()` \uB85C \uC2E4\uC81C \uAC31\uC2E0\uB41C \uD589\uC744 \uBC1B\uC544 0\uD589\uC774\uBA74 \uC2E4\uD328("not_found")\uB85C \uBC18\uD658\uD55C\uB2E4.
+ */
 export async function softDeleteBoardComment(
   supabase: SupabaseClient,
   userId: string,
   commentId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("comments")
     .update({ is_deleted: true, content: "\uC0AD\uC81C\uB41C \uB313\uAE00\uC785\uB2C8\uB2E4." })
     .eq("id", commentId)
-    .eq("author_id", userId);
+    .eq("author_id", userId)
+    .select("id");
   if (error) return { ok: false, error: error.message };
+  if (!data || data.length === 0) return { ok: false, error: "not_found" };
   return { ok: true };
 }
 

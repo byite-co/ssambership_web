@@ -3,21 +3,38 @@ import { Eye, Heart } from "lucide-react";
 import { AuthorRoleBadge } from "@/components/community/AuthorRoleBadge";
 import type { ShortformCard } from "@/lib/community/communityShortformQueries";
 import type { CommunityCommentListItem } from "@/lib/community/communityQueries";
-import { submitCommunityCommentAction } from "@/lib/community/commentActions";
+import { deleteShortformCommentAction, submitCommunityCommentAction } from "@/lib/community/commentActions";
 import { toggleShortformLikeAction } from "@/lib/community/communityShortformActions";
 
 const PRIMARY = "#2563EB";
+
+function mapCommentErrorCode(code: string | null): string | null {
+  if (!code) return null;
+  if (code === "length") return "댓글은 1자 이상 1,000자 이하로 입력해 주세요.";
+  if (code === "account_blocked") return "계정 상태로 인해 댓글을 작성할 수 없어요.";
+  if (code === "policy") return "외부 연락처·대필 요청은 정책상 제한됩니다.";
+  if (code === "delete") return "댓글을 삭제하지 못했어요. 잠시 후 다시 시도해 주세요.";
+  if (code === "save") return "댓글을 등록하지 못했어요. 잠시 후 다시 시도해 주세요.";
+  return "요청을 처리하지 못했어요.";
+}
 
 export function CommunityShortformDetailView(props: {
   item: ShortformCard;
   postId: string;
   returnPath: string;
   comments: CommunityCommentListItem[];
+  /** 댓글 조회 실패 메시지(D-CM-12) — null 이면 정상. */
+  commentsError: string | null;
+  /** 댓글 작성·삭제 실패 코드(commentError 쿼리스트링). */
+  commentErrorCode: string | null;
+  /** 로그인 뷰어 id — 본인 댓글 삭제 버튼 노출 판정(D-CM-8). */
+  viewerId: string | null;
   canComment: boolean;
   canInteract: boolean;
   liked: boolean;
   likeErrorCode: string | null;
 }) {
+  const commentErrorMessage = mapCommentErrorCode(props.commentErrorCode);
   const v = props.item;
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)] lg:items-start">
@@ -99,6 +116,16 @@ export function CommunityShortformDetailView(props: {
 
         <section className="space-y-3 border-t border-slate-100 pt-4">
           <h2 className="text-base font-extrabold text-slate-900">{"\uB313\uAE00"}</h2>
+          {props.commentsError ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
+              {props.commentsError}
+            </p>
+          ) : null}
+          {commentErrorMessage ? (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
+              {commentErrorMessage}
+            </p>
+          ) : null}
           {props.canComment ? (
             <form action={submitCommunityCommentAction} className="space-y-2">
               <input type="hidden" name="postType" value="shortform" />
@@ -118,12 +145,26 @@ export function CommunityShortformDetailView(props: {
             </p>
           )}
           <ul className="space-y-2">
-            {props.comments.map((c) => (
-              <li key={c.id} className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-sm">
-                <p className="text-xs font-bold text-slate-700">{c.authorLabel}</p>
-                <p className="mt-1 text-slate-800">{c.body}</p>
-              </li>
-            ))}
+            {props.comments.map((c) => {
+              const isOwn = props.viewerId != null && c.authorId != null && c.authorId === props.viewerId;
+              return (
+                <li key={c.id} className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 text-sm">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-xs font-bold text-slate-700">{c.authorLabel}</p>
+                    {isOwn ? (
+                      <form action={deleteShortformCommentAction} className="inline">
+                        <input type="hidden" name="commentId" value={c.id} />
+                        <input type="hidden" name="returnPath" value={props.returnPath} />
+                        <button type="submit" className="text-xs font-bold text-red-600 hover:underline">
+                          {"삭제"}
+                        </button>
+                      </form>
+                    ) : null}
+                  </div>
+                  <p className="mt-1 text-slate-800">{c.body}</p>
+                </li>
+              );
+            })}
           </ul>
         </section>
 

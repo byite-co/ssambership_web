@@ -12,6 +12,8 @@ import {
 import Link from "next/link";
 import { VideoOff } from "lucide-react";
 import { BlockUserButton } from "@/components/blocks/BlockUserButton";
+import { ReportDialog } from "@/components/reports/ReportDialog";
+import { StateBanner } from "@/components/community/StateBanner";
 import { fetchBlockedUserIds, filterBlockedAuthors } from "@/lib/blocks/userBlocksQueries";
 import { isUserBlocksEnabled } from "@/lib/shell/featureFlags";
 
@@ -43,10 +45,13 @@ export default async function CommunityShortformDetailPage(props: Props) {
   const moderationNotice = authorModerationNotice(row, user?.id ?? null);
   // 숨김 상태에서는 조회수를 올리지 않는다(공개되지 않은 콘텐츠의 지표 왜곡 방지).
   if (item && !moderationNotice) {
-    await incrementShortformView(supabase, id);
+    // D-CM-3: 뷰어·시간버킷 기반 결정적 event_key(멱등) — 로그인 uid 를 넘겨 새로고침 중복 계수 방지.
+    await incrementShortformView(supabase, id, user?.id ?? null);
   }
 
-  const { rows: rawComments } = item ? await loadCommunityComments(supabase, "shortform", id) : { rows: [] };
+  const { rows: rawComments, error: commentsQueryError } = item
+    ? await loadCommunityComments(supabase, "shortform", id)
+    : { rows: [], error: null };
 
   // W-blocks(v1): 플래그 ON + 로그인 시 차단 작성자 댓글 숨김 — OFF면 기존 결과 그대로 (스펙 §3)
   const blocksOn = isUserBlocksEnabled() && Boolean(user);
@@ -58,6 +63,9 @@ export default async function CommunityShortformDetailPage(props: Props) {
   const reaction = item ? await getShortformReactionFlags(supabase, id, user?.id ?? null) : { liked: false };
   const returnPath = `/community/shortform/${id}`;
   const likeError = typeof sp.likeError === "string" ? sp.likeError : null;
+  const commentErrorCode = typeof sp.commentError === "string" ? sp.commentError : null;
+  const reportOk = sp.reportOk === "1" || sp.reportOk === "true";
+  const reportErrorCode = typeof sp.reportError === "string" ? sp.reportError : null;
 
   return (
     <CommunityLayoutShell activeNav="shortform">
@@ -88,16 +96,38 @@ export default async function CommunityShortformDetailPage(props: Props) {
             postId={id}
             returnPath={returnPath}
             comments={comments}
+            commentsError={commentsQueryError}
+            commentErrorCode={commentErrorCode}
+            viewerId={user?.id ?? null}
             canComment={user != null}
             canInteract={user != null}
             liked={reaction.liked}
             likeErrorCode={likeError}
           />
         ) : null}
-        {/* W-blocks(v1): 신고와 같은 화면에서 차단 접근(신고+차단 병존, 스펙 §4) */}
-        {item && canBlockAuthor && item.authorId ? (
-          <div className="mt-4 flex justify-end border-t border-slate-100 pt-3">
-            <BlockUserButton blockedUserId={item.authorId} returnTo="/community/shortform" />
+        {/* D-CM-16: 숏폼 상세 신고 접점(액션은 shortform_post 지원). 신고+차단 병존(스펙 §4). */}
+        {item ? (
+          <div className="mt-4 space-y-3 border-t border-slate-100 pt-4">
+            {reportOk ? <StateBanner kind="success" message="신고가 접수되었습니다." /> : null}
+            {reportErrorCode ? (
+              <StateBanner kind="error" message="신고를 접수하지 못했습니다. 잠시 후 다시 시도해 주세요." />
+            ) : null}
+            {user != null ? (
+              <ReportDialog targetType="shortform" postId={id} returnPath={returnPath} />
+            ) : (
+              <p className="text-sm text-slate-600">
+                로그인한 회원만 신고할 수 있어요.{" "}
+                <Link className="font-bold text-[#2563EB] underline" href={`/login?next=${encodeURIComponent(returnPath)}`}>
+                  로그인
+                </Link>
+              </p>
+            )}
+            {/* W-blocks(v1): 신고와 같은 화면에서 차단 접근(신고+차단 병존, 스펙 §4) */}
+            {canBlockAuthor && item.authorId ? (
+              <div className="flex justify-end">
+                <BlockUserButton blockedUserId={item.authorId} returnTo="/community/shortform" />
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
