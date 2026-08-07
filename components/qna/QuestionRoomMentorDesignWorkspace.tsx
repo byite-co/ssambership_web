@@ -596,7 +596,9 @@ export function QuestionRoomMentorDesignWorkspace(props: {
           </div>
         </aside>
 
-        <main className="flex min-w-0 flex-1 flex-col border-slate-200 bg-white lg:border-r">
+        {/* min-h-0: 모바일(세로 flex)에서 min-height:auto 가 내용 크기로 고정되면 main 이
+            고정 높이 셸 밖으로 자라 스레드 목록 스크롤이 죽는다(데스크톱 가로 배치는 무증상). */}
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col border-slate-200 bg-white lg:border-r">
           <header className="shrink-0 border-b border-slate-100 px-6 py-5">
             <div className="flex gap-4">
               <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full border-2 border-white bg-slate-50 shadow-md ring-1 ring-slate-100">
