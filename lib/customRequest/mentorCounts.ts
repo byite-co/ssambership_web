@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   loadMentorAppliedPostIdSet,
@@ -14,7 +15,15 @@ import {
   mentorOrderDeadlineDisplay,
 } from "@/lib/customRequest/mentorCustomOrderBrowseDisplay";
 
-export async function fetchMentorWorkspaceCounts(supabase: SupabaseClient, userId: string) {
+/**
+ * D-CR-6: 멘토 워크스페이스 카운트(지원 200 · 주문 200 · 오픈글 200 + 분쟁 + enrich)는 무겁다.
+ * React `cache()` 로 요청 스코프 메모이즈해, 한 요청 안에서 (레이아웃·페이지 등) 중복 호출되면
+ * 단일 실행으로 합친다. 키는 (supabase 인스턴스, userId) 참조.
+ */
+export const fetchMentorWorkspaceCounts = cache(async function fetchMentorWorkspaceCounts(
+  supabase: SupabaseClient,
+  userId: string,
+) {
   const [appliedResp, ordersResp, openResp, appliedPostIds] = await Promise.all([
     loadMentorRecentApplicationsWithPostHints(supabase, userId, 200),
     fetchMentorCustomRequestOrdersFromPrimaryTable(supabase, userId, 200),
@@ -83,7 +92,7 @@ export async function fetchMentorWorkspaceCounts(supabase: SupabaseClient, userI
       deadlineImminent,
     },
   };
-}
+});
 
 /** 사이드바 배지용 — openByCategory 제외 */
 export function mentorWorkspaceSidebarCounts(
