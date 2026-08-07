@@ -9,6 +9,7 @@ function read(rel: string): string {
 }
 
 const MENTOR_ROOM_PAGE = "app/(mentor)/mentor/question-room/[roomId]/page.tsx";
+const STUDENT_ROOM_PAGE = "app/(student)/question-room/[roomId]/page.tsx";
 const WORKSPACE = "components/qna/QuestionRoomWorkspace.tsx";
 const MENTOR_DESIGN_WORKSPACE = "components/qna/QuestionRoomMentorDesignWorkspace.tsx";
 
@@ -28,6 +29,31 @@ test("D-QR-8: 멘토 방 상세 정규화 redirect — thread 외 쿼리 보존 
   // 2) thread 를 제외한 나머지 searchParams 를 URLSearchParams 로 옮겨 담는 보존 루프가 있어야 한다.
   assert.ok(src.includes("new URLSearchParams()"), "보존용 URLSearchParams 생성이 없다");
   assert.ok(/key === "thread"/.test(src), "thread 키만 제외(경로 승격)하는 분기가 없다");
+});
+
+/**
+ * D-QR-8 대칭(학생): 학생 방 상세의 ?thread= 정규화 redirect 도 나머지 쿼리를 보존해야 한다.
+ * 학생 메시지 액션은 room+?thread=&kind=message&ok= 로 복귀하므로, bare redirect 는
+ * 전송 피드백(하단 정렬 트리거 포함)을 thread 상세에 도달하지 못하게 한다.
+ */
+test("D-QR-8 대칭: 학생 방 상세 정규화 redirect — thread 외 쿼리 보존 (bare redirect 금지)", () => {
+  const src = read(STUDENT_ROOM_PAGE);
+  assert.ok(
+    !/redirect\(\s*threadDetailPath\(/.test(src),
+    "redirect(threadDetailPath(...)) 단독 호출 — 나머지 쿼리를 폐기하는 구 회귀"
+  );
+  assert.ok(src.includes("new URLSearchParams()"), "보존용 URLSearchParams 생성이 없다");
+  assert.ok(/key === "thread"/.test(src), "thread 키만 제외(경로 승격)하는 분기가 없다");
+});
+
+/** 전송 직후 하단 정렬: 멘토 상세 분기가 actionFeedback(kind 포함)을 통째로 전달해야 한다. */
+test("첨부 하단 정렬: QuestionRoomWorkspace 멘토 상세 분기 — actionFeedback kind 보존", () => {
+  const src = read(WORKSPACE);
+  const mentorBranch = src.slice(src.indexOf("<QuestionRoomMentorDesignWorkspace"));
+  assert.ok(
+    /actionFeedback=\{props\.actionFeedback\}/.test(mentorBranch),
+    "멘토 상세 분기가 actionFeedback 을 재구성하며 kind 를 탈락시킨다(하단 정렬 무발화 회귀)"
+  );
 });
 
 /** D-QR-9 회귀 고정: 실제 렌더 경로가 freeTrialThreadIds 를 받아 고정 정렬·배지에 쓰는지. */

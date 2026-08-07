@@ -361,7 +361,7 @@ export function IndividualQuestionDetailView(props: {
 
   return (
     <div className="cr-landing cr-detail-v5 cr-detail-shell mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:px-8">
-      <article className="cr-detail-card">
+      <article className="cr-detail-card" data-chat-scroll-scope>
         {/* 큰 상태 문장이 주인공: 지금 무슨 상태고 누구 차례인지 사람 말로(주문방과 통일). */}
         <header className="cr-detail-header">
           {isStudent ? (

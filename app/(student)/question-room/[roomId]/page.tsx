@@ -42,8 +42,18 @@ export default async function StudentQuestionRoomDetailPage(props: Props) {
   const { roomId } = await props.params;
   const sp = (await props.searchParams) ?? {};
   const threadFromQuery = typeof sp.thread === "string" && sp.thread.length ? sp.thread : null;
+  // D-QR-8 대칭: thread 만 경로 세그먼트로 승격하고 나머지 쿼리(ok/error/kind/t/dMessage 등
+  // 액션 피드백·초안)는 전부 보존한다 — 학생 액션은 room+?thread= 로 복귀하므로 여기서
+  // 폐기하면 전송 피드백(kind=message ok)이 thread 상세에 도달하지 못한다.
   if (threadFromQuery) {
-    redirect(threadDetailPath("/question-room", roomId, threadFromQuery));
+    const preservedQuery = new URLSearchParams();
+    for (const [key, value] of Object.entries(sp)) {
+      if (key === "thread" || typeof value !== "string" || !value.length) continue;
+      preservedQuery.set(key, value);
+    }
+    const canonicalPath = threadDetailPath("/question-room", roomId, threadFromQuery);
+    const qs = preservedQuery.toString();
+    redirect(qs ? `${canonicalPath}?${qs}` : canonicalPath);
   }
   const okMessage = typeof sp.ok === "string" && sp.ok.length ? sp.ok : null;
   const rawActionError = typeof sp.error === "string" && sp.error.length ? sp.error : null;

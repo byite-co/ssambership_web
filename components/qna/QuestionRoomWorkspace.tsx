@@ -230,10 +230,7 @@ export function QuestionRoomWorkspace(props: {
         backHref={props.backHref}
         subscriptionContext={props.subscriptionContext}
         studentWeeklyUsage={props.studentWeeklyUsage}
-        actionFeedback={{
-          ok: props.actionFeedback?.ok ?? null,
-          error: props.actionFeedback?.error ?? null,
-        }}
+        actionFeedback={props.actionFeedback}
       />
     );
   }

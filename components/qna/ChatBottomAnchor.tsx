@@ -18,7 +18,9 @@ export function ChatBottomAnchor(props: { anchorKey: string | null; active: bool
     if (!el) return;
     const scroll = () => el.scrollIntoView({ block: "end" });
     scroll();
-    const scope = el.parentElement;
+    // 이미지 감시 범위: 명시 스코프(data-chat-scroll-scope)가 있으면 그 전체 —
+    // 타임라인 위쪽(예: 개별질문 질문 카드)의 늦은 이미지 로드도 하단을 밀어내기 때문.
+    const scope = el.closest("[data-chat-scroll-scope]") ?? el.parentElement;
     const pending = Array.from(scope?.querySelectorAll("img") ?? []).filter((img) => !img.complete);
     if (pending.length === 0) return;
     const onSettled = () => scroll();
