@@ -1,0 +1,882 @@
+[
+ {
+  "id": "D-AD-1",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L4",
+  "status": "done",
+  "branch": "L·admin"
+ },
+ {
+  "id": "D-AD-2",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L4",
+  "status": "done",
+  "branch": "L·admin"
+ },
+ {
+  "id": "D-AD-3",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L4",
+  "status": "done",
+  "branch": "L·admin"
+ },
+ {
+  "id": "D-AD-4",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L4",
+  "status": "done",
+  "branch": "L·admin"
+ },
+ {
+  "id": "D-AD-5",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L4",
+  "status": "done",
+  "branch": "L·admin"
+ },
+ {
+  "id": "D-AD-6",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L4",
+  "status": "done",
+  "branch": "L·admin"
+ },
+ {
+  "id": "D-AD-7",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L4",
+  "status": "done",
+  "branch": "L·admin"
+ },
+ {
+  "id": "D-AD-8",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L4",
+  "status": "done",
+  "branch": "L·admin"
+ },
+ {
+  "id": "D-AD-9",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L4",
+  "status": "done",
+  "branch": "L·admin"
+ },
+ {
+  "id": "D-AD-10",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L4",
+  "status": "done",
+  "branch": "L·admin"
+ },
+ {
+  "id": "D-AD-11",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L4",
+  "status": "done",
+  "branch": "L·admin"
+ },
+ {
+  "id": "D-AD-12",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L4",
+  "status": "done",
+  "branch": "L·admin"
+ },
+ {
+  "id": "D-AD-13",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L4",
+  "status": "done",
+  "branch": "L·admin"
+ },
+ {
+  "id": "D-AU-1",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L7",
+  "status": "done",
+  "branch": "L·auth"
+ },
+ {
+  "id": "D-AU-2",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L7",
+  "status": "done",
+  "branch": "L·auth"
+ },
+ {
+  "id": "D-AU-3",
+  "sev": "risk",
+  "wave": "Wave 0",
+  "batch": "W0-A",
+  "status": "done",
+  "branch": "wave0 (PR#69)"
+ },
+ {
+  "id": "D-AU-4",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L7",
+  "status": "done",
+  "branch": "L·auth"
+ },
+ {
+  "id": "D-AU-5",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L7",
+  "status": "done",
+  "branch": "L·auth"
+ },
+ {
+  "id": "D-AU-6",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L7",
+  "status": "done",
+  "branch": "L·auth"
+ },
+ {
+  "id": "D-AU-7",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L7",
+  "status": "done",
+  "branch": "L·auth"
+ },
+ {
+  "id": "D-AU-8",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L7",
+  "status": "done",
+  "branch": "L·auth"
+ },
+ {
+  "id": "D-AU-9",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L7",
+  "status": "done",
+  "branch": "L·auth"
+ },
+ {
+  "id": "D-AU-10",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L7",
+  "status": "done",
+  "branch": "L·auth"
+ },
+ {
+  "id": "D-AU-11",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L7",
+  "status": "done",
+  "branch": "L·auth"
+ },
+ {
+  "id": "D-AU-12",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L7",
+  "status": "done",
+  "branch": "L·auth"
+ },
+ {
+  "id": "D-CM-1",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-2",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-3",
+  "sev": "risk",
+  "wave": "Wave 0",
+  "batch": "W0-D",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-4",
+  "sev": "risk",
+  "wave": "Wave 0",
+  "batch": "W0-D",
+  "status": "skipped",
+  "branch": "wave1-community"
+ },
+ {
+  "id": "D-CM-5",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-6",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-7",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-8",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-9",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-10",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-11",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-12",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-13",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-14",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-15",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-16",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L1",
+  "status": "done",
+  "branch": "L·community"
+ },
+ {
+  "id": "D-CM-17",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-CR-1",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L8",
+  "status": "done",
+  "branch": "L·customrequest"
+ },
+ {
+  "id": "D-CR-2",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L8",
+  "status": "done",
+  "branch": "L·customrequest"
+ },
+ {
+  "id": "D-CR-3",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L8",
+  "status": "done",
+  "branch": "L·customrequest"
+ },
+ {
+  "id": "D-CR-4",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L8",
+  "status": "done",
+  "branch": "L·customrequest"
+ },
+ {
+  "id": "D-CR-5",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L8",
+  "status": "done",
+  "branch": "L·customrequest"
+ },
+ {
+  "id": "D-CR-6",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L8",
+  "status": "done",
+  "branch": "L·customrequest"
+ },
+ {
+  "id": "D-CR-7",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L8",
+  "status": "done",
+  "branch": "L·customrequest"
+ },
+ {
+  "id": "D-CR-8",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L8",
+  "status": "done",
+  "branch": "L·customrequest"
+ },
+ {
+  "id": "D-CR-9",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L8",
+  "status": "done",
+  "branch": "L·customrequest"
+ },
+ {
+  "id": "D-DB-1",
+  "sev": "bug",
+  "wave": "Wave 2",
+  "batch": "OPS-1",
+  "status": "ops",
+  "branch": ""
+ },
+ {
+  "id": "D-DB-2",
+  "sev": "risk",
+  "wave": "Wave 0",
+  "batch": "W0-B",
+  "status": "done",
+  "branch": "wave0 (PR#69)"
+ },
+ {
+  "id": "D-DB-3",
+  "sev": "risk",
+  "wave": "Wave 2",
+  "batch": "OPS-2",
+  "status": "ops",
+  "branch": ""
+ },
+ {
+  "id": "D-DB-4",
+  "sev": "risk",
+  "wave": "Wave 0",
+  "batch": "W0-C",
+  "status": "done",
+  "branch": "wave0 (PR#69)"
+ },
+ {
+  "id": "D-DB-5",
+  "sev": "smell",
+  "wave": "Wave 2",
+  "batch": "OPS-3",
+  "status": "ops",
+  "branch": ""
+ },
+ {
+  "id": "D-IQ-1",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L3",
+  "status": "done",
+  "branch": "L·iq"
+ },
+ {
+  "id": "D-IQ-2",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L3",
+  "status": "done",
+  "branch": "L·iq"
+ },
+ {
+  "id": "D-IQ-3",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L3",
+  "status": "done",
+  "branch": "L·iq"
+ },
+ {
+  "id": "D-IQ-4",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L3",
+  "status": "done",
+  "branch": "L·iq"
+ },
+ {
+  "id": "D-IQ-5",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L3",
+  "status": "done",
+  "branch": "L·iq"
+ },
+ {
+  "id": "D-IQ-6",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L3",
+  "status": "done",
+  "branch": "L·iq"
+ },
+ {
+  "id": "D-IQ-7",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L3",
+  "status": "done",
+  "branch": "L·iq"
+ },
+ {
+  "id": "D-IQ-8",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L3",
+  "status": "done",
+  "branch": "L·iq"
+ },
+ {
+  "id": "D-MT-1",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L5",
+  "status": "done",
+  "branch": "L·mentor"
+ },
+ {
+  "id": "D-MT-2",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L5",
+  "status": "done",
+  "branch": "L·mentor"
+ },
+ {
+  "id": "D-MT-3",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L5",
+  "status": "done",
+  "branch": "L·mentor"
+ },
+ {
+  "id": "D-MT-4",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L5",
+  "status": "done",
+  "branch": "L·mentor"
+ },
+ {
+  "id": "D-MT-5",
+  "sev": "bug",
+  "wave": "Wave 0",
+  "batch": "W0-C",
+  "status": "done",
+  "branch": "wave0 (PR#69)"
+ },
+ {
+  "id": "D-MT-6",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L5",
+  "status": "done",
+  "branch": "L·mentor"
+ },
+ {
+  "id": "D-MT-7",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L5",
+  "status": "done",
+  "branch": "L·mentor"
+ },
+ {
+  "id": "D-MT-8",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L5",
+  "status": "done",
+  "branch": "L·mentor"
+ },
+ {
+  "id": "D-MT-9",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L5",
+  "status": "done",
+  "branch": "L·mentor"
+ },
+ {
+  "id": "D-MT-10",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L5",
+  "status": "done",
+  "branch": "L·mentor"
+ },
+ {
+  "id": "D-MT-11",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L5",
+  "status": "done",
+  "branch": "L·mentor"
+ },
+ {
+  "id": "D-MT-12",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L5",
+  "status": "done",
+  "branch": "L·mentor"
+ },
+ {
+  "id": "D-MT-13",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L5",
+  "status": "done",
+  "branch": "L·mentor"
+ },
+ {
+  "id": "D-MT-14",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L5",
+  "status": "done",
+  "branch": "L·mentor"
+ },
+ {
+  "id": "D-QR-1",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L2",
+  "status": "done",
+  "branch": "L·qna"
+ },
+ {
+  "id": "D-QR-2",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L2",
+  "status": "done",
+  "branch": "L·qna"
+ },
+ {
+  "id": "D-QR-3",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L2",
+  "status": "done",
+  "branch": "L·qna"
+ },
+ {
+  "id": "D-QR-4",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L2",
+  "status": "done",
+  "branch": "L·qna"
+ },
+ {
+  "id": "D-QR-5",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L2",
+  "status": "done",
+  "branch": "L·qna"
+ },
+ {
+  "id": "D-QR-6",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L2",
+  "status": "skipped",
+  "branch": "wave1-qna"
+ },
+ {
+  "id": "D-QR-7",
+  "sev": "smell",
+  "wave": "Wave 0",
+  "batch": "W0-E",
+  "status": "done",
+  "branch": "L·qna"
+ },
+ {
+  "id": "D-QR-8",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L2",
+  "status": "done",
+  "branch": "L·qna"
+ },
+ {
+  "id": "D-QR-9",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L2",
+  "status": "done",
+  "branch": "L·qna"
+ },
+ {
+  "id": "D-QR-10",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L2",
+  "status": "done",
+  "branch": "L·qna"
+ },
+ {
+  "id": "D-QR-11",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L2",
+  "status": "done",
+  "branch": "L·qna"
+ },
+ {
+  "id": "D-QR-12",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L2",
+  "status": "skipped",
+  "branch": "wave1-qna"
+ },
+ {
+  "id": "D-QR-13",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L2",
+  "status": "skipped",
+  "branch": "wave1-qna"
+ },
+ {
+  "id": "D-QR-14",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L2",
+  "status": "done",
+  "branch": "L·qna"
+ },
+ {
+  "id": "D-ST-1",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-2",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-3",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-4",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-5",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-6",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-7",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-8",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-9",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-10",
+  "sev": "risk",
+  "wave": "Wave 0",
+  "batch": "W0-B",
+  "status": "done",
+  "branch": "wave0 (PR#69)"
+ },
+ {
+  "id": "D-ST-11",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-12",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-13",
+  "sev": "bug",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-14",
+  "sev": "risk",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-15",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-16",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-17",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ },
+ {
+  "id": "D-ST-18",
+  "sev": "smell",
+  "wave": "Wave 1",
+  "batch": "L6",
+  "status": "done",
+  "branch": "L·student"
+ }
+]
