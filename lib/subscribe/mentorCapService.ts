@@ -16,6 +16,9 @@ export const CAP_WEIGHT_BY_TIER: Record<SubscribePlanTier, number> = {
 /** 멘토 1인 cap 상한 기본값 (관리자만 조정). */
 export const MENTOR_CAP_LIMIT_DEFAULT = 28;
 
+/** `.in()` id 배치 크기 — URL 길이·행수 상한 회피용. */
+const IN_CHUNK = 200;
+
 export function capWeightForTier(tier: SubscribePlanTier): number {
   return CAP_WEIGHT_BY_TIER[tier] ?? 0;
 }
@@ -31,10 +34,17 @@ export type MentorCapUsage = {
   pct: number;
   /** 구독 마감 여부 (가장 작은 플랜도 못 받는 상태) */
   isFull: boolean;
+  /**
+   * D-ST-11: cap 을 **판정할 수 없었음**(서비스키 부재·집계 실패). used 0(=여유 있음)과
+   * 반드시 구분한다. 결제 경로는 이 값이 true 면 fail-closed(거부)하고, 목록/배지 표시에서는
+   * degrade(마감 아님으로 표시)한다.
+   */
+  indeterminate: boolean;
 };
 
-function emptyUsage(capLimit = MENTOR_CAP_LIMIT_DEFAULT): MentorCapUsage {
-  return { usedCap: 0, capLimit, activeCount: 0, pct: 0, isFull: false };
+/** 판정 불가 usage — used/isFull 를 신뢰하면 안 되는 상태(fail-closed 신호). */
+function indeterminateUsage(capLimit = MENTOR_CAP_LIMIT_DEFAULT): MentorCapUsage {
+  return { usedCap: 0, capLimit, activeCount: 0, pct: 0, isFull: false, indeterminate: true };
 }
 
 function tierWeightFromRow(row: Row): number {
@@ -55,7 +65,7 @@ function buildUsage(usedCap: number, capLimit: number, activeCount: number): Men
   const pct = limit > 0 ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   // 가장 작은 플랜(limited=1.0)도 못 받으면 마감
   const isFull = used + CAP_WEIGHT_BY_TIER.limited > limit;
-  return { usedCap: used, capLimit: limit, activeCount, pct, isFull };
+  return { usedCap: used, capLimit: limit, activeCount, pct, isFull, indeterminate: false };
 }
 
 function adminClientOrNull(): SupabaseClient | null {
@@ -66,10 +76,17 @@ function adminClientOrNull(): SupabaseClient | null {
   }
 }
 
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
+}
+
 /**
  * 여러 멘토의 cap 사용 현황을 한 번에 조회.
  * - 구독은 service role로 집계(학생 RLS는 본인 쌍만 보이므로 멘토 전체 합계를 못 냄).
- * - cap_limit 컬럼/서비스 키 미적용 시에도 안전 폴백(기본 28, 미마감).
+ * - D-ST-11: 서비스 키 부재·구독 집계 실패는 used 0(여유)이 아니라 `indeterminate`(판정 불가)로
+ *   반환한다. cap_limit 컬럼 부재만 기본 28 폴백으로 흡수한다.
  */
 export async function loadMentorCapUsageBatch(
   mentorIds: string[]
@@ -80,48 +97,65 @@ export async function loadMentorCapUsageBatch(
 
   const admin = adminClientOrNull();
   if (!admin) {
-    for (const id of ids) out.set(id, emptyUsage());
+    // 서비스 키 부재 → 전 멘토 판정 불가(fail-closed 신호).
+    for (const id of ids) out.set(id, indeterminateUsage());
     return out;
   }
 
-  // cap_limit (없으면 28)
+  // cap_limit (없으면 28) — 컬럼 부재는 판정 불가가 아니라 기본값 폴백.
   const capLimitByMentor = new Map<string, number>();
   try {
-    const { data, error } = await admin
-      .from("mentor_profiles")
-      .select("user_id, cap_limit")
-      .in("user_id", ids);
-    if (!error && Array.isArray(data)) {
-      for (const row of data as Row[]) {
-        const uid = String(row.user_id ?? "");
-        const lim = typeof row.cap_limit === "number" ? row.cap_limit : Number(row.cap_limit ?? NaN);
-        if (uid) capLimitByMentor.set(uid, Number.isFinite(lim) && lim > 0 ? lim : MENTOR_CAP_LIMIT_DEFAULT);
+    for (const idChunk of chunk(ids, IN_CHUNK)) {
+      const { data, error } = await admin
+        .from("mentor_profiles")
+        .select("user_id, cap_limit")
+        .in("user_id", idChunk);
+      if (!error && Array.isArray(data)) {
+        for (const row of data as Row[]) {
+          const uid = String(row.user_id ?? "");
+          const lim = typeof row.cap_limit === "number" ? row.cap_limit : Number(row.cap_limit ?? NaN);
+          if (uid) capLimitByMentor.set(uid, Number.isFinite(lim) && lim > 0 ? lim : MENTOR_CAP_LIMIT_DEFAULT);
+        }
       }
     }
   } catch {
     /* cap_limit 컬럼 미적용 → 기본 28 폴백 */
   }
 
-  // 활성 구독 cap 합 + 인원수
+  // 활성 구독 cap 합 + 인원수. 집계 실패(에러·예외)는 판정 불가로 전파(used 0 흡수 금지).
   const usedByMentor = new Map<string, number>();
   const countByMentor = new Map<string, number>();
+  let aggregateFailed = false;
   try {
-    const { data, error } = await admin
-      .from("subscriptions")
-      .select("mentor_id, plan_tier, status")
-      .in("mentor_id", ids)
-      .limit(5000);
-    if (!error && Array.isArray(data)) {
-      for (const row of data as Row[]) {
-        if (!isActiveRow(row)) continue;
-        const mid = String(row.mentor_id ?? "");
-        if (!mid) continue;
-        usedByMentor.set(mid, (usedByMentor.get(mid) ?? 0) + tierWeightFromRow(row));
-        countByMentor.set(mid, (countByMentor.get(mid) ?? 0) + 1);
+    for (const idChunk of chunk(ids, IN_CHUNK)) {
+      const { data, error } = await admin
+        .from("subscriptions")
+        .select("mentor_id, plan_tier, status")
+        .in("mentor_id", idChunk)
+        .limit(20000);
+      if (error) {
+        console.error("[mentorCap] subscriptions aggregate failed", error.message);
+        aggregateFailed = true;
+        break;
+      }
+      if (Array.isArray(data)) {
+        for (const row of data as Row[]) {
+          if (!isActiveRow(row)) continue;
+          const mid = String(row.mentor_id ?? "");
+          if (!mid) continue;
+          usedByMentor.set(mid, (usedByMentor.get(mid) ?? 0) + tierWeightFromRow(row));
+          countByMentor.set(mid, (countByMentor.get(mid) ?? 0) + 1);
+        }
       }
     }
-  } catch {
-    /* 집계 실패 → used 0 폴백(미마감) */
+  } catch (e) {
+    console.error("[mentorCap] subscriptions aggregate threw", e);
+    aggregateFailed = true;
+  }
+
+  if (aggregateFailed) {
+    for (const id of ids) out.set(id, indeterminateUsage(capLimitByMentor.get(id) ?? MENTOR_CAP_LIMIT_DEFAULT));
+    return out;
   }
 
   for (const id of ids) {
@@ -137,16 +171,18 @@ export async function loadMentorCapUsageBatch(
   return out;
 }
 
-/** 단일 멘토 cap 사용 현황. */
+/** 단일 멘토 cap 사용 현황. 조회에 없으면 판정 불가로 간주(fail-closed). */
 export async function loadMentorCapUsage(mentorId: string): Promise<MentorCapUsage> {
   const map = await loadMentorCapUsageBatch([mentorId]);
-  return map.get(mentorId) ?? emptyUsage();
+  return map.get(mentorId) ?? indeterminateUsage();
 }
 
 /**
  * 신규 구독 시 cap 초과 여부. (used + tier weight) > limit 이면 true.
- * 결제 차단의 앱-레벨 1차 검증용. (DB 트리거가 동시성 안전 최종 방어.)
+ * D-ST-11: 판정 불가(indeterminate)면 결제 경로에서 통과시키지 않도록 true(초과로 간주)를 반환한다
+ * (fail-closed). DB 트리거가 동시성 안전 최종 방어이며, 이 게이트는 그 앞단 1차 검증이다.
  */
 export function wouldExceedCap(usage: MentorCapUsage, tier: SubscribePlanTier): boolean {
+  if (usage.indeterminate) return true;
   return usage.usedCap + capWeightForTier(tier) > usage.capLimit;
 }

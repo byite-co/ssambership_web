@@ -59,6 +59,45 @@ export async function fetchCashLedgerForUser(
   return { rows: (data as LedgerLineRow[]) ?? [], table: "api_web_v1.my_cash_ledger_v1", error: null };
 }
 
+const LEDGER_WINDOW_BATCH = 1000;
+const LEDGER_WINDOW_MAX_DEFAULT = 3000;
+
+/**
+ * D-ST-13: 기간 필터(from/to)를 뷰 쿼리에 created_at gte/lte 로 내리고, 최근 N행(구 250행) 잘림
+ * 대신 range 로 창(window) 전체를 순회해 받아온다. 종류(kind) 필터는 원장 행에서 파생되는 UI
+ * 분류(ledgerUiKind)라 서버 컬럼 eq 로 정확히 표현되지 않으므로, 날짜로 좁혀진 완전한 집합 위에서
+ * 클라이언트가 계속 분류·필터한다. 안전 상한(max)에 도달하면 truncated=true 로 표면화한다.
+ */
+export async function fetchCashLedgerWindow(
+  supabase: SupabaseClient,
+  args: { from?: string | null; to?: string | null; max?: number }
+): Promise<{ rows: LedgerLineRow[]; table: string | null; error: string | null; truncated: boolean }> {
+  const max = args.max && args.max > 0 ? args.max : LEDGER_WINDOW_MAX_DEFAULT;
+  const fromTs = args.from ? `${args.from}T00:00:00` : null;
+  const toTs = args.to ? `${args.to}T23:59:59.999` : null;
+
+  const rows: LedgerLineRow[] = [];
+  let truncated = false;
+  for (let offset = 0; offset < max; offset += LEDGER_WINDOW_BATCH) {
+    let query = supabase
+      .schema(API_WEB_V1_SCHEMA)
+      .from("my_cash_ledger_v1")
+      .select("*")
+      .order("created_at", { ascending: false });
+    if (fromTs) query = query.gte("created_at", fromTs);
+    if (toTs) query = query.lte("created_at", toTs);
+
+    const end = Math.min(offset + LEDGER_WINDOW_BATCH, max) - 1;
+    const { data, error } = await query.range(offset, end);
+    if (error) return { rows: [], table: "api_web_v1.my_cash_ledger_v1", error: error.message, truncated: false };
+    const batch = (data as LedgerLineRow[]) ?? [];
+    rows.push(...batch);
+    if (batch.length < end - offset + 1) break; // 더 없음
+    if (offset + LEDGER_WINDOW_BATCH >= max) truncated = true; // 안전 상한 도달
+  }
+  return { rows, table: "api_web_v1.my_cash_ledger_v1", error: null, truncated };
+}
+
 /** 캐시·지갑 화면 하단 안내(사용자용) */
 export const CASH_DATA_MODEL = [
   "캐시 충전·결제 내역(맞춤의뢰와 별도)",

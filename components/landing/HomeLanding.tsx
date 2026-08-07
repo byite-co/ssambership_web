@@ -20,5 +20,11 @@ export function HomeLanding(props: { data: HomeLandingData; profile: UserRow | n
   const heroCtas =
     role === "mentor" ? MENTOR_HERO_CTAS : role === "student" ? STUDENT_HERO_CTAS : undefined;
 
-  return <PublicGuestLanding stats={props.data.publicStats} heroCtas={heroCtas} />;
+  return (
+    <PublicGuestLanding
+      stats={props.data.publicStats}
+      heroCtas={heroCtas}
+      loadError={props.data.loadError}
+    />
+  );
 }

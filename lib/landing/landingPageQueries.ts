@@ -1,34 +1,4 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { listBoardPosts, listShortformPosts } from "@/lib/community/communityQueries";
-import { loadPublicMentorsList, type PublicMentorsListResult } from "@/lib/mentor/publicMentorsListQueries";
-import { parseMentorsListFilters } from "@/lib/mentor/mentorsListSearchParams";
-import { assignPlansByTier, type PlansByTier } from "@/lib/subscribe/subscribePageQueries";
-
-type Row = Record<string, unknown>;
-
-const NOTICE_TABLES = ["notices", "site_notices", "promotions", "active_promotions"] as const;
-
-const PLAN_TABLES = ["plans", "mentor_plans", "subscription_plans", "mentor_subscription_plans"] as const;
-
-export type NoticeBannerLoad = {
-  rows: Row[];
-  table: string | null;
-  probe: string;
-  error: string | null;
-};
-
-export type GlobalPlansLoad = {
-  rows: Row[];
-  table: string | null;
-  probe: string;
-  error: string | null;
-};
-
-export type TrustMetric = {
-  label: string;
-  value: string;
-  probe: string;
-};
 
 export type LandingPublicStats = {
   mentorCount: number | null;
@@ -56,108 +26,27 @@ async function fetchLandingPublicStats(supabase: SupabaseClient): Promise<Landin
   };
 }
 
-async function fetchNoticesHome(supabase: SupabaseClient): Promise<NoticeBannerLoad> {
-  for (const table of NOTICE_TABLES) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) continue;
-    const { data, error } = await supabase.from(table).select("*").limit(5);
-    if (error) return { rows: [], table, probe: `${table}: ${error.message}`, error: error.message };
-    return {
-      rows: (data as Row[]) ?? [],
-      table,
-      probe: `${table} · 최대 5행`,
-      error: null,
-    };
-  }
-  return { rows: [], table: null, probe: "notices 계열 없음 또는 RLS", error: null };
-}
-
-async function fetchGlobalPlansSample(supabase: SupabaseClient): Promise<GlobalPlansLoad> {
-  let last = "plans 테이블 없음";
-  for (const table of PLAN_TABLES) {
-    const { error: pe } = await supabase.from(table).select("id").limit(1);
-    if (pe) {
-      last = `${table}: ${pe.message}`;
-      continue;
-    }
-    const { data, error } = await supabase.from(table).select("*").limit(15);
-    if (error) {
-      last = `${table}: ${error.message}`;
-      continue;
-    }
-    return {
-      rows: (data as Row[]) ?? [],
-      table,
-      probe: `${table} · 글로벌 샘플 15행(멘토별은 /subscribe)`,
-      error: null,
-    };
-  }
-  return { rows: [], table: null, probe: last, error: null };
-}
-
-async function fetchTrustMetrics(supabase: SupabaseClient): Promise<TrustMetric[]> {
-  const out: TrustMetric[] = [];
-  const m1 = await supabase.from("users").select("*", { count: "exact", head: true }).eq("role", "mentor");
-  out.push({
-    label: "멘토(등록)",
-    value: m1.count != null ? String(m1.count) : "—",
-    probe: m1.error ? m1.error.message : "users.role=mentor",
-  });
-  const m2 = await supabase.from("shortform_posts").select("*", { count: "exact", head: true });
-  if (!m2.error) {
-    out.push({
-      label: "숏폼 글",
-      value: m2.count != null ? String(m2.count) : "—",
-      probe: "shortform_posts",
-    });
-  } else {
-    out.push({ label: "숏폼 글", value: "—", probe: `shortform_posts: ${m2.error.message}` });
-  }
-  const m3 = await supabase.from("community_posts").select("*", { count: "exact", head: true });
-  if (!m3.error) {
-    out.push({
-      label: "게시판 글",
-      value: m3.count != null ? String(m3.count) : "—",
-      probe: "community_posts",
-    });
-  } else {
-    out.push({ label: "게시판 글", value: "—", probe: `community_posts: ${m3.error.message}` });
-  }
-  return out;
-}
-
+/**
+ * 랜딩(`/`)이 실제로 렌더하는 것은 공개 통계(멘토·숏폼·게시판 수)뿐이다
+ * (HomeLanding → PublicGuestLanding). 과거 로더는 렌더에 쓰이지 않는 데이터를 매 SSR 마다
+ * 조회했다. 이를 모두 제거하고 공개 통계 단일 소스만 남긴다:
+ *   - D-ST-1: 부재 테이블(notices/site_notices/promotions/active_promotions) 직렬 프로빙 제거.
+ *   - D-ST-2: 아무 멘토의 mentor_plans 15행을 섞어 티어 카드에 배정하던 로직 제거 — 랜딩
+ *     요금제 카드는 `SUBSCRIBE_PLAN_CATALOG` + "멘토 재량"으로 고정 표시되어 이 값은 렌더에
+ *     쓰이지 않았고, /subscribe 실제 가격과 불일치하는 임의 값이었다.
+ *   - D-ST-3: trust 지표(shortform/community count 중복 exact head) 제거 — 통계는 한 번만 조회.
+ *   - D-CM-17: 커뮤니티 글·숏폼 목록 조회 제거 — HomeLanding 이 참조하지 않으며, status·차단·
+ *     서명 URL 필터가 없어 되살릴 경우 draft/hidden 노출 위험이 있었다.
+ */
 export type HomeLandingData = {
-  notices: NoticeBannerLoad;
-  mentors: PublicMentorsListResult;
-  shorts: { rows: Row[]; table: string | null; error: string | null };
-  boards: { rows: Row[]; table: string | null; error: string | null };
-  plans: GlobalPlansLoad;
-  pricingByTier: PlansByTier;
-  pricingFillProbe: string;
-  trust: TrustMetric[];
   publicStats: LandingPublicStats;
+  /** D-ST-4: 로드 실패 시 폴백 배너 노출 플래그 */
+  loadError: boolean;
 };
 
-/** loadHomeLandingData 실패 시 `/` 랜딩 폴백(500 방지) */
+/** loadHomeLandingData 실패 시 `/` 랜딩 폴백(500 방지) — D-ST-4 배너 노출 */
 export function emptyHomeLandingData(): HomeLandingData {
   return {
-    notices: { rows: [], table: null, probe: "fallback", error: null },
-    mentors: {
-      cards: [],
-      totalCount: 0,
-      page: 1,
-      pageSize: 6,
-      hasMore: false,
-      usersError: null,
-      profilesError: null,
-      onlySelfVisibleHint: false,
-    },
-    shorts: { rows: [], table: null, error: null },
-    boards: { rows: [], table: null, error: null },
-    plans: { rows: [], table: null, probe: "fallback", error: null },
-    pricingByTier: { limited: null, standard: null, premium: null },
-    pricingFillProbe: "fallback",
-    trust: [],
     publicStats: {
       mentorCount: null,
       shortformCount: null,
@@ -166,30 +55,11 @@ export function emptyHomeLandingData(): HomeLandingData {
       shortformProbe: "fallback",
       boardProbe: "fallback",
     },
+    loadError: true,
   };
 }
 
 export async function loadHomeLandingData(supabase: SupabaseClient): Promise<HomeLandingData> {
-  const filters = parseMentorsListFilters({});
-  const [notices, mentors, shorts, boards, plans, trust, publicStats] = await Promise.all([
-    fetchNoticesHome(supabase),
-    loadPublicMentorsList(supabase, { ...filters, page: 1 }, { fetchLimit: 14, pageSize: 6 }),
-    listShortformPosts(supabase, 4),
-    listBoardPosts(supabase, 4),
-    fetchGlobalPlansSample(supabase),
-    fetchTrustMetrics(supabase),
-    fetchLandingPublicStats(supabase),
-  ]);
-  const { byTier, fillProbe } = assignPlansByTier(plans.rows as Row[]);
-  return {
-    notices,
-    mentors,
-    shorts,
-    boards,
-    plans,
-    pricingByTier: byTier,
-    pricingFillProbe: fillProbe,
-    trust,
-    publicStats,
-  };
+  const publicStats = await fetchLandingPublicStats(supabase);
+  return { publicStats, loadError: false };
 }

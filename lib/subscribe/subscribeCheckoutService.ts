@@ -271,6 +271,16 @@ export async function createSubscriptionPaymentIntent(
     };
   }
   const capUsage = await loadMentorCapUsage(mentorId);
+  // D-ST-11: cap 판정 불가(서비스키 부재·집계 실패)는 결제 경로에서 fail-closed 로 거부한다
+  // ('마감'과 구분되는 명시 문구). wouldExceedCap 도 indeterminate 를 초과로 간주하지만,
+  // 사용자에게는 마감이 아니라 일시 오류임을 알린다.
+  if (capUsage.indeterminate) {
+    return {
+      ok: false,
+      error: "구독 가능 여부를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      code: "db",
+    };
+  }
   if (wouldExceedCap(capUsage, planTier)) {
     return {
       ok: false,
