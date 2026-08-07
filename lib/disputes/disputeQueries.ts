@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
 import { USER_UI_LOAD_FAILED } from "@/lib/constants/userFacingMessages";
+import { refundLinkCandidatesForDispute } from "@/lib/disputes/disputeRefundLink";
 
 type Row = Record<string, unknown>;
 
@@ -51,6 +52,57 @@ async function fetchRowById(
   }
   // 0건은 오류가 아니라 「연계 정보 없음」(err null)로 구분한다.
   return { table, row: (data as Row) ?? null, err: null };
+}
+
+/**
+ * D-CR-9: 환불 연계 복원 — disputes 에 직접 refund_id FK 는 없지만, refunds 테이블이
+ * disputes 와 동일한 custom_request_order_id · payment_id · subscription_id 를 보유한다(실측 스키마).
+ * 공유키로 최신 환불 1건을 조회한다. refunds RLS(user_id=본인 OR admin)로 조회 불가하면
+ * 빈 결과(err null)로 강등된다 — 관측 동작 그대로이되, 실제 환불이 있으면 화면에 드러난다.
+ */
+async function fetchRefundRowForDispute(
+  supabase: SupabaseClient,
+  dispute: Row
+): Promise<{ table: string | null; row: Row | null; err: string | null }> {
+  for (const [col, val] of refundLinkCandidatesForDispute(dispute)) {
+    const { data, error } = await supabase
+      .from("refunds")
+      .select("*")
+      .eq(col, val)
+      .order("created_at", { ascending: false })
+      .limit(1);
+    if (error) {
+      return { table: "refunds", row: null, err: error.message };
+    }
+    const row = ((data as Row[] | null) ?? [])[0] ?? null;
+    if (row) {
+      return { table: "refunds", row, err: null };
+    }
+  }
+  return { table: "refunds", row: null, err: null };
+}
+
+/**
+ * D-CR-9: 처리 이력 복원 — 분쟁 운영 조치는 admin_action_logs(target_type='dispute', target_id=분쟁 id)에
+ * 기록된다(adminDisputeActions/logAdminAction). admin_action_logs SELECT RLS 는 관리자 전용이므로
+ * 학생·멘토 세션에서는 0건(err null)으로 강등되고, 관리자(또는 service_role bypass)에서는 실제 이력이 조회된다.
+ */
+async function fetchDisputeModLogs(
+  supabase: SupabaseClient,
+  disputeId: string
+): Promise<{ table: string | null; rows: Row[]; err: string | null }> {
+  const { data, error } = await supabase
+    .from("admin_action_logs")
+    .select("*")
+    .eq("target_type", "dispute")
+    .eq("target_id", disputeId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) {
+    // 표시 전용 강등: 권한/전송 오류는 빈 이력으로 처리(UI는 rows 만 사용).
+    return { table: "admin_action_logs", rows: [], err: error.message };
+  }
+  return { table: "admin_action_logs", rows: (data as Row[] | null) ?? [], err: null };
 }
 
 /** 관리자 상세 전용: 세션으로 disputes 단건이 안 될 때만 전달(requireRole 이후 서버 전용). */
@@ -107,9 +159,8 @@ export async function loadDisputeById(
   const subId = dRow.subscription_id != null ? String(dRow.subscription_id) : null;
   const cOrderId = dRow.custom_request_order_id != null ? String(dRow.custom_request_order_id) : null;
 
-  // W4(C10): 환불 연계 — 후보 FK 컬럼(refund_id 등) 부재 실측(187 baseline 0) — 프로빙 제거,
-  // 현행 관측 동작(빈 결과) 고정. 기능 정본화는 비범위.
-  const rRef: { table: string | null; row: Row | null; err: string | null } = { table: null, row: null, err: null };
+  // D-CR-9: 환불 연계 — disputes↔refunds 공유키(custom_request_order_id → payment_id → subscription_id)로 실제 조회 복원.
+  const rRef = await fetchRefundRowForDispute(readClient, dRow);
   let pRef = payId ? await fetchRowById(readClient, "payments", payId) : { table: null, row: null, err: null };
   const sRef = subId ? await fetchRowById(readClient, "subscriptions", subId) : { table: null, row: null, err: null };
   const cRef = cOrderId
@@ -123,9 +174,9 @@ export async function loadDisputeById(
     }
   }
 
-  // W4(C10): 처리 로그 — 후보 테이블 부재 실측(187 baseline 0: moderation_logs/dispute_events/
-  // support_events/admin_audit_logs) — 프로빙 제거, 현행 관측 동작(빈 결과) 고정. 기능 정본화는 비범위.
-  const mTab: { table: string | null; rows: Row[]; err: string | null } = { table: null, rows: [], err: null };
+  // D-CR-9: 처리 이력 — admin_action_logs(target_type='dispute', target_id=id)로 실제 조회 복원.
+  // 관리자 전용 RLS라 학생·멘토 세션에서는 빈 이력으로 강등된다.
+  const mTab = await fetchDisputeModLogs(readClient, id);
 
   const probe = [resolvedTable, rRef.table, pRef.table, sRef.table, cRef.table, mTab.table]
     .filter((x) => x != null && x !== "")

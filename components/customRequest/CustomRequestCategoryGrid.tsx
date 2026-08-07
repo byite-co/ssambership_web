@@ -1,5 +1,4 @@
 ﻿import type { CSSProperties, ReactNode } from "react";
-import type { CustomCategoryRow } from "@/lib/customRequest/customRequestQueries";
 
 const SUBJECT_CATEGORIES = [
   { label: "수학", desc: "수학 개념·문제 코치" },
@@ -9,8 +8,6 @@ const SUBJECT_CATEGORIES = [
   { label: "사회", desc: "사회 내신·서술 코치" },
   { label: "기타", desc: "기타 학습 상담" },
 ] as const;
-
-const DESC_BY_LABEL = Object.fromEntries(SUBJECT_CATEGORIES.map((c) => [c.label, c.desc])) as Record<string, string>;
 
 const CAT_COLORS = [
   { cls: "blue", cc: "#2563EB", cbg: "#eef4ff", cbd: "#c9dcfb" },
@@ -66,36 +63,17 @@ const FALLBACK_ICON = (
   </svg>
 );
 
-type Props = {
-  fromTable: { rows: CustomCategoryRow[]; table: string | null; error: string | null };
-};
-
 type DisplayCategory = { key: string; name: string; desc: string | null };
 
-function categoryName(row: CustomCategoryRow): string {
-  return (row.label ?? row.name ?? row.title ?? "기타").trim() || "기타";
-}
+// D-CR-8: 카테고리 테이블 부재(사문 로더 loadCustomRequestCategories 제거) — 정적 상수만 사용.
+const STATIC_DISPLAY_CATEGORIES: DisplayCategory[] = SUBJECT_CATEGORIES.map((c) => ({
+  key: c.label,
+  name: c.label,
+  desc: c.desc,
+}));
 
-function resolveDisplayCategories(fromTable: Props["fromTable"]): DisplayCategory[] {
-  if (fromTable.rows.length > 0) {
-    return fromTable.rows.map((row, i) => {
-      const name = categoryName(row);
-      return {
-        key: row.id ?? row.slug ?? `${name}-${i}`,
-        name,
-        desc: DESC_BY_LABEL[name] ?? null,
-      };
-    });
-  }
-  return SUBJECT_CATEGORIES.map((c) => ({
-    key: c.label,
-    name: c.label,
-    desc: c.desc,
-  }));
-}
-
-export function CustomRequestCategoryGrid(props: Props) {
-  const categories = resolveDisplayCategories(props.fromTable);
+export function CustomRequestCategoryGrid() {
+  const categories = STATIC_DISPLAY_CATEGORIES;
 
   return (
     <>

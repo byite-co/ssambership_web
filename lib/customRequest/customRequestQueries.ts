@@ -1,5 +1,7 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { fetchMentorProfileForPublicMentor, getMentorUserPublic } from "@/lib/auth/mentorPublicRead";
+import { loadMentorProfilesForDirectory } from "@/lib/auth/mentorPublicRead";
+import { API_WEB_V1_SCHEMA } from "@/lib/apiWebV1/rpc";
+import type { UserRow } from "@/lib/types/user";
 import { buildMentorProfileDisplay, type MentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
 
 type Row = Record<string, unknown>;
@@ -99,20 +101,9 @@ export async function loadStudentCustomRequestPosts(
   return { table, sourceNote: `${table}.author_id`, rows: (data as Row[]) ?? [], error: null };
 }
 
-export type CustomCategoryRow = { id?: string; name?: string; label?: string; title?: string; slug?: string };
-
-/**
- * W4(C10): 후보 테이블 부재 실측(187 baseline 0 — custom_request_categories/categories/request_categories
- * 어느 것도 존재하지 않음) — 프로빙 제거, 현행 관측 동작(빈 결과·static 소스) 고정. 기능 정본화는 비범위.
- */
-export async function loadCustomRequestCategories(_supabase: SupabaseClient, _limit = 30): Promise<{
-  rows: CustomCategoryRow[];
-  source: "table" | "static";
-  table: string | null;
-  error: string | null;
-}> {
-  return { rows: [], source: "static" as const, table: null, error: null };
-}
+// D-CR-8: 사문 카테고리 로더(loadCustomRequestCategories)·CustomCategoryRow 제거 —
+// 카테고리 테이블 부재(187 baseline 0)로 항상 빈 배열이던 스텁이 DB 조회처럼 보여 오해를 유발했다.
+// 카테고리 UI 는 CustomRequestCategoryGrid 의 정적 상수로 정본화.
 
 export function pickMentorIdFromApplication(r: Row): string | null {
   for (const k of ["mentor_id", "applicant_id", "user_id", "proposer_id"] as const) {
@@ -804,25 +795,56 @@ export async function getOrderIdForPostAndStudent(
   return r.orderId;
 }
 
+/**
+ * D-CR-5: 지원자 표시명(nickname) 배치 조회 — mentor_directory_v1(V3) 1쿼리.
+ * 프로필 배치(loadMentorProfilesForDirectory)는 nickname 을 매핑하지 않으므로 표시명 전용으로 분리 조회한다.
+ */
+async function loadMentorNicknamesByIds(
+  supabase: SupabaseClient,
+  ids: string[]
+): Promise<Map<string, string | null>> {
+  const byId = new Map<string, string | null>();
+  if (ids.length === 0) return byId;
+  const { data, error } = await supabase
+    .schema(API_WEB_V1_SCHEMA)
+    .from("mentor_directory_v1")
+    .select("mentor_id, nickname")
+    .in("mentor_id", ids);
+  if (error) {
+    console.error("[loadMentorNicknamesByIds] directory read failed", error.message);
+    return byId;
+  }
+  for (const raw of (data as Row[] | null) ?? []) {
+    const id = typeof raw.mentor_id === "string" ? raw.mentor_id : String(raw.mentor_id ?? "");
+    if (id) byId.set(id, typeof raw.nickname === "string" ? raw.nickname : null);
+  }
+  return byId;
+}
+
+/**
+ * D-CR-5: 지원자 1명당 프로필·users 2쿼리 순차(N+1) 제거 —
+ * mentorIds 를 모아 배치 2쿼리(프로필 in() + 표시명 in())로 치환.
+ */
 export async function enrichApplicationRows(supabase: SupabaseClient, rows: Row[]): Promise<EnrichedApplication[]> {
-  const out: EnrichedApplication[] = [];
-  for (const row of rows) {
+  const mentorIds = [
+    ...new Set(rows.map(pickMentorIdFromApplication).filter((x): x is string => !!x)),
+  ];
+
+  const [{ byUser: profByUser }, nickById] = await Promise.all([
+    loadMentorProfilesForDirectory(supabase, mentorIds),
+    loadMentorNicknamesByIds(supabase, mentorIds),
+  ]);
+
+  return rows.map((row) => {
     const mentorId = pickMentorIdFromApplication(row);
     const applicationId = pickApplicationRowId(row);
     if (!mentorId) {
-      out.push({ row, mentorId: null, applicationId, display: null });
-      continue;
+      return { row, mentorId: null, applicationId, display: null };
     }
-    const [{ row: pRow, error: pErr }, { data: uRow }] = await Promise.all([
-      fetchMentorProfileForPublicMentor(supabase, mentorId),
-      getMentorUserPublic(supabase, mentorId),
-    ]);
-    if (pErr) {
-      out.push({ row, mentorId, applicationId, display: null });
-      continue;
-    }
-    const display = buildMentorProfileDisplay(pRow, uRow);
-    out.push({ row, mentorId, applicationId, display });
-  }
-  return out;
+    const profRow = (profByUser.get(mentorId) as Row | undefined) ?? null;
+    // buildMentorProfileDisplay 는 userRow 의 full_name·nickname 만 표시명에 사용한다(V3 는 full_name 비노출).
+    const userRow = { full_name: null, nickname: nickById.get(mentorId) ?? null } as unknown as UserRow;
+    const display = buildMentorProfileDisplay(profRow, userRow);
+    return { row, mentorId, applicationId, display };
+  });
 }
