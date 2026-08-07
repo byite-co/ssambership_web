@@ -83,11 +83,20 @@ export type OpenIndividualQuestionBrowseRow = {
   created_at: string;
 };
 
+/**
+ * [QA-B7] users 표시명 행.
+ *
+ * 종전에는 `name` 필드가 있었고 select 도 그 컬럼을 요청했는데, public.users 에
+ * **name 컬럼은 존재하지 않는다**. 그래서 이 조회는 매번
+ * `column users.name does not exist` 로 실패했고(개별질문 사용 구간에서 DB 로그
+ * 8회 이상 관측), 아래 fetchUserNameMap 이 오류를 삼키고 빈 맵을 돌려주는 바람에
+ * **개별질문 목록의 학생·멘토 이름이 전부 '학생'·'멘토' 폴백으로 표시됐다** —
+ * 로그 노이즈가 아니라 실제 표시 결함이었다.
+ */
 type UserNameRow = {
   id: string;
   full_name?: string | null;
   nickname?: string | null;
-  name?: string | null;
   email?: string | null;
   role?: string | null;
 };
@@ -96,7 +105,7 @@ const QUESTION_COLUMNS =
   "id, student_id, question_type, designated_mentor_id, claimed_mentor_id, claimed_at, subject, topic, title, body, price_cents, status, expires_at, answered_at, released_at, refunded_at, hold_ledger_id, release_ledger_id, refund_ledger_id, created_at, updated_at";
 
 function displayName(row: UserNameRow | null | undefined, fallback: string): string {
-  const value = row?.full_name?.trim() || row?.nickname?.trim() || row?.name?.trim() || row?.email?.trim();
+  const value = row?.full_name?.trim() || row?.nickname?.trim() || row?.email?.trim();
   return value || fallback;
 }
 
@@ -107,10 +116,15 @@ async function fetchUserNameMap(supabase: SupabaseClient, ids: string[]): Promis
 
   const { data, error } = await supabase
     .from("users")
-    .select("id, full_name, nickname, name, email, role")
+    .select("id, full_name, nickname, email, role")
     .in("id", uniqueIds);
 
-  if (error || !data) return map;
+  if (error || !data) {
+    // 조용히 빈 맵을 돌려주면 이름이 전부 폴백으로 바뀌는데 아무도 모른다 —
+    // 실제로 존재하지 않는 컬럼 요청이 이 경로에 오래 남아 있었다(QA-B7).
+    if (error) console.error("[fetchUserNameMap] users 표시명 조회 실패", error.message);
+    return map;
+  }
   for (const row of data as UserNameRow[]) {
     if (row.id) map.set(row.id, row);
   }
