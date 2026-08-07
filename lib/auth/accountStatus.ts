@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { strictDeletionDecision } from "../appSession/appSurfaceAccountGate.ts";
+import {
+  strictAccountStatusDecision,
+  strictDeletionDecision,
+  type AppSurfaceAccountRow,
+} from "../appSession/appSurfaceAccountGate.ts";
 
 /**
  * 계정 상태(active / suspended / banned) 판정 + 핵심 액션 차단 메시지.
@@ -70,6 +74,8 @@ export function accountBlockMessage(
 export type AccountGateDenyReason =
   | "banned"
   | "suspended"
+  | "deleted" // users.status='deleted' (CHECK 4종 중 하나) — 탈퇴 완료 계정 명시 거부
+  | "status_unknown" // CHECK 밖 가상 값 — 제약상 도달 불가 방어선(확인 불가는 곧 거부)
   | "deletion_blocked" // 탈퇴 write-block (§11.5 ACCOUNT_DELETION_IN_PROGRESS 계열)
   | "row_missing" // users 행 부재 — 확인 불가는 곧 거부
   | "unverifiable"; // 조회 오류·예외·형식 오류 — 확인 불가는 곧 거부
@@ -79,6 +85,9 @@ export type AccountGateResult = { ok: true } | { ok: false; reason: AccountGateD
 const UNVERIFIABLE_MESSAGE =
   "계정 상태를 확인하지 못해 요청을 처리할 수 없어요. 잠시 후 다시 시도해 주세요.";
 const DELETION_IN_PROGRESS_MESSAGE = "탈퇴 처리가 진행 중인 계정이라 이 작업을 할 수 없어요.";
+const STATUS_UNKNOWN_MESSAGE =
+  "계정 상태를 확인할 수 없어 이 작업을 할 수 없어요. 문의가 필요하면 고객센터로 연락해 주세요.";
+const DELETED_MESSAGE = "이미 탈퇴 처리된 계정이라 이 작업을 할 수 없어요.";
 
 function deny(reason: AccountGateDenyReason, userMessage: string): AccountGateResult {
   return { ok: false, reason, userMessage };
@@ -92,21 +101,57 @@ export type AccountActiveGateDeps = {
 };
 
 /**
- * DI 코어 — **fail-closed**(계약 §11.5). deps 예외 포함 모든 확인 불가를 거부로 수렴한다.
- * 판정식은 §11.5 그대로: banned → 거부, suspended AND (until NULL 또는 미래) → 거부(만료된
- * suspended 는 통과), 탈퇴 write-block → 거부. 그 외 상태 문자열은 §11.5 coalesce 식에 따라
- * 통과한다(effectiveAccountStatus). 오류 상세·원문 응답은 반환·기록하지 않는다.
+ * 웹 게이트 status 정규화 — DB 정본(`api_web_v1.mentor_directory_v1` 등)의
+ * `COALESCE(status,'active')` 와 동일하게 NULL/빈 문자열을 active 로 정규화한다.
+ * 원격 실측(2026-08-07) 기준 users.status 는 **NOT NULL · default 'active' ·
+ * CHECK (active/suspended/banned/deleted)** 이므로 NULL/'' 은 제약상 존재할 수 없는
+ * **도달 불가 방어선**이다(오너 결정 1 — 무해하므로 뷰 정합용으로 유지). 앱 표면
+ * strict 게이트는 NULL 을 거부하지만(더 엄격), 웹은 이 정규화로 뷰 식과 정합을 맞춘다.
+ */
+function coalesceWebStatusRow(row: AccountStatusInfo | null): AppSurfaceAccountRow | null {
+  if (!row) return row;
+  const raw = typeof row.status === "string" ? row.status.trim() : row.status;
+  const normalized = raw === null || raw === undefined || raw === "" ? "active" : raw;
+  return { status: normalized, suspended_until: row.suspended_until };
+}
+
+/**
+ * DI 코어 — **fail-closed** + **status allowlist**(계약 §11.5, D-AU-3, 오너 결정 1).
+ * allowlist 는 users.status 의 DB CHECK 4종(active/suspended/banned/deleted)에 정확히
+ * 맞춘다: 통과는 `active`(및 만료된 `suspended`)뿐이고 suspended·banned·deleted 는 각각
+ * **명시 거부**한다. CHECK 밖 값·NULL/'' 은 제약상 도달 불가 방어선이다(전자는
+ * status_unknown 거부, 후자는 coalesceWebStatusRow 로 active 정규화 — 뷰 정합).
+ * 구 동작은 effectiveAccountStatus 의 "미지 값 → active" coalesce 를 써서 새 상태값이
+ * 도입되면 조용히 fail-open 됐다 — 이 폴백을 게이트에서 제거했다(표시용 함수는 유지).
+ * 탈퇴 write-block 은 strictDeletionDecision 재사용. 오류 상세·원문 응답은 반환·기록하지 않는다.
  */
 export async function assertAccountActiveCore(deps: AccountActiveGateDeps): Promise<AccountGateResult> {
   try {
     const account = await deps.fetchAccountRow();
-    if (account.error) return deny("unverifiable", UNVERIFIABLE_MESSAGE);
-    if (!account.row) return deny("row_missing", UNVERIFIABLE_MESSAGE);
     const now = deps.now ? deps.now() : new Date();
-    const status = effectiveAccountStatus(account.row, now);
-    if (status !== "active") {
-      const msg = accountBlockMessage(account.row, now);
-      return deny(status, msg ?? UNVERIFIABLE_MESSAGE);
+    const statusDecision = strictAccountStatusDecision(coalesceWebStatusRow(account.row), account.error, now);
+    if (!statusDecision.ok) {
+      const rawStatus =
+        typeof account.row?.status === "string" ? account.row.status.trim().toLowerCase() : null;
+      switch (statusDecision.reason) {
+        case "query_error":
+          return deny("unverifiable", UNVERIFIABLE_MESSAGE);
+        case "row_missing":
+          return deny("row_missing", UNVERIFIABLE_MESSAGE);
+        case "banned":
+          return deny("banned", accountBlockMessage({ status: "banned" }, now) ?? STATUS_UNKNOWN_MESSAGE);
+        case "suspended":
+        case "suspended_until_invalid":
+          return deny(
+            "suspended",
+            accountBlockMessage(account.row ?? { status: "suspended" }, now) ?? STATUS_UNKNOWN_MESSAGE,
+          );
+        default:
+          // CHECK 4종 중 deleted 는 명시 거부, 그 외(CHECK 밖 가상 값)는 도달 불가 방어선
+          return rawStatus === "deleted"
+            ? deny("deleted", DELETED_MESSAGE)
+            : deny("status_unknown", STATUS_UNKNOWN_MESSAGE);
+      }
     }
     const deletion = await deps.fetchDeletionStatus();
     const decision = strictDeletionDecision(deletion.payload, deletion.error);

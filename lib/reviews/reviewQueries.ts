@@ -2,7 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { checkReviewEligibility } from "@/lib/reviews/checkReviewEligibility";
 import { formatGradeSubject, maskStudentName } from "@/lib/reviews/reviewDisplay";
 import { isPubliclyVisibleReview, mapReviewDbRow, type ReviewDbRow } from "@/lib/reviews/reviewRowMapper";
-import { applyReviewUpdate } from "@/lib/reviews/reviewUpdateResult";
+import { applyReviewUpdate, decideReviewUpdateOutcome } from "@/lib/reviews/reviewUpdateResult";
 import { maskContactInUserText } from "@/lib/safety/trustSafetyText";
 
 export type ReviewCardItem = {
@@ -329,11 +329,12 @@ export async function hideReview(
     is_hidden: hidden,
     moderation_state: hidden ? "hidden" : "visible",
   };
-  const { error } = await supabase.from("reviews").update(patch).eq("id", reviewId);
-  if (error) {
-    return { ok: false, error: "처리에 실패했습니다." };
-  }
-  return { ok: true };
+  // D-MT-5 / D-DB-4: error 만 보면 RLS 로 0행이 갱신돼도 성공으로 보고돼(fail-open) 관리자
+  // 숨김 조치가 유실된다. 작성자 수정 경로(applyReviewUpdate)와 동일하게 RETURNING id 를
+  // 회수해 '정확히 1행 · id 일치'일 때만 성공으로 판정한다(reviews_update_admin 정책 의존).
+  const { data, error } = await supabase.from("reviews").update(patch).eq("id", reviewId).select("id");
+  const outcome = decideReviewUpdateOutcome(reviewId, data, error);
+  return outcome.ok ? { ok: true } : { ok: false, error: outcome.error };
 }
 
 export async function listMentorReceivedReviews(

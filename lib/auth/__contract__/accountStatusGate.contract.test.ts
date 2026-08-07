@@ -52,6 +52,28 @@ test("C9 §11.5 판정식 — 상태별 통과/거부 (fail-closed)", async () =
       expectOk: true,
     },
     {
+      name: "deleted → 명시 거부 (오너 결정 1: CHECK 4종 정합 — 탈퇴 완료 계정)",
+      row: { status: "deleted" },
+      expectOk: false,
+      expectReason: "deleted",
+    },
+    {
+      name: "CHECK 밖 가상 status → 거부 (D-AU-3: 미지 값 fail-open 제거 — 제약상 도달 불가 방어선)",
+      row: { status: "some_future_status" },
+      expectOk: false,
+      expectReason: "status_unknown",
+    },
+    {
+      name: "NULL status → 통과 (뷰 COALESCE(status,'active') 정합 — NOT NULL 제약상 도달 불가 방어선)",
+      row: { status: null },
+      expectOk: true,
+    },
+    {
+      name: "빈 문자열 status → 통과 (NULL 과 동일 정규화 — 도달 불가 방어선)",
+      row: { status: "   " },
+      expectOk: true,
+    },
+    {
       name: "suspended_until 해석 불가 → 거부(만료 판정 불가 = 유효 정지 취급)",
       row: { status: "suspended", suspended_until: "not-a-date" },
       expectOk: false,
