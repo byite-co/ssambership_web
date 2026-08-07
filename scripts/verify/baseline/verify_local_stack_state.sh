@@ -53,9 +53,13 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 79본 pack(생성기 78 + PR60 1)의 PG16 로컬 fresh replay 실측
-# (tables=80 functions=216 policies=175 buckets=13)이며, PG17 CLI 재생에서도
+# 기대치는 81본 pack(생성기 80 + PR60 1)의 PG16 로컬 fresh replay 실측
+# (tables=80 functions=217 policies=175 buckets=13)이며, PG17 CLI 재생에서도
 # 같은 값이 재현된다.
+# 79본→81본 델타:
+#   functions +1 = my_blocked_users(S5-1/QA-C7 — 차단 목록 닉네임 정의자 RPC)
+#   (S3-1/QA-B6 의 list_open_individual_questions_for_mentor 는 반환 컬럼이 늘어
+#    drop 후 재생성한 것이라 함수 수는 변하지 않는다 — 20260807010000)
 # 72본→79본(S1 배치) 델타:
 #   functions +2 = account_deletion_state_blocked(S1-1/QA-A1)
 #                + content_reports_dedupe_open(S1-3/QA-B4)
@@ -80,7 +84,7 @@ count_check(){ # count_check <label> <expected> <sql>
 }
 count_check tables 80 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
-count_check functions 216 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+count_check functions 217 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
 count_check policies 175 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"
