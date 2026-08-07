@@ -96,31 +96,9 @@ export function mentorSignupFieldErrors(f: MentorSignupFields): SignupFieldError
   return errors;
 }
 
-function firstError(errors: SignupFieldErrors): string | null {
-  const values = Object.values(errors);
-  return values[0] ?? null;
-}
-
-/** 학생 가입: 계정 + 프로필 + 필수 약관 */
-export function validateStudentSignup(f: StudentSignupFields): string | null {
-  return firstError(studentSignupFieldErrors(f));
-}
-
-/** 멘토 가입: 계정 + 인증/프로필 + 필수 약관 */
-export function validateMentorSignup(f: MentorSignupFields): string | null {
-  return firstError(mentorSignupFieldErrors(f));
-}
-
-export function validateSignupByRole(
-  role: Extract<AppRole, "student" | "mentor">,
-  student: StudentSignupFields,
-  mentor: MentorSignupFields
-): string | null {
-  if (role === "student") {
-    return validateStudentSignup(student);
-  }
-  return validateMentorSignup(mentor);
-}
+// D-AU-7: 사문 헬퍼 validateSignupByRole(및 그것만 쓰던 validateStudentSignup·
+// validateMentorSignup·firstError)를 삭제했다. 정본은 signupFieldErrorsByRole 다
+// (signup 페이지가 필드별 오류맵을 직접 소비한다 — 첫 오류 문자열만 뽑던 병렬 규칙 폐지).
 
 export function signupFieldErrorsByRole(
   role: Extract<AppRole, "student" | "mentor">,

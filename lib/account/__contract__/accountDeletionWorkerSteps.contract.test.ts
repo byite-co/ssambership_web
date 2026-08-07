@@ -409,6 +409,62 @@ test("auth_soft_deleted → completed 로 마무리", async () => {
   ]);
 });
 
+// ── D-AU-4: 실패 종결 시 unban 보상 ──────────────────────────────────────────
+
+test("실패 종결(recordError concludedFailed) 시 unbanOnFailure 보상이 호출된다", async () => {
+  const calls: Calls = [];
+  const deps = makeDeps(calls, {
+    uncoveredBuckets: async () => ["shortform-videos"],
+    recordError: async (_u, err) => {
+      calls.push(`recordError:${err}`);
+      return { concludedFailed: true };
+    },
+    unbanOnFailure: async () => {
+      calls.push("unbanOnFailure");
+    },
+  });
+  const result = await runAccountDeletionJob({ userId: "u1", state: "locked", dryRun: false }, deps);
+
+  assert.equal(result.stopped, "uncovered_buckets");
+  assert.ok(calls.includes("unbanOnFailure"), "실패 종결 시 100년 밴을 해제한다");
+  assert.ok(
+    calls.findIndex((c) => c.startsWith("recordError")) < calls.indexOf("unbanOnFailure"),
+    "record_error 로 실패 종결을 확인한 뒤 unban 한다"
+  );
+});
+
+test("실패 종결이 아니면(recordError void) unbanOnFailure 는 호출되지 않는다", async () => {
+  const calls: Calls = [];
+  const deps = makeDeps(calls, {
+    uncoveredBuckets: async () => ["shortform-videos"],
+    // recordError 는 기본 fixture(void 반환) 사용 — concludedFailed 신호 없음.
+    unbanOnFailure: async () => {
+      calls.push("unbanOnFailure");
+    },
+  });
+  const result = await runAccountDeletionJob({ userId: "u1", state: "locked", dryRun: false }, deps);
+
+  assert.equal(result.stopped, "uncovered_buckets");
+  assert.ok(!calls.includes("unbanOnFailure"), "진행 중(재시도 가능) 오류는 밴을 풀지 않는다");
+});
+
+test("unbanOnFailure 실패는 원 정지 판정을 가리지 않는다", async () => {
+  const calls: Calls = [];
+  const deps = makeDeps(calls, {
+    uncoveredBuckets: async () => ["shortform-videos"],
+    recordError: async () => ({ concludedFailed: true }),
+    unbanOnFailure: async () => {
+      calls.push("unbanOnFailure");
+      throw new Error("gotrue down");
+    },
+  });
+  const result = await runAccountDeletionJob({ userId: "u1", state: "locked", dryRun: false }, deps);
+
+  assert.equal(result.ok, false);
+  assert.equal(result.stopped, "uncovered_buckets", "보상 실패가 정지 사유를 덮어쓰지 않는다");
+  assert.ok(calls.includes("unbanOnFailure"));
+});
+
 test("이미 completed 인 job 재호출은 무해(파괴 동작 0)", async () => {
   const calls: Calls = [];
   const deps = makeDeps(calls);

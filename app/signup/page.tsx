@@ -18,9 +18,10 @@ import { safeInternalNextPath } from "@/lib/auth/getPostLoginPath";
 import { signupFieldErrorsByRole, type SignupFieldErrors } from "@/lib/auth/signupValidation";
 import { isUnderMinimumSignupAge } from "@/lib/auth/minorAgeGate";
 import {
-  MINOR_CONSENT_COPY,
   MINOR_CONSENT_VERIFICATION_METHOD_PLACEHOLDER,
   MINOR_CONSENT_VERSION,
+  MINOR_SIGNUP_BLOCKED_COPY,
+  MINOR_SIGNUP_BLOCKED_MESSAGE,
 } from "@/lib/auth/minorConsentPlaceholders";
 import { mapSupabaseAuthError } from "@/lib/utils/mapSupabaseAuthError";
 import type { AppRole } from "@/lib/types/user";
@@ -298,10 +299,12 @@ function SignupPageContent() {
     }
 
     const isMinorSignup = currentRole === "student" && isUnderMinimumSignupAge(student.birthDate);
-    if (isMinorSignup && !guardianConsentAgree) {
+    // D-AU-9: 본인확인 연동 전까지 만 14세 미만 가입은 **차단**한다(동의 체크 여부와 무관).
+    // placeholder 동의로 게이트를 여는 구 동작(guardianVerificationMethod='legal_review_pending')을 폐지.
+    if (isMinorSignup) {
       setMinorConsentPrompt(true);
-      setFieldErrors({ guardianConsent: MINOR_CONSENT_COPY.requiredError });
-      setError(MINOR_CONSENT_COPY.requiredError);
+      setFieldErrors({ guardianConsent: MINOR_SIGNUP_BLOCKED_MESSAGE });
+      setError(MINOR_SIGNUP_BLOCKED_MESSAGE);
       return;
     }
 
@@ -717,7 +720,7 @@ function SignupPageContent() {
                     <FieldError message={fieldErrors.terms} />
                     {showMinorConsent ? (
                       <div className="mt-4">
-                        {minorGuardianConsentBlock(guardianConsentAgree, setGuardianConsentAgree, loading)}
+                        {minorSignupBlockedNotice()}
                         <FieldError message={fieldErrors.guardianConsent} />
                       </div>
                     ) : null}
@@ -906,36 +909,19 @@ export default function SignupPage() {
   );
 }
 
-function minorGuardianConsentBlock(
-  checked: boolean,
-  setChecked: (b: boolean) => void,
-  loading: boolean
-) {
+/**
+ * D-AU-9: 만 14세 미만 가입 차단 안내. 본인확인 연동 전까지는 동의 체크박스 대신
+ * 가입 불가 사실을 명확히 고지한다(placeholder 동의 게이트 폐지).
+ */
+function minorSignupBlockedNotice() {
   return (
-    <section className="rounded-2xl border border-[#2563EB]/25 bg-blue-50/40 p-5 sm:p-6" aria-label="보호자 동의">
-      <header className="border-b border-blue-100 pb-4">
-        <p className="text-xs font-extrabold tracking-wide text-[#2563EB]">04 · 보호자 동의</p>
-        <h2 className="mt-1.5 text-lg font-extrabold text-slate-900 sm:text-xl">{MINOR_CONSENT_COPY.title}</h2>
-        <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{MINOR_CONSENT_COPY.description}</p>
+    <section className="rounded-2xl border border-red-200 bg-red-50/60 p-5 sm:p-6" aria-label="만 14세 미만 가입 제한">
+      <header className="border-b border-red-100 pb-4">
+        <p className="text-xs font-extrabold tracking-wide text-red-700">{MINOR_SIGNUP_BLOCKED_COPY.eyebrow}</p>
+        <h2 className="mt-1.5 text-lg font-extrabold text-slate-900 sm:text-xl">{MINOR_SIGNUP_BLOCKED_COPY.title}</h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-slate-700">{MINOR_SIGNUP_BLOCKED_COPY.description}</p>
       </header>
-      <div className="mt-4 rounded-xl border border-dashed border-blue-200 bg-white/70 p-4">
-        <p className="text-xs font-extrabold uppercase tracking-wide text-slate-500">{MINOR_CONSENT_COPY.legalSlotLabel}</p>
-        <ul className="mt-2 space-y-1.5 text-sm text-slate-600">
-          {MINOR_CONSENT_COPY.legalSlots.map((slot) => (
-            <li key={slot}>- {slot}</li>
-          ))}
-        </ul>
-      </div>
-      <label className="mt-4 flex items-start gap-3 text-slate-800 sm:gap-3.5">
-        <input
-          type="checkbox"
-          className="mt-1.5 h-5 w-5 shrink-0 rounded border-slate-300 text-[#2563EB] focus:ring-[#2563EB]"
-          checked={checked}
-          onChange={(e) => setChecked(e.target.checked)}
-          disabled={loading}
-        />
-        <span className="text-sm font-semibold leading-relaxed sm:text-base">{MINOR_CONSENT_COPY.checkboxLabel}</span>
-      </label>
+      <p className="mt-4 text-sm leading-relaxed text-slate-600">{MINOR_SIGNUP_BLOCKED_COPY.guidance}</p>
     </section>
   );
 }

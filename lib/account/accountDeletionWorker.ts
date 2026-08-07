@@ -38,6 +38,13 @@ export const dryRunSessionRevoke: SessionRevokeAdapter = async () => ({ ok: true
 
 export type BeginLockedResult = { ok: boolean; code?: string };
 
+/**
+ * record_error 결과 — 이번 오류 기록으로 job 이 **실패 종결(state='failed')** 되었는지.
+ * 175 account_deletion_record_error 는 attempts 가 한도를 넘으면 state='failed' 로 종결하고
+ * `{ ok:true, state:'failed', … }` 를 돌려준다. 그 신호를 워커까지 전달해 unban 보상을 건다(D-AU-4).
+ */
+export type RecordErrorOutcome = { concludedFailed?: boolean } | void;
+
 export type DeletionDeps = {
   /**
    * 176 account_deletion_begin_locked — 동의·잔액·취소창 검증과 `pending→locked` 전이를
@@ -47,8 +54,19 @@ export type DeletionDeps = {
   beginLocked: (userId: string) => Promise<BeginLockedResult>;
   /** 175 account_deletion_advance(from→to) 래퍼. 전이 성공 여부. pending→locked 는 거부된다. */
   advance: (userId: string, from: string, to: string) => Promise<boolean>;
-  /** 오류 기록 + backoff(175 account_deletion_record_error). */
-  recordError: (userId: string, err: string) => Promise<void>;
+  /**
+   * 오류 기록 + backoff(175 account_deletion_record_error).
+   * attempts 한도 초과로 job 이 실패 종결되면 `{ concludedFailed:true }` 를 돌려준다
+   * (구 구현은 void 였다 — 실패 종결 신호가 워커에 닿지 않아 unban 보상을 걸 수 없었다: D-AU-4).
+   */
+  recordError: (userId: string, err: string) => Promise<RecordErrorOutcome>;
+  /**
+   * job 실패 종결(state='failed') 시 GoTrue 밴 해제(`ban_duration:'none'`) 보상(D-AU-4).
+   * locked 진입 시 100년 밴을 걸지만 job 이 영구 실패하면 계정이 삭제되지도 복구되지도 않은 채
+   * 로그인 영구 차단으로 남는다. 실패 종결 시 밴을 풀어 사용자가 (익명화 전 커밋 상태의)
+   * 계정으로 다시 로그인할 수 있게 한다. 미주입 시 no-op(테스트/dry-run). 보상 실패는 원 오류를 가리지 않는다.
+   */
+  unbanOnFailure?: (userId: string) => Promise<void>;
   /** GoTrue 전 세션 revoke(dry-run 기본). locked 직후 호출, 성공 전 다음 단계 금지. */
   revokeSessions: SessionRevokeAdapter;
   /** DB 에 기록된 유저 Storage refs(소유자 조인 기반). */
@@ -92,6 +110,22 @@ export type DeletionRunResult = {
 
 function log(deps: DeletionDeps, msg: string, meta?: Record<string, unknown>) {
   deps.log?.(msg, meta);
+}
+
+/**
+ * 오류 기록 래퍼(D-AU-4) — record_error 를 호출하고, 그 호출로 job 이 **실패 종결**되면
+ * unban 보상을 건다. 모든 recordError 경로가 이 함수를 거쳐야 실패 종결 시 밴 해제가 보장된다.
+ * 보상(unban) 실패는 삼켜서 원래의 정지·오류 경로를 가리지 않는다.
+ */
+async function noteError(deps: DeletionDeps, userId: string, err: string): Promise<void> {
+  const outcome = await deps.recordError(userId, err);
+  if (outcome && outcome.concludedFailed === true && deps.unbanOnFailure) {
+    try {
+      await deps.unbanOnFailure(userId);
+    } catch {
+      /* 보상 실패는 원 오류/정지 판정을 가리지 않는다(다음 운영 사이클에서 재시도 가능). */
+    }
+  }
 }
 
 /**
@@ -210,7 +244,7 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
     const planAtStart = await planAccountDeletion(userId, deps);
     const blockAtStart = planBlockReason(planAtStart);
     if (blockAtStart) {
-      await deps.recordError(userId, blockAtStart.detail);
+      await noteError(deps, userId, blockAtStart.detail);
       return blockedResult(userId, state, dryRun, planAtStart, blockAtStart.stopped);
     }
 
@@ -220,7 +254,7 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
       if (!begun.ok) {
         const code = begun.code ?? "not_locked";
         // 취소창 미경과는 정상 대기다 — 오류로 기록하지 않는다.
-        if (code !== "CANCEL_WINDOW_OPEN") await deps.recordError(userId, `begin_locked: ${code}`);
+        if (code !== "CANCEL_WINDOW_OPEN") await noteError(deps, userId, `begin_locked: ${code}`);
         return { ok: code === "CANCEL_WINDOW_OPEN", userId, finalState: "pending", dryRun, stopped: code };
       }
       state = "locked";
@@ -230,7 +264,7 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
     if (state === "locked") {
       const rev = await deps.revokeSessions(userId);
       if (!rev.ok) {
-        await deps.recordError(userId, `session_revoke_failed: ${rev.error ?? "unknown"}`);
+        await noteError(deps, userId, `session_revoke_failed: ${rev.error ?? "unknown"}`);
         return { ok: false, userId, finalState: "locked", dryRun, stopped: "session_revoke" };
       }
       // locked → purging (조건부 원자).
@@ -243,7 +277,7 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
       // §3-3-b: 시작 게이트 이후 나타난 충돌·귀속 불능도 삭제 전에 다시 막는다.
       const blockBeforeRemove = planBlockReason(planned);
       if (blockBeforeRemove) {
-        await deps.recordError(userId, blockBeforeRemove.detail);
+        await noteError(deps, userId, blockBeforeRemove.detail);
         return blockedResult(userId, "purging", dryRun, planned, blockBeforeRemove.stopped);
       }
       const plan = planned.refs;
@@ -256,7 +290,7 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
       const removed = await deps.removeObjects(plan);
       const residue = purgeResidue(plan, removed);
       if (residue.length > 0) {
-        await deps.recordError(userId, `storage residue ${residue.length}`);
+        await noteError(deps, userId, `storage residue ${residue.length}`);
         return { ok: false, userId, finalState: "purging", dryRun, plan, stopped: "residue" };
       }
 
@@ -265,11 +299,11 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
       const recheck = await planAccountDeletion(userId, deps);
       const blockAtRecheck = planBlockReason(recheck);
       if (blockAtRecheck) {
-        await deps.recordError(userId, blockAtRecheck.detail);
+        await noteError(deps, userId, blockAtRecheck.detail);
         return { ...blockedResult(userId, "purging", dryRun, recheck, blockAtRecheck.stopped), plan };
       }
       if (!emptyStateSatisfied(recheck.refs)) {
-        await deps.recordError(userId, `not empty after purge: ${recheck.refs.map(storageObjectKey).join(",")}`);
+        await noteError(deps, userId, `not empty after purge: ${recheck.refs.map(storageObjectKey).join(",")}`);
         return { ok: false, userId, finalState: "purging", dryRun, plan, stopped: "not_empty" };
       }
       if (await deps.advance(userId, "purging", "storage_purged")) state = "storage_purged";
@@ -295,7 +329,7 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
     return { ok: true, userId, finalState: state, dryRun };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    await deps.recordError(userId, msg);
+    await noteError(deps, userId, msg);
     return { ok: false, userId, finalState: state, dryRun, stopped: "error" };
   }
 }

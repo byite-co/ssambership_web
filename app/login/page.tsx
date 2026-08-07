@@ -1,6 +1,9 @@
 import { Suspense } from "react";
+import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { LoginDualRolePanel } from "@/components/auth/LoginDualRolePanel";
+import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
+import { resolvePostLoginPath } from "@/lib/auth/getPostLoginPath";
 
 type LoginPageProps = {
   searchParams: Promise<{ next?: string }>;
@@ -9,6 +12,12 @@ type LoginPageProps = {
 export default async function LoginPage({ searchParams }: LoginPageProps) {
   const params = await searchParams;
   const initialNext = params.next?.trim() || null;
+
+  // D-AU-12: 이미 로그인한 사용자는 유형 선택 화면을 다시 보지 않는다(/admin/login 과 대칭).
+  const { user, profile } = await getServerUserWithProfile();
+  if (user && profile) {
+    redirect(resolvePostLoginPath(initialNext, profile.role));
+  }
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-[#F9FAFB]">
