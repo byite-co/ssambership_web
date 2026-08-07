@@ -53,6 +53,7 @@ export default async function StudentIndividualQuestionDetailPage(props: PagePro
       flash={flash}
       warning={warning}
       transfer={transfer}
+      justSent={Boolean(sent)}
     />
   );
 }

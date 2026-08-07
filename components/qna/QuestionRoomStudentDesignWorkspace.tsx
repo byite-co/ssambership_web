@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useFormStatus } from "react-dom";
+import { ChatBottomAnchor } from "@/components/qna/ChatBottomAnchor";
 import { ConnectionNotesPanel } from "@/components/qna/ConnectionNotesPanel";
 import { listCardClassName, type ListCardTone } from "@/components/design-system/ListCard";
 import {
@@ -166,7 +167,7 @@ export function QuestionRoomStudentDesignWorkspace(props: {
   unreadCountsByRoomId?: Record<string, number>;
   subscriptionContext?: QuestionRoomSubscriptionContext;
   subjectOptions?: string[];
-  actionFeedback?: { ok: string | null; error: string | null };
+  actionFeedback?: { kind?: string; ok: string | null; error: string | null };
   draftMessageBody?: string;
   draftNoteBody?: string;
   formRevision?: string;
@@ -332,6 +333,17 @@ export function QuestionRoomStudentDesignWorkspace(props: {
   const chatTimeline = useMemo(
     () => buildChatTimeline(props.messages.rows, standalone),
     [props.messages.rows, standalone]
+  );
+
+  // 내 전송 직후(kind=message 성공 복귀)에만 최하단 정렬 — 첨부 전송도 텍스트와 동일 체감.
+  const lastTimelineItem = chatTimeline[chatTimeline.length - 1] ?? null;
+  const lastTimelineMine = lastTimelineItem
+    ? lastTimelineItem.kind === "attachment"
+      ? lastTimelineItem.attachment.authorId === props.currentUserId
+      : messageAuthorId(lastTimelineItem.message) === props.currentUserId
+    : false;
+  const scrollToLatest = Boolean(
+    props.actionFeedback?.kind === "message" && props.actionFeedback?.ok && lastTimelineMine
   );
 
   const subjectChipsRoom = roomSubjectChips(currentRoom ?? {}, props.mentorDisplays, 4);
@@ -741,6 +753,7 @@ export function QuestionRoomStudentDesignWorkspace(props: {
                           </div>
                         );
                       })}
+                      <ChatBottomAnchor anchorKey={lastTimelineItem?.key ?? null} active={scrollToLatest} />
                     </div>
                   )}
                 </div>

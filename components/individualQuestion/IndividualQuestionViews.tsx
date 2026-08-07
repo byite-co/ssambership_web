@@ -1,5 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { ChatBottomAnchor } from "@/components/qna/ChatBottomAnchor";
 import { CheckCircle2, Clock, Inbox, MessageCircle, MessageCircleCheck, MessageSquareText, Paperclip, ReceiptText, ShieldCheck, WalletCards } from "lucide-react";
 import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -244,6 +245,8 @@ export function IndividualQuestionDetailView(props: {
   flash?: string | null;
   warning?: string | null;
   transfer?: { roomId: string | null; threadId: string | null; transferredAt?: string | null } | null;
+  /** ?sent=1 복귀 — 내 메시지(텍스트·첨부) 전송 직후에만 대화 최하단 정렬. */
+  justSent?: boolean;
 }) {
   const { detail, actor } = props;
   const transferThreadHref =
@@ -264,6 +267,17 @@ export function IndividualQuestionDetailView(props: {
     list.push(att);
     attachmentsByMessage.set(att.message_id, list);
   }
+
+  // 전송 직후 하단 정렬 판정 — 마지막 메시지가 내 것일 때만(열람·상대 갱신에는 미개입).
+  const lastMessage = detail.messages[detail.messages.length - 1] ?? null;
+  const lastMessageRole: "student" | "mentor" | "unknown" = lastMessage
+    ? lastMessage.author_id === detail.student_id
+      ? "student"
+      : mentorUserId && lastMessage.author_id === mentorUserId
+        ? "mentor"
+        : lastMessage.authorRole
+    : "unknown";
+  const scrollToLatest = Boolean(props.justSent) && lastMessageRole === actor;
 
   const status = (detail.status ?? "").toLowerCase();
   const terminal = status === "released" || status === "refunded" || status === "expired" || status === "canceled";
@@ -534,6 +548,7 @@ export function IndividualQuestionDetailView(props: {
               ) : null}
             </div>
           )}
+          <ChatBottomAnchor anchorKey={lastMessage?.id ?? null} active={scrollToLatest} />
         </section>
 
         {/* 메시지 입력바 — 멘토·학생 공통(서버가 작성자 판별) */}

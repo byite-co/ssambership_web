@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { useFormStatus } from "react-dom";
+import { ChatBottomAnchor } from "@/components/qna/ChatBottomAnchor";
 import { ConnectionNotesPanel } from "@/components/qna/ConnectionNotesPanel";
 import { ArrowLeft, ChevronLeft, ChevronRight, Download, Eye, FileText, MessageCircle, Search, Send, User } from "lucide-react";
 import { QuestionRoomAttachmentButton } from "@/components/qna/QuestionRoomAttachmentButton";
@@ -161,7 +162,7 @@ export function QuestionRoomMentorDesignWorkspace(props: {
   draftMessageBody?: string;
   draftNoteBody?: string;
   formRevision?: string;
-  actionFeedback?: { ok: string | null; error: string | null };
+  actionFeedback?: { kind?: string; ok: string | null; error: string | null };
   /** true: 질문 상세(톡방) 화면 — 중앙 채팅 + 우측 연결노트만 */
   threadDetailMode?: boolean;
   /** 톡방에서 질문 목록(2단계)으로 돌아가는 경로 */
@@ -275,6 +276,17 @@ export function QuestionRoomMentorDesignWorkspace(props: {
   const chatTimeline = useMemo(
     () => buildChatTimeline(props.messages.rows, standalone),
     [props.messages.rows, standalone]
+  );
+
+  // 내 전송 직후(kind=message 성공 복귀)에만 최하단 정렬 — 첨부 전송도 텍스트와 동일 체감.
+  const lastTimelineItem = chatTimeline[chatTimeline.length - 1] ?? null;
+  const lastTimelineMine = lastTimelineItem
+    ? lastTimelineItem.kind === "attachment"
+      ? lastTimelineItem.attachment.authorId === props.currentUserId
+      : messageAuthorId(lastTimelineItem.message) === props.currentUserId
+    : false;
+  const scrollToLatest = Boolean(
+    props.actionFeedback?.kind === "message" && props.actionFeedback?.ok && lastTimelineMine
   );
 
   /* 연결 노트 패널 (공용 컴포넌트 — 멘토/학생 통합) */
@@ -428,6 +440,7 @@ export function QuestionRoomMentorDesignWorkspace(props: {
             );
           })
         )}
+        <ChatBottomAnchor anchorKey={lastTimelineItem?.key ?? null} active={scrollToLatest} />
       </div>
 
       <div className="shrink-0 border-t border-slate-200 bg-white p-3">

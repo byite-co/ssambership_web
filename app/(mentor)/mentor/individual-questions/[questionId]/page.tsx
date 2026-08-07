@@ -52,6 +52,7 @@ export default async function MentorIndividualQuestionDetailPage(props: PageProp
               ? "공개 질문 답변을 맡았어요. 이제 답변을 작성할 수 있습니다."
               : null
       }
+      justSent={Boolean(sent)}
     />
   );
 }

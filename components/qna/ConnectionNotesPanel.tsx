@@ -146,7 +146,9 @@ function NoteColumn(opts: {
   onAddNote: () => void;
 }) {
   const isStudent = opts.side === "student";
-  const canAdd = opts.viewerRole === opts.side;
+  // 연결노트는 (room, author) 당 1개 — DB unique(connection_notes_room_author_unique)와 정합.
+  // 내 노트가 이미 있으면 추가 버튼을 숨겨 중복 생성 진입 자체를 없앤다(수정·삭제로만 관리).
+  const canAdd = opts.viewerRole === opts.side && opts.cards.length === 0;
   return (
     <section className={`rounded-2xl border p-3.5 ${isStudent ? "border-blue-200 bg-blue-50" : "border-emerald-200 bg-emerald-50"}`}>
       <div className="flex items-center justify-between gap-2">
