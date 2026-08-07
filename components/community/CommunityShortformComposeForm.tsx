@@ -6,6 +6,8 @@ import {
   createShortformVideoUploadTicketFromAppAction,
   submitShortformUploadAction,
   submitShortformUploadFromAppAction,
+  uploadShortformThumbnailAction,
+  uploadShortformThumbnailFromAppAction,
 } from "@/lib/community/communityShortformActions";
 import { SHORTFORM_CATEGORIES, SHORTFORM_VIDEO_MAX_BYTES } from "@/lib/community/communityShortformConstants";
 import { SHORTFORM_VIDEO_BUCKET, SHORTFORM_VIDEO_MIME } from "@/lib/community/shortformVideoRef";
@@ -48,6 +50,69 @@ function messageForError(code: string | null): string | null {
   return "저장에 실패했습니다.";
 }
 
+/**
+ * [QA-C15] 영상 첫 프레임을 뽑아 JPEG data URL 로 만든다.
+ *
+ * 왜 클라에서 하나: Vercel 서버리스에는 ffmpeg 이 없고, 영상은 서명 티켓으로 Storage 에
+ * 직접 올라가 서버가 바이트를 만지지 않는다. 브라우저(앱 WebView 포함 Chromium)는
+ * <video>+<canvas> 로 프레임을 얻을 수 있으므로 여기서 만드는 게 유일하게 짧은 경로다.
+ *
+ * 실패는 던지지 않고 null 을 돌려준다 — 썸네일이 없다고 글 발행을 막으면 안 된다.
+ * 폭은 480px 로 줄여 30~80KB 로 맞춘다(액션 body 상한 512KB 안).
+ */
+async function captureVideoPosterDataUrl(file: File): Promise<string | null> {
+  if (typeof document === "undefined") return null;
+  const objectUrl = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "metadata";
+  try {
+    const ready = new Promise<void>((resolve, reject) => {
+      let settled = false;
+      const done = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+      const fail = () => {
+        if (settled) return;
+        settled = true;
+        reject(new Error("video-decode"));
+      };
+      video.onloadeddata = done;
+      video.onseeked = done;
+      video.onerror = fail;
+      // 디코딩이 끝나지 않는 코덱에서 영원히 매달리지 않게 한다.
+      setTimeout(fail, 8000);
+    });
+    video.src = objectUrl;
+    // 0초 프레임은 검은 화면인 경우가 많아 살짝 뒤로 옮긴다.
+    video.currentTime = 0.1;
+    await ready;
+
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    if (!vw || !vh) return null;
+    const targetW = Math.min(480, vw);
+    const targetH = Math.max(1, Math.round((vh / vw) * targetW));
+    const canvas = document.createElement("canvas");
+    canvas.width = targetW;
+    canvas.height = targetH;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(video, 0, 0, targetW, targetH);
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
+    return dataUrl.startsWith("data:image/jpeg;base64,") ? dataUrl : null;
+  } catch {
+    return null;
+  } finally {
+    video.removeAttribute("src");
+    video.load();
+    URL.revokeObjectURL(objectUrl);
+  }
+}
+
 function cryptoRandomUuid(): string {
   const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
   if (c?.randomUUID) return c.randomUUID();
@@ -65,6 +130,7 @@ export function CommunityShortformComposeForm(props: Props) {
 
   const formRef = useRef<HTMLFormElement>(null);
   const videoRefInputRef = useRef<HTMLInputElement>(null);
+  const thumbnailRefInputRef = useRef<HTMLInputElement>(null);
   const requestIdInputRef = useRef<HTMLInputElement>(null);
   const intentInputRef = useRef<HTMLInputElement>(null);
   const uploadedGateRef = useRef(false);
@@ -168,12 +234,27 @@ export function CommunityShortformComposeForm(props: Props) {
           return;
         }
         if (videoRefInputRef.current) videoRefInputRef.current.value = ticket.ref;
+
+        // 썸네일 — 영상 업로드가 끝난 뒤에 만든다(실패해도 발행을 막지 않는다).
+        const poster = await captureVideoPosterDataUrl(videoFile);
+        if (poster) {
+          const uploadThumb = isAppSurface
+            ? uploadShortformThumbnailFromAppAction
+            : uploadShortformThumbnailAction;
+          const thumb = await uploadThumb({ dataUrl: poster });
+          if (thumb.ok && thumbnailRefInputRef.current) {
+            thumbnailRefInputRef.current.value = thumb.ref;
+          }
+        }
       } else if (videoRefInputRef.current) {
         videoRefInputRef.current.value = "";
       }
       if (requestIdInputRef.current) requestIdInputRef.current.value = rid;
+      // 재제출 직전 한 번 더 못박는다 — 이 줄과 requestSubmit 사이에는 재렌더가 끼어들 수 없다.
+      if (intentInputRef.current) intentInputRef.current.value = intent;
       uploadedGateRef.current = true;
-      // submitter 를 넘기지 않는다 — intent 는 위에서 hidden input 에 캡처됐다.
+      // submitter 를 넘기지 않는다 — 이 시점의 상단바 버튼은 busy 로 disabled 라
+      // 넘겨도 entry list 에서 제외된다. intent 는 위 hidden 이 나른다.
       formRef.current?.requestSubmit();
     } catch {
       setError("저장에 실패했어요. 다시 시도해 주세요.");
@@ -200,6 +281,9 @@ export function CommunityShortformComposeForm(props: Props) {
           {props.draft ? <input type="hidden" name="draftId" value={props.draft.id} /> : null}
           {hasStoredVideo ? <input type="hidden" name="videoUrl" value={props.draft?.videoUrl ?? ""} /> : null}
           <input type="hidden" name="videoRef" ref={videoRefInputRef} defaultValue="" />
+          {/* QA-C15: 영상 첫 프레임으로 만든 썸네일의 stored ref. 실패하면 빈 값으로 두고
+              글은 그대로 발행한다 — 썸네일은 있으면 좋은 값이지 발행 조건이 아니다. */}
+          <input type="hidden" name="thumbnailRef" ref={thumbnailRefInputRef} defaultValue="" />
           <input type="hidden" name="requestId" ref={requestIdInputRef} defaultValue="" />
           {/* 최초 submit 의 intent 캡처용 — 서버는 getAll("intent") 중 첫 유효값을 읽어
               JS 비활성(submitter 값)·JS 활성(이 hidden 값) 어느 경로든 의도를 보존한다. */}

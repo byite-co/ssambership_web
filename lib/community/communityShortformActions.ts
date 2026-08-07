@@ -7,6 +7,10 @@ import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
 import { authorStoredLabelFromProfile } from "@/lib/community/communityAuthorLabels";
 import { communityComposePath } from "@/lib/community/communityComposeTab";
 import {
+  parseShortformThumbnailDataUrl,
+  shortformThumbnailRefBelongsToUser,
+} from "@/lib/community/shortformThumbnailRef";
+import {
   insertShortformPost,
   toggleShortformLike,
   updateShortformPost,
@@ -14,6 +18,8 @@ import {
 import type { ShortformCategorySlug } from "@/lib/community/communityShortformConstants";
 import {
   createShortformVideoUploadTicket,
+  deleteShortformThumbnailStoredRef,
+  uploadShortformThumbnail,
   deleteShortformVideoStoredRef,
   isShortformStoredVideoRef,
   shortformVideoRefBelongsToUser,
@@ -61,6 +67,18 @@ async function compensateNewShortformVideo(
   const del = await deleteShortformVideoStoredRef(supabase, uploadedRef);
   if (!del.ok) {
     console.error("[shortform] orphan video 보상 삭제 실패", { uploadedRef, error: del.error });
+  }
+}
+
+// 이번 요청에서 새로 업로드했으나 DB write 가 실패한 thumbnail 객체를 보상 삭제한다.
+async function compensateNewShortformThumbnail(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  uploadedRef: string | null
+): Promise<void> {
+  if (!uploadedRef) return;
+  const del = await deleteShortformThumbnailStoredRef(supabase, uploadedRef);
+  if (!del.ok) {
+    console.error("[shortform] orphan thumbnail 보상 삭제 실패", { uploadedRef, error: del.error });
   }
 }
 
@@ -115,10 +133,11 @@ async function submitShortformUploadCore(surface: "web" | "app", formData: FormD
 
   // UPDATE 경로: 새 업로드 전에 소유권 조건으로 기존 video_url 을 조회한다(교체 시 구파일 차집합 삭제용).
   let oldVideoRef: string | null = null;
+  let oldThumbnailRef: string | null = null;
   if (isUpdate) {
     const { data: existing } = await supabase
       .from("shortform_posts")
-      .select("video_url")
+      .select("video_url, thumbnail_url")
       .eq("id", draftId)
       .eq("author_id", user.id)
       .maybeSingle();
@@ -126,6 +145,10 @@ async function submitShortformUploadCore(surface: "web" | "app", formData: FormD
       ? (existing as { video_url: string }).video_url
       : null;
     oldVideoRef = ev;
+    const et = existing && typeof (existing as { thumbnail_url?: unknown }).thumbnail_url === "string"
+      ? (existing as { thumbnail_url: string }).thumbnail_url
+      : null;
+    oldThumbnailRef = et;
   }
 
   // [staged upload] 영상은 액션 body 로 받지 않는다(413 회피). 클라가 서명 티켓으로 Storage 에 직접
@@ -139,9 +162,23 @@ async function submitShortformUploadCore(surface: "web" | "app", formData: FormD
     videoUrl = newVideoRef;
     uploadedRef = newVideoRef;
   }
+  // [QA-C15] 썸네일 — 클라가 영상 첫 프레임으로 만들어 별도 액션으로 먼저 올린 ref 를 받는다.
+  //   영상과 달리 액션 body 로 바이트를 받아 magic byte 를 검증한 뒤 서버가 올리므로,
+  //   여기 오는 건 이미 검증된 본인 경로 ref 다. 그래도 위조를 가정하고 소유 경로를 다시 본다.
+  //   썸네일은 있으면 좋은 값이라, 없거나 형식이 틀려도 발행을 막지 않고 조용히 비운다
+  //   (영상과 달리 게시 필수 조건이 아니다).
+  let thumbnailUrl: string | null = isUpdate ? oldThumbnailRef : null;
+  let uploadedThumbRef: string | null = null;
+  const newThumbRef = fields.thumbnailRef;
+  if (newThumbRef && shortformThumbnailRefBelongsToUser(newThumbRef, user.id)) {
+    thumbnailUrl = newThumbRef;
+    uploadedThumbRef = newThumbRef;
+  }
+
   if (!videoUrl && status === "published") {
     // 아직 DB write 전. 방금 업로드한 새 객체가 있으면 고아 방지 위해 보상 삭제 후 오류.
     await compensateNewShortformVideo(supabase, uploadedRef);
+    await compensateNewShortformThumbnail(supabase, uploadedThumbRef);
     err(returnPath, "video");
   }
 
@@ -154,7 +191,7 @@ async function submitShortformUploadCore(surface: "web" | "app", formData: FormD
     title: safeTitle,
     category,
     videoUrl,
-    thumbnailUrl: null as string | null,
+    thumbnailUrl,
     body: safeBody,
     tags: [] as string[],
     source,
@@ -168,23 +205,36 @@ async function submitShortformUploadCore(surface: "web" | "app", formData: FormD
     : await insertShortformPost(supabase, user.id, payload);
 
   if (!r.ok) {
-    // DB 실패(INSERT/UPDATE 오류·UPDATE 0행) → 이번 요청 신규 video 고아 방지 보상 삭제.
+    // DB 실패(INSERT/UPDATE 오류·UPDATE 0행) → 이번 요청 신규 video·thumbnail 고아 방지 보상 삭제.
     await compensateNewShortformVideo(supabase, uploadedRef);
+    await compensateNewShortformThumbnail(supabase, uploadedThumbRef);
     err(returnPath, r.error);
   }
 
   // 중복 제출 멱등 재생: 기존 글이 반환됐다면 이번 중복 업로드 영상은 고아 → 보상 삭제 후 기존 글로 이동.
   if (!isUpdate && "idempotentReplay" in r && r.idempotentReplay) {
     await compensateNewShortformVideo(supabase, uploadedRef);
+    await compensateNewShortformThumbnail(supabase, uploadedThumbRef);
   }
 
   // DB 성공 → 교체된 구영상 차집합 삭제(old != final 이고 old 가 우리 stored video ref 일 때만).
-  // 썸네일은 현재 액션이 업로드하지 않으므로 보상 대상 제외.
   if (isUpdate && oldVideoRef && oldVideoRef !== videoUrl && isShortformStoredVideoRef(oldVideoRef)) {
     const del = await deleteShortformVideoStoredRef(supabase, oldVideoRef);
     if (!del.ok) {
       // post-commit 실패는 DB 성공을 되돌릴 수 없다 → 구조화 경고 로그, 은폐 금지, 재정리 대상.
       console.error("[shortform] 교체 구영상 정리 실패", { postId: r.id, oldVideoRef, error: del.error });
+    }
+  }
+  // 교체된 구썸네일도 같은 규칙으로 정리한다(본인 경로 ref 이고 최종값과 다를 때만).
+  if (
+    isUpdate &&
+    oldThumbnailRef &&
+    oldThumbnailRef !== thumbnailUrl &&
+    shortformThumbnailRefBelongsToUser(oldThumbnailRef, user.id)
+  ) {
+    const del = await deleteShortformThumbnailStoredRef(supabase, oldThumbnailRef);
+    if (!del.ok) {
+      console.error("[shortform] 교체 구썸네일 정리 실패", { postId: r.id, error: del.error });
     }
   }
 
@@ -262,6 +312,52 @@ export async function createShortformVideoUploadTicketFromAppAction(input: {
   contentType: string;
 }): Promise<{ ok: true; path: string; token: string; ref: string } | { ok: false; error: string }> {
   return createShortformVideoUploadTicketCore("app", await createAppSurfaceClient(), input.contentType);
+}
+
+/**
+ * [QA-C15] 숏폼 썸네일 업로드 — 클라가 영상 첫 프레임을 canvas 로 뽑아 data URL 로 보낸다.
+ *
+ * 영상(수백 MB)과 달리 썸네일은 수십 KB 라 서명 티켓을 쓰지 않는다. 액션 body 로 받으면
+ * 서버가 **magic byte 까지 검증한 뒤** 올릴 수 있어 더 안전하고, 클라 왕복도 한 번 줄어든다.
+ * 경로는 서버가 본인 userId 로 통제한다(Storage 정책 sfv_mentor_insert 와 동일 규칙).
+ * 실패는 발행을 막지 않는다 — 썸네일 없이도 글은 올라가야 한다.
+ */
+async function uploadShortformThumbnailCore(
+  surface: "web" | "app",
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  dataUrl: string,
+): Promise<{ ok: true; ref: string } | { ok: false; error: string }> {
+  const parsed = parseShortformThumbnailDataUrl(dataUrl);
+  if (!parsed) return { ok: false, error: "type" };
+
+  const { data: authData } = await supabase.auth.getUser();
+  const user = authData?.user ?? null;
+  if (!user) return { ok: false, error: "auth" };
+  const acct =
+    surface === "app"
+      ? await assertAppSurfaceAccountActiveStrict(supabase, user.id)
+      : await assertAccountActive(supabase, user.id);
+  if (!acct.ok) return { ok: false, error: "account_blocked" };
+  const { data: profile } = await getUserProfileById(supabase, user.id);
+  if (profile?.role !== "mentor") return { ok: false, error: "mentor_only" };
+
+  const buffer = Buffer.from(parsed.base64, "base64");
+  const up = await uploadShortformThumbnail(supabase, user.id, buffer, parsed.mime);
+  if (!up.url) return { ok: false, error: up.error ?? "upload" };
+  return { ok: true, ref: up.url };
+}
+
+export async function uploadShortformThumbnailAction(input: {
+  dataUrl: string;
+}): Promise<{ ok: true; ref: string } | { ok: false; error: string }> {
+  return uploadShortformThumbnailCore("web", await createClient(), input.dataUrl);
+}
+
+/** 앱 WebView 표면용 — 앱 전용 클라이언트(쿠키 속성 강제)+strict 계정 게이트. */
+export async function uploadShortformThumbnailFromAppAction(input: {
+  dataUrl: string;
+}): Promise<{ ok: true; ref: string } | { ok: false; error: string }> {
+  return uploadShortformThumbnailCore("app", await createAppSurfaceClient(), input.dataUrl);
 }
 
 export async function toggleShortformLikeAction(formData: FormData) {

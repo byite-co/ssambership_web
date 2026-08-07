@@ -15,6 +15,7 @@ export const SHORTFORM_SUBMIT_ALLOWED_KEYS = [
   "draftId",
   "videoUrl",
   "videoRef",
+  "thumbnailRef",
   "requestId",
   "intent",
 ] as const;
@@ -31,6 +32,8 @@ export type ShortformSubmitFields = {
   draftId: string;
   videoUrl: string;
   videoRef: string;
+  /** QA-C15: 클라가 영상 첫 프레임으로 만들어 먼저 올린 썸네일의 stored ref. */
+  thumbnailRef: string;
   requestId: string;
 };
 
@@ -64,6 +67,7 @@ export function extractShortformSubmitFields(formData: FormData): ShortformSubmi
     draftId: trimmed(formData, "draftId"),
     videoUrl: trimmed(formData, "videoUrl"),
     videoRef: trimmed(formData, "videoRef"),
+    thumbnailRef: trimmed(formData, "thumbnailRef"),
     requestId: trimmed(formData, "requestId"),
   };
 }
