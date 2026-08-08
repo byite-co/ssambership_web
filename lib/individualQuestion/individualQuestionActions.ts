@@ -192,6 +192,7 @@ export async function createDirectIndividualQuestionAction(formData: FormData) {
     const upload = await uploadIndividualQuestionAttachment(admin, {
       questionId: result.question_id,
       messageId: null,
+      authorId: user.id,
       file: attachment,
     });
     if (!upload.ok) {
@@ -274,6 +275,7 @@ export async function createOpenIndividualQuestionAction(formData: FormData) {
     const upload = await uploadIndividualQuestionAttachment(admin, {
       questionId: result.question_id,
       messageId: null,
+      authorId: user.id,
       file: attachment,
     });
     if (!upload.ok) {
@@ -396,6 +398,7 @@ export async function sendIndividualQuestionMessageAction(formData: FormData) {
     const upload = await uploadIndividualQuestionAttachment(admin, {
       questionId,
       messageId,
+      authorId: user.id,
       file: attachment,
     });
     if (!upload.ok) {

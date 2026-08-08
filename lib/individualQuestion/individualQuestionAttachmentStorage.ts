@@ -38,9 +38,15 @@ export async function uploadIndividualQuestionAttachment(
   params: {
     questionId: string;
     messageId: string | null;
+    // 상위 server action에서 requireRole/requireQnaActor로 인증된 actor uid.
+    // service-role 클라이언트로는 auth.uid()를 복원할 수 없어 명시 전달이 정본이다.
+    authorId: string;
     file: File;
   }
 ): Promise<{ ok: true; path: string } | { ok: false; error: string }> {
+  if (!params.authorId) {
+    return { ok: false, error: "첨부 작성자 정보가 올바르지 않습니다. 다시 로그인해 주세요." };
+  }
   const extension = fileExtension(params.file.name);
   if (!normalizeJpgPngPdfExtension(extension)) {
     return { ok: false, error: JPG_PNG_PDF_EXTENSION_ERROR };
@@ -68,6 +74,7 @@ export async function uploadIndividualQuestionAttachment(
   const { error: insertError } = await supabase.from("individual_question_attachments").insert({
     question_id: params.questionId,
     message_id: params.messageId,
+    author_id: params.authorId,
     storage_path: path,
     file_name: params.file.name,
     mime_type: verified.file.mimeType,
