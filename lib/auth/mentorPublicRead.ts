@@ -166,6 +166,48 @@ export async function loadMentorProfilesForDirectory(
   return { byUser, error: null, probe: "api_web_v1.mentor_directory_v1(V3)" };
 }
 
+/**
+ * C1 ③-a: id 묶음 → 뷰 행(UserRow adapter) 일괄 해석. 뷰에는 공개 노출 대상 멘토만 있으므로
+ * 섞인 id 를 그대로 넘겨도 멘토 id 만 해석된다(학생 id 는 조용히 미해석 — 호출부 폴백 유지).
+ * 개별질문 표시명처럼 "학생 세션에서 멘토 nickname 이 필요한" 경로가 users 직접 읽기
+ * (RLS 로 타인 행 0행) 대신 이것을 쓴다.
+ */
+export async function loadMentorDirectoryUserRowsByIds(
+  supabase: SupabaseClient,
+  ids: string[]
+): Promise<{ byId: Map<string, UserRow>; error: string | null }> {
+  const byId = new Map<string, UserRow>();
+  const unique = [...new Set(ids.filter((id) => typeof id === "string" && id.trim()))];
+  if (unique.length === 0) {
+    return { byId, error: null };
+  }
+  const { data, error } = await directoryView(supabase).select("*").in("mentor_id", unique);
+  if (error) {
+    return { byId, error: viewErrorMessage(error) || "mentor_directory_v1 failed" };
+  }
+  for (const row of rowsFromSupabaseData(data)) {
+    if (row.mentor_id == null) continue;
+    const user = mapDirectoryRowToUserRow(row);
+    byId.set(user.id, user);
+  }
+  return { byId, error: null };
+}
+
+/**
+ * C1 ③-b: 랜딩 공개 지표용 멘토 수 — V3 뷰 기준 count. 뷰의 노출 조건(승인·활성·비삭제)이
+ * 곧 "공개할 멘토 수"의 올바른 정의이고, anon 에게도 SELECT 가 허용되어 게스트 랜딩에서
+ * 동작한다(구 mentor_profiles 직접 count 는 anon 정책 0개로 항상 0·error null 이었다).
+ */
+export async function countPublicMentors(
+  supabase: SupabaseClient
+): Promise<{ count: number | null; error: string | null }> {
+  const { count, error } = await directoryView(supabase).select("*", { count: "exact", head: true });
+  if (error) {
+    return { count: null, error: viewErrorMessage(error) || "mentor_directory_v1 failed" };
+  }
+  return { count: count ?? null, error: null };
+}
+
 export async function getMentorUserPublic(
   supabase: SupabaseClient,
   mentorId: string

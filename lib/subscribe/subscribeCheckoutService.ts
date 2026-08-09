@@ -19,7 +19,6 @@ import { loadMentorCapUsage, wouldExceedCap } from "@/lib/subscribe/mentorCapSer
 import { assertMentorApprovedForAction } from "@/lib/mentor/mentorVerificationGate";
 import { loadMentorActivityForGate } from "@/lib/mentor/mentorActivityService";
 import { mentorAcceptsNewSubscriptions, mentorActivityState } from "@/lib/mentor/mentorActivity";
-import { loadMentorSubscribeOpen } from "@/lib/mentor/mentorSubscribeOpen";
 
 type Row = Record<string, unknown>;
 
@@ -242,9 +241,19 @@ export async function createSubscriptionPaymentIntent(
     return { ok: false, error: mentorGate.error, code: "mentor" };
   }
   // 멘토 활동 중단 게이트 — 종료/일시중단 중인 멘토는 신규 구독 불가.
-  const mentorActivity = await loadMentorActivityForGate(supabase, mentorId);
-  if (mentorActivity && !mentorAcceptsNewSubscriptions(mentorActivity)) {
-    const state = mentorActivityState(mentorActivity);
+  // C1(F2): activity_status·pause_until 은 뷰에 없어 서비스 롤로 읽는다. 판정 불가
+  // (indeterminate)는 건너뛰기가 아니라 fail-closed — 문구는 휴식·종료·마감과 구분되는
+  // "일시 오류" 계열을 유지한다(게이트별 문구 상이 원칙).
+  const activityLookup = await loadMentorActivityForGate(mentorId);
+  if (activityLookup.indeterminate) {
+    return {
+      ok: false,
+      error: "멘토 활동 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.",
+      code: "db",
+    };
+  }
+  if (!mentorAcceptsNewSubscriptions(activityLookup.activity)) {
+    const state = mentorActivityState(activityLookup.activity);
     return {
       ok: false,
       error:
@@ -255,7 +264,11 @@ export async function createSubscriptionPaymentIntent(
     };
   }
   // 멘토 self "신규 구독 그만 받기" 게이트 — flag=false 면 신규 구독 거부(기존 구독·갱신엔 무관, cap 계산 불변).
-  if (!(await loadMentorSubscribeOpen(supabase, mentorId))) {
+  // C1(F0): 종전 loadMentorSubscribeOpen 은 학생 세션 RLS 로 항상 0행 → fail-closed 라 모든
+  // 신규 구독을 오차단했다. 게이트 2(assertMentorApprovedForAction)가 이미 쥔 뷰 행의
+  // 공개 플래그를 재사용한다 — 뷰에 없는 멘토는 게이트 2에서 먼저 걸러지므로 이 문구가
+  // 승인·삭제대기 문구와 섞이지 않고, 추가 왕복도 없다.
+  if (!mentorGate.profile.is_open_for_subscriptions) {
     return { ok: false, error: "이 멘토는 현재 신규 구독을 받지 않고 있어요.", code: "mentor" };
   }
   const dup = await findActiveSubscriptionForPair(supabase, studentId, mentorId);

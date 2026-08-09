@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { IndividualQuestionStatus } from "@/lib/individualQuestion/individualQuestionTypes";
 import { signIndividualQuestionAttachment } from "@/lib/individualQuestion/individualQuestionAttachmentStorage";
 import { fetchStudentDisplayNames, type StudentDisplayResult } from "@/lib/qna/studentDisplayNames";
+import { loadMentorDirectoryUserRowsByIds } from "@/lib/auth/mentorPublicRead";
 
 // [D-IQ-6] 멘토 세션은 RLS(users_select_own)로 학생 users 행을 직접 못 읽는다. 직접 select 는
 // 조용히 빈 결과 → 전원 '학생' 폴백으로 강등되어 운영자가 실패인지 정상인지 구분할 수 없었다.
@@ -115,7 +116,11 @@ function displayName(row: UserNameRow | null | undefined, fallback: string): str
   return value || fallback;
 }
 
-async function fetchUserNameMap(supabase: SupabaseClient, ids: string[]): Promise<Map<string, UserNameRow>> {
+async function fetchUserNameMap(
+  supabase: SupabaseClient,
+  ids: string[],
+  mentorIdHints: string[]
+): Promise<Map<string, UserNameRow>> {
   const uniqueIds = [...new Set(ids.filter(Boolean))];
   const map = new Map<string, UserNameRow>();
   if (uniqueIds.length === 0) return map;
@@ -125,14 +130,33 @@ async function fetchUserNameMap(supabase: SupabaseClient, ids: string[]): Promis
     .select("id, full_name, nickname, email, role")
     .in("id", uniqueIds);
 
-  if (error || !data) {
+  if (error) {
     // 조용히 빈 맵을 돌려주면 이름이 전부 폴백으로 바뀌는데 아무도 모른다 —
     // 실제로 존재하지 않는 컬럼 요청이 이 경로에 오래 남아 있었다(QA-B7).
-    if (error) console.error("[fetchUserNameMap] users 표시명 조회 실패", error.message);
-    return map;
+    console.error("[fetchUserNameMap] users 표시명 조회 실패", error.message);
   }
-  for (const row of data as UserNameRow[]) {
+  for (const row of (data ?? []) as UserNameRow[]) {
     if (row.id) map.set(row.id, row);
+  }
+
+  // C1 ③-a: users 직접 읽기는 RLS(users_select_own)로 **세션 본인 행만** 돌아온다 — 학생
+  // 세션에서 멘토 id 가 에러 없이 0행으로 빠져 화면에 폴백 리터럴("멘토")만 남던 원인.
+  // 미해석 멘토 id 를 공개 뷰(mentor_directory_v1)의 nickname 으로 보강한다. 뷰 조회는
+  // 멘토일 수 있는 id(hints — 행의 designated/claimed mentor id)로 한정한다 — 멘토 세션은
+  // 자기 행이 users 로 이미 해석돼 보강 대상이 0건이고(불필요 왕복 없음), 학생 id 를 뷰에
+  // 묻지 않는다. **부분 해결이다** — 학생 nickname 은 어떤 뷰에도 없어 상대 학생 이름은
+  // 여전히 폴백(멘토 화면은 D-IQ-6 전용 RPC 가 덮어씀). 멘토명·학생명이 비대칭으로 보이는
+  // 것은 예상된 상태이며 버그가 아니다.
+  const hintSet = new Set(mentorIdHints.filter(Boolean));
+  const unresolvedMentorIds = uniqueIds.filter((id) => !map.has(id) && hintSet.has(id));
+  if (unresolvedMentorIds.length > 0) {
+    const view = await loadMentorDirectoryUserRowsByIds(supabase, unresolvedMentorIds);
+    if (view.error) {
+      console.error("[fetchUserNameMap] mentor_directory_v1 표시명 보강 실패", view.error);
+    }
+    for (const [id, user] of view.byId) {
+      map.set(id, { id, nickname: user.nickname, role: "mentor" });
+    }
   }
   return map;
 }
@@ -181,7 +205,8 @@ export async function fetchStudentDirectIndividualQuestions(
   const rows = (data ?? []) as IndividualQuestionRow[];
   const names = await fetchUserNameMap(
     supabase,
-    rows.flatMap((row) => [row.student_id, row.designated_mentor_id ?? row.claimed_mentor_id ?? ""])
+    rows.flatMap((row) => [row.student_id, row.designated_mentor_id ?? row.claimed_mentor_id ?? ""]),
+    rows.map((row) => row.designated_mentor_id ?? row.claimed_mentor_id ?? "")
   );
   return { rows: enrichQuestions(rows, names), error: null };
 }
@@ -201,7 +226,8 @@ export async function fetchStudentIndividualQuestions(
   const rows = (data ?? []) as IndividualQuestionRow[];
   const names = await fetchUserNameMap(
     supabase,
-    rows.flatMap((row) => [row.student_id, row.designated_mentor_id ?? row.claimed_mentor_id ?? ""])
+    rows.flatMap((row) => [row.student_id, row.designated_mentor_id ?? row.claimed_mentor_id ?? ""]),
+    rows.map((row) => row.designated_mentor_id ?? row.claimed_mentor_id ?? "")
   );
   return { rows: enrichQuestions(rows, names), error: null };
 }
@@ -222,7 +248,8 @@ export async function fetchMentorDirectIndividualQuestions(
   const rows = (data ?? []) as IndividualQuestionRow[];
   const names = await fetchUserNameMap(
     supabase,
-    rows.flatMap((row) => [row.student_id, row.designated_mentor_id ?? ""])
+    rows.flatMap((row) => [row.student_id, row.designated_mentor_id ?? ""]),
+    rows.map((row) => row.designated_mentor_id ?? "")
   );
   // [D-IQ-6] 멘토 화면의 상대(학생) 표시명은 전용 RPC로 — RLS 무음 강등 제거.
   const studentDisplay = await fetchStudentDisplayNames(
@@ -247,7 +274,8 @@ export async function fetchMentorOwnedIndividualQuestions(
   const rows = (data ?? []) as IndividualQuestionRow[];
   const names = await fetchUserNameMap(
     supabase,
-    rows.flatMap((row) => [row.student_id, row.designated_mentor_id ?? row.claimed_mentor_id ?? ""])
+    rows.flatMap((row) => [row.student_id, row.designated_mentor_id ?? row.claimed_mentor_id ?? ""]),
+    rows.flatMap((row) => [row.designated_mentor_id ?? "", row.claimed_mentor_id ?? ""])
   );
   // [D-IQ-6] 멘토 화면의 상대(학생) 표시명은 전용 RPC로 — RLS 무음 강등 제거.
   const studentDisplay = await fetchStudentDisplayNames(
@@ -332,7 +360,8 @@ export async function fetchIndividualQuestionDetail(
       row.designated_mentor_id ?? "",
       row.claimed_mentor_id ?? "",
       ...messages.map((message) => message.author_id),
-    ].filter(Boolean)
+    ].filter(Boolean),
+    [row.designated_mentor_id ?? "", row.claimed_mentor_id ?? ""]
   );
 
   // [D-IQ-6] 상대(학생) 표시명은 전용 RPC로 덮어쓴다 — 멘토 세션에서 학생명이 무음 강등되지 않게.

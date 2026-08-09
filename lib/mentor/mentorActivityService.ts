@@ -1,6 +1,5 @@
 import "server-only";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { computeProratedRefundEstimate } from "@/lib/subscribe/subscriptionRefundProration";
 import { refreshSubscriptionSettlementItemsBestEffort } from "@/lib/mentor/subscriptionSettlementItems";
@@ -351,16 +350,41 @@ export async function flagMentorAbandonment(
   };
 }
 
-/** 신규 구독 게이트에 쓰는 멘토 활동 상태 조회(유저 클라이언트 read). */
-export async function loadMentorActivityForGate(
-  supabase: SupabaseClient,
-  mentorId: string
-): Promise<{ activity_status?: string | null; pause_until?: string | null } | null> {
-  const { data, error } = await supabase
+/**
+ * 신규 구독 게이트에 쓰는 멘토 활동 상태 조회 — 서비스 롤 read.
+ *
+ * C1(F2): 종전에는 유저 세션 클라이언트로 mentor_profiles 를 읽었는데, 학생 세션은 RLS
+ * (본인·관리자 SELECT 정책뿐)로 항상 0행 → null → 호출부의 `if (mentorActivity && …)` 가
+ * 검사를 통째로 건너뛰어 활동종료·일시휴식 멘토가 결제를 통과했다(fail-open).
+ * `activity_status`·`pause_until` 은 공개 뷰(mentor_directory_v1)에 노출되지 않고 노출
+ * RPC 도 없으므로, cap 선례(loadMentorCapUsage — 서비스 롤 + indeterminate fail-closed)를
+ * 따라 서비스 롤로 읽는다. 서버 전용 결제 경로(createSubscriptionPaymentIntent) 밖에서
+ * 호출하지 마라.
+ *
+ * indeterminate=true 는 서비스 키 부재·조회 실패·행 부재(게이트 2 통과 후에는 발생하지
+ * 않아야 할 이상 상태)다 — 호출부는 통과가 아니라 fail-closed(일시 오류 문구, 휴식·종료
+ * 문구와 구분)로 거부해야 한다. null 을 "정상이라 건너뜀"으로 삼키던 구 계약을 폐기한다.
+ */
+export type MentorActivityGateLookup =
+  | { indeterminate: true }
+  | { indeterminate: false; activity: { activity_status: string | null; pause_until: string | null } };
+
+export async function loadMentorActivityForGate(mentorId: string): Promise<MentorActivityGateLookup> {
+  let admin: Admin;
+  try {
+    admin = createServiceRoleClient();
+  } catch {
+    return { indeterminate: true };
+  }
+  const { data, error } = await admin
     .from("mentor_profiles")
     .select("activity_status, pause_until")
     .eq("user_id", mentorId)
     .maybeSingle();
-  if (error) return null;
-  return (data as { activity_status?: string | null; pause_until?: string | null } | null) ?? null;
+  if (error || !data) return { indeterminate: true };
+  const row = data as { activity_status?: string | null; pause_until?: string | null };
+  return {
+    indeterminate: false,
+    activity: { activity_status: row.activity_status ?? null, pause_until: row.pause_until ?? null },
+  };
 }
