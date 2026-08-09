@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { fetchMentorProfileForPublicMentor } from "@/lib/auth/mentorPublicRead";
 import { checkReviewEligibility } from "@/lib/reviews/checkReviewEligibility";
 import { formatGradeSubject, maskStudentName } from "@/lib/reviews/reviewDisplay";
 import { isPubliclyVisibleReview, mapReviewDbRow, type ReviewDbRow } from "@/lib/reviews/reviewRowMapper";
@@ -56,6 +57,15 @@ async function loadAuthorsMap(supabase: SupabaseClient, ids: string[]): Promise<
 }
 
 async function mentorFirstSubject(supabase: SupabaseClient, mentorId: string): Promise<string | null> {
+  // C1 ③-c: 과목 라벨은 공개 뷰(mentor_directory_v1)의 teaching_subjects 를 우선 사용한다.
+  // 구 mentor_profiles 직접 읽기는 학생 세션 RLS(본인·관리자 SELECT 뿐)로 에러 없이 0행 →
+  // 후기 카드 과목이 전원 기본 라벨로 강등됐다.
+  const { row } = await fetchMentorProfileForPublicMentor(supabase, mentorId);
+  const viewSubjects = row?.teaching_subjects;
+  if (Array.isArray(viewSubjects) && viewSubjects[0]) return String(viewSubjects[0]);
+  // 뷰에 없는 멘토(미승인·삭제대기 등)의 **본인 콘솔·관리자 화면** 폴백 — RLS 상 본인
+  // (*_select_own)·관리자(*_admin_select_all) 행만 읽히고, 학생 세션에서는 종전과 동일하게
+  // 0행(무해)이다. 공개 경로를 이 직접 읽기로 되돌리지 마라.
   const { data } = await supabase
     .from("mentor_profiles")
     .select("teaching_subjects")

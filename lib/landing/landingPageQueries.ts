@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { countPublicMentors } from "@/lib/auth/mentorPublicRead";
 
 export type LandingPublicStats = {
   mentorCount: number | null;
@@ -10,8 +11,12 @@ export type LandingPublicStats = {
 };
 
 async function fetchLandingPublicStats(supabase: SupabaseClient): Promise<LandingPublicStats> {
+  // C1 ③-b: 멘토 수는 공개 뷰(mentor_directory_v1) 기준으로 센다. 구 mentor_profiles 직접
+  // count 는 anon SELECT 정책이 0개라 **항상 count 0 · error null** — 랜딩이 "준비 중"으로
+  // 강등됐다(RLS 는 에러가 아니라 0행/0카운트를 돌려준다). 뷰의 노출 조건(승인·활성·비삭제)이
+  // 공개 지표로서 올바른 정의이기도 하다.
   const [mentors, shortforms, boards] = await Promise.all([
-    supabase.from("mentor_profiles").select("*", { count: "exact", head: true }),
+    countPublicMentors(supabase),
     supabase.from("shortform_posts").select("*", { count: "exact", head: true }),
     supabase.from("community_posts").select("*", { count: "exact", head: true }),
   ]);
@@ -20,7 +25,7 @@ async function fetchLandingPublicStats(supabase: SupabaseClient): Promise<Landin
     mentorCount: mentors.error ? null : mentors.count,
     shortformCount: shortforms.error ? null : shortforms.count,
     boardCount: boards.error ? null : boards.count,
-    mentorProbe: mentors.error ? mentors.error.message : "mentor_profiles count",
+    mentorProbe: mentors.error ? mentors.error : "api_web_v1.mentor_directory_v1 count",
     shortformProbe: shortforms.error ? shortforms.error.message : "shortform_posts count",
     boardProbe: boards.error ? boards.error.message : "community_posts count",
   };
