@@ -117,6 +117,18 @@
 점검 SQL: `supabase/sql/039_storage_buckets_private_audit.sql`  
 `SELECT id, name, public FROM storage.buckets ORDER BY id;`
 
+## 마이그레이션 hotfix 역수입 규칙
+
+MCP `apply_migration`(또는 CLI 밖 직접 적용)으로 비상 hotfix를 DB에 적용한 세션은 **같은 세션에서 저장소 역수입까지 완료해야 한다.** 원장(`supabase_migrations.schema_migrations`)에만 있고 저장소 pack에 없는 version은 `db-apply-pending`의 remote_only 가드를 hard fail시켜 DB 수정 경로 전체를 잠근다.
+
+역수입 절차:
+1. 원장에서 본문 추출 — `select statements from supabase_migrations.schema_migrations where version='<v>'`
+2. `supabase/baseline/post_ledger_backfills/<원장version>_<name>.sql` 로 등재 (원장 바이트 그대로 + 말미 개행 1개, md5 대조)
+3. `python3 scripts/verify/baseline/build_native_migration_pack.py` 재실행 (migrations 사본·manifest는 생성기 소유 — 직접 편집 금지)
+4. `validate_native_migration_pack.py` · `validate_replay_manifest.sh` PASS 확인 후 커밋
+
+> 실제 사례: `20260808092007_account_deletion_server_cancel_window_30d` — 2026-08-08 소스 없이 원장에만 적용된 hotfix(탈퇴 취소 유예 30분→30일). 이 1본 포함 원장 4본 불일치로 `db-apply-pending`이 hard fail하며 DB 적용 경로 전체가 잠겼고, 2026-08-09 원장 화해 PR에서 역수입으로 해소했다.
+
 ## 코딩 규칙
 
 1. TypeScript strict
