@@ -16,8 +16,8 @@ import { dirname, join } from "node:path";
 // 게이트 오작동·표시 폴백 무음 강등)이 전부 살아남았다. 아래 트리 walk 테스트가
 // app/lib/components 전체를 검사한다.
 //
-// CI: `npm run test:contract` 는 `.github/workflows/web-contract-tests.yml` 이
-// app/lib/components·package* 변경 PR마다 실행한다(2026-08-10 편입 — 종전 로컬 전용 고지 해소).
+// CI: `npm run test:contract` 는 `.github/workflows/web-contract-tests.yml`(web checks) 이
+// TS 소스·package* 변경 PR마다 lint·tsc 와 함께 실행한다(2026-08-10 편입 — 종전 로컬 전용 고지 해소).
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = readFileSync(join(here, "..", "mentorPublicRead.ts"), "utf8");

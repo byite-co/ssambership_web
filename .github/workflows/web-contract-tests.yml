@@ -1,16 +1,19 @@
-name: web contract tests
+name: web checks
 
-# 웹 계약 테스트 게이트 (npm run test:contract).
-# mentor_profiles/users 직접 읽기 차단 트리 walk 등 lib/**/__contract__ 전체를 실행한다.
+# 웹 검사 게이트 3종: eslint · tsc --noEmit · npm run test:contract.
+# 계약 테스트는 mentor_profiles/users 직접 읽기 차단 트리 walk 등 lib/**/__contract__ 전체,
+# tsc 는 tsconfig include(**/*.ts — app/lib/components/hooks/e2e/scripts 등 저장소 전역)를 검사한다.
 # 부모 프로젝트에 접속하지 않는다. secret 을 사용하지 않는다.
 on:
   pull_request:
     paths:
-      - 'app/**'
-      - 'lib/**'
-      - 'components/**'
+      - '**/*.ts'
+      - '**/*.tsx'
+      - '**/*.mts'
+      - '**/*.mjs'
       - 'package.json'
       - 'package-lock.json'
+      - 'tsconfig.json'
       - '.github/workflows/web-contract-tests.yml'
   workflow_dispatch:
 
@@ -22,8 +25,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  contract:
-    name: contract tests
+  checks:
+    name: lint · typecheck · contract tests
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -34,5 +37,9 @@ jobs:
           cache: 'npm'
       - name: npm ci
         run: npm ci
+      - name: lint
+        run: npm run lint
+      - name: typecheck
+        run: npx tsc --noEmit
       - name: contract tests
         run: npm run test:contract
