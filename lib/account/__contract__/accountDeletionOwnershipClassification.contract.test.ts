@@ -175,6 +175,10 @@ function makeDeps(calls: Calls, over: Partial<DeletionDeps> = {}): DeletionDeps 
       calls.push(`removeObjects:${refs.length}`);
       return refs.map(storageObjectKey);
     },
+    purgeIdentityPaymentArtifacts: async () => {
+      calls.push("purgeArtifacts");
+      return { activeBillingKeys: 0 };
+    },
     forfeitWalletAndAnonymize: async () => {
       calls.push("forfeit");
     },

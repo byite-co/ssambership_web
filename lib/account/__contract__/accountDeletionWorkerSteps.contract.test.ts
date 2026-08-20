@@ -59,6 +59,10 @@ function makeDeps(calls: Calls, over: Partial<DeletionDeps> = {}): DeletionDeps 
       calls.push(`removeObjects:${refs.length}`);
       return refs.map((r) => `${r.bucket}/${r.path}`);
     },
+    purgeIdentityPaymentArtifacts: async () => {
+      calls.push("purgeArtifacts");
+      return { activeBillingKeys: 0 };
+    },
     forfeitWalletAndAnonymize: async () => {
       calls.push("forfeit");
     },
@@ -169,6 +173,7 @@ test("dry-run: claim·advance·revoke·remove 0회, 계획만 반환", async () 
   assert.ok(!calls.includes("beginLocked"), "job claim/전이 0회");
   assert.ok(!calls.includes("revokeSessions"), "revokeSessions 어댑터 호출 0회");
   assert.ok(!calls.some((c) => c.startsWith("removeObjects")), "removeObjects 0회");
+  assert.ok(!calls.includes("purgeArtifacts"), "신원·결제수단 파기 0회(S-B m7)");
   assert.ok(!calls.includes("forfeit"), "몰수·익명화 0");
   assert.ok(!calls.includes("authSoftDelete"), "auth 삭제 0");
 });
@@ -365,12 +370,16 @@ test("storage_purged: 몰수·익명화가 finalized 전이보다 먼저, 그리
     "listInventory",
     "uncoveredBuckets",
     "resolveObjectOwners",
+    "purgeArtifacts",
     "forfeit",
     "advance:storage_purged->finalized",
     "authSoftDelete",
     "advance:finalized->auth_soft_deleted",
     "advance:auth_soft_deleted->completed",
   ]);
+  // 순서 불변식(S-B m7): 신원·결제수단 파기는 익명화(forfeit)보다 앞서야 한다 —
+  // 익명화 이후 실패하면 "익명 유저의 실명 CI/DI 가 잔존"하는 반쪽 상태가 생긴다.
+  assert.ok(calls.indexOf("purgeArtifacts") < calls.indexOf("forfeit"));
   // 순서 불변식: 몰수·익명화는 finalized 전이보다 앞서야 한다(176 의 storage_purged 게이트와 짝).
   assert.ok(calls.indexOf("forfeit") < calls.indexOf("advance:storage_purged->finalized"));
   // auth 삭제는 finalized 이후에만.
@@ -378,6 +387,65 @@ test("storage_purged: 몰수·익명화가 finalized 전이보다 먼저, 그리
     calls.indexOf("advance:storage_purged->finalized") < calls.indexOf("authSoftDelete")
   );
   assert.equal(result.ok, true);
+});
+
+// ── S-B m7: 신원·결제수단 아티팩트 파기 스텝 ─────────────────────────────────
+
+test("storage_purged: 파기 RPC 실패는 예외 → forfeit·finalized 전이 없이 recordError 정지", async () => {
+  const calls: Calls = [];
+  const deps = makeDeps(calls, {
+    purgeIdentityPaymentArtifacts: async () => {
+      calls.push("purgeArtifacts");
+      throw new Error("purge_identity_payment_artifacts rejected: NO_ACTIVE_DELETION");
+    },
+  });
+  const result = await runAccountDeletionJob(
+    { userId: "u1", state: "storage_purged", dryRun: false },
+    deps
+  );
+
+  assert.equal(result.ok, false);
+  assert.equal(result.stopped, "error");
+  assert.equal(result.finalState, "storage_purged", "state 는 재시도 가능하게 그대로");
+  assert.ok(!calls.includes("forfeit"), "파기 실패 시 익명화로 진행하지 않는다");
+  assert.ok(!calls.includes("advance:storage_purged->finalized"), "finalized 전이 금지");
+  assert.ok(!calls.includes("authSoftDelete"));
+  assert.ok(calls.some((c) => c.startsWith("recordError")));
+});
+
+test("storage_purged: active 빌링키가 미해지 파기되면 marker 로그 1건(S-D 해지 API 삽입 전 추적)", async () => {
+  const calls: Calls = [];
+  const logged: Array<{ msg: string; meta?: Record<string, unknown> }> = [];
+  const deps = makeDeps(calls, {
+    purgeIdentityPaymentArtifacts: async () => {
+      calls.push("purgeArtifacts");
+      return { activeBillingKeys: 1 };
+    },
+    log: (msg, meta) => logged.push({ msg, meta }),
+  });
+  const result = await runAccountDeletionJob(
+    { userId: "u1", state: "storage_purged", dryRun: false },
+    deps
+  );
+
+  assert.equal(result.ok, true);
+  const entries = logged.filter((l) => l.msg === "billing_keys_purged_without_revocation");
+  assert.equal(entries.length, 1, "포트원 측 미해지 파기는 무음이 아니다");
+  assert.equal(entries[0].meta?.userId, "u1", "수동 해지 조치를 위해 userId 를 싣는다");
+  assert.equal(entries[0].meta?.activeBillingKeys, 1);
+});
+
+test("storage_purged: active 빌링키 0이면 marker 로그 없음(정상 경로 무소음)", async () => {
+  const calls: Calls = [];
+  const logged: Array<{ msg: string }> = [];
+  const deps = makeDeps(calls, { log: (msg) => logged.push({ msg }) });
+  await runAccountDeletionJob({ userId: "u1", state: "storage_purged", dryRun: false }, deps);
+
+  assert.ok(calls.includes("purgeArtifacts"));
+  assert.equal(
+    logged.filter((l) => l.msg === "billing_keys_purged_without_revocation").length,
+    0
+  );
 });
 
 test("finalized: auth soft-delete 실패는 예외 → recordError 후 정지(전이 없음)", async () => {
