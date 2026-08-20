@@ -3,8 +3,9 @@
 > 2026-08-20 · 세션: sprint-pay S-B v2 · 브랜치 `claude/sprint-pay-s-b-yrewf3`
 > 대상 DB: Supabase `lbeqxarxothkmzqvpudy` (이름 "ssambership-staging" — **실제 라이브 프로덕션**)
 >
-> **상태: §5 적용 승인 게이트에서 정지.** DB 에는 SELECT 계열만 실행했고 DDL 은 미적용이다.
-> 사용자가 정확히 "적용 승인"이라고 답한 경우에만 db-apply-pending 절차로 적용한다.
+> **상태: 적용 완료 (2026-08-20).** §5 게이트에서 정지·보고 후 사용자가 "적용 승인"으로 답해
+> 7본을 라이브에 적용했고, 같은 회차 후속(스냅샷 재수출·columns.json·지문·verify green)까지
+> 완료했다 — 적용 경위·증적은 `docs/sprint-pay/S-B-APPLY.md`.
 
 ## 0. 브랜치 주기(注記)
 
