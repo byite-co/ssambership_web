@@ -53,9 +53,16 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 81본 pack(생성기 80 + PR60 1)의 PG16 로컬 fresh replay 실측
-# (tables=80 functions=217 policies=175 buckets=13)이며, PG17 CLI 재생에서도
+# 기대치는 92본 pack(생성기 91 + PR60 1)의 PG16 로컬 fresh replay 실측
+# (tables=84 functions=218 policies=175 buckets=13)이며, PG17 CLI 재생에서도
 # 같은 값이 재현된다.
+# 81본→92본(S-B sprint-pay) 델타:
+#   tables   +4 = nice_auth_tokens + identity_verifications + billing_keys
+#                + portone_webhook_events (20260820100100~100500 — 전부
+#                RLS on·정책 0·클라이언트 GRANT 0 이라 policies 불변)
+#   functions+1 = account_deletion_purge_identity_payment_artifacts (20260820100700)
+#   (컬럼 추가 3본(users/payments/refunds/subscriptions)·pg_cron 스윕·adg 트리거
+#    부착은 위 4개 카운트를 바꾸지 않는다. 버킷 신설 0 — buckets 불변.)
 # 79본→81본 델타:
 #   functions +1 = my_blocked_users(S5-1/QA-C7 — 차단 목록 닉네임 정의자 RPC)
 #   (S3-1/QA-B6 의 list_open_individual_questions_for_mentor 는 반환 컬럼이 늘어
@@ -82,9 +89,9 @@ count_check(){ # count_check <label> <expected> <sql>
   echo "$1=$got" >> "$EV/structure_counts.txt"
   [ "$got" = "$2" ] && say "$1=$got" || bad "$1=$got — PG16 replay 실측 기대치 $2 와 다르다"
 }
-count_check tables 80 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
+count_check tables 84 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
-count_check functions 217 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+count_check functions 218 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
 count_check policies 175 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"
