@@ -457,6 +457,43 @@ export function makeRemoveObjects(admin: SupabaseClient): DeletionDeps["removeOb
 }
 
 /**
+ * S-B m7 account_deletion_purge_identity_payment_artifacts — 신원·결제수단 아티팩트
+ * (identity_verifications·billing_keys 전행) DB 파기. service_role 전용 SECURITY DEFINER.
+ * RPC 는 `account_deletion_write_blocked`(취소 불가 시점 진행 중 job) 게이트를 통과할 때만
+ * 파기한다 — 오호출은 NO_ACTIVE_DELETION 거부. 전행 DELETE 라 재호출은 0행으로 멱등.
+ * 반환 billing_keys_active_at_delete = 삭제 시점 active 빌링키 수(워커가 marker 로그).
+ * 실패·거부는 예외 → 워커가 record_error 후 backoff 재시도(finalized 진행 금지).
+ *
+ * TODO(S-D): 포트원 빌링키 해지 API 호출을 이 DB 파기 **앞에**(워커 스텝에서) 삽입할 것 —
+ * 지금은 해지 클라이언트가 없어 DB 파기만 수행한다.
+ */
+export function makePurgeIdentityPaymentArtifacts(
+  admin: SupabaseClient
+): DeletionDeps["purgeIdentityPaymentArtifacts"] {
+  return async (userId) => {
+    const { data, error } = await admin.rpc("account_deletion_purge_identity_payment_artifacts", {
+      p_user_id: userId,
+    });
+    if (error) throw new Error(`purge_identity_payment_artifacts failed: ${error.message}`);
+    const row = (data ?? {}) as {
+      ok?: boolean;
+      code?: string;
+      billing_keys_active_at_delete?: number;
+    };
+    if (row.ok !== true) {
+      throw new Error(`purge_identity_payment_artifacts rejected: ${row.code ?? "unknown"}`);
+    }
+    return {
+      activeBillingKeys:
+        typeof row.billing_keys_active_at_delete === "number" &&
+        Number.isFinite(row.billing_keys_active_at_delete)
+          ? row.billing_keys_active_at_delete
+          : 0,
+    };
+  };
+}
+
+/**
  * 176 account_deletion_forfeit_and_anonymize — state='storage_purged' 에서만 동작하고,
  * 양수 잔액이면 **검증된 몰수 동의를 마지막으로 한 번 더** 확인한다(3계층 방어의 3층).
  */
@@ -499,6 +536,7 @@ export function buildDeletionDeps(
     resolveObjectOwners: makeResolveObjectOwners(admin),
     uncoveredBuckets: makeUncoveredBuckets(),
     removeObjects: makeRemoveObjects(admin),
+    purgeIdentityPaymentArtifacts: makePurgeIdentityPaymentArtifacts(admin),
     forfeitWalletAndAnonymize: makeForfeitWalletAndAnonymize(admin),
     authSoftDelete: makeAuthSoftDelete(admin),
     log,

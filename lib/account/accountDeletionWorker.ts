@@ -89,6 +89,14 @@ export type DeletionDeps = {
   uncoveredBuckets: () => Promise<readonly string[]>;
   /** 실제 삭제 — 삭제된 객체 key 목록 반환. */
   removeObjects: (refs: StorageObjectRef[]) => Promise<string[]>;
+  /**
+   * m7 RPC account_deletion_purge_identity_payment_artifacts — 신원·결제수단 아티팩트
+   * (identity_verifications·billing_keys 전행) DB 파기. 멱등(재호출 0행 수렴).
+   * 반환 activeBillingKeys = 삭제 시점에 아직 active 였던 빌링키 수 — 0 이 아니면
+   * 포트원 측 해지 없이 파기됐다는 뜻이라 워커가 로그 marker 를 남긴다.
+   * 실패는 예외 → 워커가 record_error 후 backoff 재시도(finalized 진행 금지).
+   */
+  purgeIdentityPaymentArtifacts: (userId: string) => Promise<{ activeBillingKeys: number }>;
   /** 지갑 forfeit 원장+0원 + 익명화(원자 경계 RPC). */
   forfeitWalletAndAnonymize: (userId: string) => Promise<void>;
   /** auth soft-delete(실패 시 예외 → 재시도). */
@@ -319,8 +327,17 @@ export async function runAccountDeletionJob(job: DeletionJob, deps: DeletionDeps
       if (await deps.advance(userId, "purging", "storage_purged")) state = "storage_purged";
     }
 
-    // storage_purged → finalized: 지갑 forfeit + 익명화 원자 경계.
+    // storage_purged → finalized: 신원·결제수단 아티팩트 파기 → 지갑 forfeit + 익명화.
     if (state === "storage_purged") {
+      // TODO(S-D): 포트원 빌링키 해지 API 호출을 이 DB 파기 **앞에** 삽입할 것 —
+      // 지금은 해지 클라이언트가 없어 DB 파기만 수행한다(active 키는 marker 로그로 추적).
+      const purged = await deps.purgeIdentityPaymentArtifacts(userId);
+      if (purged.activeBillingKeys > 0) {
+        log(deps, "billing_keys_purged_without_revocation", {
+          userId,
+          activeBillingKeys: purged.activeBillingKeys,
+        });
+      }
       await deps.forfeitWalletAndAnonymize(userId);
       if (await deps.advance(userId, "storage_purged", "finalized")) state = "finalized";
     }

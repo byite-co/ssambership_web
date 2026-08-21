@@ -53,9 +53,17 @@ try {
 }
 
 // 2) 적용 migration → 소스 파일 매핑.
+// 소스 탐색 대상 3곳: 구 authoring(supabase/sql) + 신 authoring(post_ledger_backfills)
+// + 통합 pack(supabase/migrations — 생성기 산출물, ledger_replay·interleaves·PR60 포함
+// 전 92본이 `<version>_<name>.sql` 로 실재하며 build --check 가 source 동일성을 강제).
+// (S-B 2026-08-20: 구 스냅샷이 0801 이전 56본에서 멈춰 있어 잠복했던 결함 — 0802 이후의
+// authoring 이 sql/ 밖으로 이동한 뒤 재수출하면 파리티가 오탐 실패했다.)
 const STRICT_FROM_VERSION = "20260731000000";
-const sqlDir = join(root, "supabase/sql");
-const sqlFiles = readdirSync(sqlDir);
+const SOURCE_DIRS = ["supabase/sql", "supabase/migrations", "supabase/baseline/post_ledger_backfills"];
+const sqlFiles = SOURCE_DIRS.flatMap((d) => {
+  const p = join(root, d);
+  return existsSync(p) ? readdirSync(p) : [];
+});
 const hasSource = (version, name) =>
   sqlFiles.some(
     (f) =>
