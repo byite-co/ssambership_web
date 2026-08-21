@@ -14,10 +14,15 @@
 -- consent_actor CHECK 'guardian', guardian_ref·idempotency_key UNIQUE 실재를
 -- 실측 확인(087). S-C §3 스펙이 그대로 사용한다.
 --
+-- ④ di_hash 인코딩 확정(오너 승인 2026-08-21): base64url 무패딩 HMAC-SHA256.
+--    m2(20260820100200) 헤더·테이블 코멘트의 'HMAC-SHA256 hex' 표기는 폐기 —
+--    m2 파일은 원장 바이트 불변이므로 정정은 이 파일의 카탈로그 코멘트로만 반영한다.
+--
 -- 구조 카운트 축(테이블·함수·정책·버킷) 불변 — CI 기대치 수정 불요.
 -- columns.json +1행(kind), contracts 스냅샷 $.migrations +1 (적용 회차 후속 절차).
 --
 -- 롤백 노트 (실행 금지 — 참고용):
+--   -- comment on column public.identity_verifications.di_hash is null;  -- (코멘트 정정 원복은 m2 문구 재기입)
 --   -- drop index if exists public.identity_verifications_di_hash_verified_uniq;
 --   -- create unique index if not exists identity_verifications_di_hash_verified_uniq
 --   --   on public.identity_verifications (di_hash)
@@ -52,3 +57,10 @@ drop index if exists public.identity_verifications_di_hash_verified_uniq;
 create unique index if not exists identity_verifications_di_hash_verified_uniq
   on public.identity_verifications (di_hash)
   where status = 'verified' and di_hash is not null and kind = 'self';
+
+-- ④ di_hash 인코딩 확정 코멘트 정정 — base64url 무패딩 (m2 의 hex 표기 폐기).
+comment on column public.identity_verifications.di_hash is
+  'S-C m8: 결정적 base64url 무패딩 HMAC-SHA256(di, IDENTITY_HASH_KEY). 중복계정 차단 키 — status=verified·kind=self 한정 부분 유니크.';
+
+comment on table public.identity_verifications is
+  'S-B m2·S-C m8: NICE 본인인증 요청·결과. service_role 전용. ci/di/mobile_no 는 앱 계층 AES-256-GCM(v1: 접두) 암호문만, di_hash 는 base64url 무패딩 HMAC-SHA256. kind=self 의 verified 행은 di_hash 부분 유니크로 중복계정 차단(guardian 은 자녀 복수 인증 허용). 탈퇴 시 m7 RPC 가 전행 파기.';

@@ -73,6 +73,14 @@ test("레이아웃 게이트 배선: (student)·(mentor) 레이아웃이 온보�
   );
 });
 
+test("탈퇴 경로 게이트 예외: /account/delete 는 미인증도 접근 가능 (오너 확정 2026-08-21)", () => {
+  const student = read("app/(student)/layout.tsx");
+  assert.ok(
+    student.includes("!isAccountDeletePath(pathname) && needsIdentityOnboarding(profile)"),
+    "/account/delete 게이트 예외가 사라짐 — 인증 거부 유저의 탈퇴권을 게이트가 막으면 안 된다"
+  );
+});
+
 test("middleware.ts 무수정 계약: x-pathname 헤더 주입만 — 게이트·세션 접근 금지", () => {
   const src = read("middleware.ts");
   assert.ok(src.includes("x-pathname"), "기존 x-pathname 계약이 사라짐");

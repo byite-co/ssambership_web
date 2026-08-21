@@ -61,7 +61,9 @@ export default async function StudentLayout({ children }: { children: ReactNode 
     if (!user) {
       redirect(`/login/student?next=${encodeURIComponent(pathname)}`);
     }
-    if (needsIdentityOnboarding(profile)) {
+    // S-C 게이트 예외(오너 확정 2026-08-21): /account/delete 는 미인증 유저도 접근 가능 —
+    // 인증을 거부한 유저의 탈퇴권(개인정보 자기결정권)을 게이트가 막으면 안 된다.
+    if (!isAccountDeletePath(pathname) && needsIdentityOnboarding(profile)) {
       redirect("/onboarding/verify");
     }
     const sessionRole: AppRole = profile?.role === "mentor" ? "mentor" : "student";

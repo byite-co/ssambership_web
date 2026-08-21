@@ -12,6 +12,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { MINOR_CONSENT_VERSION } from "@/lib/auth/minorConsentPlaceholders";
 import { NiceApiError, requestNiceAuthResult, requestNiceAuthUrl } from "@/lib/nice/client";
 import {
   decryptNiceResult,
@@ -60,8 +61,14 @@ const START_THROTTLE_MAX = 5;
 /** NICE return_url 길이 제한 (매뉴얼 250byte) */
 const RETURN_URL_MAX_BYTES = 250;
 
-/** 보호자 동의 기록 버전 — user_consent_records.consent_version 관례(kebab + 날짜) */
-export const GUARDIAN_CONSENT_VERSION = "guardian-nice-v1-2026-08-21";
+/**
+ * 보호자 동의 기록 버전 — 기존 약관 버전 관례의 최신값 사용(오너 확정 2026-08-21).
+ * 정합 확인: 최근 약관 개정(시행일 2026-07-12, XV-PRICE 회차)은 동의 버전을 승급하지
+ * 않았고 라이브 원장·가입 경로 모두 legal-placeholder-2026-06-20 단일 — guardian 도
+ * 동일 버전을 쓰는 것이 관례 정합이다. 법무 문구 확정 시 MINOR_CONSENT_VERSION 승급에
+ * 자동 연동된다.
+ */
+export const GUARDIAN_CONSENT_VERSION = MINOR_CONSENT_VERSION;
 
 /** return 팝업에서 vid 쿼리 유실 대비 이중화 쿠키 이름 (httpOnly — start 가 설정) */
 export const NICE_VID_COOKIE = "nice_identity_vid";
