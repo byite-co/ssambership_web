@@ -60,7 +60,10 @@ function assertNoHits(hits: Hit[], label: string) {
 
 test("users 직접 self UPDATE/UPSERT 0 (관리자 service-role 코어 제외)", () => {
   // .from("users") 와 .update(/.upsert( 가 같은 파일에 함께 있으면 위험 신호로 본다.
-  const exempt = /lib[\\/]admin[\\/](accountStatusActions|accountStatusCore|adminDisputeSanctionActions)\.ts$|lib[\\/]account[\\/]accountDeletionAdapters\.ts$/;
+  // lib/identity/service.ts: S-C 본인인증 서비스 롤 코어 — NICE 인증값(birth_date/full_name/
+  // identity_verified_at) 갱신은 service_role 필수(users authenticated UPDATE GRANT 부재,
+  // IMPACT 수정 제안 #7). server-only 부착 + 게이트 배선 계약테스트가 경계를 감시한다.
+  const exempt = /lib[\\/]admin[\\/](accountStatusActions|accountStatusCore|adminDisputeSanctionActions)\.ts$|lib[\\/]account[\\/]accountDeletionAdapters\.ts$|lib[\\/]identity[\\/]service\.ts$/;
   const offenders: string[] = [];
   for (const dir of SCAN_DIRS) {
     for (const file of walk(join(ROOT, dir))) {

@@ -111,6 +111,10 @@ const DIRECT_ACCESS_EXEMPT: Record<string, string> = {
     "본인 행(세션 사용자 프로필) + 관리자 호출부 2곳(멘토 승인 상세·분쟁 상세 — users_admin_select_all 로 읽힘)",
   "lib/auth/syncAfterSignUpSession.ts": "본인 행(가입 직후 트리거 결과 검증 — 직접 쓰기 없음)",
   "lib/appSession/appSurfaceAccountGate.ts": "본인 행(앱 표면 요청별 계정 상태 게이트)",
+  "lib/identity/identityGate.ts":
+    "서비스 롤(S-C 머니패스 가드 — identity_verified_at 판독 전용, 판독 실패 fail-closed)",
+  "lib/identity/service.ts":
+    "서비스 롤 전용(S-C 본인인증 — 게이트 컬럼 판독 + birth_date/full_name/identity_verified_at 인증값 갱신. users 에 authenticated UPDATE GRANT 부재로 세션 경로 불가 — IMPACT 수정 제안 #7)",
   "lib/admin/accountStatusActions.ts": "관리자 서비스 롤 계정 상태 조치(outboundSurface 면제와 동일)",
   "lib/admin/accountStatusQueries.ts": "관리자 계정 상태 콘솔 조회(admin 클라이언트)",
   "lib/admin/accountStatusCore.ts": "관리자 서비스 롤 계정 상태 코어",
