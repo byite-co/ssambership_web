@@ -5377,6 +5377,18 @@
 },
 {
 "schema": "public",
+"table": "identity_verifications",
+"column": "kind",
+"ordinal": 20,
+"data_type": "text",
+"udt_name": "text",
+"is_nullable": "NO",
+"column_default": "'self'::text",
+"identity": null,
+"generated": null
+},
+{
+"schema": "public",
 "table": "individual_question_attachments",
 "column": "id",
 "ordinal": 1,

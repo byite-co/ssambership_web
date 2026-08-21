@@ -3,19 +3,19 @@
 > 2026-08-21 · 세션: sprint-pay S-C v2 · 브랜치 `claude/new-session-nggfez`
 > 대상 DB: Supabase `lbeqxarxothkmzqvpudy` (이름 "ssambership-staging" — **실제 라이브 프로덕션**)
 >
-> **상태: 코드·리포 검증 완료 / m8 라이브 적용은 "적용 승인" 대기(부록 A 게이트에서 정지).**
-> 이 세션은 DB 를 SELECT 로만 접촉했다(§4 라이브 실측). DDL·데이터 변경 0건.
+> **상태: 적용 완료 (2026-08-21).** §0 게이트에서 정지·보고 후 사용자가 "적용 승인"(+지시 ①~④)으로
+> 답해 m8 을 라이브에 적용했고, 같은 회차 후속(스냅샷 재수출·columns.json·지문·verify)까지
+> 완료했다 — 적용 경위·증적·①~④ 처리 내역은 `docs/sprint-pay/S-C-APPLY.md`.
 > 스테이징 실측 1~6 은 NICE 자격증명·Gabia 프록시·실물 휴대폰이 있는 배포 환경 전제라
 > 이 세션에서 수행 불가 — §6 에 실행 절차(변조·원복 SQL 포함)를 기록해 인계한다.
 
-## 0. 정지 지점 (오너 확인 필요)
+## 0. 정지 지점 (해소 경과)
 
-1. **m8 적용 승인** — `supabase/baseline/post_ledger_backfills/20260821100100_identity_verifications_kind_guardian.sql`
-   을 라이브에 적용해야 CAS 락('processing')·보호자 체인(kind)·di_hash self 한정 유니크가 동작한다.
-   적용 전까지 인증 플로우는 **첫 CAS 에서 23514 로 실패**한다(기능 미개방 상태 — `IDENTITY_GATE_ENABLED`
-   미설정이므로 기존 유저 영향 0). 승인 시 §5 적용 계획대로 같은 회차에 후속 절차까지 완료한다.
-2. env 등록(§7 표) + Gabia 프록시 가동 + NICE 에 프록시 공인 IP 등록(미등록 시 전 호출 1007).
-3. 스테이징 실측 1~6(§6) 후 `IDENTITY_GATE_ENABLED=true` 롤아웃(부록 C 순서).
+1. ~~**m8 적용 승인**~~ → **적용 완료** (사용자 "적용 승인" 2026-08-21 · S-C-APPLY.md).
+   CAS 락('processing')·보호자 체인(kind)·di_hash self 한정 유니크 라이브 개통.
+2. **[잔여 — 오너/운영]** env 등록(§7 표) + Gabia 프록시 가동 + NICE 에 프록시 공인 IP 등록
+   (미등록 시 전 호출 1007).
+3. **[잔여 — 오너/운영]** 스테이징 실측 1~6(§6) 후 `IDENTITY_GATE_ENABLED=true` 롤아웃(부록 C 순서).
 
 ## 1. 수행 내역
 
@@ -145,7 +145,7 @@ identityCrypto.ts · age.ts — env/DB/네트워크 접근 0, 키 재료는 전�
 - `identity_verifications.kind` 부재(0) · `user_consent_records` consent_type/actor CHECK 에
   'minor_guardian_consent'/'guardian' 실재, UNIQUE 1건(idempotency_key) — **m8 무변경 결정 유효**
 
-## 5. m8 적용 계획 (승인 후에만 — 같은 회차 완료 의무)
+## 5. m8 적용 계획 (수행 완료 — 실측 증적은 S-C-APPLY.md)
 
 1. CLAUDE.md db-apply-pending 절차로 m8 적용. environment 브랜치 정책에 막히면 **S-B 선례 폴백**
    (S-B-APPLY.md §1: execute_sql 로 파일 SQL 실행 + `schema_migrations` 등재 — statements=파일 전문
@@ -197,18 +197,16 @@ identityCrypto.ts · age.ts — env/DB/네트워크 접근 0, 키 재료는 전�
 `IDENTITY_DATA_KEY`(32byte base64) · `IDENTITY_HASH_KEY` · `APP_URL`(미설정 시
 `NEXT_PUBLIC_SITE_URL` 재사용) · `IDENTITY_GATE_ENABLED`(롤아웃 플래그, 기본 off)
 
-## 8. 스펙 주기·오너 확인 요망 (차단 아님)
+## 8. 스펙 주기 — 오너 확정 반영 완료 (2026-08-21 "적용 승인" 지시 ①~④)
 
-1. **di_hash 인코딩**: S-B m2 SQL 주석은 "HMAC-SHA256 **hex**", S-C 지시서 §2 는 "**base64url**(HMAC-SHA256)".
-   지시서(카논)를 채택해 base64url 무패딩으로 구현·유닛 고정했다. 기능 동등(결정적 유니크 키)이나
-   m2 의 DB comment 문구와 어긋남 — 차기 DB 회차에서 comment 문구 정정 권장.
-2. **/account/delete·/settings/blocks 도 게이트 대상**이다((student) 레이아웃 소속, 부록 B 예외 목록에
-   없음). 미인증 유저의 회원 탈퇴 진입도 온보딩으로 리다이렉트되므로, 인증 거부 유저의 탈퇴권 예외가
-   필요하면 오너 결정으로 예외 추가(1줄). 현재는 로그아웃(예외)으로만 이탈 가능.
-3. **팝업 구현**: 지시서 문언은 "클릭 핸들러에서 직접 window.open(authUrl…)"이나 authUrl 은 비동기
-   응답이라 gesture 소실 위험이 있어, **동기 pre-open(about:blank) → authUrl 이동**으로 구현(의도 =
-   gesture 보존, 실측 6 폴백 포함). 문언 그대로가 필요하면 회신 바람.
-4. guardian consent_version 은 `guardian-nice-v1-2026-08-21` (087 관례 kebab+날짜 — 법무 문구 확정 시 버전 승급).
+1. **di_hash 인코딩 = base64url 확정(①)**: m8 에서 di_hash 컬럼 COMMENT 를 base64url 기준으로
+   정정하고 테이블 코멘트의 m2 'hex' 표기를 폐기했다(m2 파일은 원장 바이트 불변 — 무수정).
+2. **/account/delete 게이트 예외 등재(②)**: 미인증 유저도 탈퇴 가능 — (student) 레이아웃 예외 +
+   tripwire 계약테스트 고정. `/settings/blocks` 는 종전대로 게이트 대상.
+3. **팝업 pre-open 현행 유지(③)**: 동기 pre-open(about:blank) → authUrl 이동, 차단 시 동일창 폴백.
+4. **guardian consent_version(④)**: 기존 약관 버전 관례의 최신값 `legal-placeholder-2026-06-20`
+   (`MINOR_CONSENT_VERSION` 연동 — 승급 시 자동 반영). 정합 확인: 최근 약관 개정(시행 2026-07-12)은
+   동의 버전을 승급하지 않았고 라이브 원장도 동 버전 단일(S-C-APPLY §0). 법무 문구 확정 시 일괄 승급.
 
 ## 9. 핸드오프 노트 (S-D용)
 

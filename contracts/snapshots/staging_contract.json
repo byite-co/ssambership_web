@@ -4561,6 +4561,10 @@
     {
       "name": "account_deletion_purge_identity_payment_artifacts",
       "version": "20260820100700"
+    },
+    {
+      "name": "identity_verifications_kind_guardian",
+      "version": "20260821100100"
     }
   ],
   "table_grants": [
