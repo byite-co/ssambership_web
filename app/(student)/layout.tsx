@@ -6,6 +6,7 @@ import { requireRole, requireWalletChargeAccess } from "@/lib/auth/routeGuard";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { getPostLoginPath } from "@/lib/auth/getPostLoginPath";
 import { isAccountDeletionFeatureEnabled, isUserBlocksEnabled } from "@/lib/shell/featureFlags";
+import { needsIdentityOnboarding } from "@/lib/identity/identityGateFlag";
 import type { AppRole } from "@/lib/types/user";
 
 function isWalletChargePath(pathname: string): boolean {
@@ -36,6 +37,10 @@ export default async function StudentLayout({ children }: { children: ReactNode 
     if (profile && profile.role !== "student") {
       redirect(getPostLoginPath(profile.role));
     }
+    // S-C 게이트: 로그인 상태에서 본인인증 미완료면 온보딩으로(비로그인 열람은 비대상).
+    if (needsIdentityOnboarding(profile)) {
+      redirect("/onboarding/verify");
+    }
     const sessionRole: AppRole | null = profile?.role === "student" ? "student" : null;
     return (
       <AppShell area="student" sessionRole={sessionRole} userProfile={profile}>
@@ -56,6 +61,9 @@ export default async function StudentLayout({ children }: { children: ReactNode 
     if (!user) {
       redirect(`/login/student?next=${encodeURIComponent(pathname)}`);
     }
+    if (needsIdentityOnboarding(profile)) {
+      redirect("/onboarding/verify");
+    }
     const sessionRole: AppRole = profile?.role === "mentor" ? "mentor" : "student";
     return (
       <AppShell
@@ -70,6 +78,9 @@ export default async function StudentLayout({ children }: { children: ReactNode 
 
   if (isWalletChargePath(pathname)) {
     const { profile } = await requireWalletChargeAccess();
+    if (needsIdentityOnboarding(profile)) {
+      redirect("/onboarding/verify");
+    }
     const sessionRole: AppRole = profile?.role === "mentor" ? "mentor" : "student";
     return (
       <AppShell
@@ -83,6 +94,9 @@ export default async function StudentLayout({ children }: { children: ReactNode 
   }
 
   const { profile } = await requireRole("student");
+  if (needsIdentityOnboarding(profile)) {
+    redirect("/onboarding/verify");
+  }
   return (
     <AppShell area="student" sessionRole="student" userProfile={profile}>
       {children}

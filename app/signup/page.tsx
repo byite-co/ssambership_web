@@ -18,10 +18,9 @@ import { safeInternalNextPath } from "@/lib/auth/getPostLoginPath";
 import { signupFieldErrorsByRole, type SignupFieldErrors } from "@/lib/auth/signupValidation";
 import { isUnderMinimumSignupAge } from "@/lib/auth/minorAgeGate";
 import {
-  MINOR_CONSENT_VERIFICATION_METHOD_PLACEHOLDER,
+  MINOR_CONSENT_VERIFICATION_METHOD_NICE_CHAIN,
   MINOR_CONSENT_VERSION,
-  MINOR_SIGNUP_BLOCKED_COPY,
-  MINOR_SIGNUP_BLOCKED_MESSAGE,
+  MINOR_SIGNUP_GUARDIAN_CHAIN_COPY,
 } from "@/lib/auth/minorConsentPlaceholders";
 import { mapSupabaseAuthError } from "@/lib/utils/mapSupabaseAuthError";
 import type { AppRole } from "@/lib/types/user";
@@ -212,8 +211,6 @@ function SignupPageContent() {
   const [termsAgree, setTermsAgree] = useState(false);
   const [privacyAgree, setPrivacyAgree] = useState(false);
   const [marketingAgree, setMarketingAgree] = useState(false);
-  const [guardianConsentAgree, setGuardianConsentAgree] = useState(false);
-  const [minorConsentPrompt, setMinorConsentPrompt] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<SignupFieldErrors>({});
@@ -237,10 +234,6 @@ function SignupPageContent() {
 
   function handleStudentChange(next: StudentSignupFormValues) {
     setStudent(next);
-    if (!isUnderMinimumSignupAge(next.birthDate)) {
-      setGuardianConsentAgree(false);
-      setMinorConsentPrompt(false);
-    }
   }
 
   function goNext() {
@@ -258,8 +251,6 @@ function SignupPageContent() {
   function goBackToRoleSelect() {
     setError(null);
     setFieldErrors({});
-    setGuardianConsentAgree(false);
-    setMinorConsentPrompt(false);
     setStep(1);
   }
 
@@ -298,15 +289,10 @@ function SignupPageContent() {
       return;
     }
 
+    // S-C: D-AU-9 원천 차단 해제 — 만 14세 미만도 가입은 허용한다. 동의는 가입 시점이 아니라
+    // 가입 직후 온보딩의 본인 인증 → 보호자(법정대리인) 본인인증 체인이 검증·기록하고,
+    // 완료 전까지는 identity 게이트가 서비스 이용을 막는다.
     const isMinorSignup = currentRole === "student" && isUnderMinimumSignupAge(student.birthDate);
-    // D-AU-9: 본인확인 연동 전까지 만 14세 미만 가입은 **차단**한다(동의 체크 여부와 무관).
-    // placeholder 동의로 게이트를 여는 구 동작(guardianVerificationMethod='legal_review_pending')을 폐지.
-    if (isMinorSignup) {
-      setMinorConsentPrompt(true);
-      setFieldErrors({ guardianConsent: MINOR_SIGNUP_BLOCKED_MESSAGE });
-      setError(MINOR_SIGNUP_BLOCKED_MESSAGE);
-      return;
-    }
 
     const email = currentRole === "student" ? studentEmail : mentorEmail;
     const password = currentRole === "student" ? studentPassword : mentorPassword;
@@ -333,11 +319,12 @@ function SignupPageContent() {
       highSchoolName: currentRole === "mentor" ? mentor.highSchoolName : "",
       introLine: currentRole === "mentor" ? mentor.introLine : "",
       isMinor: isMinorSignup,
-      guardianConsent: isMinorSignup && guardianConsentAgree,
+      // 가입 시점에는 보호자 동의를 받지 않는다 — NICE 보호자 체인이 완료될 때 기록된다.
+      guardianConsent: false,
       guardianConsentVersion: MINOR_CONSENT_VERSION,
       guardianRef: "",
       ageGateCheckedAt,
-      guardianVerificationMethod: MINOR_CONSENT_VERIFICATION_METHOD_PLACEHOLDER,
+      guardianVerificationMethod: MINOR_CONSENT_VERIFICATION_METHOD_NICE_CHAIN,
     });
 
     let newUser: { id: string } | null = null;
@@ -479,7 +466,7 @@ function SignupPageContent() {
     setLoading(false);
   }
 
-  const showMinorConsent = role === "student" && (minorConsentPrompt || isUnderMinimumSignupAge(student.birthDate));
+  const showMinorConsent = role === "student" && isUnderMinimumSignupAge(student.birthDate);
 
   return (
     <AuthPageLayout
@@ -720,7 +707,7 @@ function SignupPageContent() {
                     <FieldError message={fieldErrors.terms} />
                     {showMinorConsent ? (
                       <div className="mt-4">
-                        {minorSignupBlockedNotice()}
+                        {minorGuardianChainNotice()}
                         <FieldError message={fieldErrors.guardianConsent} />
                       </div>
                     ) : null}
@@ -910,18 +897,18 @@ export default function SignupPage() {
 }
 
 /**
- * D-AU-9: 만 14세 미만 가입 차단 안내. 본인확인 연동 전까지는 동의 체크박스 대신
- * 가입 불가 사실을 명확히 고지한다(placeholder 동의 게이트 폐지).
+ * S-C: 만 14세 미만 보호자 체인 안내. 가입은 허용하되, 가입 직후 본인 인증 →
+ * 보호자(법정대리인) 본인인증을 완료해야 이용 가능함을 가입 화면에서 미리 고지한다.
  */
-function minorSignupBlockedNotice() {
+function minorGuardianChainNotice() {
   return (
-    <section className="rounded-2xl border border-red-200 bg-red-50/60 p-5 sm:p-6" aria-label="만 14세 미만 가입 제한">
-      <header className="border-b border-red-100 pb-4">
-        <p className="text-xs font-extrabold tracking-wide text-red-700">{MINOR_SIGNUP_BLOCKED_COPY.eyebrow}</p>
-        <h2 className="mt-1.5 text-lg font-extrabold text-slate-900 sm:text-xl">{MINOR_SIGNUP_BLOCKED_COPY.title}</h2>
-        <p className="mt-1.5 text-sm leading-relaxed text-slate-700">{MINOR_SIGNUP_BLOCKED_COPY.description}</p>
+    <section className="rounded-2xl border border-blue-200 bg-blue-50/60 p-5 sm:p-6" aria-label="만 14세 미만 보호자 동의 안내">
+      <header className="border-b border-blue-100 pb-4">
+        <p className="text-xs font-extrabold tracking-wide text-[#1A56DB]">{MINOR_SIGNUP_GUARDIAN_CHAIN_COPY.eyebrow}</p>
+        <h2 className="mt-1.5 text-lg font-extrabold text-slate-900 sm:text-xl">{MINOR_SIGNUP_GUARDIAN_CHAIN_COPY.title}</h2>
+        <p className="mt-1.5 text-sm leading-relaxed text-slate-700">{MINOR_SIGNUP_GUARDIAN_CHAIN_COPY.description}</p>
       </header>
-      <p className="mt-4 text-sm leading-relaxed text-slate-600">{MINOR_SIGNUP_BLOCKED_COPY.guidance}</p>
+      <p className="mt-4 text-sm leading-relaxed text-slate-600">{MINOR_SIGNUP_GUARDIAN_CHAIN_COPY.guidance}</p>
     </section>
   );
 }

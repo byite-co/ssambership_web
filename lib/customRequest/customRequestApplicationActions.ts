@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/routeGuard";
+import { requireVerifiedIdentity } from "@/lib/identity/identityGate";
 import { createClient } from "@/lib/supabase/server";
 import { sanitizeTrustSafetyText } from "@/lib/safety/trustSafetyText";
 import {
@@ -42,6 +43,11 @@ function onFailure(postId: string, code: string | undefined, returnContext: "men
 
 export async function submitMentorCustomRequestApplication(formData: FormData) {
   const { user } = await requireRole("mentor");
+  // S-C 머니패스 가드: 맞춤의뢰 멘토 지원은 본인인증 완료 계정만.
+  const identity = await requireVerifiedIdentity(user.id);
+  if (!identity.ok) {
+    redirect("/onboarding/verify");
+  }
   const supabase = await createClient();
   const returnContext: "mentor" | "public" =
     String(formData.get("returnContext") ?? "").trim() === "mentor" ? "mentor" : "public";
