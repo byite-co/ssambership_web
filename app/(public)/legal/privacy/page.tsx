@@ -7,10 +7,14 @@ export const metadata = {
   description: "쌤버십 개인정보처리방침입니다.",
 };
 
+// [오너확정-1] 본 개정(본인인증 수집 고지)의 시행일 — 오너 미지정 상태의 잠정값. 확정 시 이 상수만 교체.
+const REVISION_EFFECTIVE_DATE = "2026년 8월 25일";
+
 export default function LegalPrivacyPage() {
   return (
     <LegalDocLayout
       title="개인정보처리방침"
+      effectiveDate={REVISION_EFFECTIVE_DATE}
       intro={
         <>
           {COMPANY.name}(이하 &lsquo;회사&rsquo;)은 「개인정보 보호법」 등 관련 법령을 준수하며, 이용자의 개인정보를 보호하기
@@ -25,16 +29,24 @@ export default function LegalPrivacyPage() {
             <><strong>회원 공통(필수)</strong>: 이메일, 비밀번호(암호화 저장), 닉네임, 역할(학생/멘토), 서비스 이용기록</>,
             <><strong>학생(선택)</strong>: 학년 등 학습 지원에 필요한 정보</>,
             <><strong>멘토(필수)</strong>: 대학명·학과·담당 과목 등 프로필 정보, 재학 확인을 위한 학생증 이미지</>,
+            <><strong>본인인증 시(필수)</strong>: 성명, 생년월일, 성별, 내·외국인 정보, 휴대폰번호, 이동통신사, 연계정보(CI), 중복가입확인정보(DI)</>,
+            <><strong>만 14세 미만 회원의 법정대리인(필수)</strong>: 성명, 생년월일, 성별, 내·외국인 정보, 휴대폰번호, 이동통신사, 연계정보(CI), 중복가입확인정보(DI) — 법정대리인 본인인증(동의 확인) 과정에서 수집합니다</>,
             <><strong>결제 시</strong>: 결제 승인 정보·결제 내역(카드번호 등 민감 결제정보는 결제대행사가 처리하며 회사는 저장하지 않습니다)</>,
             <><strong>자동 생성·수집</strong>: 접속 로그, 기기·브라우저 정보, 서비스 이용 중 생성되는 질문·답변·정산·캐시 원장 등 거래기록</>,
           ]}
         />
+        <p>
+          본인인증 정보는 본인확인기관인 NICE평가정보(주)의 휴대폰 본인확인 서비스를 통해 수집하며, 회사는 이용자가
+          본인확인기관에서 인증을 완료하는 시점에 그 결과를 제공받습니다.
+        </p>
       </LegalSection>
 
       <LegalSection title="제2조 (개인정보의 수집·이용 목적)">
         <LegalList
           items={[
             "회원 식별·인증 및 계정 관리, 멘토 자격 검증",
+            "본인 확인 및 실명 인증, 연령 확인, 만 14세 미만 아동 가입 시 법정대리인 동의 확인",
+            "중복 가입 및 부정 이용 방지, 유료 서비스 이용·환불 시 본인 확인",
             "질문방·개별질문·맞춤의뢰·커뮤니티 등 서비스 제공 및 멘토-학생 연결",
             "캐시 충전·결제·환불·정산 등 요금 처리",
             "고객 문의 대응, 공지·중요 안내 전달",
@@ -58,6 +70,10 @@ export default function LegalPrivacyPage() {
         />
         <p>
           위 거래기록(결제·캐시 원장·정산·주문 등)은 개인을 식별할 수 없도록 익명 처리한 상태로 보존됩니다.
+        </p>
+        <p>
+          본인인증 과정에서 수집한 정보(제1조의 본인인증 시 및 법정대리인 항목)는 회원 탈퇴 시 탈퇴 처리 과정에서
+          지체 없이 파기합니다. 다만 관계 법령에 따라 보존 의무가 있는 기록은 위 보존 기간을 따릅니다.
         </p>
       </LegalSection>
 
@@ -116,6 +132,7 @@ export default function LegalPrivacyPage() {
         <LegalList
           items={[
             "비밀번호 등 인증정보의 암호화 저장 및 전송 구간 암호화",
+            "본인인증 정보 중 연계정보(CI)·중복가입확인정보(DI)·휴대폰번호는 중요한 식별정보로서 암호화하여 저장",
             "데이터베이스 접근 권한 통제 및 행 수준 보안(RLS) 등 접근 제어",
             "비정상 접근 탐지·차단 및 접속기록의 보관·점검",
           ]}
@@ -124,8 +141,10 @@ export default function LegalPrivacyPage() {
 
       <LegalSection title="제9조 (만 14세 미만 아동의 개인정보)">
         <p>
-          서비스는 만 14세 미만 아동의 회원가입을 허용하지 않으며, 미성년자의 경우 법정대리인의 동의를 받아 가입·이용하도록
-          합니다. 관련 안내는 <Link href="/legal/minor-consent" className="font-semibold text-[#2563EB] hover:underline">만 14세 미만 보호자 동의</Link> 페이지를 참고하십시오.
+          만 14세 미만 아동은 법정대리인의 동의를 확인한 후 서비스를 이용할 수 있습니다. 회사는 법정대리인의 동의를
+          법정대리인 본인의 휴대폰 본인인증으로 확인하며, 이 과정에서 법정대리인의 개인정보(제1조의 법정대리인 항목)를
+          수집합니다. 법정대리인의 동의가 확인되기 전까지 아동의 서비스 이용은 제한됩니다. 관련 안내는{" "}
+          <Link href="/legal/minor-consent" className="font-semibold text-[#2563EB] hover:underline">만 14세 미만 보호자 동의</Link> 페이지를 참고하십시오.
         </p>
       </LegalSection>
 
@@ -150,9 +169,15 @@ export default function LegalPrivacyPage() {
 
       <LegalSection title="제12조 (개인정보처리방침의 변경)">
         <p>
-          본 방침은 {COMPANY.effectiveDate}부터 적용되며, 법령·서비스의 변경에 따라 내용이 추가·삭제·수정되는 경우 변경 사항을
-          시행 최소 7일 전부터 공지사항을 통해 고지합니다.
+          법령·서비스의 변경에 따라 본 방침의 내용이 추가·삭제·수정되는 경우 회사는 변경 사항을 시행 최소 7일 전부터
+          공지사항을 통해 고지합니다. 본 방침의 시행일 및 개정 이력은 다음과 같습니다.
         </p>
+        <LegalList
+          items={[
+            <>{COMPANY.effectiveDate}: 시행</>,
+            <>{REVISION_EFFECTIVE_DATE}: 개정 시행 — 휴대폰 본인인증(NICE평가정보) 도입에 따라 수집 항목·이용 목적·처리 위탁·안전성 확보 조치 및 만 14세 미만 아동의 개인정보 조항을 정비</>,
+          ]}
+        />
       </LegalSection>
     </LegalDocLayout>
   );

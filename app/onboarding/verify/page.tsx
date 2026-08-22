@@ -69,6 +69,14 @@ export default async function OnboardingVerifyPage(props: Props) {
               initialStatus={firstParam(sp.status)}
               initialCode={firstParam(sp.code)}
             />
+            <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+              인증 과정에서 본인 확인을 위한 개인정보(성명·생년월일·성별·내·외국인 정보·휴대폰번호·이동통신사·연계정보(CI)·중복가입확인정보(DI))가
+              수집·이용돼요. 자세한 내용은{" "}
+              <Link href="/legal/privacy" className="font-semibold text-[#1A56DB] underline-offset-2 hover:underline">
+                개인정보처리방침
+              </Link>
+              을 확인해 주세요.
+            </p>
           </div>
         </section>
         <div className="mt-6 flex items-center justify-center gap-4 text-xs text-slate-500">
