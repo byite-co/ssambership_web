@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole, requireQnaActor } from "@/lib/auth/routeGuard";
+import { requireVerifiedIdentity } from "@/lib/identity/identityGate";
 import { assertAccountActive } from "@/lib/auth/accountStatus";
 import { assertMentorApprovedForAction } from "@/lib/mentor/mentorVerificationGate";
 import { fetchMentorIndividualQuestionPrice } from "@/lib/individualQuestion/individualQuestionPricing";
@@ -119,6 +120,11 @@ async function setQuestionExpiryBestEffort(
 
 export async function createDirectIndividualQuestionAction(formData: FormData) {
   const { user } = await requireRole("student");
+  // S-C 머니패스 가드: 개별질문 결제(에스크로 생성)는 본인인증 완료 계정만.
+  const identity = await requireVerifiedIdentity(user.id);
+  if (!identity.ok) {
+    redirect("/onboarding/verify");
+  }
   const mentorId = textValue(formData, "mentorId");
   const idempotencyKey = textValue(formData, "idempotencyKey");
   const title = textValue(formData, "title");
@@ -210,6 +216,11 @@ export async function createDirectIndividualQuestionAction(formData: FormData) {
 
 export async function createOpenIndividualQuestionAction(formData: FormData) {
   const { user } = await requireRole("student");
+  // S-C 머니패스 가드: 개별질문 결제(에스크로 생성)는 본인인증 완료 계정만.
+  const identity = await requireVerifiedIdentity(user.id);
+  if (!identity.ok) {
+    redirect("/onboarding/verify");
+  }
   const idempotencyKey = textValue(formData, "idempotencyKey");
   const title = textValue(formData, "title");
   const body = textValue(formData, "body");

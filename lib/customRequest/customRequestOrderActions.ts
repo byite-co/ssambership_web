@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/routeGuard";
+import { requireVerifiedIdentity } from "@/lib/identity/identityGate";
 import { createClient } from "@/lib/supabase/server";
 import {
   findOrderForPostAndStudent,
@@ -30,6 +31,11 @@ function backToApplications(postId: string, msg: string) {
  */
 export async function selectMentorApplicationForOrder(formData: FormData) {
   const { user } = await requireRole("student");
+  // S-C 머니패스 가드: 맞춤형 주문(에스크로 홀드)은 본인인증 완료 계정만.
+  const identity = await requireVerifiedIdentity(user.id);
+  if (!identity.ok) {
+    redirect("/onboarding/verify");
+  }
   const supabase = await createClient();
   const postId = String(formData.get("postId") ?? "").trim();
   const applicationId = String(formData.get("applicationId") ?? "").trim();

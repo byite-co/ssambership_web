@@ -4,6 +4,7 @@ import { fetchWalletBalanceByUserId } from "@/lib/cash/cashQueries";
 import { parseWalletBalanceBreakdown } from "@/lib/cash/parseWalletBalanceKrw";
 import { finalizeSubscriptionCashWalletCheckout } from "@/lib/subscribe/subscribeCheckoutService";
 import { getStudentSupabaseForSubscribe } from "@/lib/subscribe/subscribeCheckoutSession";
+import { identityRequiredJsonResponse, requireVerifiedIdentity } from "@/lib/identity/identityGate";
 import { fetchPlansForMentor } from "@/lib/mentor/publicMentorBundle";
 import { assignPlansByTier, isSubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
 import { cashKrwFromAmountCents, mentorPlanDebitAmountCents } from "@/lib/subscribe/mentorPlanPricing";
@@ -65,6 +66,12 @@ export async function POST(req: NextRequest) {
       { ok: false, error: session.code, message: session.error },
       { status: session.status }
     );
+  }
+
+  // S-C 머니패스 가드: 구독 생성은 본인인증 완료 계정만 (403 + IDENTITY_REQUIRED 선두 토큰).
+  const identity = await requireVerifiedIdentity(session.studentId);
+  if (!identity.ok) {
+    return identityRequiredJsonResponse();
   }
 
   const plans = await fetchPlansForMentor(session.supabase, mentorIdTrim);

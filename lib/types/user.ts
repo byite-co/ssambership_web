@@ -9,6 +9,8 @@ export type UserRow = {
   status: string;
   /** 정지 만료 시각(102 마이그레이션). suspended 전용, null=영구/미설정 */
   suspended_until?: string | null;
+  /** 본인인증(NICE) 완료 시각(S-B m2). null=미인증 — identity 게이트 판독 컬럼 */
+  identity_verified_at?: string | null;
   status_reason?: string | null;
   full_name: string | null;
   display_name?: string | null;
