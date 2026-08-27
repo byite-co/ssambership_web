@@ -7,8 +7,9 @@
 //  - link/url 미포함(앱이 버린다 — 외부 경로 실행 금지 계약)
 //  - android channel_id = ssambership_default 고정(앱 A-4 채널과 1:1)
 //  - 게이트 2종(new_order_message·new_application)은 빌더 이전(claim 래퍼) 단계에서 걸러진다
-//  - invalidToken 판정: 404/UNREGISTERED → true · 429/5xx → false(backoff 재시도) ·
-//    400 INVALID_ARGUMENT 를 무효 토큰으로 오분류하지 않는다
+//  - invalidToken 판정(상태 코드별 명시 — isInvalidTokenError 폴백 없음):
+//    404/UNREGISTERED → true · 400 은 FCM 무효 토큰 문구(/registration token/i)일 때만 true ·
+//    401/403 은 항상 false(SENDER_ID_MISMATCH 포함 — 서버 설정 오류) · 429/5xx → false
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -156,14 +157,49 @@ test("invalidToken 판정 — 429/5xx 는 무효 아님(backoff 재시도)", () 
   }
 });
 
-test("400 INVALID_ARGUMENT 오분류(적대 검증 #9)의 방지선은 빌더 계약이다", () => {
-  // isInvalidTokenError(outboxBackoff — 무수정 계약)는 invalid_argument 를 무효 토큰
-  // 어휘로 분류하므로, #9 의 방지선은 판정식이 아니라 B-2 빌더 계약이다: '값 전부
-  // 문자열·부재 키 생략' 이 형식 위반 payload 자체를 만들 수 없게 한다(위 두 테스트).
-  // 여기서는 실패 정규화(ok:false·오류 문자열 합성)만 고정한다.
-  const res = classifyFcmSendFailure({ status: 400, errorMessage: "x", errorCodes: ["INVALID_ARGUMENT"] });
+test("400 INVALID_ARGUMENT(payload 형식 오류)는 무효 토큰으로 분류하지 않는다(적대 검증 #9)", () => {
+  // 명시 판정 계약(2026-08-27 개정): 400 은 FCM 무효 토큰 문구가 아닌 한 토큰 잘못이
+  // 아니다 — isInvalidTokenError 폴백 제거로 invalid_argument 어휘 오분류가 원천 차단됐다.
+  // (형식 위반 payload 자체를 만들지 않는 빌더 계약은 위 두 테스트가 별도로 고정한다.)
+  const res = classifyFcmSendFailure({
+    status: 400,
+    errorMessage: "Invalid JSON payload received.",
+    errorCodes: ["INVALID_ARGUMENT"],
+  });
   assert.equal(res.ok, false);
+  assert.equal(res.invalidToken, false);
   assert.ok(res.error && res.error.includes("INVALID_ARGUMENT"));
+});
+
+test("400 + FCM 무효 토큰 문구는 무효 토큰이다(revoke 경로)", () => {
+  const res = classifyFcmSendFailure({
+    status: 400,
+    errorMessage: "The registration token is not a valid FCM registration token",
+    errorCodes: ["INVALID_ARGUMENT"],
+  });
+  assert.equal(res.ok, false);
+  assert.equal(res.invalidToken, true);
+});
+
+test("400 'message is too big' 은 무효 토큰이 아니다", () => {
+  const res = classifyFcmSendFailure({
+    status: 400,
+    errorMessage: "message is too big",
+    errorCodes: ["INVALID_ARGUMENT"],
+  });
+  assert.equal(res.ok, false);
+  assert.equal(res.invalidToken, false);
+});
+
+test("403 SENDER_ID_MISMATCH 는 서버 설정 오류 — 무효 토큰이 아니다(revoke 금지)", () => {
+  const res = classifyFcmSendFailure({
+    status: 403,
+    errorMessage: "SenderId mismatch",
+    errorCodes: ["SENDER_ID_MISMATCH"],
+  });
+  assert.equal(res.ok, false);
+  assert.equal(res.invalidToken, false);
+  assert.ok(res.error && res.error.includes("SENDER_ID_MISMATCH"));
 });
 
 test("FCM_TRANSPORT_MODE 해석 — 기본·미설정·미지값 전부 dry-run", () => {

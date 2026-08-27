@@ -7,7 +7,6 @@
 // ★ 시크릿 금지: FCM_SERVICE_ACCOUNT_JSON_B64 원문·액세스 토큰·기기 토큰 전문·제목·본문을
 //   어떤 로그·오류 문자열에도 싣지 않는다(B-3 로그 규칙).
 
-import { isInvalidTokenError } from "./outboxBackoff.ts";
 import type { OutboxRow, OutboxTransport, TransportResult } from "./outboxWorker.ts";
 
 /** claim RPC 는 SETOF notification_outbox — 런타임 행에는 전 컬럼이 있고,
@@ -100,11 +99,20 @@ export function buildFcmMessage(args: {
   };
 }
 
+/** FCM v1 무효 토큰 문구(400 INVALID_ARGUMENT 중 토큰 자체가 원인인 경우 —
+ *  "The registration token is not a valid FCM registration token"). */
+const FCM_INVALID_TOKEN_MESSAGE = /registration token/i;
+
 /** FCM v1 비-2xx 응답 → 실패 TransportResult 정규화(순수, 계약테스트 대상).
- *  판정 우선순위(B-2 — 400 INVALID_ARGUMENT 를 무효 토큰으로 오분류하지 않기 위한 순서):
+ *  상태 코드별 명시 판정(2026-08-27 개정 — isInvalidTokenError 문자열 폴백 제거):
  *  ① 404 또는 details[].errorCode UNREGISTERED → invalidToken:true (무효 확정 → revoke 경로)
- *  ② 429/5xx → invalidToken:false (backoff 재시도)
- *  ③ 그 외 → isInvalidTokenError(합성 문자열) */
+ *  ② 400 → errorMessage 가 FCM 무효 토큰 문구(/registration token/i)일 때만 true.
+ *     그 외 400(INVALID_ARGUMENT: payload 형식·크기 등)은 토큰 잘못이 아니다 → false
+ *  ③ 401/403 → 항상 false — 인증·권한 오류(SENDER_ID_MISMATCH 포함)는 서버 설정
+ *     문제지 토큰 무효가 아니다(토큰 revoke 금지)
+ *  ④ 429/5xx·그 외 전부 → false (backoff 재시도)
+ *  ★ outboxBackoff.isInvalidTokenError 는 무수정 유지 — outboxWorker 가 invalidToken
+ *    미지정 transport 에 쓰는 폴백이며, 이 transport 는 항상 invalidToken 을 명시한다. */
 export function classifyFcmSendFailure(args: {
   status: number;
   errorMessage?: string | null;
@@ -112,15 +120,16 @@ export function classifyFcmSendFailure(args: {
 }): TransportResult {
   const { status } = args;
   const errorCodes = args.errorCodes ?? [];
-  const error = [`fcm_status_${status}`, args.errorMessage ?? "", ...errorCodes]
+  const errorMessage = args.errorMessage ?? "";
+  const error = [`fcm_status_${status}`, errorMessage, ...errorCodes]
     .filter((part) => part.length > 0)
     .join(" | ");
   const invalidToken =
     status === 404 || errorCodes.includes("UNREGISTERED")
       ? true
-      : status === 429 || status >= 500
-        ? false
-        : isInvalidTokenError(error);
+      : status === 400
+        ? FCM_INVALID_TOKEN_MESSAGE.test(errorMessage)
+        : false;
   return { ok: false, invalidToken, error };
 }
 
