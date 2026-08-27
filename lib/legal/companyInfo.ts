@@ -27,4 +27,5 @@ export const PROCESSORS: ReadonlyArray<{ name: string; purpose: string }> = [
   { name: "토스페이먼츠(주) (㈜비바리퍼블리카)", purpose: "신용카드·간편결제 등 결제 처리 및 결제 도용 방지" },
   { name: "Supabase, Inc.", purpose: "서비스 운영을 위한 클라우드 인프라·데이터베이스·파일 저장" },
   { name: "NICE평가정보(주)", purpose: "본인확인 서비스: 휴대폰 본인인증(본인 확인·실명 인증 및 만 14세 미만 회원의 법정대리인 동의 확인)" },
+  { name: "Google LLC", purpose: "앱 푸시 알림 전송(Firebase Cloud Messaging)" },
 ];
