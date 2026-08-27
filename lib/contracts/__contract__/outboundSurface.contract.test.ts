@@ -147,7 +147,7 @@ test("리뷰 공개 predicate 에 moderation_state 포함", () => {
   assert.ok(/moderation_state\s*===\s*["']visible["']/.test(m), "isPubliclyVisibleReview 에 moderation_state 필요");
 });
 
-test("Firebase/FCM 표면 = 허용 파일 한정 (App-F1 개정, 2026-08-27 · 방침 고지 2026-09-04)", () => {
+test("Firebase/FCM 표면 = 허용 파일 한정 (App-F1 개정, 2026-08-27 · 방침 고지 2026-09-01)", () => {
   // 구 계약 "Firebase 미유입" 을 푸시 재도입(App-F1)에서 개정: FCM v1 transport 와
   // outbox 워커 cron 라우트 2파일에만 firebase 코드 표면을 허용한다(PUSH 지시문 B-5).
   // 개인정보처리방침·수탁업체 목록 2파일은 법률 고지 문구(수탁·국외 이전 표기)로만
