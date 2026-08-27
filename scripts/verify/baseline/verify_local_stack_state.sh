@@ -53,9 +53,16 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 92본 pack(생성기 91 + PR60 1)의 PG16 로컬 fresh replay 실측
-# (tables=84 functions=218 policies=175 buckets=13)이며, PG17 CLI 재생에서도
-# 같은 값이 재현된다.
+# 기대치는 96본 pack(생성기 95 + PR60 1) 기준
+# (tables=84 functions=221 policies=175 buckets=13)이며, 프로덕션 원장 96본
+# 실측과 일치한다. PG17 CLI 재생에서도 같은 값이 재현된다.
+# 92본→96본(정산 원천징수 hotfix 역수입) 델타:
+#   functions +3 = calc_withholding_cents + mentor_settlement_lines
+#                + mentor_settlement_summary (20260827100200~100300 —
+#                pay_due_payouts_for_run·payout_reconciliation_report 는
+#                본문 치환이라 카운트 불변)
+#   (20260821100100 kind guardian 은 제약 변경, 20260827100100 은 GRANT 뿐이라
+#    위 4개 카운트를 바꾸지 않는다.)
 # 81본→92본(S-B sprint-pay) 델타:
 #   tables   +4 = nice_auth_tokens + identity_verifications + billing_keys
 #                + portone_webhook_events (20260820100100~100500 — 전부
@@ -91,7 +98,7 @@ count_check(){ # count_check <label> <expected> <sql>
 }
 count_check tables 84 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
-count_check functions 218 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+count_check functions 221 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
 count_check policies 175 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"
