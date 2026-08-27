@@ -67,7 +67,8 @@ export function MentorPayoutAccountPanel(props: Props) {
   }
 
   return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+    // 상단 카드의 "정산 계좌 미등록" 경고 배너 앵커 대상
+    <section id="payout-account" className="scroll-mt-24 rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#ECFDF5] text-[#059669]">

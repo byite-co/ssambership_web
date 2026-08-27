@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { MentorPayoutMonthlyCard } from "@/lib/mentor/mentorPayoutsTypes";
+import type { SettlementTrendPoint } from "@/lib/mentor/mentorSettlementDisplay";
 
 const MentorPayoutsMonthlyAreaChartInner = dynamic(
   () => import("./MentorPayoutsCharts").then((m) => m.MentorPayoutsMonthlyAreaChart),
@@ -13,6 +13,6 @@ const MentorPayoutsMonthlyAreaChartInner = dynamic(
   }
 );
 
-export function MentorPayoutsMonthlyAreaChartLazy(props: { months: MentorPayoutMonthlyCard[] }) {
-  return <MentorPayoutsMonthlyAreaChartInner months={props.months} />;
+export function MentorPayoutsMonthlyAreaChartLazy(props: { trend: SettlementTrendPoint[] }) {
+  return <MentorPayoutsMonthlyAreaChartInner trend={props.trend} />;
 }

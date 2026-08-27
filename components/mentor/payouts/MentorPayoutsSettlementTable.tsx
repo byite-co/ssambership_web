@@ -6,23 +6,29 @@ import {
   PAYOUT_WITHHOLDING_LABEL,
   PAYOUT_WITHHOLDING_TOOLTIP,
 } from "@/lib/mentor/mentorPayoutsConstants";
-import type { MentorPayoutSettlementTableRow } from "@/lib/mentor/mentorPayoutsTypes";
+import type { MentorSettlementTableRow } from "@/lib/mentor/mentorSettlementDisplay";
+import { formatKoreanDate } from "@/lib/utils/formatDisplay";
 import {
   formatCashKrw,
   formatPayoutTableDate,
-  settlementStatusBadge,
+  settlementLineStatusBadge,
   typeBadgeClass,
   typeBadgeLabel,
 } from "./payoutUi";
 
+/**
+ * 정산 내역 표 — 모든 금액·상태는 mentor_settlement_lines RPC 값 그대로 (프론트 재계산 없음).
+ * 지급(예정)일 = paid_run_date ?? expected_run_date.
+ */
 export function MentorPayoutsSettlementTable(props: {
-  rows: MentorPayoutSettlementTableRow[];
+  rows: MentorSettlementTableRow[];
   /** detail 페이지: 결제금액·순수령액 라벨 */
   variant?: "summary" | "detail";
 }) {
   const grossLabel = props.variant === "detail" ? "결제금액" : "총액";
   const netLabel = props.variant === "detail" ? "순수령액" : "정산액";
-  const payoutLabel = "실지급 예정액";
+  const payoutLabel = "실지급";
+  const payDateLabel = "지급(예정)일";
   if (!props.rows.length) {
     return (
       <EmptyState
@@ -37,9 +43,9 @@ export function MentorPayoutsSettlementTable(props: {
 
   return (
     <>
-    {/* 데스크탑(sm+): 기존 표 그대로 — lg+ 픽셀 동일 */}
+    {/* 데스크탑(sm+): 표 — lg+ 픽셀 동일 */}
     <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm sm:block">
-      <table className="w-full min-w-[1040px] text-left text-sm">
+      <table className="w-full min-w-[1120px] text-left text-sm">
         <thead>
           <tr className="border-b border-slate-100 bg-slate-50/90 text-xs font-bold text-slate-500">
             <th className="px-4 py-3">일자</th>
@@ -53,12 +59,14 @@ export function MentorPayoutsSettlementTable(props: {
               {PAYOUT_WITHHOLDING_LABEL}
             </th>
             <th className="px-4 py-3 text-right">{payoutLabel}</th>
+            <th className="px-4 py-3">{payDateLabel}</th>
             <th className="px-4 py-3">상태</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-slate-100">
           {props.rows.map((row) => {
-            const st = settlementStatusBadge(row.uiStatus);
+            const st = settlementLineStatusBadge(row.status, row.holdReason);
+            const isCanceled = row.status === "canceled";
             return (
               <tr key={row.id} className="hover:bg-slate-50/50">
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatPayoutTableDate(row.date)}</td>
@@ -72,35 +80,37 @@ export function MentorPayoutsSettlementTable(props: {
                 </td>
                 <td
                   className={`px-4 py-3 text-right tabular-nums font-semibold ${
-                    row.isCancelled ? "text-red-600" : "text-slate-900"
+                    isCanceled ? "text-slate-400 line-through" : "text-slate-900"
                   }`}
                 >
-                  {row.isCancelled ? `-${formatCashKrw(Math.abs(row.grossAmount))}` : formatCashKrw(row.grossAmount)}
+                  {formatCashKrw(row.grossCash)}
                 </td>
-                <td
-                  className={`px-4 py-3 text-right tabular-nums font-semibold ${
-                    row.isCancelled ? "text-emerald-600" : "text-slate-500"
-                  }`}
-                >
-                  {row.isCancelled ? `+${formatCashKrw(row.feeAmount)}` : formatCashKrw(row.feeAmount)}
+                <td className={`px-4 py-3 text-right tabular-nums font-semibold ${isCanceled ? "text-slate-400" : "text-slate-500"}`}>
+                  {formatCashKrw(row.feeCash)}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-700">
-                  {formatCashKrw(row.netAmount)}
+                <td className={`px-4 py-3 text-right tabular-nums font-semibold ${isCanceled ? "text-slate-400" : "text-slate-700"}`}>
+                  {formatCashKrw(row.mentorCash)}
                 </td>
-                {/* W-01: 원천징수 강조 셀 */}
+                {/* W-01: 원천징수 강조 셀 — RPC withholding_cents 그대로 */}
                 <td
                   className={`px-4 py-3 text-right tabular-nums font-extrabold ${
-                    row.isCancelled ? "text-slate-400" : "text-rose-600"
+                    isCanceled ? "text-slate-400" : "text-rose-600"
                   }`}
                   title={PAYOUT_WITHHOLDING_TOOLTIP}
                 >
-                  {row.withholdingAmount > 0 ? `-${formatCashKrw(row.withholdingAmount)}` : "—"}
+                  {row.withholdingCash > 0 ? `-${formatCashKrw(row.withholdingCash)}` : "—"}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums font-black text-[#059669]">
-                  {formatCashKrw(row.payoutAmount)}
+                <td className={`px-4 py-3 text-right tabular-nums font-black ${isCanceled ? "text-slate-400" : "text-[#059669]"}`}>
+                  {formatCashKrw(row.netCash)}
+                </td>
+                <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                  {row.payDate ? formatKoreanDate(row.payDate) : "—"}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-extrabold ${st.className}`}>
+                  <span
+                    className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-extrabold ${st.className}`}
+                    title={st.title}
+                  >
                     {st.label}
                   </span>
                 </td>
@@ -111,14 +121,11 @@ export function MentorPayoutsSettlementTable(props: {
       </table>
     </div>
 
-    {/* 모바일(sm 미만): 행을 카드로 — 일자·유형 + 내용 + 총액·수수료·정산액(강조)·상태 */}
+    {/* 모바일(sm 미만): 행을 카드로 */}
     <ul className="space-y-2.5 sm:hidden">
       {props.rows.map((row) => {
-        const st = settlementStatusBadge(row.uiStatus);
-        const grossText = row.isCancelled
-          ? `-${formatCashKrw(Math.abs(row.grossAmount))}`
-          : formatCashKrw(row.grossAmount);
-        const feeText = row.isCancelled ? `+${formatCashKrw(row.feeAmount)}` : formatCashKrw(row.feeAmount);
+        const st = settlementLineStatusBadge(row.status, row.holdReason);
+        const isCanceled = row.status === "canceled";
         return (
           <li key={row.id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between gap-2">
@@ -131,36 +138,49 @@ export function MentorPayoutsSettlementTable(props: {
             <dl className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm">
               <div className="flex items-center justify-between gap-3">
                 <dt className="font-medium text-slate-500">{grossLabel}</dt>
-                <dd className={`tabular-nums font-semibold ${row.isCancelled ? "text-red-600" : "text-slate-900"}`}>
-                  {grossText}
+                <dd className={`tabular-nums font-semibold ${isCanceled ? "text-slate-400 line-through" : "text-slate-900"}`}>
+                  {formatCashKrw(row.grossCash)}
                 </dd>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <dt className="font-medium text-slate-500">수수료</dt>
-                <dd className={`tabular-nums font-semibold ${row.isCancelled ? "text-emerald-600" : "text-slate-500"}`}>
-                  {feeText}
+                <dd className={`tabular-nums font-semibold ${isCanceled ? "text-slate-400" : "text-slate-500"}`}>
+                  {formatCashKrw(row.feeCash)}
                 </dd>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <dt className="font-medium text-slate-500">{netLabel}</dt>
-                <dd className="tabular-nums font-semibold text-slate-700">{formatCashKrw(row.netAmount)}</dd>
+                <dd className={`tabular-nums font-semibold ${isCanceled ? "text-slate-400" : "text-slate-700"}`}>
+                  {formatCashKrw(row.mentorCash)}
+                </dd>
               </div>
               {/* W-01: 원천징수 강조 행 */}
               <div className="flex items-center justify-between gap-3">
                 <dt className="font-extrabold text-rose-700" title={PAYOUT_WITHHOLDING_TOOLTIP}>
                   {PAYOUT_WITHHOLDING_LABEL}
                 </dt>
-                <dd className={`tabular-nums font-extrabold ${row.isCancelled ? "text-slate-400" : "text-rose-600"}`}>
-                  {row.withholdingAmount > 0 ? `-${formatCashKrw(row.withholdingAmount)}` : "—"}
+                <dd className={`tabular-nums font-extrabold ${isCanceled ? "text-slate-400" : "text-rose-600"}`}>
+                  {row.withholdingCash > 0 ? `-${formatCashKrw(row.withholdingCash)}` : "—"}
                 </dd>
               </div>
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-1.5">
                 <dt className="font-bold text-slate-700">{payoutLabel}</dt>
-                <dd className="text-base font-black tabular-nums text-[#059669]">{formatCashKrw(row.payoutAmount)}</dd>
+                <dd className={`text-base font-black tabular-nums ${isCanceled ? "text-slate-400" : "text-[#059669]"}`}>
+                  {formatCashKrw(row.netCash)}
+                </dd>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <dt className="font-medium text-slate-500">{payDateLabel}</dt>
+                <dd className="tabular-nums font-semibold text-slate-700">
+                  {row.payDate ? formatKoreanDate(row.payDate) : "—"}
+                </dd>
               </div>
             </dl>
             <div className="mt-3 flex justify-end">
-              <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-extrabold ${st.className}`}>
+              <span
+                className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-extrabold ${st.className}`}
+                title={st.title}
+              >
                 {st.label}
               </span>
             </div>

@@ -8,7 +8,7 @@ import {
   Tooltip,
 } from "recharts";
 import { formatChartMonthLabel } from "@/lib/mentor/mentorPayoutsDisplay";
-import type { MentorPayoutMonthlyCard } from "@/lib/mentor/mentorPayoutsTypes";
+import type { SettlementTrendPoint } from "@/lib/mentor/mentorSettlementDisplay";
 import { MentorRevenueChart } from "@/components/mentor/mypage/MentorRevenueChart";
 import { formatCashKrw } from "./payoutUi";
 
@@ -68,13 +68,12 @@ export function MentorPayoutsDonutChart(props: DonutProps) {
   );
 }
 
-export function MentorPayoutsMonthlyAreaChart(props: { months: MentorPayoutMonthlyCard[] }) {
-  const chartData = [...props.months]
-    .reverse()
-    .map((m) => ({
-      month: formatChartMonthLabel(m.yearMonth),
-      total: m.revenue,
-    }));
+/** 월간 추이 — 포인트 금액은 mentor_settlement_summary 의 월별 by_source 합 그대로 (오름차순 입력). */
+export function MentorPayoutsMonthlyAreaChart(props: { trend: SettlementTrendPoint[] }) {
+  const chartData = props.trend.map((m) => ({
+    month: formatChartMonthLabel(m.yearMonth),
+    total: m.revenueCash,
+  }));
 
   if (!chartData.length) {
     return (

@@ -1,37 +1,40 @@
 import { NextResponse } from "next/server";
 import { requireMentorApiSession } from "@/lib/mentor/mentorPayoutsApiAuth";
-import { loadMentorPayoutDetail, type PayoutLineType } from "@/lib/mentor/mentorPayoutsService";
+import { fetchMentorSettlementLines } from "@/lib/mentor/mentorSettlementService";
 import { createClient } from "@/lib/supabase/server";
 
+const SOURCE_TYPES = ["subscription", "custom_request", "individual_question"] as const;
+
+/**
+ * 정산 내역 조회 — mentor_settlement_lines RPC 단일 소스 (월 = occurred_at KST 경계).
+ * RPC 는 security definer + auth.uid() 라 세션 클라이언트로 호출하며, 금액·상태를 서버·클라이언트
+ * 어디서도 재계산하지 않는다. 실패는 fail-closed(빈 목록으로 무음 degrade 하지 않는다).
+ */
 export async function GET(request: Request) {
   const auth = await requireMentorApiSession();
   if (!auth.ok) return auth.response;
 
   const url = new URL(request.url);
   const month = url.searchParams.get("month");
+  if (month !== null && !/^\d{4}-\d{2}$/.test(month)) {
+    return NextResponse.json({ ok: false, error: "지원하지 않는 월 형식입니다." }, { status: 400 });
+  }
+  // D-MT-1: 미지원 유형 값은 무음 all 폴백 대신 400 으로 거부한다.
   const typeRaw = url.searchParams.get("type");
-  // D-MT-1: individual_question 을 화이트리스트에 포함하고, 미지원 값은 무음 all 폴백 대신
-  // 400 으로 거부한다(개별질문 필터가 조용히 전 유형으로 확장되던 오독 차단).
-  let type: PayoutLineType | "all" | null;
-  if (typeRaw === null) {
-    type = null;
-  } else if (
-    typeRaw === "subscription" ||
-    typeRaw === "custom_request" ||
-    typeRaw === "individual_question" ||
-    typeRaw === "all"
+  if (
+    typeRaw !== null &&
+    typeRaw !== "all" &&
+    !(SOURCE_TYPES as readonly string[]).includes(typeRaw)
   ) {
-    type = typeRaw;
-  } else {
     return NextResponse.json({ ok: false, error: "지원하지 않는 정산 유형입니다." }, { status: 400 });
   }
 
-  try {
-    const supabase = await createClient();
-    const detail = await loadMentorPayoutDetail(supabase, auth.user.id, { month, type });
-    return NextResponse.json({ ok: true, ...detail });
-  } catch (e) {
-    console.error("[GET /api/mentor/payouts/detail]", e);
-    return NextResponse.json({ ok: false, error: "상세 내역을 불러오지 못했습니다." }, { status: 500 });
+  const supabase = await createClient();
+  const result = await fetchMentorSettlementLines(supabase, { ym: month });
+  if (!result.ok) {
+    return NextResponse.json({ ok: false, error: result.error }, { status: 500 });
   }
+  const lines =
+    typeRaw && typeRaw !== "all" ? result.data.filter((l) => l.sourceType === typeRaw) : result.data;
+  return NextResponse.json({ ok: true, lines });
 }

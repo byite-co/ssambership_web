@@ -526,7 +526,7 @@ function orderPerfStatus(o: Row): MentorPayoutPerformanceRow["uiStatus"] {
   return "in_progress";
 }
 
-async function loadPerformanceLines(
+export async function loadPerformanceLines(
   client: SupabaseClient,
   mentorId: string
 ): Promise<MentorPayoutPerformanceRow[]> {
