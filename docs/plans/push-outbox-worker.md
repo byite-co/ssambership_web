@@ -11,7 +11,7 @@
 |---|---|
 | `app/api/cron/notification-outbox/route.ts` | 분 단위 cron(vercel.json). CRON_SECRET 인증 → 플래그 확인 → service-role 로 `runOutboxBatch` 반복(최대 45초, claimed 0 이면 종료). claim 래퍼가 게이트 2종(F19: `new_order_message`·`new_application`) 즉시 sent 처리 + `notifications` 행 부재 outbox sent 처리(무한 재시도 방지) |
 | `lib/notifications/fcmTransport.ts` | FCM HTTP v1 transport — google-auth-library JWT + fetch(`firebase-admin` 금지). 액세스 토큰 모듈 캐시(만료 60초 전 갱신). 순수 빌더 `buildFcmMessage`(data 6키·전부 문자열·부재 생략·link/url 금지)와 판정 `classifyFcmSendFailure`(404/UNREGISTERED=무효, 429/5xx=재시도)는 계약테스트 대상 |
-| `supabase/migrations/20260827100100_device_token_register_grant.sql` | `register_device_token` authenticated EXECUTE GRANT 1줄 — **라이브 미적용(O-7 대기)** |
+| `supabase/baseline/post_ledger_backfills/20260827100100_device_token_register_grant.sql` | `register_device_token` authenticated EXECUTE GRANT 1줄 — **라이브 미적용(O-7 대기)**. 정본 source 는 이 경로이고 `supabase/migrations/` 사본 + manifest 행은 `build_native_migration_pack.py` 산출물(직접 편집 금지). ★ PUSH-APPLY.md 증적 작성 시 기록: 최초 커밋의 손 배치(migrations 직행)를 CI `validate_native_migration_pack` FAIL 후 backfill 경로 + 생성기 재생성으로 교정했다(2026-08-27) |
 
 플래그 2단(전부 Vercel env, 서버 전용):
 
