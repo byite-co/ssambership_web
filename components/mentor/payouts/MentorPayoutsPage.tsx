@@ -1,4 +1,4 @@
-import type { MentorSettlementPageData } from "@/lib/mentor/mentorSettlementDisplay";
+import { monthNumberOf, type MentorSettlementPageData } from "@/lib/mentor/mentorSettlementDisplay";
 import { ResponsivePageColumns } from "@/components/shell/ResponsivePageColumns";
 import { MentorPayoutsHeroCard } from "./MentorPayoutsHeroCard";
 import { MentorPayoutsMain } from "./MentorPayoutsMain";
@@ -35,7 +35,7 @@ export function MentorPayoutsPage(props: { data: MentorSettlementPageData }) {
         aside={
           <MentorPayoutsRightPanel
             runDate={data.summary.runDate}
-            monthLabel={`${Number(data.month.slice(5, 7))}월`}
+            monthLabel={`${monthNumberOf(data.month)}월`}
             monthProgressPct={data.monthProgressPct}
             trend={data.trend}
           />

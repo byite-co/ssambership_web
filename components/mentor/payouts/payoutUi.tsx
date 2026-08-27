@@ -7,6 +7,28 @@ import {
 
 export { formatCashKrw };
 
+/**
+ * 정산 금액 표시 — RPC cents/100 을 그대로 받는다. 캐시 정수면 통일 포맷으로,
+ * 소수(구독·개별질문 85% 산식에서 가격이 20의 배수가 아니면 합법적으로 발생)면
+ * 반올림·절사 없이 정확값을 노출하되 단위 오류 표식을 붙인다(무음 보정 금지).
+ */
+export function CashText(props: { cash: number; unit?: boolean }) {
+  const withUnit = props.unit ?? true;
+  if (Number.isInteger(props.cash)) {
+    return <>{withUnit ? formatCashKrw(props.cash) : props.cash.toLocaleString("ko-KR")}</>;
+  }
+  const exact = props.cash.toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+  return (
+    <span
+      className="text-rose-700 underline decoration-dotted underline-offset-2"
+      title={`캐시 단위 오류 — 원 단위와 일치하지 않는 금액입니다 (${exact} 캐시)`}
+    >
+      {withUnit ? `${exact} 캐시` : exact}
+    </span>
+  );
+}
+
+/** 일자 표시 — 표·XLSX 의 월 버킷(RPC KST 경계)과 일치하도록 KST 고정(뷰어 시간대 무관). */
 export function formatPayoutTableDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
@@ -14,6 +36,7 @@ export function formatPayoutTableDate(iso: string): string {
     year: "numeric",
     month: "2-digit",
     day: "2-digit",
+    timeZone: "Asia/Seoul",
   }).format(d);
 }
 

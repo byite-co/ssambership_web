@@ -9,7 +9,7 @@ import {
 import type { MentorSettlementTableRow } from "@/lib/mentor/mentorSettlementDisplay";
 import { formatKoreanDate } from "@/lib/utils/formatDisplay";
 import {
-  formatCashKrw,
+  CashText,
   formatPayoutTableDate,
   settlementLineStatusBadge,
   typeBadgeClass,
@@ -83,13 +83,13 @@ export function MentorPayoutsSettlementTable(props: {
                     isCanceled ? "text-slate-400 line-through" : "text-slate-900"
                   }`}
                 >
-                  {formatCashKrw(row.grossCash)}
+                  <CashText cash={row.grossCash} />
                 </td>
                 <td className={`px-4 py-3 text-right tabular-nums font-semibold ${isCanceled ? "text-slate-400" : "text-slate-500"}`}>
-                  {formatCashKrw(row.feeCash)}
+                  <CashText cash={row.feeCash} />
                 </td>
                 <td className={`px-4 py-3 text-right tabular-nums font-semibold ${isCanceled ? "text-slate-400" : "text-slate-700"}`}>
-                  {formatCashKrw(row.mentorCash)}
+                  <CashText cash={row.mentorCash} />
                 </td>
                 {/* W-01: 원천징수 강조 셀 — RPC withholding_cents 그대로 */}
                 <td
@@ -98,10 +98,10 @@ export function MentorPayoutsSettlementTable(props: {
                   }`}
                   title={PAYOUT_WITHHOLDING_TOOLTIP}
                 >
-                  {row.withholdingCash > 0 ? `-${formatCashKrw(row.withholdingCash)}` : "—"}
+                  {row.withholdingCash > 0 ? <>-<CashText cash={row.withholdingCash} /></> : "—"}
                 </td>
                 <td className={`px-4 py-3 text-right tabular-nums font-black ${isCanceled ? "text-slate-400" : "text-[#059669]"}`}>
-                  {formatCashKrw(row.netCash)}
+                  <CashText cash={row.netCash} />
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                   {row.payDate ? formatKoreanDate(row.payDate) : "—"}
@@ -139,19 +139,19 @@ export function MentorPayoutsSettlementTable(props: {
               <div className="flex items-center justify-between gap-3">
                 <dt className="font-medium text-slate-500">{grossLabel}</dt>
                 <dd className={`tabular-nums font-semibold ${isCanceled ? "text-slate-400 line-through" : "text-slate-900"}`}>
-                  {formatCashKrw(row.grossCash)}
+                  <CashText cash={row.grossCash} />
                 </dd>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <dt className="font-medium text-slate-500">수수료</dt>
                 <dd className={`tabular-nums font-semibold ${isCanceled ? "text-slate-400" : "text-slate-500"}`}>
-                  {formatCashKrw(row.feeCash)}
+                  <CashText cash={row.feeCash} />
                 </dd>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <dt className="font-medium text-slate-500">{netLabel}</dt>
                 <dd className={`tabular-nums font-semibold ${isCanceled ? "text-slate-400" : "text-slate-700"}`}>
-                  {formatCashKrw(row.mentorCash)}
+                  <CashText cash={row.mentorCash} />
                 </dd>
               </div>
               {/* W-01: 원천징수 강조 행 */}
@@ -160,13 +160,13 @@ export function MentorPayoutsSettlementTable(props: {
                   {PAYOUT_WITHHOLDING_LABEL}
                 </dt>
                 <dd className={`tabular-nums font-extrabold ${isCanceled ? "text-slate-400" : "text-rose-600"}`}>
-                  {row.withholdingCash > 0 ? `-${formatCashKrw(row.withholdingCash)}` : "—"}
+                  {row.withholdingCash > 0 ? <>-<CashText cash={row.withholdingCash} /></> : "—"}
                 </dd>
               </div>
               <div className="flex items-center justify-between gap-3 border-t border-slate-100 pt-1.5">
                 <dt className="font-bold text-slate-700">{payoutLabel}</dt>
                 <dd className={`text-base font-black tabular-nums ${isCanceled ? "text-slate-400" : "text-[#059669]"}`}>
-                  {formatCashKrw(row.netCash)}
+                  <CashText cash={row.netCash} />
                 </dd>
               </div>
               <div className="flex items-center justify-between gap-3">

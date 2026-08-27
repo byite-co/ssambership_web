@@ -53,8 +53,10 @@ export function MentorPayoutsMain(props: {
     [props.defaultMonth]
   );
 
-  // 월/재시도 변경 시 로딩 전환 — effect 의 동기 setState 대신 렌더 중 파생 리셋.
-  const loadKey = `${month}|${retryTick}`;
+  // 월/재시도/기본월(월 넘어감 후 refresh) 변경 시 로딩 전환 — effect 의 동기 setState 대신
+  // 렌더 중 파생 리셋. defaultMonth 를 키에 넣지 않으면 defaultMonth 만 바뀌었을 때 리셋이
+  // 건너뛰어져 빈 fetchedLines 가 로딩 표시 없이 "0건" 정상 표로 렌더된다(무음 0 렌더 금지).
+  const loadKey = `${month}|${retryTick}|${props.defaultMonth}`;
   const [prevLoadKey, setPrevLoadKey] = useState(loadKey);
   if (prevLoadKey !== loadKey) {
     setPrevLoadKey(loadKey);
@@ -157,7 +159,8 @@ export function MentorPayoutsMain(props: {
         <div className="space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs font-medium text-slate-500">
-              {formatYearMonthLabel(month)} 기준 {error ? "—" : `${rows.length}건`}
+              {/* 로딩 중에는 이전 월의 stale 건수를 새 월 라벨과 함께 보이지 않는다 */}
+              {formatYearMonthLabel(month)} 기준 {loading || error ? "—" : `${rows.length}건`}
             </p>
             <div className="flex flex-wrap items-center gap-2">
               <select

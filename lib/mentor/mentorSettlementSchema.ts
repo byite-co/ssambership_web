@@ -7,8 +7,14 @@
  *
  * 프론트는 여기서 검증된 값을 **그대로** 표시한다 — ×0.15/×0.05/×0.033 재계산 금지.
  * 금액은 전부 *_cents(minor, 원×100)이며 캐시 표시값은 cents/100 이다. cents 가 정수가
- * 아니거나 100의 배수가 아니면(=캐시가 소수) 데이터 불변식 위반이므로 **파싱을 실패**시켜
- * 화면이 오류 상태를 그리게 한다(0 렌더 금지 — fail-closed, PR #75 zero-row 무음 흡수 재발 방지).
+ * 아니면(단위 혼동 신호) **파싱을 실패**시켜 화면이 오류 상태를 그리게 한다(0 렌더 금지 —
+ * fail-closed, PR #75 zero-row 무음 흡수 재발 방지).
+ *
+ * 단, 100의 배수 위반(=캐시 소수)은 파싱 실패가 **아니다**: 구독·개별질문 멘토 몫은
+ * floor(gross×0.85) 라 가격(캐시)이 20의 배수가 아니면 합법적으로 50 cents 단위가 나온다
+ * (가격 검증은 밴드/양수만 강제). 이런 값으로 페이지 전체를 오류로 잠그면 정상 멘토가
+ * 복구 불가가 되므로, 캐시 소수는 표시 계층(payoutUi.CashText)이 값별 오류 표시(정확값
+ * 노출 + 단위 오류 표식)로 처리한다.
  */
 
 export type SettlementSourceType = "subscription" | "custom_request" | "individual_question";
@@ -98,13 +104,12 @@ function readInt(obj: Raw, key: string, path: string): number {
   return v;
 }
 
-/** *_cents 필드 — 정수이면서 100의 배수(=캐시 정수)여야 한다. 위반 시 파싱 실패. */
+/**
+ * *_cents 필드 — 정수만 강제한다(비정수 cents = 단위 혼동 신호 → 파싱 실패).
+ * 100의 배수 위반(캐시 소수)은 합법 데이터가 있어 여기서 실패시키지 않는다 — 모듈 주석 참조.
+ */
 function readCents(obj: Raw, key: string, path: string): number {
-  const v = readInt(obj, key, path);
-  if (v % 100 !== 0) {
-    throw new MentorSettlementParseError(`${path}.${key}=${v} — 캐시 단위(100 cents)가 아니다`);
-  }
-  return v;
+  return readInt(obj, key, path);
 }
 
 function readString(obj: Raw, key: string, path: string): string {
@@ -233,9 +238,17 @@ export function parseMentorSettlementLines(raw: unknown): MentorSettlementLine[]
   return raw.map(parseLine);
 }
 
-/** 검증된 cents → 캐시 표시값. 파싱이 100의 배수를 보증하므로 항상 정수다. */
+/**
+ * 검증된 cents → 캐시 표시값(정확 나눗셈 — 반올림·절사 없음). 100의 배수가 아니면
+ * 소수가 나오며, 표시 계층이 단위 오류 표식과 함께 정확값을 그대로 노출한다.
+ */
 export function centsToCash(cents: number): number {
   return cents / 100;
+}
+
+/** 캐시 정수인가 — false 면 표시 계층이 값별 단위 오류 표식을 붙인다. */
+export function isCashIntegerCents(cents: number): boolean {
+  return cents % 100 === 0;
 }
 
 // ---------------------------------------------------------------------------

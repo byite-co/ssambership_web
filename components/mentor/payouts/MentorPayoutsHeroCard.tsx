@@ -9,7 +9,8 @@ import { Repeat, Briefcase, MessageCircleQuestion, TriangleAlert, Wallet } from 
 import { centsToCash, formatKstMonthDay, type MentorSettlementSummary } from "@/lib/mentor/mentorSettlementSchema";
 import { formatRunDateLabel, monthNumberOf } from "@/lib/mentor/mentorSettlementDisplay";
 import { SURFACE_CARD } from "@/lib/ui/surfaceCard";
-import { formatCashKrw } from "./payoutUi";
+import { formatKoreanDate } from "@/lib/utils/formatDisplay";
+import { CashText } from "./payoutUi";
 
 // 색 위계: 발생 전 단순 정보 = 중립 slate / "지급 완료 합계" = 완료 초록 #059669. (멘토 정체성 초록 #059669는 본문에 쓰지 않음)
 const TILE_NEUTRAL = "flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#F1F5F9] text-[#64748B]";
@@ -58,21 +59,21 @@ export function MentorPayoutsHeroCard(props: Props) {
         <div>
           <p className="text-[13px] font-medium text-slate-500">{headline}</p>
           <p className="mt-2 text-[38px] font-bold leading-none tabular-nums tracking-tight text-slate-900">
-            {formatCashKrw(centsToCash(summary.confirmed.netCents))}
+            <CashText cash={centsToCash(summary.confirmed.netCents)} />
           </p>
           {/* 산식 줄 — 네 값 모두 confirmed 버킷(RPC 값 그대로). 적립중 포함 총수익과 섞지 않는다. */}
           <p className="mt-3 text-[12px] leading-relaxed text-slate-500">
             총 수익{" "}
             <span className="font-semibold tabular-nums text-slate-700">
-              {formatCashKrw(centsToCash(summary.confirmed.grossCents))}
+              <CashText cash={centsToCash(summary.confirmed.grossCents)} />
             </span>
             {" − "}플랫폼 수수료{" "}
             <span className="font-semibold tabular-nums text-slate-700">
-              {formatCashKrw(centsToCash(summary.confirmed.platformFeeCents))}
+              <CashText cash={centsToCash(summary.confirmed.platformFeeCents)} />
             </span>
             {" − "}
             <strong className="font-extrabold text-rose-600" title={PAYOUT_WITHHOLDING_TOOLTIP}>
-              {PAYOUT_WITHHOLDING_LABEL} {formatCashKrw(centsToCash(summary.confirmed.withholdingCents))}
+              {PAYOUT_WITHHOLDING_LABEL} <CashText cash={centsToCash(summary.confirmed.withholdingCents)} />
             </strong>
             {" = "}
             {runDatePassed ? "실지급액" : "실지급 예정액"}
@@ -82,16 +83,16 @@ export function MentorPayoutsHeroCard(props: Props) {
             <p className="mt-2 inline-flex flex-wrap items-center gap-1.5 rounded-lg border border-sky-200 bg-sky-50 px-2.5 py-1 text-[12px] text-sky-900">
               <span className="font-extrabold">적립중</span>
               <span className="font-semibold tabular-nums">
-                {formatCashKrw(centsToCash(summary.accruing.mentorAmountCents))}
+                <CashText cash={centsToCash(summary.accruing.mentorAmountCents)} />
               </span>
               <span className="tabular-nums text-sky-800">
-                (원천징수 후 {centsToCash(summary.accruing.netCents).toLocaleString("ko-KR")})
+                (원천징수 후 <CashText cash={centsToCash(summary.accruing.netCents)} unit={false} />)
               </span>
               {summary.accruing.lastPeriodEnd ? (
                 <span className="text-sky-700">· {formatKstMonthDay(summary.accruing.lastPeriodEnd)} 확정</span>
               ) : null}
               {summary.accruing.expectedRunDate ? (
-                <span className="text-sky-700">· {summary.accruing.expectedRunDate} 지급 예정</span>
+                <span className="text-sky-700">· {formatKoreanDate(summary.accruing.expectedRunDate)} 지급 예정</span>
               ) : null}
             </p>
           ) : null}
@@ -99,7 +100,7 @@ export function MentorPayoutsHeroCard(props: Props) {
             <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-100 px-2.5 py-1 text-[12px] text-slate-700">
               <span className="font-extrabold">보류</span>
               <span className="font-semibold tabular-nums">
-                {formatCashKrw(centsToCash(summary.held.mentorAmountCents))}
+                <CashText cash={centsToCash(summary.held.mentorAmountCents)} />
               </span>
               <span className="text-slate-500">· {summary.held.count}건</span>
             </p>
@@ -124,7 +125,7 @@ export function MentorPayoutsHeroCard(props: Props) {
             <p className="text-[12px] font-semibold text-slate-500">구독 수익</p>
           </div>
           <p className="mt-2 text-[20px] font-bold tabular-nums text-slate-900">
-            {formatCashKrw(subscriptionCash)}
+            <CashText cash={subscriptionCash} />
           </p>
           <p className="mt-1 text-[11px] text-slate-400">{SUBSCRIPTION_PLATFORM_FEE_LABEL}</p>
         </div>
@@ -136,7 +137,7 @@ export function MentorPayoutsHeroCard(props: Props) {
             <p className="text-[12px] font-semibold text-slate-500">맞춤의뢰 수익</p>
           </div>
           <p className="mt-2 text-[20px] font-bold tabular-nums text-slate-900">
-            {formatCashKrw(customRequestCash)}
+            <CashText cash={customRequestCash} />
           </p>
           <p className="mt-1 text-[11px] text-slate-400">{CUSTOM_REQUEST_PLATFORM_FEE_LABEL}</p>
         </div>
@@ -148,7 +149,7 @@ export function MentorPayoutsHeroCard(props: Props) {
             <p className="text-[12px] font-semibold text-slate-500">개별질문 수익</p>
           </div>
           <p className="mt-2 text-[20px] font-bold tabular-nums text-slate-900">
-            {formatCashKrw(individualQuestionCash)}
+            <CashText cash={individualQuestionCash} />
           </p>
           <p className="mt-1 text-[11px] text-slate-400">{INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL}</p>
         </div>
@@ -160,7 +161,7 @@ export function MentorPayoutsHeroCard(props: Props) {
             <p className="text-[12px] font-semibold text-slate-500">누적 정산</p>
           </div>
           <p className="mt-2 text-[20px] font-bold tabular-nums text-[#059669]">
-            {formatCashKrw(centsToCash(summary.paidTotal.netCents))}
+            <CashText cash={centsToCash(summary.paidTotal.netCents)} />
           </p>
           <p className="mt-1 text-[11px] text-slate-400">지급 완료 합계</p>
         </div>

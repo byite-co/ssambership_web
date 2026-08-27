@@ -1,8 +1,10 @@
-// 계약 테스트: mentor_settlement_summary RPC 응답 스키마 — 키 존재·정수(cents=캐시×100) 고정.
+// 계약 테스트: mentor_settlement_summary RPC 응답 스키마 — 키 존재·정수(cents) 고정.
 //
 // 정산 화면은 이 파서가 통과시킨 값만 그대로 표시한다(프론트 ×0.15/×0.033 재계산 금지).
-// 키 누락·비정수·캐시 소수(100의 배수 아님)는 전부 파싱 실패 → 화면은 0 대신 오류 상태를
-// 그린다(fail-closed — PR #75 zero-row 무음 흡수 패턴 재발 방지).
+// 키 누락·비정수 cents 는 파싱 실패 → 화면은 0 대신 오류 상태를 그린다(fail-closed —
+// PR #75 zero-row 무음 흡수 패턴 재발 방지). 단 100의 배수 위반(캐시 소수)은 합법 데이터가
+// 있어(85% 산식 × 20의 배수 아닌 가격) 파싱 실패가 아니라 표시 계층의 값별 단위 오류
+// 표식으로 처리한다 — isCashIntegerCents 가 그 판정을 고정한다.
 //
 // 픽스처는 2026-08-27 prod 실측(테스트 멘토, mentor_settlement_summary('2026-08-01'),
 // migration 20260827100200·20260827100300 적용본)과 같은 형상이다.
@@ -11,6 +13,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   centsToCash,
+  isCashIntegerCents,
   MentorSettlementParseError,
   parseMentorSettlementSummary,
 } from "../mentorSettlementSchema.ts";
@@ -67,7 +70,7 @@ test("실측 형상 응답은 키 전부 존재·정수로 파싱된다", () => 
   assert.equal(s.accruing.expectedRunDate, "2026-10-23");
   assert.equal(s.accruing.lastPeriodEnd, "2026-09-27T02:00:44+00:00");
 
-  // 모든 cents 는 정수이면서 캐시 정수(÷100) — 표시 직전 단언과 동일 조건
+  // 모든 cents 는 정수 — 실측 픽스처는 전부 캐시 정수(÷100)이기도 하다
   const centsValues = [
     s.confirmed.grossCents,
     s.confirmed.platformFeeCents,
@@ -84,6 +87,7 @@ test("실측 형상 응답은 키 전부 존재·정수로 파싱된다", () => 
   ];
   for (const cents of centsValues) {
     assert.ok(Number.isSafeInteger(cents), `cents 정수 아님: ${cents}`);
+    assert.ok(isCashIntegerCents(cents), `실측 픽스처 캐시가 소수: ${cents}`);
     assert.ok(Number.isInteger(centsToCash(cents)), `캐시가 소수: ${cents}`);
   }
 });
@@ -102,18 +106,26 @@ test("키 누락은 파싱 실패다 — 무음 0 렌더 금지", () => {
   assert.throws(() => parseMentorSettlementSummary(noNet), MentorSettlementParseError);
 });
 
-test("비정수·캐시 소수 cents 는 파싱 실패다", () => {
+test("비정수 cents 는 파싱 실패다 (단위 혼동 신호)", () => {
   const fractional = fixture();
-  fractional.accruing.withholding_cents = 490_500.94; // cents 소수
+  fractional.accruing.withholding_cents = 490_500.94; // cents 소수 — 구 표시 버그(4,905.94)의 신호
   assert.throws(() => parseMentorSettlementSummary(fractional), MentorSettlementParseError);
-
-  const notCashUnit = fixture();
-  notCashUnit.accruing.withholding_cents = 490_505; // 정수지만 100의 배수 아님 → 캐시 4,905.05
-  assert.throws(() => parseMentorSettlementSummary(notCashUnit), MentorSettlementParseError);
 
   const stringCents = fixture() as ReturnType<typeof fixture> & {
     confirmed: { gross_cents: unknown };
   };
   stringCents.confirmed.gross_cents = "0";
   assert.throws(() => parseMentorSettlementSummary(stringCents), MentorSettlementParseError);
+});
+
+test("캐시 소수(100의 배수 아닌 정수 cents)는 파싱은 통과하고 표시 계층 판정으로 넘어간다", () => {
+  // 85% 산식 × 20의 배수 아닌 가격이면 합법적으로 발생 (예: 84,910캐시 구독 → 멘토분 7,217,350 cents).
+  // 파싱 실패로 페이지 전체를 잠그면 정상 멘토가 복구 불가가 된다 — 값별 단위 오류 표시가 정책이다.
+  const subCash = fixture();
+  subCash.accruing.mentor_amount_cents = 7_217_350;
+  const parsed = parseMentorSettlementSummary(subCash);
+  assert.equal(parsed.accruing.mentorAmountCents, 7_217_350);
+  assert.equal(isCashIntegerCents(parsed.accruing.mentorAmountCents), false); // → CashText 단위 오류 표식
+  assert.equal(centsToCash(parsed.accruing.mentorAmountCents), 72_173.5); // 정확값 그대로(반올림·절사 금지)
+  assert.ok(isCashIntegerCents(490_500) && !isCashIntegerCents(490_505));
 });

@@ -16,7 +16,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const month = url.searchParams.get("month");
-  if (month !== null && !/^\d{4}-\d{2}$/.test(month)) {
+  if (month !== null && !/^\d{4}-(0[1-9]|1[0-2])$/.test(month)) {
     return NextResponse.json({ ok: false, error: "지원하지 않는 월 형식입니다." }, { status: 400 });
   }
   // D-MT-1: 미지원 유형 값은 무음 all 폴백 대신 400 으로 거부한다.
