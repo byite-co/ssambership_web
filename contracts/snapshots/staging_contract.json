@@ -3722,6 +3722,21 @@
       "security_definer": true
     },
     {
+      "args": "p_token text, p_platform text",
+      "name": "register_device_token",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "jsonb",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
       "args": "p_question_id uuid",
       "name": "release_individual_question",
       "config": [
@@ -4565,6 +4580,10 @@
     {
       "name": "identity_verifications_kind_guardian",
       "version": "20260821100100"
+    },
+    {
+      "name": "device_token_register_grant",
+      "version": "20260827100100"
     }
   ],
   "table_grants": [

@@ -5665,6 +5665,10 @@
 {
 "grantee": "service_role",
 "privilege": "EXECUTE"
+},
+{
+"grantee": "authenticated",
+"privilege": "EXECUTE"
 }
 ]
 },
