@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { formatKoreanDate } from "@/lib/utils/formatDisplay";
 import {
   startMentorTermination,
   startMentorPause,
@@ -46,9 +47,10 @@ export async function requestMentorPauseAction(formData: FormData) {
   const res = await startMentorPause(admin, user.id, days, reason, new Date());
   revalidatePath(MYPAGE);
   if (!res.ok) redirect(backWith("error", res.error ?? "일시 중단 신청에 실패했습니다."));
+  // TZ-FIX R3 #30: UTC ISO 앞 10자 절단 → KST 달력일 (formatKoreanDate, P-C).
   const until =
     res.summary && typeof res.summary.pauseUntil === "string"
-      ? String(res.summary.pauseUntil).slice(0, 10)
+      ? formatKoreanDate(res.summary.pauseUntil)
       : "";
   redirect(
     backWith(

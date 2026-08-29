@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { loadAdminDashboardSummary, type AdminDashboardSummary } from "@/lib/admin/adminQueries";
+import { kstDayString } from "@/lib/utils/kstTime";
+
+const DAY_MS = 24 * 60 * 60 * 1000; // KST 는 DST 없음 — 일 경계 산술에 안전
 
 export type AdminKpiCard = {
   label: string;
@@ -34,7 +37,8 @@ export type AdminDashboardExtended = {
 };
 
 function dayKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  // TZ-FIX R3 #19: UTC ISO 절단 → KST 달력일.
+  return kstDayString(d);
 }
 
 function pctChange(today: number | null, yesterday: number | null): string {
@@ -79,21 +83,17 @@ export async function loadAdminDashboardExtended(supabase: SupabaseClient): Prom
   const summary = await loadAdminDashboardSummary(supabase);
 
   const now = new Date();
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
-  const tomorrow = new Date(todayStart);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const yesterdayStart = new Date(todayStart);
-  yesterdayStart.setDate(yesterdayStart.getDate() - 1);
+  // TZ-FIX R3 #19: 서버 로컬(UTC) 자정 절단 → KST 자정 instant (P-E).
+  const todayStart = new Date(`${kstDayString(now)}T00:00:00+09:00`);
+  const tomorrow = new Date(todayStart.getTime() + DAY_MS);
+  const yesterdayStart = new Date(todayStart.getTime() - DAY_MS);
 
   // D-AD-11: 순차 14+3 쿼리를 병렬로 실행해 TTFB 지연을 줄인다.
   // 7일 추이 각 일자의 (가입수, 캐시합계)를 한 번에 모은다.
   const dayWindows: Array<{ from: Date; to: Date; label: string }> = [];
   for (let i = 6; i >= 0; i--) {
-    const d0 = new Date(todayStart);
-    d0.setDate(d0.getDate() - i);
-    const d1 = new Date(d0);
-    d1.setDate(d1.getDate() + 1);
+    const d0 = new Date(todayStart.getTime() - i * DAY_MS);
+    const d1 = new Date(d0.getTime() + DAY_MS);
     dayWindows.push({ from: d0, to: d1, label: dayKey(d0).slice(5) });
   }
 

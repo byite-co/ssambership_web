@@ -2,6 +2,7 @@
  * 멘토 맞춤의뢰 주문 목록·카드용 표시 헬퍼 (클라이언트 번들 안전).
  * — Supabase / server-only 모듈을 import하지 않습니다.
  */
+import { kstDayDiff } from "@/lib/utils/kstTime";
 import { pickDisplayField } from "@/lib/customRequest/customRequestQueries";
 import {
   isOrderRowPaymentConfirmedForMentorWork,
@@ -62,10 +63,8 @@ export function mentorOrderDeadlineDisplay(row: Row): { dday: string; dateStr: s
   if (deadline === "—") return { dday: "—", dateStr: "", sortKey: 9999 };
   try {
     const d = new Date(deadline);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    d.setHours(0, 0, 0, 0);
-    const diff = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    // TZ-FIX R3 #21: 실행 환경 로컬 자정 절단 → KST 달력일 차 (kstTime.kstDayDiff 공용화).
+    const diff = kstDayDiff(new Date(), d);
     const dday = diff === 0 ? "D-Day" : diff > 0 ? `D-${diff}` : `D+${Math.abs(diff)}`;
     const dateStr = deadline.substring(0, 10).replace(/-/g, ".");
     return { dday, dateStr, sortKey: diff };

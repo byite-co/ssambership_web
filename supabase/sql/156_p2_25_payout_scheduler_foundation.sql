@@ -1,3 +1,6 @@
+-- ⚠ 재적용 금지 (TZ-FIX R3 #26, 2026-08-29): 이 파일의 payout_reconciliation_report cutoff 는
+--   UTC 원문이다. 라이브는 20260827100200에서 KST 기준으로 패치됐다 — 재적용 시 정산 마감이
+--   9시간 무음 역행한다. 본문은 감사 스냅샷으로 무수정 보존한다.
 -- 156_p2_25_payout_scheduler_foundation.sql
 -- P2-25 지급 운영 scheduler 기반 — 기본 비활성(OFF). 153 지급 엔진 무수정.
 -- 실송금이 아니라 내부지갑 적립 모델. cron 은 staging 에서도 기본 disabled(명시 enable 없으면 실지급 금지).

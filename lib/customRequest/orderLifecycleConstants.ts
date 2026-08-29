@@ -418,6 +418,15 @@ function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
 
+// TZ-FIX R3 #22·#24: 로컬 getter 표기를 KST 벽시계로 고정 (P-B — epoch+9h 후 UTC getter,
+// 화면 문구에 박힌 YYYY.MM.DD (HH:mm) 포맷 유지, SSR/CSR 동일 결과).
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+function kstYmd(d: Date): string {
+  const k = new Date(d.getTime() + KST_OFFSET_MS);
+  return `${k.getUTCFullYear()}.${pad2(k.getUTCMonth() + 1)}.${pad2(k.getUTCDate())}`;
+}
+
 /** 날짜만: 2026.05.02 */
 export function formatOrderRoomDate(v: unknown): string {
   if (v == null) {
@@ -427,12 +436,12 @@ export function formatOrderRoomDate(v: unknown): string {
     if (Number.isNaN(v.getTime())) {
       return "—";
     }
-    return `${v.getFullYear()}.${pad2(v.getMonth() + 1)}.${pad2(v.getDate())}`;
+    return kstYmd(v);
   }
   if (typeof v === "string" && v.trim()) {
     const d = new Date(v.trim());
     if (!Number.isNaN(d.getTime())) {
-      return `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`;
+      return kstYmd(d);
     }
   }
   return "—";
@@ -452,7 +461,8 @@ export function formatOrderRoomDateTime(v: unknown): string {
   if (!d || Number.isNaN(d.getTime())) {
     return "—";
   }
-  return `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  const k = new Date(d.getTime() + KST_OFFSET_MS);
+  return `${kstYmd(d)} ${pad2(k.getUTCHours())}:${pad2(k.getUTCMinutes())}`;
 }
 
 export function deliverableVersionLabelKorean(version: unknown, zeroBasedIndex: number): string {

@@ -11,6 +11,7 @@ import {
   SUBSCRIPTION_PLATFORM_FEE_LABEL,
 } from "@/lib/mentor/mentorPayoutsConstants";
 import { isAccruingPayoutStatus } from "@/lib/mentor/payoutLineStatus";
+import { kstDateString, kstYearMonth, nextYearMonth } from "@/lib/mentor/mentorSettlementSchema";
 import type {
   MentorPayoutDetailLine,
   MentorPayoutScheduleInfo,
@@ -53,10 +54,12 @@ const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
 export function formatPayoutDateLabel(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  const w = WEEKDAY_KO[d.getDay()];
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  // TZ-FIX R3 #31: 서버 로컬 getter → KST 벽시계 (epoch+9h 후 UTC getter, 포맷 유지).
+  const k = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  const w = WEEKDAY_KO[k.getUTCDay()];
+  const y = k.getUTCFullYear();
+  const m = String(k.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(k.getUTCDate()).padStart(2, "0");
   return `${y}.${m}.${day} (${w})`;
 }
 
@@ -77,18 +80,19 @@ export function buildPayoutScheduleInfo(
   completedAmount: number,
   from = new Date()
 ): MentorPayoutScheduleInfo {
-  const y = from.getFullYear();
-  const m = from.getMonth();
-  const day = from.getDate();
-  const target = day < 23 ? new Date(y, m, 23) : new Date(y, m + 1, 23);
-  const daysInMonth = new Date(y, m + 1, 0).getDate();
+  // TZ-FIX R3 #31: 서버 로컬(UTC) 일·월 → KST 달력 (kstDateString/kstYearMonth 교체만 —
+  // orphan 소비처 정리는 별도 회차, §4 화이트리스트 주의).
+  const [y, m, day] = kstDateString(from).split("-").map(Number); // m = 1..12
+  const targetYm = day < 23 ? kstYearMonth(from) : nextYearMonth(kstYearMonth(from));
+  const target = new Date(`${targetYm}-23T00:00:00+09:00`);
+  const daysInMonth = new Date(Date.UTC(y, m, 0)).getUTCDate();
   const progress = Math.min(100, Math.round((day / daysInMonth) * 100));
 
   return {
     nextPayoutDateIso: target.toISOString(),
     nextPayoutLabel: formatPayoutDateLabel(target.toISOString()),
     monthProgressPct: progress,
-    monthLabel: `${m + 1}월`,
+    monthLabel: `${m}월`,
     completedPayoutAmount: completedAmount,
     expectedPayoutAmount: expectedAmount,
   };

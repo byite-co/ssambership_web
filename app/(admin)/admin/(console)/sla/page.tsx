@@ -13,7 +13,8 @@ function fmt(v: string | null): string {
   if (!v) return "—";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return v;
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "short", timeStyle: "short" }).format(d);
+  // TZ-FIX R3 각주③ (#11 계열 변형, R2 검수 발견): 서버 UTC 렌더 → Asia/Seoul 고정.
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Seoul" }).format(d);
 }
 
 export default async function AdminSlaPage() {

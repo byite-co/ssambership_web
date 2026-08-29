@@ -129,6 +129,8 @@ export type AdminDisputeListItem = DisputeListItem & {
   titleLine: string;
   actorSummary: string;
   createdAt: string;
+  /** TZ-FIX R3 #18: 날짜 필터용 원본 timestamptz ISO (표기용 createdAt 재파싱 금지) */
+  createdAtIso: string;
   updatedAt: string;
   /** body / reason / description 요약 */
   summaryReason: string;
@@ -188,6 +190,7 @@ export function mapRowToAdminListItem(r: Row): AdminDisputeListItem {
     titleLine,
     actorSummary: actorSummaryFromDisputeRow(r),
     createdAt: formatTsKo(c0),
+    createdAtIso: c0,
     updatedAt: formatTsKo(u0),
     summaryReason: summaryFromRow(r),
     orderRef: orderLine(r),

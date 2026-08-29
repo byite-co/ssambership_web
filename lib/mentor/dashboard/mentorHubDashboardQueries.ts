@@ -14,6 +14,7 @@ import { fetchActiveOpenDisputeOrderIdSet } from "@/lib/customRequest/orderDispu
 import { loadOpenCustomRequestPostsForMentorBrowse } from "@/lib/customRequest/customRequestQueries";
 import { aggregateThreadStatsForRooms } from "@/lib/home/threadStats";
 import { kstYearMonth } from "@/lib/mentor/mentorSettlementSchema";
+import { kstDayString } from "@/lib/utils/kstTime";
 import {
   countActiveSubscriptionsForMentor,
   fetchMentorCustomRequestOrdersFromPrimaryTable,
@@ -55,12 +56,8 @@ const KEYWORD_CANDIDATES = [
 function isCreatedToday(iso: string): boolean {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return false;
-  const now = new Date();
-  return (
-    d.getFullYear() === now.getFullYear() &&
-    d.getMonth() === now.getMonth() &&
-    d.getDate() === now.getDate()
-  );
+  // TZ-FIX R3 #20: 서버 로컬(UTC) 달력일 → KST 달력일 비교.
+  return kstDayString(d) === kstDayString(new Date());
 }
 
 function pickCreatedAt(row: Row): string {
