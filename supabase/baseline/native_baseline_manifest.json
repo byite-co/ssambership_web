@@ -5,12 +5,12 @@
  "comment_only_parts": 3,
  "executable_parts": 185,
  "failure_recovery": "DISCARD_FRESH_DATABASE_AND_RECREATE",
- "generated_content_sha256": "73708562ee0af8c54e9f55d29330e021a17bba87e8043c1db8a07ec4c320a5a6",
+ "generated_content_sha256": "5b08cd2d51ce38efbd6f557850401672e72880bb2bee537b161271029ad1880e",
  "generator": "scripts/verify/baseline/build_native_baseline_migration.py",
  "output_path": "supabase/migrations/20260701000000_pre_ledger_baseline.sql",
- "output_sha256": "ec71936927af655158374768fc4354e438f73f6c96370ac406f72b5909e92ce9",
- "output_size": 1115384,
+ "output_sha256": "f2281e86c5231f7bbb021b30747832c6b145362802973296867719004f310822",
+ "output_size": 1116116,
  "same_db_retry": "PROHIBITED",
- "source_manifest_sha256": "59e29b7bbc868400335b30b9d287ed4d72466d7ef55d5d6dcecefe2bc7053782",
+ "source_manifest_sha256": "0308f7bd17ed87e5e9735e1b085c206ab444ced63ae8a91abfcabb21c8a114a4",
  "source_parts": 188
 }

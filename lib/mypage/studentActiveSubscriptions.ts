@@ -4,7 +4,6 @@ import { buildMentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
 import type { UserRow } from "@/lib/types/user";
 import { rowsFromSupabaseData } from "@/lib/qna/safeSelect";
 import { getSubscribeCatalogPlan } from "@/lib/subscribe/subscribePlanCatalog";
-import { formatSubscriptionDate } from "@/lib/subscribe/subscriptionDisplay";
 import {
   assignPlansByTier,
   isSubscribePlanTier,

@@ -7,8 +7,8 @@
 -- COMMENT_ONLY_PARTS: 3
 -- APPLY_STAGES: 114
 -- APPLY_ORDER_SHA256: 62de26ba89a600790ea8760e47ca31ba1d131d952c8dfbc7074ea92db9cfc862
--- SOURCE_MANIFEST_SHA256: 59e29b7bbc868400335b30b9d287ed4d72466d7ef55d5d6dcecefe2bc7053782
--- GENERATED_CONTENT_SHA256: 73708562ee0af8c54e9f55d29330e021a17bba87e8043c1db8a07ec4c320a5a6
+-- SOURCE_MANIFEST_SHA256: 0308f7bd17ed87e5e9735e1b085c206ab444ced63ae8a91abfcabb21c8a114a4
+-- GENERATED_CONTENT_SHA256: 5b08cd2d51ce38efbd6f557850401672e72880bb2bee537b161271029ad1880e
 --
 -- ⚠️ BASELINE_ATOMICITY: NOT_GUARANTEED
 --    원본 source 안에 자체 BEGIN/COMMIT 쌍이 다수 존재한다. 이 파일을 하나의
@@ -20182,6 +20182,10 @@ commit;
 --   register_device_token 재소유(계정 전환).
 
 -- >>> NATIVE_BASELINE_PART 0160 | supabase/sql/153_p2_25_pay_due_payouts_convergence.sql | 153_p2_25_pay_due_payouts_convergence.sql <<<
+-- ⚠ 재적용 금지 (TZ-FIX R3 #26, 2026-08-29): 이 파일의 pay_due_payouts_for_run cutoff 는
+--   UTC 원문이다. 라이브는 20260827100200(withholding_cash_unit_and_mentor_settlement_rpc)에서
+--   KST(at time zone 'Asia/Seoul') 기준으로 패치됐다 — 이 파일을 재적용하면 정산 마감이
+--   9시간 무음 역행한다. 본문은 감사 스냅샷으로 무수정 보존한다.
 -- 153_p2_25_pay_due_payouts_convergence.sql
 -- P2-25 내부지갑 지급 스택 수렴 — 108(DRAFT 미적용) 정본화 + 114 원천징수 컬럼 + 전역 UNIQUE.
 --
@@ -20585,6 +20589,9 @@ commit;
 --   재실행/중복 전이 시 (recipient,event_key) UNIQUE 로 중복 0.
 
 -- >>> NATIVE_BASELINE_PART 0163 | supabase/sql/156_p2_25_payout_scheduler_foundation.sql | 156_p2_25_payout_scheduler_foundation.sql <<<
+-- ⚠ 재적용 금지 (TZ-FIX R3 #26, 2026-08-29): 이 파일의 payout_reconciliation_report cutoff 는
+--   UTC 원문이다. 라이브는 20260827100200에서 KST 기준으로 패치됐다 — 재적용 시 정산 마감이
+--   9시간 무음 역행한다. 본문은 감사 스냅샷으로 무수정 보존한다.
 -- 156_p2_25_payout_scheduler_foundation.sql
 -- P2-25 지급 운영 scheduler 기반 — 기본 비활성(OFF). 153 지급 엔진 무수정.
 -- 실송금이 아니라 내부지갑 적립 모델. cron 은 staging 에서도 기본 disabled(명시 enable 없으면 실지급 금지).
