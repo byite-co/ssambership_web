@@ -2231,6 +2231,21 @@
       "security_definer": true
     },
     {
+      "args": "p_mentor_amount_cents bigint",
+      "name": "calc_withholding_cents",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated",
+        "service_role"
+      ],
+      "returns": "bigint",
+      "body_md5": null,
+      "security_definer": false
+    },
+    {
       "args": "",
       "name": "cc_sync_board_delete_to_canonical",
       "config": [
@@ -3220,6 +3235,34 @@
         "service_role"
       ],
       "returns": "trigger",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_from timestamp with time zone, p_to timestamp with time zone",
+      "name": "mentor_settlement_lines",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated"
+      ],
+      "returns": "TABLE(source_type text, source_id uuid, occurred_at timestamp with time zone, period_start timestamp with time zone, period_end timestamp with time zone, gross_cents bigint, platform_fee_cents bigint, mentor_amount_cents bigint, fee_rate numeric, withholding_cents bigint, net_cents bigint, status text, hold_reason text, completion_ts timestamp with time zone, expected_run_date date, paid_run_date date, paid_at timestamp with time zone)",
+      "body_md5": null,
+      "security_definer": true
+    },
+    {
+      "args": "p_month date",
+      "name": "mentor_settlement_summary",
+      "config": [
+        "search_path=public"
+      ],
+      "schema": "public",
+      "execute": [
+        "authenticated"
+      ],
+      "returns": "jsonb",
       "body_md5": null,
       "security_definer": true
     },
@@ -4584,6 +4627,14 @@
     {
       "name": "device_token_register_grant",
       "version": "20260827100100"
+    },
+    {
+      "name": "withholding_cash_unit_and_mentor_settlement_rpc",
+      "version": "20260827100200"
+    },
+    {
+      "name": "mentor_settlement_rpc_v2_due_payouts_parity",
+      "version": "20260827100300"
     }
   ],
   "table_grants": [
