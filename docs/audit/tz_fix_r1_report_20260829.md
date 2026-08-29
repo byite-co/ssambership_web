@@ -14,6 +14,9 @@
 | 콜사이트 | `lib/subscribe/subscribeCheckoutService.ts` | import(15행)·`fallbackPeriodEndIso`(81행) 2곳 갱신. **전 저장소 grep으로 콜사이트 정확히 2곳뿐임을 수정 전·후 재확인** (`addMonthsClampedUtc` 잔존 0) |
 | 신규 계약테스트 | `lib/subscribe/__contract__/subscriptionMonthKst.contract.test.ts` | 27케이스 — 2026년 12개월 각 1일 × KST 02:00/09:00 (24) + 월말 clamp 3 (1/31→2/28 · 3/31→4/30 · 8/31→9/30, KST 02:00) |
 | 세션 보고서 | `docs/audit/tz_fix_r1_report_20260829.md` | 본 문서 |
+| pack 등재 (v1.1) | `supabase/baseline/post_ledger_backfills/20260829100100_tz_fix_subscription_month_kst.sql` | **지시서 v1.1 보정**으로 추가 — 185의 pack source (185와 바이트 일치, `cmp` 확인). version `20260829100100` = 현행 최댓값(`20260827100300`) 이후·PR60 이후 |
+| pack 산출물 (v1.1) | `supabase/migrations/20260829100100_tz_fix_subscription_month_kst.sql` | `build_native_migration_pack.py` 재생성 산출물 (생성기 소유 — 직접 편집 없음, backfill과 바이트 일치) |
+| pack manifest (v1.1) | `supabase/baseline/native_migration_pack_manifest.tsv` | 생성기 재생성 — generator-owned 95 → 96 (backfill 32 → 33), last version `20260829100100` |
 
 grep 절차 도출분: 없음 (R1은 grep 화이트리스트 확장 절차가 없는 회차 — 콜사이트 확인 grep만 수행).
 
@@ -66,10 +69,13 @@ docs/audit/tz_fix_r1_report_20260829.md
 lib/subscribe/__contract__/subscriptionMonthKst.contract.test.ts
 lib/subscribe/subscribeCheckoutService.ts
 lib/subscribe/subscriptionsTable.ts
+supabase/baseline/native_migration_pack_manifest.tsv
+supabase/baseline/post_ledger_backfills/20260829100100_tz_fix_subscription_month_kst.sql
+supabase/migrations/20260829100100_tz_fix_subscription_month_kst.sql
 supabase/sql/185_tz_fix_subscription_month_kst.sql
 ```
 
-→ R1 화이트리스트(§2 R1-4)의 부분집합. 역수입 미발동이므로 baseline pack 산출물 없음. 금지 목록(§0-3) 파일 무접촉.
+→ R1 화이트리스트(§2 R1-4)의 부분집합 + **지시서 v1.1 보정으로 승인된 pack 등재 산출물 3본** (post_ledger_backfills 신규 1 · migrations 생성기 산출 1 · manifest 재생성 1). 금지 목록(§0-3) 파일 무접촉. 구본 131·143·145·068·100 무수정.
 
 ## 6. §5 매트릭스 대비 신규 발견 파급
 
@@ -77,7 +83,9 @@ supabase/sql/185_tz_fix_subscription_month_kst.sql
 
 ## 7. 적용 경로 메모 (후속 — 코드 아님)
 
-- 185는 **저장소 표준 경로(`db-apply-pending`) 적용 전제**로 작성했다(파일 머리 주석 명시). 이 워크플로는 `supabase/migrations/` pack의 pending 차집합을 적용하므로, **적용 회차에서 185를 pack에 등재(timestamp version 부여 + `build_native_migration_pack.py` 재생성)하는 작업이 별도로 필요**하다. 이 등재 산출물은 R1 화이트리스트 밖(「역수입 시」 조건부)이라 본 세션에서는 수행하지 않고 기록만 남긴다 (§0-4 절차).
+- 185는 **저장소 표준 경로(`db-apply-pending`) 적용 전제**로 작성했다(파일 머리 주석 명시). 이 워크플로는 `supabase/migrations/` pack의 pending 차집합을 적용한다.
+- **pack 등재 완료 (지시서 v1.1 보정, 2026-08-29):** 185를 `post_ledger_backfills/20260829100100_…` 로 등재하고 `build_native_baseline_migration.py` + `build_native_migration_pack.py` 재생성. 검증: `validate_native_migration_pack.py` **PASS** (version 오름차순·최종 version = backfill 최대 `20260829100100`·manifest checksum 96/96·금지 내용 0) · `validate_replay_manifest.sh` **PASS** · 3개 사본(sql/185 ↔ backfill ↔ migrations) `cmp` 바이트 일치. 이로써 머지 후 `db-apply-pending`(dry-run → 사람 승인 → apply)이 `20260829100100`을 pending 차집합으로 산출·적용할 수 있다.
+- 라이브 적용은 여전히 이 세션 범위 밖이다 — 실제 적용은 사람 승인 게이트를 거치는 `db-apply-pending` workflow_dispatch 로 수행한다.
 - MCP `apply_migration`으로 적용할 경우에는 CLAUDE.md 역수입 절차를 같은 세션에서 완수할 것.
 - TS 폴백과 SQL 2본은 같은 배포로 나가야 한다(감사 §6 R1 동시 배포 제약 — 본 PR 1개에 동봉됨).
 
