@@ -12,7 +12,7 @@ import {
   SUBSCRIPTIONS_ORDER_COLUMN,
   SUBSCRIPTIONS_SELECT,
   SUBSCRIPTIONS_TABLE,
-  addMonthsClampedUtc,
+  addMonthsClampedKst,
 } from "@/lib/subscribe/subscriptionsTable";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { loadMentorCapUsage, wouldExceedCap } from "@/lib/subscribe/mentorCapService";
@@ -78,7 +78,7 @@ function isoFromUnknown(value: unknown): string | null {
 }
 
 function fallbackPeriodEndIso(periodStartIso: string): string {
-  return addMonthsClampedUtc(new Date(periodStartIso), 1).toISOString();
+  return addMonthsClampedKst(new Date(periodStartIso), 1).toISOString();
 }
 
 function positiveIntegerFromUnknown(value: unknown): number | null {
