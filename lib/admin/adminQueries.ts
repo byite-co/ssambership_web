@@ -1,4 +1,6 @@
 ﻿import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
+import { formatKoreanDate } from "@/lib/utils/formatDisplay";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { mentorProfilesAdminReadClient } from "@/lib/admin/mentorProfilesAdminRead";
 import type { AdminReviewModerationPlan } from "@/lib/admin/reviewLabels";
@@ -960,8 +962,9 @@ function parseSubscriptionSettlementItem(r: Row): AdminSettlementListItem | null
   const billingEventId = String(r.billing_event_id ?? "");
   const feeRaw = r.fee_rate;
   const feeNum = typeof feeRaw === "number" ? feeRaw : Number(feeRaw);
-  const periodStart = typeof r.period_start === "string" && r.period_start ? r.period_start.slice(0, 10) : "";
-  const periodEnd = typeof r.period_end === "string" && r.period_end ? r.period_end.slice(0, 10) : "";
+  // TZ-FIX R3 #28: UTC ISO slice 절단 → KST 달력일 (formatKoreanDate, P-C).
+  const periodStart = typeof r.period_start === "string" && r.period_start ? formatKoreanDate(r.period_start) : "";
+  const periodEnd = typeof r.period_end === "string" && r.period_end ? formatKoreanDate(r.period_end) : "";
   const meta = [
     "\uAD6C\uB3C5 \uC815\uC0B0",
     r.event_type != null ? String(r.event_type) : "",
@@ -1070,7 +1073,8 @@ function buildOrderMetaLine(o: Row): string | null {
     }
   }
   if (o.completed_at != null && String(o.completed_at).trim()) {
-    parts.push(`완료: ${String(o.completed_at).slice(0, 19)}`);
+    // TZ-FIX R3 #29: UTC 벽시계 원문 노출 → KST 고정 표기 + 라벨에 KST 명시 (P-C).
+    parts.push(`완료(KST): ${formatKoDateTimeKst(o.completed_at)}`);
   }
   return parts.length ? parts.join(" · ") : null;
 }

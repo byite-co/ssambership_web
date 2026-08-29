@@ -1,3 +1,4 @@
+import { kstDayDiff } from "@/lib/utils/kstTime";
 import { formatBudgetRangeKrw } from "@/lib/customRequest/mentorCustomRequestDisplay";
 
 type Row = Record<string, unknown>;
@@ -61,11 +62,8 @@ function pickDeadlineDate(row: Row): Date | null {
 export function formatDeadlineDday(row: Row): { label: string; urgent: boolean } {
   const d = pickDeadlineDate(row);
   if (!d) return { label: "일정 협의", urgent: false };
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const end = new Date(d);
-  end.setHours(0, 0, 0, 0);
-  const diff = Math.ceil((end.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+  // TZ-FIX R3 #21: 실행 환경 로컬 자정 절단 → KST 달력일 차 (kstTime.kstDayDiff 공용화).
+  const diff = kstDayDiff(new Date(), d);
   if (diff < 0) return { label: "마감", urgent: true };
   if (diff === 0) return { label: "D-Day", urgent: true };
   if (diff <= 3) return { label: `D-${diff}`, urgent: true };

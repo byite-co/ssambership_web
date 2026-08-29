@@ -23,7 +23,8 @@ function formatDate(v: unknown): string {
   try {
     const d = new Date(v);
     if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric" });
+    // TZ-FIX R3 #33: 서버 UTC 달력 → Asia/Seoul 고정 ('년 월 일' 포맷 유지, P-A).
+    return d.toLocaleDateString("ko-KR", { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Seoul" });
   } catch {
     return "";
   }

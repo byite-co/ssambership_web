@@ -38,7 +38,8 @@ function formatIssueTime(iso: string): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" }).format(d);
+  // TZ-FIX R3 #35: SSR(UTC)/해외 CSR 표기 갈림 → Asia/Seoul 고정.
+  return new Intl.DateTimeFormat("ko-KR", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" }).format(d);
 }
 
 const issueKindClass: Record<string, string> = {

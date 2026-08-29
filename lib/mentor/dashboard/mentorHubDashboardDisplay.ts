@@ -1,6 +1,7 @@
 /**
  * 멘토 통합 대시보드 UI 헬퍼 — server-only import 없음
  */
+import { kstDayDiff } from "@/lib/utils/kstTime";
 import { pickDisplayField } from "@/lib/customRequest/customRequestQueries";
 import { classifyMentorOrderBrowseTab } from "@/lib/customRequest/mentorOrderBrowseTabClassify";
 import {
@@ -36,10 +37,8 @@ export function getDeadlineDisplay(row: Row): { dday: string; dateStr: string; u
   if (deadline === "—") return { dday: "—", dateStr: "", urgent: false };
   try {
     const d = new Date(deadline);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    d.setHours(0, 0, 0, 0);
-    const diff = Math.round((d.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    // TZ-FIX R3 #21: 실행 환경 로컬 자정 절단 → KST 달력일 차 (kstTime.kstDayDiff 공용화).
+    const diff = kstDayDiff(new Date(), d);
     const dday = diff === 0 ? "D-Day" : diff > 0 ? `D-${diff}` : `D+${Math.abs(diff)}`;
     const dateStr = deadline.substring(0, 10).replace(/-/g, ".");
     const urgent = diff >= 0 && diff <= 3;

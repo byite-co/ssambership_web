@@ -5,6 +5,8 @@ import { useEffect, useMemo, useState } from "react";
 import { ReceiptText } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { formatWalletRowDisplay } from "@/lib/cash/cashQueries";
+import { addMonthsClampedKst } from "@/lib/subscribe/subscriptionsTable";
+import { kstDayString } from "@/lib/utils/kstTime";
 import type { WalletLedgerPageData } from "@/lib/cash/walletRouteData";
 import {
   ledgerAmountLabel,
@@ -23,11 +25,12 @@ type PeriodKey = "1m" | "3m" | "6m" | "custom";
 type KindFilter = "all" | LedgerUiKind;
 
 function periodStart(key: PeriodKey): Date | null {
-  const now = new Date();
-  if (key === "1m") return new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-  if (key === "3m") return new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
-  if (key === "6m") return new Date(now.getFullYear(), now.getMonth() - 6, now.getDate());
-  return null;
+  // TZ-FIX R3 #36: 실행 환경 로컬 자정(SSR UTC ↔ 하이드레이션 KST 불일치) →
+  // KST 달력 −N개월(말일 clamp, R1 정본 addMonthsClampedKst) 후 KST 자정 instant.
+  const months = key === "1m" ? 1 : key === "3m" ? 3 : key === "6m" ? 6 : null;
+  if (months === null) return null;
+  const shifted = addMonthsClampedKst(new Date(), -months);
+  return new Date(`${kstDayString(shifted)}T00:00:00+09:00`);
 }
 
 function rowDate(row: Record<string, unknown>): Date | null {

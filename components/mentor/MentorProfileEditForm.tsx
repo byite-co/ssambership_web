@@ -219,10 +219,13 @@ export function MentorProfileEditForm(props: {
     verification: initial.verification,
   };
 
+  // TZ-FIX R3 #35: SSR(UTC)/CSR(로컬) 표기 갈림 → Asia/Seoul 고정
+  // (238행 suppressHydrationWarning 지점의 표시원 — 동일 처리).
   const lastSavedStr = query.row?.updated_at
     ? new Date(query.row.updated_at as string).toLocaleString("ko-KR", {
         dateStyle: "medium",
         timeStyle: "short",
+        timeZone: "Asia/Seoul",
       })
     : "기록 없음";
 

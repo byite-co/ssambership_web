@@ -1,3 +1,7 @@
+-- ⚠ 재적용 금지 (TZ-FIX R3 #26, 2026-08-29): 이 파일의 pay_due_payouts_for_run cutoff 는
+--   UTC 원문이다. 라이브는 20260827100200(withholding_cash_unit_and_mentor_settlement_rpc)에서
+--   KST(at time zone 'Asia/Seoul') 기준으로 패치됐다 — 이 파일을 재적용하면 정산 마감이
+--   9시간 무음 역행한다. 본문은 감사 스냅샷으로 무수정 보존한다.
 -- 153_p2_25_pay_due_payouts_convergence.sql
 -- P2-25 내부지갑 지급 스택 수렴 — 108(DRAFT 미적용) 정본화 + 114 원천징수 컬럼 + 전역 UNIQUE.
 --

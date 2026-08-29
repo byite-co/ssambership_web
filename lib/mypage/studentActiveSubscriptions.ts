@@ -4,6 +4,7 @@ import { buildMentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
 import type { UserRow } from "@/lib/types/user";
 import { rowsFromSupabaseData } from "@/lib/qna/safeSelect";
 import { getSubscribeCatalogPlan } from "@/lib/subscribe/subscribePlanCatalog";
+import { formatSubscriptionDate } from "@/lib/subscribe/subscriptionDisplay";
 import {
   assignPlansByTier,
   isSubscribePlanTier,
@@ -86,17 +87,9 @@ function mentorInitialFromName(name: string): string {
 }
 
 export function formatSubscriptionStartedAt(iso: string): string {
-  try {
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return "—";
-    return date.toLocaleDateString("ko-KR", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  } catch {
-    return iso;
-  }
+  // TZ-FIX R3 #34: 서버 로컬(UTC) 달력 → 정본 subscriptionDisplay.formatSubscriptionDate
+  // (Asia/Seoul 고정, 동일 '년 월 일' 포맷) 위임 — 같은 카드의 라벨과 기준 통일.
+  return formatSubscriptionDate(iso);
 }
 
 // W4(C10): 후보 테이블 부재 실측(187 baseline 0 — subscription_usage_counters 없음) — 구

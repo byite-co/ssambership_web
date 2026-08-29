@@ -46,7 +46,9 @@ export function formatDateYMDOrDash(value: unknown): string {
   if (!d || Number.isNaN(d.getTime())) {
     return "—";
   }
-  return `${d.getFullYear()}.${pad2(d.getMonth() + 1)}.${pad2(d.getDate())}`;
+  // TZ-FIX R3 #24: 로컬 getter → KST 벽시계 (P-B, YYYY.MM.DD 포맷 유지).
+  const k = new Date(d.getTime() + 9 * 60 * 60 * 1000);
+  return `${k.getUTCFullYear()}.${pad2(k.getUTCMonth() + 1)}.${pad2(k.getUTCDate())}`;
 }
 
 function parseKrw(n: unknown): number | null {

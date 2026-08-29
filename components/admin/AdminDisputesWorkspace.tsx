@@ -70,11 +70,13 @@ export function AdminDisputesWorkspace(props: Props) {
       if (!matchType(it, typeFilter)) return false;
       if (!matchStatus(it, statusFilter)) return false;
       if (dateFrom || dateTo) {
-        const raw = it.createdAt !== "—" ? it.createdAt : "";
+        // TZ-FIX R3 #18: 표기 문자열 재파싱(항상 Invalid) → 원본 ISO(createdAtIso) 비교,
+        // 경계는 KST 달력일 +09:00 명시.
+        const raw = it.createdAtIso !== "—" ? it.createdAtIso : "";
         const d = raw ? new Date(raw) : null;
         if (!d || Number.isNaN(d.getTime())) return false;
-        if (dateFrom && d < new Date(`${dateFrom}T00:00:00`)) return false;
-        if (dateTo && d > new Date(`${dateTo}T23:59:59`)) return false;
+        if (dateFrom && d < new Date(`${dateFrom}T00:00:00+09:00`)) return false;
+        if (dateTo && d > new Date(`${dateTo}T23:59:59.999+09:00`)) return false;
       }
       return true;
     });

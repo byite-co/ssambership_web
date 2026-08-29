@@ -8,13 +8,8 @@ import {
   MENTOR_MAX_PAUSE_DAYS,
   type MentorActivityInfo,
 } from "@/lib/mentor/mentorActivity";
-
-function fmt(iso: string | null | undefined): string {
-  if (!iso) return "";
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(d.getDate()).padStart(2, "0")}`;
-}
+// TZ-FIX R3 #23: 로컬 fmt 제거 — KST 달력 날짜 정본 위임.
+import { formatKoreanDate } from "@/lib/utils/formatDisplay";
 
 export function MentorActivityControls(props: {
   info: MentorActivityInfo & { termination_effective_at?: string | null; pause_reason?: string | null };
@@ -41,9 +36,9 @@ export function MentorActivityControls(props: {
           {state === "active"
             ? "활동 중"
             : state === "paused"
-              ? `일시 휴식${info.pause_until ? ` (~${fmt(info.pause_until)})` : ""}`
+              ? `일시 휴식${info.pause_until ? ` (~${formatKoreanDate(info.pause_until)})` : ""}`
               : state === "terminating"
-                ? `활동 종료 예정${info.termination_effective_at ? ` (${fmt(info.termination_effective_at)})` : ""}`
+                ? `활동 종료 예정${info.termination_effective_at ? ` (${formatKoreanDate(info.termination_effective_at)})` : ""}`
                 : "활동 종료됨"}
         </span>
       </div>
@@ -110,7 +105,7 @@ export function MentorActivityControls(props: {
           <p className="text-xs leading-relaxed text-amber-800">
             <span className="md:hidden">복귀일이 지나면 자동 재개돼요.</span>
             <span className="hidden md:inline">
-              현재 일시 휴식 중입니다{info.pause_until ? ` (복귀 예정 ${fmt(info.pause_until)})` : ""}. 복귀 예정일이 지나면 자동으로 활동이 재개됩니다.
+              현재 일시 휴식 중입니다{info.pause_until ? ` (복귀 예정 ${formatKoreanDate(info.pause_until)})` : ""}. 복귀 예정일이 지나면 자동으로 활동이 재개됩니다.
             </span>
           </p>
           <button type="submit" className="mt-3 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-700">
@@ -124,7 +119,7 @@ export function MentorActivityControls(props: {
               <>
                 <span className="md:hidden">종료 예정 · 유예 동안 응대 부탁드려요.</span>
                 <span className="hidden md:inline">
-                  활동 종료가 예약되어 신규 구독을 받지 않습니다{info.termination_effective_at ? ` (${fmt(info.termination_effective_at)} 정리 예정)` : ""}. 유예 기간 동안 학생 응대를 부탁드려요.
+                  활동 종료가 예약되어 신규 구독을 받지 않습니다{info.termination_effective_at ? ` (${formatKoreanDate(info.termination_effective_at)} 정리 예정)` : ""}. 유예 기간 동안 학생 응대를 부탁드려요.
                 </span>
               </>
             ) : (

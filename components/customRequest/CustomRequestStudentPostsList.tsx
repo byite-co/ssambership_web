@@ -25,11 +25,13 @@ function formatSavedAt(row: Row): string {
   if (raw == null) return "저장 시각 없음";
   const d = raw instanceof Date ? raw : new Date(String(raw));
   if (Number.isNaN(d.getTime())) return "저장 시각 없음";
+  // TZ-FIX R3 #35: SSR(UTC)/해외 CSR 표기 갈림 → Asia/Seoul 고정.
   return d.toLocaleString("ko-KR", {
     month: "short",
     day: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    timeZone: "Asia/Seoul",
   });
 }
 
