@@ -1,11 +1,12 @@
-import type { MentorPayoutsPageData } from "@/lib/mentor/mentorPayoutsTypes";
+import { monthNumberOf, type MentorSettlementPageData } from "@/lib/mentor/mentorSettlementDisplay";
 import { ResponsivePageColumns } from "@/components/shell/ResponsivePageColumns";
 import { MentorPayoutsHeroCard } from "./MentorPayoutsHeroCard";
 import { MentorPayoutsMain } from "./MentorPayoutsMain";
 import { MentorPayoutAccountPanel } from "./MentorPayoutAccountPanel";
 import { MentorPayoutsRightPanel } from "./MentorPayoutsRightPanel";
 
-export function MentorPayoutsPage(props: { data: MentorPayoutsPageData }) {
+export function MentorPayoutsPage(props: { data: MentorSettlementPageData }) {
+  const { data } = props;
   return (
     <div className="mx-auto max-w-[1440px] px-4 pb-16 pt-6">
       <header className="mb-6">
@@ -18,20 +19,27 @@ export function MentorPayoutsPage(props: { data: MentorPayoutsPageData }) {
         desktopGrid="xl:grid-cols-[1fr_300px]"
         main={
           <div className="min-w-0 space-y-[18px]">
-            <MentorPayoutsHeroCard
-              summary={props.data.summary}
-              schedule={props.data.schedule}
-              lifetimePaid={props.data.kpis.lifetimePaid}
-            />
+            <MentorPayoutsHeroCard summary={data.summary} todayKst={data.todayKst} />
             <MentorPayoutAccountPanel
-              bankName={props.data.summary.bankName}
-              accountNumber={props.data.summary.bankAccountNumber}
-              editable={props.data.summary.bankEditable}
+              bankName={data.bank.bankName}
+              accountNumber={data.bank.accountMasked}
+              editable={data.bank.editable}
             />
-            <MentorPayoutsMain data={props.data} hideHero />
+            <MentorPayoutsMain
+              defaultMonth={data.month}
+              initialLines={data.lines}
+              performanceLines={data.performanceLines}
+            />
           </div>
         }
-        aside={<MentorPayoutsRightPanel schedule={props.data.schedule} months={props.data.months} />}
+        aside={
+          <MentorPayoutsRightPanel
+            runDate={data.summary.runDate}
+            monthLabel={`${monthNumberOf(data.month)}월`}
+            monthProgressPct={data.monthProgressPct}
+            trend={data.trend}
+          />
+        }
       />
     </div>
   );

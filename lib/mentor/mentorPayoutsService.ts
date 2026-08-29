@@ -62,13 +62,6 @@ function ymKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function monthStartEnd(ym: string): { start: string; end: string } {
-  const [y, m] = ym.split("-").map(Number);
-  const start = new Date(y, m - 1, 1);
-  const end = new Date(y, m, 0, 23, 59, 59, 999);
-  return { start: start.toISOString(), end: end.toISOString() };
-}
-
 function currentYm(): string {
   return ymKey(new Date());
 }
@@ -526,7 +519,7 @@ function orderPerfStatus(o: Row): MentorPayoutPerformanceRow["uiStatus"] {
   return "in_progress";
 }
 
-async function loadPerformanceLines(
+export async function loadPerformanceLines(
   client: SupabaseClient,
   mentorId: string
 ): Promise<MentorPayoutPerformanceRow[]> {
@@ -637,34 +630,4 @@ export async function loadMentorPayoutsPageData(
     performanceLines,
     defaultMonth: ym,
   };
-}
-
-export async function loadMentorPayoutDetail(
-  supabase: SupabaseClient,
-  mentorId: string,
-  opts: { month?: string | null; type?: PayoutLineType | "all" | null }
-): Promise<MentorPayoutDetailResult> {
-  const client = await readClient(supabase);
-  let lines = await loadAllPayoutLines(client, mentorId);
-  if (opts.type && opts.type !== "all") {
-    lines = lines.filter((l) => l.type === opts.type);
-  }
-  if (opts.month) {
-    const { start, end } = monthStartEnd(opts.month);
-    lines = lines.filter((l) => l.date >= start.slice(0, 10) && l.date <= end);
-  }
-  lines.sort((a, b) => (a.date < b.date ? 1 : -1));
-
-  const totals = lines.reduce(
-    (acc, l) => ({
-      paymentAmount: acc.paymentAmount + l.paymentAmount,
-      feeAmount: acc.feeAmount + l.feeAmount,
-      netAmount: acc.netAmount + l.netAmount,
-      withholdingAmount: acc.withholdingAmount + l.withholdingAmount,
-      payoutAmount: acc.payoutAmount + l.payoutAmount,
-    }),
-    { paymentAmount: 0, feeAmount: 0, netAmount: 0, withholdingAmount: 0, payoutAmount: 0 }
-  );
-
-  return { lines, totals };
 }

@@ -5,32 +5,33 @@ import {
   MENTOR_SUBSCRIPTION_PLATFORM_SHARE,
   PAYOUT_DAY_LABEL,
 } from "@/lib/mentor/mentorPayoutsConstants";
-import type { MentorPayoutMonthlyCard, MentorPayoutScheduleInfo } from "@/lib/mentor/mentorPayoutsTypes";
+import { formatRunDateLabel, type SettlementTrendPoint } from "@/lib/mentor/mentorSettlementDisplay";
 import { MentorPayoutsMonthlyAreaChartLazy } from "./MentorPayoutsChartLazy";
 
 type Props = {
-  schedule: MentorPayoutScheduleInfo;
-  months: MentorPayoutMonthlyCard[];
+  /** mentor_settlement_summary.run_date — 이번 달 확정분의 지급(예정)일 */
+  runDate: string;
+  monthLabel: string;
+  monthProgressPct: number;
+  trend: SettlementTrendPoint[];
 };
 
 export function MentorPayoutsRightPanel(props: Props) {
-  const { schedule } = props;
-
   return (
     <aside className={`flex w-full flex-col self-start xl:sticky xl:top-24 ${PAGE_COL_GAP}`}>
       <section className={SURFACE_CARD}>
         <h3 className="text-sm font-extrabold text-slate-900">지급 일정</h3>
         <p className="mt-3 text-xs font-semibold text-slate-500">다음 지급 예정일</p>
-        <p className="mt-1 text-lg font-black text-slate-900">{schedule.nextPayoutLabel}</p>
+        <p className="mt-1 text-lg font-black text-slate-900">{formatRunDateLabel(props.runDate)}</p>
         <div className="mt-4">
           <div className="flex items-center justify-between text-[11px] font-bold text-slate-600">
-            <span>{schedule.monthLabel} 정산 진행 현황</span>
-            <span>{schedule.monthProgressPct}%</span>
+            <span>{props.monthLabel} 정산 진행 현황</span>
+            <span>{props.monthProgressPct}%</span>
           </div>
           <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
             <div
               className="h-full rounded-full bg-[#059669] transition-all"
-              style={{ width: `${schedule.monthProgressPct}%` }}
+              style={{ width: `${props.monthProgressPct}%` }}
             />
           </div>
         </div>
@@ -44,7 +45,7 @@ export function MentorPayoutsRightPanel(props: Props) {
           </span>
         </div>
         <div className="mt-3">
-          <MentorPayoutsMonthlyAreaChartLazy months={props.months} />
+          <MentorPayoutsMonthlyAreaChartLazy trend={props.trend} />
         </div>
       </section>
 

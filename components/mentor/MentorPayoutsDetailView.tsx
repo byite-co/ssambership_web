@@ -3,60 +3,50 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
-import type { MentorPayoutDetailLine, PayoutLineType } from "@/lib/mentor/mentorPayoutsTypes";
-import { detailLineToSettlementRow, formatYearMonthLabel } from "@/lib/mentor/mentorPayoutsDisplay";
+import {
+  kstYearMonth,
+  listRecentYearMonths,
+  type MentorSettlementLine,
+  type SettlementSourceType,
+} from "@/lib/mentor/mentorSettlementSchema";
+import {
+  settlementLineToTableRow,
+  type MentorSettlementTableRow,
+} from "@/lib/mentor/mentorSettlementDisplay";
+import { formatYearMonthLabel } from "@/lib/mentor/mentorPayoutsDisplay";
 import { MentorPayoutsSettlementTable } from "@/components/mentor/payouts/MentorPayoutsSettlementTable";
 import { Download } from "lucide-react";
 import {
-  formatCashKrw,
   formatPayoutTableDate,
-  settlementStatusBadge,
+  settlementLineStatusBadge,
   typeBadgeLabel,
 } from "@/components/mentor/payouts/payoutUi";
 
-type DetailTotals = {
-  paymentAmount: number;
-  feeAmount: number;
-  netAmount: number;
-  withholdingAmount: number;
-  payoutAmount: number;
-};
-
-const EMPTY_TOTALS: DetailTotals = {
-  paymentAmount: 0,
-  feeAmount: 0,
-  netAmount: 0,
-  withholdingAmount: 0,
-  payoutAmount: 0,
-};
-
-type DetailResponse = {
+type LinesResponse = {
   ok: boolean;
-  lines?: MentorPayoutDetailLine[];
-  totals?: DetailTotals;
+  lines?: MentorSettlementLine[];
   error?: string;
 };
 
-function monthOptions(count = 12): { value: string; label: string }[] {
-  const out: { value: string; label: string }[] = [];
-  const now = new Date();
-  for (let i = 0; i < count; i++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-    out.push({ value: ym, label: formatYearMonthLabel(ym) });
-  }
-  return out;
-}
-
+/**
+ * 정산 상세 — 표·엑셀 다운로드 데이터는 mentor_settlement_lines RPC(월 = occurred_at KST 경계,
+ * /api/mentor/payouts/detail)만 사용한다. 금액·상태 클라이언트 재계산 없음. 실패 시 fail-closed.
+ */
 export function MentorPayoutsDetailView() {
-  const months = useMemo(() => monthOptions(), []);
+  const months = useMemo(() => {
+    const currentYm = kstYearMonth(new Date());
+    return listRecentYearMonths(currentYm, 12).map((ym) => ({
+      value: ym,
+      label: formatYearMonthLabel(ym),
+    }));
+  }, []);
   const [month, setMonth] = useState(months[0]?.value ?? "");
-  const [type, setType] = useState<"all" | PayoutLineType>("all");
+  const [type, setType] = useState<"all" | SettlementSourceType>("all");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lines, setLines] = useState<MentorPayoutDetailLine[]>([]);
-  const [totals, setTotals] = useState<DetailTotals>(EMPTY_TOTALS);
+  const [lines, setLines] = useState<MentorSettlementLine[]>([]);
   const [page, setPage] = useState(1);
+  const [retryTick, setRetryTick] = useState(0);
 
   // 클라이언트 페이지네이션 — 데스크탑 10/page, 모바일(≤767px) 5/page.
   // SSR/hydration 일치를 위해 초기값=데스크탑(10), 마운트 후 모바일이면 5로 보정.
@@ -65,8 +55,7 @@ export function MentorPayoutsDetailView() {
   const pageSize = useMediaQuery("(max-width: 767px)") ? PAGE_SIZE_MOBILE : PAGE_SIZE_DESKTOP;
 
   // 필터(month/type) 변경 시 로딩 상태로 전환 — effect 의 동기 setState 대신 렌더 중 파생 리셋.
-  // (초기 마운트는 useState 초기값 loading=true/error=null 이 이미 커버)
-  const loadKey = `${month}|${type}`;
+  const loadKey = `${month}|${type}|${retryTick}`;
   const [prevLoadKey, setPrevLoadKey] = useState(loadKey);
   if (prevLoadKey !== loadKey) {
     setPrevLoadKey(loadKey);
@@ -74,8 +63,13 @@ export function MentorPayoutsDetailView() {
     setError(null);
   }
 
-  const tableRows = useMemo(() => lines.map(detailLineToSettlementRow), [lines]);
-  // 이미 로드된 내역을 pageSize개씩 slice(추가 fetch 없음). pageSize 전환 시 safePage 클램프.
+  const tableRows: MentorSettlementTableRow[] = useMemo(
+    () =>
+      lines
+        .map(settlementLineToTableRow)
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()),
+    [lines]
+  );
   const totalPages = Math.max(1, Math.ceil(tableRows.length / pageSize));
   const safePage = Math.min(page, totalPages);
   const pagedRows = useMemo(
@@ -83,8 +77,7 @@ export function MentorPayoutsDetailView() {
     [tableRows, safePage, pageSize]
   );
 
-  // month/type 별 상세 fetch — loading/error 초기화는 마운트 초기값·loadKey 파생 리셋이 담당,
-  // setState 는 전부 await 이후 콜백 시점(effect 동기 setState 금지 규칙 준수). 언마운트/필터 변경 시 stale 응답 무시.
+  // month/type 별 상세 fetch — 언마운트/필터 변경 시 stale 응답 무시.
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -93,17 +86,19 @@ export function MentorPayoutsDetailView() {
       if (type !== "all") params.set("type", type);
       try {
         const res = await fetch(`/api/mentor/payouts/detail?${params.toString()}`);
-        const json = (await res.json()) as DetailResponse;
+        const json = (await res.json()) as LinesResponse;
         if (cancelled) return;
-        if (!json.ok || !json.lines) {
-          setError(json.error ?? "내역을 불러오지 못했습니다.");
+        if (!json.ok || !Array.isArray(json.lines)) {
+          setError(json.error ?? "정산 정보를 불러오지 못했습니다");
           setLines([]);
           return;
         }
         setLines(json.lines);
-        setTotals(json.totals ?? EMPTY_TOTALS);
       } catch {
-        if (!cancelled) setError("내역을 불러오지 못했습니다.");
+        if (!cancelled) {
+          setError("정산 정보를 불러오지 못했습니다");
+          setLines([]);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -111,33 +106,36 @@ export function MentorPayoutsDetailView() {
     return () => {
       cancelled = true;
     };
-  }, [month, type]);
+  }, [month, type, retryTick]);
 
   async function exportExcel() {
     const XLSX = await import("xlsx");
     const rows = tableRows.map((r) => {
-      const st = settlementStatusBadge(r.uiStatus);
+      const st = settlementLineStatusBadge(r.status, r.holdReason);
       return {
         날짜: formatPayoutTableDate(r.date),
         유형: typeBadgeLabel(r.type),
         내용: r.description,
-        결제금액: r.grossAmount,
-        수수료: r.feeAmount,
-        순수령액: r.netAmount,
-        "원천징수 3.3%": r.withholdingAmount,
-        "실지급 예정액": r.payoutAmount,
+        결제금액: r.grossCash,
+        수수료: r.feeCash,
+        순수령액: r.mentorCash,
+        "원천징수 3.3%": r.withholdingCash,
+        실지급: r.netCash,
+        "지급(예정)일": r.payDate ?? "",
         상태: st.label,
       };
     });
+    // 합계 행 — 표시된(필터된) 행의 RPC 값 단순 합 (모집단 재해석 없음)
     rows.push({
       날짜: "합계",
       유형: "",
       내용: "",
-      결제금액: totals.paymentAmount,
-      수수료: totals.feeAmount,
-      순수령액: totals.netAmount,
-      "원천징수 3.3%": totals.withholdingAmount,
-      "실지급 예정액": totals.payoutAmount,
+      결제금액: tableRows.reduce((a, r) => a + r.grossCash, 0),
+      수수료: tableRows.reduce((a, r) => a + r.feeCash, 0),
+      순수령액: tableRows.reduce((a, r) => a + r.mentorCash, 0),
+      "원천징수 3.3%": tableRows.reduce((a, r) => a + r.withholdingCash, 0),
+      실지급: tableRows.reduce((a, r) => a + r.netCash, 0),
+      "지급(예정)일": "",
       상태: "",
     });
     const ws = XLSX.utils.json_to_sheet(rows);
@@ -155,38 +153,19 @@ export function MentorPayoutsDetailView() {
           </Link>
           <div>
             <h1 className="text-2xl font-black text-slate-900">정산 상세</h1>
-            <p className="mt-1 text-sm text-slate-600">기간·유형별 수익 내역과 합계를 확인합니다.</p>
+            <p className="mt-1 text-sm text-slate-600">기간·유형별 수익 내역을 확인합니다.</p>
           </div>
         </div>
         <button
           type="button"
           onClick={() => void exportExcel()}
-          disabled={!lines.length}
+          disabled={loading || Boolean(error) || !lines.length}
           className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-800 hover:bg-slate-50 disabled:opacity-50"
         >
           <Download className="h-4 w-4" />
           엑셀 다운로드
         </button>
       </div>
-
-      {/* W-01 4단 구조: 총 수익 → 수수료 → 원천징수 3.3%(강조) → 실지급 예정액 */}
-      {!loading && !error ? (
-        <div className="mb-4 rounded-2xl border-[0.5px] border-emerald-200 bg-emerald-50/60 px-5 py-4">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-sm font-bold text-slate-700">실지급 예정액 합계</span>
-            <span className="text-2xl font-black tabular-nums text-[#059669]">{formatCashKrw(totals.payoutAmount)}</span>
-          </div>
-          <p className="mt-2 text-[12px] text-slate-500">
-            총 수익 <span className="font-semibold tabular-nums text-slate-700">{formatCashKrw(totals.paymentAmount)}</span>
-            {" − "}플랫폼 수수료 <span className="font-semibold tabular-nums text-slate-700">{formatCashKrw(totals.feeAmount)}</span>
-            {" − "}
-            <strong className="font-extrabold text-rose-600" title="프리랜서 사업소득 원천징수">
-              원천징수 3.3% {formatCashKrw(totals.withholdingAmount)}
-            </strong>
-            {" = "}실지급 예정액 <span className="font-semibold tabular-nums text-slate-700">(매월 23일 지급)</span>
-          </p>
-        </div>
-      ) : null}
 
       <div className="mb-4 flex flex-wrap gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <label className="text-xs font-semibold text-slate-600">
@@ -211,7 +190,7 @@ export function MentorPayoutsDetailView() {
           <select
             value={type}
             onChange={(e) => {
-              setType(e.target.value as "all" | PayoutLineType);
+              setType(e.target.value as "all" | SettlementSourceType);
               setPage(1);
             }}
             className="mt-1 block rounded-lg border border-slate-200 px-3 py-2 text-sm font-bold"
@@ -225,14 +204,21 @@ export function MentorPayoutsDetailView() {
       </div>
 
       {error ? (
-        <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">
-          {error}
-        </p>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm font-semibold text-red-900">{error}</p>
+          <button
+            type="button"
+            onClick={() => setRetryTick((t) => t + 1)}
+            className="inline-flex items-center rounded-lg border border-red-200 bg-white px-3 py-1.5 text-xs font-bold text-red-800 hover:bg-red-50"
+          >
+            다시 시도
+          </button>
+        </div>
       ) : null}
 
       {loading ? (
         <p className="py-16 text-center text-sm text-slate-500">불러오는 중…</p>
-      ) : (
+      ) : error ? null : (
         <>
           <MentorPayoutsSettlementTable rows={pagedRows} variant="detail" />
           {totalPages > 1 ? (
