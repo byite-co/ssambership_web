@@ -99,8 +99,10 @@ export function WalletLedgerPageBody(props: { data: WalletLedgerPageData }) {
         });
       }
     } else if (customFrom || customTo) {
-      const fromD = customFrom ? new Date(customFrom) : null;
-      const toD = customTo ? new Date(`${customTo}T23:59:59`) : null;
+      // TZ-FIX R2 #3: KST 달력일 경계 +09:00 명시 — 서버 질의
+      // (lib/cash/cashQueries.ts fetchCashLedgerWindow 의 fromTs/toTs)와 동일 instant.
+      const fromD = customFrom ? new Date(`${customFrom}T00:00:00+09:00`) : null;
+      const toD = customTo ? new Date(`${customTo}T23:59:59.999+09:00`) : null;
       rows = rows.filter((r) => {
         const d = rowDate(r);
         if (!d) return false;

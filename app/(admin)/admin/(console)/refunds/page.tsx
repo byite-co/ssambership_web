@@ -15,6 +15,7 @@ import { approveAdminRefundAction, rejectAdminRefundAction } from "@/lib/admin/r
 import { bulkProcessRefundsAction } from "@/lib/admin/bulkActions";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { parseAdminListParams } from "@/lib/admin/adminListParams";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 type Row = Record<string, unknown>;
 
@@ -107,7 +108,7 @@ function formatRequestedAt(v: unknown): string {
   if (s === "—") return "—";
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return s;
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(s);
 }
 
 type PageProps = { searchParams?: Promise<Record<string, string | string[] | undefined>> };

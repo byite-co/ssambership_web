@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { kstYearMonth } from "@/lib/mentor/mentorSettlementSchema";
 import { loadMentorSettlementItemsForPayouts } from "@/lib/mentor/mentorPayoutsQueries";
 import {
   formatSubscriptionSettlementPeriod,
@@ -59,7 +60,8 @@ export {
 type Row = Record<string, unknown>;
 
 function ymKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  // TZ-FIX R2 #4: 서버 로컬(UTC) 연·월 → KST 달력월 (정산 정본 kstYearMonth 위임).
+  return kstYearMonth(d);
 }
 
 function currentYm(): string {

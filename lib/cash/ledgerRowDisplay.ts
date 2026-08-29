@@ -31,7 +31,7 @@ function looksLikeUuid(s: string): boolean {
 function formatKoDateTime(raw: string): string {
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return raw;
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Seoul" }).format(d);
 }
 
 export function ledgerAt(row: Row): string {

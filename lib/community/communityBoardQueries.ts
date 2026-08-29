@@ -135,7 +135,8 @@ function formatRelativeTime(iso: string): string {
     if (h < 24) return `${h}\uC2DC\uAC04 \uC804`;
     const day = Math.floor(h / 24);
     if (day < 7) return `${day}\uC77C \uC804`;
-    return d.toLocaleDateString("ko-KR", { month: "short", day: "numeric" });
+    // TZ-FIX R2 #12: 서버 UTC 달력 → Asia/Seoul 고정.
+    return d.toLocaleDateString("ko-KR", { month: "short", day: "numeric", timeZone: "Asia/Seoul" });
   } catch {
     return "";
   }

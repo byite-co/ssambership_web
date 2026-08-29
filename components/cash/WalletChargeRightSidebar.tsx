@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { LedgerLineRow } from "@/lib/cash/cashQueries";
 import { ledgerAmountLabel, ledgerIsCredit, ledgerUiKind } from "@/lib/cash/ledgerRowDisplay";
+import { kstMonthStartInstant } from "@/lib/utils/kstTime";
 
 function parseAmountCash(label: string): number {
   const n = Number(label.replace(/[^\d-]/g, ""));
@@ -9,7 +10,8 @@ function parseAmountCash(label: string): number {
 
 function monthUsageStats(rows: LedgerLineRow[]) {
   const now = new Date();
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  // TZ-FIX R2 #7: 실행 환경 로컬 월초 → KST 달력 월초 instant.
+  const monthStart = kstMonthStartInstant(now);
   let custom = 0;
   let subscription = 0;
   let other = 0;

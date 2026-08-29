@@ -1,4 +1,5 @@
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 const NOTICE_LIST_FAIL = "공지 목록을 불러올 수 없습니다.";
 const PROMO_LIST_FAIL = "프로모션 목록을 불러올 수 없습니다.";
@@ -31,10 +32,8 @@ const NOTICE_TYPE_LABEL: Record<string, string> = {
 };
 
 function formatTs(v: unknown): string {
-  if (v === null || v === undefined || v === "") return "—";
-  const s = String(v);
-  if (s.includes("T")) return s.slice(0, 16).replace("T", " ");
-  return s.length > 19 ? s.slice(0, 19) : s;
+  // TZ-FIX R2 #27: UTC ISO slice 절단 → KST 고정 표기 위임 (저장 수정 #2와 동시 배포).
+  return formatKoDateTimeKst(v);
 }
 
 function pickTargetCell(r: Row): string {

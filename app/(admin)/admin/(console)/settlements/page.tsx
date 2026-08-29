@@ -9,6 +9,7 @@ import {
 } from "@/lib/admin/adminQueries";
 import { adminListErrorDescription } from "@/lib/admin/adminDisplayError";
 import { refreshSubscriptionSettlementItemsBestEffort } from "@/lib/mentor/subscriptionSettlementItems";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 const SETTLEMENTS_BADGE_RESULT: AdminListResult = {
   table: null,
@@ -31,7 +32,7 @@ function formatDateKo(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(iso);
 }
 
 const statusBadgeClass = (s: string) => {

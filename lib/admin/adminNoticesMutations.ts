@@ -3,9 +3,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 const TABLE_NOTICE = "app_notices" as const;
 const TABLE_PROMOTION = "promotion_campaigns" as const;
 
+/** datetime-local(YYYY-MM-DDTHH:mm) — 관리자 노출기간 입력 폼의 KST 벽시계 값 */
+const DATETIME_LOCAL_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+
 function toTimestamptzOrNull(raw: string): string | null {
   const t = raw.trim();
   if (!t) return null;
+  // 무오프셋 datetime-local 입력은 KST 벽시계이므로 +09:00 을 부여해 저장한다
+  // (TZ-FIX R2 #2 — 이미 오프셋(+, Z)이 붙은 값은 그대로 통과).
+  if (DATETIME_LOCAL_RE.test(t)) return `${t}:00+09:00`;
   return t;
 }
 

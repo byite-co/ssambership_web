@@ -7,6 +7,7 @@ import {
   adminReviewRowIsHidden,
   adminReviewRowIsReviewed,
 } from "@/lib/admin/reviewLabels";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 type Row = Record<string, unknown>;
 
@@ -25,7 +26,7 @@ function formatTs(v: unknown): string {
   if (!s) return "—";
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(s);
 }
 
 function pickRating(row: Row, meta: AdminReviewsPageMeta): string {

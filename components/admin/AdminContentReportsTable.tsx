@@ -4,6 +4,7 @@ import { adminContentTargetDisplay } from "@/lib/admin/adminOperationalLabels";
 import { contentReportRowIsActionable, contentReportStatusLabel } from "@/lib/admin/contentReportLabels";
 import type { AdminListResult } from "@/lib/admin/adminQueries";
 import { adminListFetchFailedCopy } from "@/lib/admin/adminDisplayError";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 type Row = Record<string, unknown>;
 
@@ -30,7 +31,7 @@ function formatTs(v: unknown): string {
   if (!s) return "—";
   const d = new Date(s);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(s);
 }
 
 function targetLine(row: Row): { display: string; title: string | undefined } {

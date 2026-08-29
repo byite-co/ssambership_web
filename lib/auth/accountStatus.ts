@@ -4,6 +4,7 @@ import {
   strictDeletionDecision,
   type AppSurfaceAccountRow,
 } from "../appSession/appSurfaceAccountGate.ts";
+import { formatKoreanDate } from "../utils/formatDisplay.ts";
 
 /**
  * 계정 상태(active / suspended / banned) 판정 + 핵심 액션 차단 메시지.
@@ -51,9 +52,9 @@ function formatUntil(untilIso: string | null | undefined): string | null {
   if (!untilIso) return null;
   const d = new Date(untilIso);
   if (Number.isNaN(d.getTime())) return null;
-  return `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, "0")}.${String(
-    d.getDate()
-  ).padStart(2, "0")}`;
+  // TZ-FIX R2 #13: 서버 로컬(UTC) 달력 → KST 달력일 (정본 formatKoreanDate 위임,
+  // YYYY.MM.DD 포맷 동일 · null 반환 동작은 위 가드로 유지).
+  return formatKoreanDate(untilIso);
 }
 
 export function accountBlockMessage(

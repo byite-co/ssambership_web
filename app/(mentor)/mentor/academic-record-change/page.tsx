@@ -11,6 +11,7 @@ import {
 } from "@/lib/mentor/mentorAcademicRecordChange";
 import { submitMentorAcademicRecordChangeAction } from "@/lib/mentor/mentorAcademicRecordChangeActions";
 import { mapDataErrorMessage } from "@/lib/utils/mapDataError";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 type PageProps = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 
@@ -42,7 +43,7 @@ function formatDateTime(v: string | null | undefined): string {
   if (!v) return "—";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(v);
 }
 
 export default async function MentorAcademicRecordChangePage(props: PageProps) {

@@ -10,6 +10,7 @@ import {
 import { contentReportStatusLabel } from "@/lib/admin/contentReportLabels";
 import { adminDisputeStatusLabel } from "@/lib/admin/disputeLabels";
 import { orderEventKindLabelForUi } from "@/lib/customRequest/orderLifecycleConstants";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 type JsonRow = Record<string, unknown>;
 
@@ -49,7 +50,7 @@ export type LoadAdminUnifiedActivityOpts = {
 function formatTsKo(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(iso);
 }
 
 function shortId(v: unknown): string {

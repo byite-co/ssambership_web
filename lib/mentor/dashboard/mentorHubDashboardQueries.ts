@@ -13,6 +13,7 @@ import { classifyMentorOrderBrowseTab } from "@/lib/customRequest/mentorOrderBro
 import { fetchActiveOpenDisputeOrderIdSet } from "@/lib/customRequest/orderDisputeHelpers";
 import { loadOpenCustomRequestPostsForMentorBrowse } from "@/lib/customRequest/customRequestQueries";
 import { aggregateThreadStatsForRooms } from "@/lib/home/threadStats";
+import { kstYearMonth } from "@/lib/mentor/mentorSettlementSchema";
 import {
   countActiveSubscriptionsForMentor,
   fetchMentorCustomRequestOrdersFromPrimaryTable,
@@ -249,7 +250,8 @@ export async function loadMentorHubDashboardData(
   const todaySchedule = [...scheduleFromOrders, ...scheduleFromQuestions].slice(0, 5);
 
   const now = new Date();
-  const monthLabel = `${now.getMonth() + 1}월`;
+  // TZ-FIX R2 #4: 서버 로컬(UTC) 월 → KST 달력월 라벨.
+  const monthLabel = `${Number(kstYearMonth(now).slice(5))}월`;
 
   return {
     kpis: {

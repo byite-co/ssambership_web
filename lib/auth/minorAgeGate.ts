@@ -1,3 +1,5 @@
+import { kstTodayParts } from "@/lib/identity/age";
+
 export const MINIMUM_SIGNUP_AGE = 14 as const;
 
 type BirthDateParts = {
@@ -23,11 +25,9 @@ export function parseBirthDateParts(value: string): BirthDateParts | null {
 }
 
 function todayParts(at: Date): BirthDateParts {
-  return {
-    year: at.getFullYear(),
-    month: at.getMonth() + 1,
-    day: at.getDate(),
-  };
+  // TZ-FIX R2 #15: 브라우저 로컬 달력 '오늘' → KST 달력 (정본 kstTodayParts 위임).
+  // isFutureBirthDate(#37)도 이 함수를 쓰므로 함께 KST 기준이 된다.
+  return kstTodayParts(at);
 }
 
 export function calculateFullAge(birthDate: string, at = new Date()): number | null {

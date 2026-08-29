@@ -25,6 +25,7 @@ import {
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { AdminListPagination } from "@/components/admin/AdminListPagination";
 import { parseAdminListParams } from "@/lib/admin/adminListParams";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 type PageProps = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 
@@ -49,7 +50,7 @@ function formatDate(v: unknown): string {
   if (v == null) return "—";
   const d = new Date(String(v));
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(String(v));
 }
 
 function statusBadgeClass(s: string): string {
