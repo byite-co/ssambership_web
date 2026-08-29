@@ -48,26 +48,34 @@ export type InitialSubscriptionPeriodFields = {
   billing_cycle: "monthly";
 };
 
-function daysInUtcMonth(year: number, monthIndex: number): number {
+const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+function daysInCalendarMonth(year: number, monthIndex: number): number {
   return new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
 }
 
-export function addMonthsClampedUtc(value: Date, months: number): Date {
-  const monthIndex = value.getUTCMonth() + months;
-  const targetYear = value.getUTCFullYear() + Math.floor(monthIndex / 12);
+/**
+ * KST 달력 기준 +N개월(월말 clamp) — DB `((ts at time zone 'Asia/Seoul' + interval
+ * '1 month') at time zone 'Asia/Seoul')` (SQL 185, TZ-FIX R1)와 동일 산술.
+ * epoch+9h로 KST 벽시계를 분해해 월을 가감하고, 대상 월 말일로 clamp 후 −9h 복원한다.
+ */
+export function addMonthsClampedKst(value: Date, months: number): Date {
+  const shifted = new Date(value.getTime() + KST_OFFSET_MS);
+  const monthIndex = shifted.getUTCMonth() + months;
+  const targetYear = shifted.getUTCFullYear() + Math.floor(monthIndex / 12);
   const targetMonth = ((monthIndex % 12) + 12) % 12;
-  const targetDay = Math.min(value.getUTCDate(), daysInUtcMonth(targetYear, targetMonth));
+  const targetDay = Math.min(shifted.getUTCDate(), daysInCalendarMonth(targetYear, targetMonth));
 
   return new Date(
     Date.UTC(
       targetYear,
       targetMonth,
       targetDay,
-      value.getUTCHours(),
-      value.getUTCMinutes(),
-      value.getUTCSeconds(),
-      value.getUTCMilliseconds()
-    )
+      shifted.getUTCHours(),
+      shifted.getUTCMinutes(),
+      shifted.getUTCSeconds(),
+      shifted.getUTCMilliseconds()
+    ) - KST_OFFSET_MS
   );
 }
 
@@ -75,7 +83,7 @@ export function buildInitialSubscriptionPeriodFields(
   value: Date = new Date()
 ): InitialSubscriptionPeriodFields {
   const startedAt = Number.isNaN(value.getTime()) ? new Date() : value;
-  const periodEnd = addMonthsClampedUtc(startedAt, 1);
+  const periodEnd = addMonthsClampedKst(startedAt, 1);
 
   return {
     started_at: startedAt.toISOString(),
