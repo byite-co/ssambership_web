@@ -120,6 +120,8 @@ supabase/sql/187_tz_fix_consent_minor_age_kst.sql
 supabase/sql/INDEX.md
 ```
 
+**추기 (CI 수정 후 최종 — 위 목록에 4본 추가, 총 31파일):** `supabase/baseline/native_baseline_manifest.json` · `supabase/baseline/native_baseline_source_map.tsv` · `supabase/migrations/20260701000000_pre_ledger_baseline.sql` (3본 전부 생성기 재생성 산출물 — #26 주석 유입분과 체크섬·오프셋 메타데이터만, 실행 SQL 델타 0을 라인 단위로 검수. §0-4 기록: 화이트리스트 밖이나 CI 결정론 게이트가 강제하는 생성기 소유 부수 산출물) + 본 보고서. `db-apply-pending`의 remote_only 가드는 version 단위 비교라 이미 적용된 baseline 파일의 바이트 변화와 무충돌(검증자 확인, workflow :124).
+
 → R3 화이트리스트(G7~G12 명시 파일 · 신규 SQL 1본 · 세션 보고서) + **각주①로 승인된 pack 등재 산출물 3본** + **각주③ sla 1본**의 부분집합. 금지 목록(§0-3) 무접촉 — 087·157·158·103·131·143·145·068·100 무수정, 153·156은 머리 주석만.
 
 ## 6. §5 매트릭스 대비 신규 발견 파급
@@ -132,11 +134,17 @@ supabase/sql/INDEX.md
 
 - build·lint PASS · 계약 572/572 (기준선 동일, 신규 실패 0).
 - pack 검증기 2종 PASS · 187 3사본 `cmp` 바이트 일치 · 로컬 PG16 실행 검증(§4).
-- 독립 적대적 검증: 수행 중 — 완료 시 본 절에 결과를 추기한다(후속 커밋). 발견 사항 발생 시 수정 커밋을 같은 PR에 포함한다.
+- 독립 적대적 검증 완료 — **HEAD 기준 반증 실패(REFUTED: no), blocker 0건**:
+  1. 중간 커밋 `8ebe231` 단독으로는 검증자가 실제로 반증에 성공(중복 import·baseline 결정론 — 153/156 헤더 sha 변화가 원인임을 revert 실험으로 인과 증명). 후속 `2174039`가 동일 결함을 독립적으로 해소했음을 확인. **잔여 리스크 기록: bisect 가 8ebe231에 착지하면 red** (수정 불가한 이력 사실 — 기록만).
+  2. SQL 187 전체 사슬 검증: CRLF 77쌍 보존 · 역치환 md5/크기 정확 일치(3,121 B) · `signup:` 멱등 키 4라인 바이트 불변 · 3사본 md5 일치 · **로컬 PG 왕복으로 라이브 def md5(`833a94c8…`, 3,300 B)를 독립 재현** — pg_get_functiondef 산출에서 식 1개 역치환 시 라이브 원문 md5 도출.
+  3. 산술 퍼즈: 6,230 instant(KST 자정 ±1ms·월초/월중/말일·23일 경계 ±1ms·윤년 2/29) × 실행 TZ 4종(UTC·Asia/Seoul·Pacific/Chatham·America/St_Johns) — **0건 불일치, TZ 간 출력 다이제스트 동일**(SSR/CSR 결정론). periodStart·주문방 포매터·관리자 일 창(연속·무중첩 7창)·지급 23일 경계·kstDayDiff(round/ceil 두 변형, date-only 입력 포함) 전부 Intl 레퍼런스와 일치.
+  4. #18: 구 코드의 표기 문자열 재파싱이 V8에서 Invalid Date임을 실증(필터가 죽어 있었음) → 신 코드 `createdAtIso`+`+09:00` 경계로 작동. 타입 additive, 타 소비처 무영향, tsc clean.
+  5. 게이트: 계약 572/572 · tsc clean · pack 검증기 2종 PASS · 금지 목록 파일별 diff 전수 무접촉 · 문구 변화는 승인된 `완료(KST):` 1건뿐.
+  6. 수용된 미세 델타(값 정상화 방향): #30 토스트 날짜 표기 `YYYY-MM-DD`→`YYYY.MM.DD`(formatKoreanDate 정본 포맷) · MentorActivityControls 파싱 불가 값 `""`→`"—"`(손상 데이터 경로 한정) · `nextPayoutDateIso` instant가 진짜 KST 자정으로 이동(소비처는 KST 라벨뿐).
 - CI 1차 실행에서 2건 실패 → 근본 수정 후 재푸시(`2174039`): ① Vercel 빌드 — #34 위임 시 `formatSubscriptionDate` 중복 import(기존 다중 import에 이미 존재, 로컬 빌드 캐시가 가려 미검출) 제거, 캐시 삭제 후 build·tsc·lint·계약 572/572 재검증 + 터치 파일 20본 중복 import 0 스캔. ② pack 생성기 결정론 — #26의 153·156 머리 주석이 baseline 재조립 소스로 유입되므로 생성기 2종 재실행 산출물(주석 2블록 + 체크섬·오프셋 메타데이터만 — diff 검수) 커밋. **§0-4 기록**: `pre_ledger_baseline.sql`·`native_baseline_source_map.tsv`·`native_baseline_manifest.json`은 화이트리스트 밖이나 #26(화이트리스트 내) 수정에 CI가 강제하는 생성기 소유 부수 산출물 — 표준 경로 재생성으로만 변경, 직접 편집 0.
 
 ## 8. 후속
 
 - **TZ-FIX 3회차 완결.** 사람 QA: 지시서 §6 QA-01~15 전건 (특히 R3분: QA-12 분쟁 필터 · QA-13 '오늘' 카드 · QA-14 표기 스팟체크 · QA-10 생년월일 경계).
 - DB 적용: 머지 후 `db-apply-pending` 1회 — pending 차집합 = `20260829100100`(R1 #1) · `20260829100200`(R2 #14) · `20260829100300`(R3 #25) 중 미적용 전량.
-- 후속 회차 후보(스코프 외 기록): 감사 망 밖 timeZone 미지정 포매터 잔여분(§2), `monthBounds` 반개구간 정밀화(R2 보고서 §6-1), orphan 위젯(#20 KPI·#31 사이드바·#34 API 라벨) 정리.
+- 후속 회차 후보(스코프 외 기록): 감사 망 밖 timeZone 미지정 포매터 잔여분(§2) — **적대적 검증이 추가 식별한 동류 결함 2건 포함**: `lib/customRequest/mentorCustomRequestDisplay.ts:17~31 formatDateYYYYMMDD`(로컬 getter — 학생 의뢰 마감 표기로 유입, `customRequestPostMappers.ts:91` 경유) · `lib/customRequest/customRequestQueries.ts:467·476 dateLikeToYmdDots`(비 date-only 입력 분기) — 둘 다 감사 버그표 밖이라 §0-4대로 무수정·기록. 그 외 `monthBounds` 반개구간 정밀화(R2 보고서 §6-1), orphan 위젯(#20 KPI·#31 사이드바·#34 API 라벨) 정리.
