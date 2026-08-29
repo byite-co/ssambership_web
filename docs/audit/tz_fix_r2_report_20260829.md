@@ -169,9 +169,17 @@ supabase/sql/186_tz_fix_mentor_notification_body_kst.sql
 - 신설 `kstTime` 4 test·`mentorActivityRestKst` 4 test 포함 전 계약 572/572 PASS, build·lint PASS.
 - SQL 186: 라이브 원문 재구성 md5 일치 → 기계 치환 → 자가 diff(본문 날짜 외 불변) → 로컬 PG 16.13 실행 검증 (§4).
 - #11 치환 후 잔존 무-timeZone 패턴 0 grep · `setMonth` 코드 잔존 0 grep · 구 함수명 잔존 0 grep.
-- 독립 적대적 검증(diff 전수 리뷰 · 신설 테스트의 구현 판별력 · KST 산술 퍼즈)은 별도 세션 검증 패스로 수행 — 발견 사항 발생 시 본 보고서 §7에 추기하고 수정 커밋을 같은 PR에 추가한다.
+- 독립 적대적 검증 완료 — **반증 실패(REFUTED: no), blocker 0건**:
+  1. diff 전 hunk 리뷰: 위임·timeZone 키·KST 산술 패턴 외 변경 0, 금지 목록 무접촉 재확인.
+  2. SQL 186 역방향 검증: v_body_date 3처 추가를 역치환하면 158 본문이 **바이트 단위 재현**(2,043 B). 로컬 PG 트리거 스모크: 멱등 키는 UTC 날짜(`…:2026-08-28`) 유지, 본문만 KST(`2026년 8월 29일`).
+  3. 판별력: 신설 mentorActivityRestKst 3개 실질 케이스 전부 구 구현(origin/main)에서 실패, null/파싱불가 계약은 신구 동일(동작 보존).
+  4. KST 산술 퍼즈: 4,800 instant(경계 시각 포함) × 실행 TZ 4종(UTC·Asia/Seoul·America/New_York·Pacific/Kiritimati)에서 kstTime 4함수가 독립 Intl 레퍼런스와 전건 일치. `canRequestNormalRest` 임계 ±1ms 2,200케이스 정확 일치.
+  5. `toTimestamptzOrNull` 동작 표: 공백→null · datetime-local→`+09:00` 부여(PG 파싱 instant 검증) · 오프셋/Z/초/date-only 무변경 통과.
+  6. `tsc --noEmit` 0 · eslint clean · 계약 572/572 재확인. 버그표 2차 근거 위치 전수가 수정된 공용 함수의 콜사이트임을 교차 확인(독립 잔존 0).
 
 ## 8. 후속 (사람 QA · R3)
+
+- **기존 행 표시 유의 (§0-5 예정 사항)**: 배포 전 저장된 `app_notices`/`promotion_campaigns` 행은 +9h 오저장 instant를 유지하며, #27 표시 정상화로 관리자 화면에 그 오차가 **가려지지 않고 드러난다**(약 9시간 늦은 노출기간으로 보임). 지시서 §0-5(데모 데이터 −9h 백필 금지, 출시 전 초기화 전제)에 따라 보정하지 않음 — 데모 데이터 초기화로 해소.
 
 - 사람 QA: QA-05~11·13~14 중 R2 해당분 (지시서 §6).
 - R3 인계: #27·#32는 **R2 선처리 완료** — R3에서 확인만. #36은 R3 수행. #37은 #15로 사실상 해소 — R3에서 잔여 로컬 비교 확인만.
