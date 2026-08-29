@@ -16,6 +16,7 @@ import { mentorApprovalStatusLabel, mentorApprovalStatusRaw } from "@/lib/admin/
 import type { ClassificationOption } from "@/lib/mentor/schoolClassificationCatalog";
 import type { MentorSchoolVerificationRow } from "@/lib/mentor/mentorSchoolVerification";
 import type { SchoolTier, VerifiedMajorCategory } from "@/lib/mentor/schoolVerificationConstants";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 type Row = Record<string, unknown>;
 type UserDisplay = { nickname: string | null; full_name: string | null; email: string | null };
@@ -69,7 +70,7 @@ function formatTs(v: unknown): string {
   if (!v) return "-";
   const d = new Date(String(v));
   if (Number.isNaN(d.getTime())) return "-";
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(String(v));
 }
 
 function schoolVerificationStatusLabel(status: string): string {

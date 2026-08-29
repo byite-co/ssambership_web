@@ -62,7 +62,8 @@ function relTime(iso: string): string {
     if (m < 60) return `${m}분 전`;
     const h = Math.floor(m / 60);
     if (h < 24) return `${h}시간 전`;
-    return new Date(iso).toLocaleDateString("ko-KR");
+    // TZ-FIX R2 #12: 서버 UTC 달력 → Asia/Seoul 고정.
+    return new Date(iso).toLocaleDateString("ko-KR", { timeZone: "Asia/Seoul" });
   } catch {
     return "";
   }

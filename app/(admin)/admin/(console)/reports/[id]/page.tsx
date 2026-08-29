@@ -10,6 +10,7 @@ import { loadAdminReportNotes } from "@/lib/admin/adminCaseNotes";
 import { contentReportStatusLabel } from "@/lib/admin/contentReportLabels";
 import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { AdminCaseNotesPanel } from "@/components/admin/AdminCaseNotesPanel";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 const TABLE = "content_reports" as const;
 
@@ -19,7 +20,7 @@ function fmtDate(v: unknown): string {
   if (v == null) return "—";
   const d = new Date(String(v));
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(String(v));
 }
 
 function fieldStr(row: Record<string, unknown> | null, key: string): string | null {

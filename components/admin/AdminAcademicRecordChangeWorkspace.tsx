@@ -6,6 +6,7 @@ import {
   rejectMentorAcademicRecordChangeAction,
   requestMentorAcademicRecordChangeResubmitAction,
 } from "@/lib/admin/mentorAcademicRecordChangeReviewActions";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 type ReviewProfile = {
   user_id: string;
@@ -25,7 +26,7 @@ function formatDateTime(v: string | null | undefined): string {
   if (!v) return "—";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(v);
 }
 
 function statusLabel(status: string): string {

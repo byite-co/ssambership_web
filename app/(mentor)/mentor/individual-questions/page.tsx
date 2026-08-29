@@ -12,6 +12,7 @@ import {
   fetchOpenIndividualQuestionsForMentor,
 } from "@/lib/individualQuestion/individualQuestionQueries";
 import { assertMentorApprovedForAction } from "@/lib/mentor/mentorVerificationGate";
+import { kstYearMonth } from "@/lib/mentor/mentorSettlementSchema";
 import { createClient } from "@/lib/supabase/server";
 
 export const dynamic = "force-dynamic";
@@ -48,7 +49,8 @@ export default async function MentorIndividualQuestionsPage(props: PageProps) {
   const doneThisMonthCount = rows.filter((r) => {
     if (lower(r.status) !== "released" || !r.released_at) return false;
     const d = new Date(r.released_at);
-    return !Number.isNaN(d.getTime()) && d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+    // TZ-FIX R2 #8: 서버 로컬(UTC) 연·월 비교 → KST 달력월 비교.
+    return !Number.isNaN(d.getTime()) && kstYearMonth(d) === kstYearMonth(now);
   }).length;
 
   return (

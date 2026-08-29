@@ -344,7 +344,8 @@ export function formatCommunityPostDate(row: Row): string | null {
       try {
         const d = new Date(v);
         if (!Number.isNaN(d.getTime())) {
-          return d.toLocaleDateString("ko-KR", { dateStyle: "medium" });
+          // TZ-FIX R2 #12: 서버 UTC 달력 → Asia/Seoul 고정.
+          return d.toLocaleDateString("ko-KR", { dateStyle: "medium", timeZone: "Asia/Seoul" });
         }
       } catch {
         /* ignore */

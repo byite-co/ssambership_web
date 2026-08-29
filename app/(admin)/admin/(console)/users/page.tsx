@@ -12,6 +12,7 @@ import {
 import { setUserStatusAction, issueUserWarningAction } from "@/lib/admin/accountStatusActions";
 import { WARNING_AUTO_SUSPEND_THRESHOLD } from "@/lib/admin/accountStatusCore";
 import { effectiveAccountStatus } from "@/lib/auth/accountStatus";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 const BASE_PATH = "/admin/users";
 
@@ -19,7 +20,7 @@ function fmtDate(v: string | null): string {
   if (!v) return "—";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return v;
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(v);
 }
 
 function roleLabel(r: string): string {

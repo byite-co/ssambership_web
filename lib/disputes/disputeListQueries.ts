@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { pickText } from "@/lib/disputes/disputeQueries";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 type Row = Record<string, unknown>;
 
@@ -166,7 +167,7 @@ function formatTsKo(v: string): string {
   if (v === "—") return "—";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return v;
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(v);
 }
 
 function summaryFromRow(r: Row): string {

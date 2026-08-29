@@ -73,8 +73,11 @@ export async function fetchCashLedgerWindow(
   args: { from?: string | null; to?: string | null; max?: number }
 ): Promise<{ rows: LedgerLineRow[]; table: string | null; error: string | null; truncated: boolean }> {
   const max = args.max && args.max > 0 ? args.max : LEDGER_WINDOW_MAX_DEFAULT;
-  const fromTs = args.from ? `${args.from}T00:00:00` : null;
-  const toTs = args.to ? `${args.to}T23:59:59.999` : null;
+  // TZ-FIX R2 #3: KST 달력일 경계를 +09:00 으로 명시 (무오프셋이면 서버 UTC 자정으로
+  // 해석돼 시작일 KST 00:00~08:59 내역이 누락된다). 클라이언트 재필터
+  // (components/cash/WalletLedgerPageBody.tsx '직접설정' 분기)와 동일 instant.
+  const fromTs = args.from ? `${args.from}T00:00:00+09:00` : null;
+  const toTs = args.to ? `${args.to}T23:59:59.999+09:00` : null;
 
   const rows: LedgerLineRow[] = [];
   let truncated = false;

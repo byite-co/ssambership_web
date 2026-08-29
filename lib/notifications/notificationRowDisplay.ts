@@ -28,7 +28,8 @@ export function formatNotificationTime(iso: string): string {
   if (iso === "—") return "—";
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso.slice(0, 19);
-  return d.toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short" });
+  // TZ-FIX R2 #10: timeZone 미지정(서버 UTC 렌더) → Asia/Seoul 고정.
+  return d.toLocaleString("ko-KR", { dateStyle: "short", timeStyle: "short", timeZone: "Asia/Seoul" });
 }
 
 export function typeRaw(row: Row, typeColumn: string | null): string | null {

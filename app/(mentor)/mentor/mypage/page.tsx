@@ -16,6 +16,7 @@ import { loadMentorSubscribeOpenState } from "@/lib/mentor/mentorSubscribeOpen";
 import { loadMentorCapUsage, type MentorCapUsage } from "@/lib/subscribe/mentorCapService";
 import { listMentorReceivedReviews, type ReviewCardItem } from "@/lib/reviews/reviewQueries";
 import { formatKoreanDate } from "@/lib/utils/formatDisplay";
+import { kstMonthBounds, kstYearMonth, listRecentYearMonths } from "@/lib/mentor/mentorSettlementSchema";
 import { PAGE_COL_GAP, SURFACE_CARD } from "@/lib/ui/surfaceCard";
 
 export const dynamic = "force-dynamic";
@@ -50,7 +51,8 @@ function initialOf(name: string): string {
 }
 
 function monthKey(d: Date): string {
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  // TZ-FIX R2 #5: 서버 로컬(UTC) 연·월 → KST 달력월 (정산 정본 kstYearMonth 위임).
+  return kstYearMonth(d);
 }
 
 /**
@@ -66,12 +68,14 @@ async function loadRecentMonthlyRevenue(
   mentorId: string,
 ): Promise<MonthlyRevenue[]> {
   const now = new Date();
+  // TZ-FIX R2 #5: 버킷 시드·조회 하한을 KST 달력월 기준으로 (UTC 월이면 KST 1일
+  // 새벽 인입이 전월로 귀속되고 창 첫 달 첫 9시간이 소실된다).
+  const recentYms = listRecentYearMonths(kstYearMonth(now), MONTHS_BACK); // 내림차순
   const buckets = new Map<string, number>();
   for (let i = MONTHS_BACK - 1; i >= 0; i--) {
-    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-    buckets.set(monthKey(d), 0);
+    buckets.set(recentYms[i], 0);
   }
-  const start = new Date(now.getFullYear(), now.getMonth() - (MONTHS_BACK - 1), 1);
+  const startIso = kstMonthBounds(recentYms[MONTHS_BACK - 1]).fromIso;
 
   try {
     const { data, error } = await supabase
@@ -79,7 +83,7 @@ async function loadRecentMonthlyRevenue(
       .select("created_at, delta_cents, ref_type")
       .eq("user_id", mentorId)
       .gt("delta_cents", 0)
-      .gte("created_at", start.toISOString());
+      .gte("created_at", startIso);
     if (!error && Array.isArray(data)) {
       for (const row of data as Array<{ created_at?: unknown; delta_cents?: unknown }>) {
         const at = row.created_at;

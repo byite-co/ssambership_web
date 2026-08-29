@@ -5,12 +5,13 @@ import {
   releaseMentorSettlementHoldAction,
   finalizeMentorTerminationAdminAction,
 } from "@/lib/admin/mentorActivityAdminActions";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 function fmt(v: string | null): string {
   if (!v) return "—";
   const d = new Date(v);
   if (Number.isNaN(d.getTime())) return v;
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(v);
 }
 
 const EVENT_LABEL: Record<string, string> = {

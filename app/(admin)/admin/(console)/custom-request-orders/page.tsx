@@ -13,6 +13,7 @@ import { mentorProfilesAdminReadClient } from "@/lib/admin/mentorProfilesAdminRe
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { parseAdminListParams } from "@/lib/admin/adminListParams";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 type PageProps = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 
@@ -39,7 +40,7 @@ function dateLabel(value: unknown): string {
   if (!value) return "—";
   const d = new Date(String(value));
   if (Number.isNaN(d.getTime())) return "—";
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(String(value));
 }
 
 function userLabel(userById: Map<string, { nickname: string | null; full_name: string | null }>, id: string): string {

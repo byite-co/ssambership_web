@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { kstMonthBounds, kstYearMonth } from "@/lib/mentor/mentorSettlementSchema";
 import {
   normalizedPrimaryOrderStatus,
   orderStatusLabelForUi,
@@ -169,10 +170,10 @@ export async function loadMentorSettlementItemsForPayouts(
 }
 
 function monthBounds(): { start: string; end: string } {
-  const d = new Date();
-  const start = new Date(d.getFullYear(), d.getMonth(), 1);
-  const end = new Date(d.getFullYear(), d.getMonth() + 1, 0, 23, 59, 59, 999);
-  return { start: start.toISOString(), end: end.toISOString() };
+  // TZ-FIX R2 #6: 서버 로컬(UTC) 월 경계 → KST 달력월 경계 (+09:00 명시 ISO).
+  // 함수명·반환 형태 유지 — end 는 익월 1일 00:00(KST) 경계값이 된다.
+  const { fromIso, toIso } = kstMonthBounds(kstYearMonth(new Date()));
+  return { start: fromIso, end: toIso };
 }
 
 // W4(C10): firstPayoutsTable(payouts/mentor_payouts/payout_lines/payout_batch_items/

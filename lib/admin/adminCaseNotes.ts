@@ -2,6 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchAdminUsersDisplayByIds } from "@/lib/admin/adminQueries";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 const TABLE = "admin_case_notes" as const;
 
@@ -45,7 +46,7 @@ function shortId(id: string): string {
 function formatTsKo(raw: string): string {
   const d = new Date(raw);
   if (Number.isNaN(d.getTime())) return raw || "-";
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(raw);
 }
 
 function adminDisplay(

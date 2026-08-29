@@ -5,11 +5,12 @@ import { useState } from "react";
 import { Star } from "lucide-react";
 import type { ReviewCardItem } from "@/lib/reviews/reviewQueries";
 import { starIcons } from "@/lib/reviews/reviewDisplay";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
-  return new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(d);
+  return formatKoDateTimeKst(iso);
 }
 
 export function MentorReviewsManage(props: { initialItems: ReviewCardItem[]; loadFailed?: boolean }) {

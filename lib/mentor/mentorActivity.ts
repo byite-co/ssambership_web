@@ -3,6 +3,8 @@
  * (PART B: P0 #5 멘토 활동 중단 대안)
  */
 
+import { addMonthsClampedKst } from "../subscribe/subscriptionsTable.ts";
+
 export const MENTOR_TERMINATION_NOTICE_DAYS = 14; // 완전 종료 2주 사전 공지
 export const MENTOR_MAX_PAUSE_DAYS = 7; // 일시 중단 최대 1주
 export const MENTOR_REST_FREQUENCY_MONTHS = 6; // 일반 휴식 빈도 제한(6개월 1회)
@@ -49,8 +51,9 @@ export function canRequestNormalRest(
   if (!lastPauseAtIso) return true;
   const last = new Date(lastPauseAtIso);
   if (Number.isNaN(last.getTime())) return true;
-  const threshold = new Date(now);
-  threshold.setMonth(threshold.getMonth() - MENTOR_REST_FREQUENCY_MONTHS);
+  // TZ-FIX R2 #16+#17: 서버 로컬(UTC) setMonth(말일 이월) → KST 달력 −6개월 + 말일
+  // clamp (R1 정본 addMonthsClampedKst 재사용 — setMonth 사용 금지).
+  const threshold = addMonthsClampedKst(now, -MENTOR_REST_FREQUENCY_MONTHS);
   return last.getTime() <= threshold.getTime();
 }
 

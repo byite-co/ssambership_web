@@ -10,6 +10,7 @@ import { loadAdminDisputeEscrowSplitPanelState } from "@/lib/admin/adminDisputeE
 import { CUSTOM_ORDER_PLATFORM_FEE_RATE } from "@/lib/customRequest/orderSettlementAmounts";
 import { loadAdminDisputeNotes } from "@/lib/admin/adminCaseNotes";
 import { loadAdminDisputeDeliverables } from "@/lib/admin/adminDisputeDeliverables";
+import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -149,7 +150,7 @@ export default async function AdminDisputeDetailPage(props: PageProps) {
                         </p>
                         <p className="mt-0.5 text-xs text-slate-500">
                           {f.status ?? "—"} · {f.mimeType ?? "형식 미상"}
-                          {f.createdAt ? ` · ${new Intl.DateTimeFormat("ko-KR", { dateStyle: "medium", timeStyle: "short" }).format(new Date(f.createdAt))}` : ""}
+                          {f.createdAt ? ` · ${formatKoDateTimeKst(f.createdAt)}` : ""}
                         </p>
                       </div>
                       {f.signedUrl ? (
