@@ -17,6 +17,7 @@ type Counters = { toss: number; record: number; lookup?: number };
 function makePorts(over: Partial<ConfirmCashTopupPorts>, counters: Counters): ConfirmCashTopupPorts {
   return {
     getAuthenticatedUserId: async () => USER,
+    isTossAllowedUser: () => true,
     isAllowedPayKrw: (won) => won === 30_000 || won === 60_000,
     hasTossSecret: () => true,
     tossConfirm: async ({ orderId, amount }) => {
@@ -40,6 +41,8 @@ const GOOD_INPUT = { paymentKey: "pk_test", orderId: ORDER, amount: 30_000 };
 test("검증 순서: Toss 호출 전 차단 케이스는 전부 Toss fetch 0", async () => {
   const cases: Array<{ name: string; input?: Partial<typeof GOOD_INPUT>; over?: Partial<ConfirmCashTopupPorts>; error: string; status: number }> = [
     { name: "미로그인", over: { getAuthenticatedUserId: async () => null }, error: "unauthorized", status: 401 },
+    // Phase 0 토스 게이트: 심사 allowlist 비허용 유저는 인증 직후 차단(외부 호출 0).
+    { name: "토스 게이트 비허용", over: { isTossAllowedUser: () => false }, error: "toss_not_allowed", status: 403 },
     { name: "타인 orderId", input: { orderId: `cash-${OTHER}-1753300000000` }, error: "unauthorized", status: 401 },
     { name: "잘못된 orderId 형식", input: { orderId: "weird-order" }, error: "invalid_order", status: 400 },
     { name: "허용되지 않은 package", input: { amount: 31_000 }, error: "invalid_package", status: 400 },
@@ -117,6 +120,7 @@ function topupPorts(over: Partial<RecordCashTopupPorts>, calls: { rpc: number; r
   return {
     isAllowedPayKrw: (won) => won === 30_000,
     cashKrwForPayKrw: (won) => (won === 30_000 ? 30_000 : null),
+    isTossAllowedUser: () => true,
     recordTopupV2: async () => { calls.rpc++; return { ok: true, duplicate: false }; },
     recoverPastDue: async () => { calls.recover++; },
     ...over,
@@ -188,6 +192,19 @@ test("F11 실패 코드 매핑: 성공 승격·코드 은폐 금지 + 복구 미
     if (!out.ok) assert.equal(out.code, c.code, c.f11);
     assert.equal(calls.recover, 0, c.f11);
   }
+});
+
+test("토스 게이트(웹훅 보강): 비허용 유저는 적립 차단 — F11 호출 0·복구 0", async () => {
+  const calls = { rpc: 0, recover: 0 };
+  const out = await recordCashTopupCore(
+    ORDER,
+    30_000,
+    topupPorts({ isTossAllowedUser: () => false }, calls),
+  );
+  assert.equal(out.ok, false);
+  if (!out.ok) assert.equal(out.code, "toss_not_allowed");
+  assert.equal(calls.rpc, 0, "비허용 유저에서 F11 이 호출됨");
+  assert.equal(calls.recover, 0, "비허용 유저에서 past_due 복구가 호출됨");
 });
 
 test("원장 코어 입력 매핑: 비허용 금액·주문 형식 오류(F11 호출 0)", async () => {

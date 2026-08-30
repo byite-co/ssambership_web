@@ -26,6 +26,7 @@ type Counters = { toss: number; lookup: number; record: number };
 function ports(over: Partial<ConfirmCashTopupPorts>, c: Counters): ConfirmCashTopupPorts {
   return {
     getAuthenticatedUserId: async () => USER,
+    isTossAllowedUser: () => true,
     isAllowedPayKrw: (won) => won === PAY,
     hasTossSecret: () => true,
     // 기본은 '이미 처리된 결제' 응답 — 기승인 수렴 경로를 태운다.
@@ -146,6 +147,7 @@ test("정상 승인 경로에서도 lookup 은 0회다(추가 외부 호출 없�
 test("Toss 호출 전 차단 케이스는 confirm·lookup 둘 다 0회", async () => {
   const cases: Array<{ name: string; over: Partial<ConfirmCashTopupPorts>; input?: typeof INPUT }> = [
     { name: "미로그인", over: { getAuthenticatedUserId: async () => null } },
+    { name: "토스 게이트 비허용", over: { isTossAllowedUser: () => false } },
     { name: "타인 orderId", over: {}, input: { ...INPUT, orderId: OTHER_ORDER } },
     { name: "secret 누락", over: { hasTossSecret: () => false } },
   ];
@@ -188,6 +190,7 @@ test("기승인 수렴이 반복돼도 원장은 1행뿐이다(F11 duplicate 정
   const recordPorts: RecordCashTopupPorts = {
     isAllowedPayKrw: (won) => won === PAY,
     cashKrwForPayKrw: () => PAY,
+    isTossAllowedUser: () => true,
     recordTopupV2: async (userId, cents, orderRef) => {
       // UNIQUE(idempotency_key) 재현 — 기존 키면 INSERT 없이 duplicate:true(F11 계약).
       if (ledgerKeys.has(orderRef)) return { ok: true, duplicate: true };
@@ -238,6 +241,7 @@ test("past_due 복구는 신규 적립 성공 시 1회, duplicate 재호출에�
   const p: RecordCashTopupPorts = {
     isAllowedPayKrw: (won) => won === PAY,
     cashKrwForPayKrw: () => PAY,
+    isTossAllowedUser: () => true,
     recordTopupV2: async (_u, _c, orderRef) => {
       if (ledgerKeys.has(orderRef)) return { ok: true, duplicate: true };
       ledgerKeys.add(orderRef);
@@ -259,6 +263,7 @@ test("past_due 복구 실패는 적립 결과를 되돌리지 않는다(best-eff
   const p: RecordCashTopupPorts = {
     isAllowedPayKrw: (won) => won === PAY,
     cashKrwForPayKrw: () => PAY,
+    isTossAllowedUser: () => true,
     recordTopupV2: async () => ({ ok: true, duplicate: false }),
     recoverPastDue: async () => { throw new Error("복구 실패"); },
   };
@@ -272,6 +277,7 @@ test("원장 RPC 실패는 ledger_failed 이고 복구를 호출하지 않는다
   const p: RecordCashTopupPorts = {
     isAllowedPayKrw: (won) => won === PAY,
     cashKrwForPayKrw: () => PAY,
+    isTossAllowedUser: () => true,
     recordTopupV2: async () => ({ ok: false, code: "" }),
     recoverPastDue: async (u) => { recovered.push(u); },
   };
@@ -334,6 +340,7 @@ test("사용자 노출 문구에 Toss 원문·코드·내부 메시지가 섞이
 test("모든 실패 경로의 message 는 고정 매핑 표 안의 값이다", async () => {
   const scenarios: Array<{ name: string; over: Partial<ConfirmCashTopupPorts>; input?: typeof INPUT }> = [
     { name: "미로그인", over: { getAuthenticatedUserId: async () => null } },
+    { name: "토스 게이트 비허용", over: { isTossAllowedUser: () => false } },
     { name: "형식 오류", over: {}, input: { ...INPUT, orderId: "weird" } },
     { name: "타인 주문", over: {}, input: { ...INPUT, orderId: OTHER_ORDER } },
     { name: "비허용 금액", over: {}, input: { ...INPUT, amount: 31_000 } },

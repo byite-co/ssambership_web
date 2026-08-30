@@ -26,6 +26,9 @@ scripts/*
 !scripts/contracts/**
 # 보고서 생성 스크립트는 기존부터 추적됨
 !scripts/generate-review-report.mjs
+# E2E 러너(test:e2e:toss-gate 진입점)는 정본(추적)
+!scripts/e2e/
+!scripts/e2e/**
 
 # E2E / Playwright 산출물 (소스 아님)
 /test-results/

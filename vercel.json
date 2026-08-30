@@ -16,6 +16,10 @@
     {
       "path": "/api/cron/notification-outbox",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/paysync-reconcile",
+      "schedule": "*/5 * * * *"
     }
   ]
 }

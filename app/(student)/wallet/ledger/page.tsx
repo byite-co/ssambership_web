@@ -6,6 +6,8 @@ import { loadWalletLedgerPageData } from "@/lib/cash/walletRouteData";
 import { StudentDashboardShell } from "@/components/mypage/StudentDashboardShell";
 import { Suspense } from "react";
 import { WalletLedgerPageBody } from "@/components/cash/WalletLedgerPageBody";
+import { PaysyncPendingLedgerSection } from "@/components/cash/PaysyncPendingLedgerSection";
+import { createServiceRoleClient } from "@/lib/supabase/admin";
 
 type Props = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 
@@ -48,6 +50,11 @@ export default async function WalletLedgerPage(props: Props) {
           <h1 className="text-2xl font-black text-slate-900 tracking-tight">캐시 사용내역</h1>
           <p className="mt-1 text-sm text-slate-500">충전·구독·맞춤의뢰 등 캐시 흐름을 확인합니다.</p>
         </header>
+
+        {/* 진행 중 무통장 주문 — 없으면 아무것도 렌더하지 않는다. */}
+        <Suspense fallback={null}>
+          <PaysyncPendingLedgerSection admin={createServiceRoleClient()} userId={user.id} />
+        </Suspense>
 
         <Suspense fallback={<p className="text-sm text-slate-500">불러오는 중…</p>}>
           <WalletLedgerPageBody data={data} />

@@ -3,6 +3,7 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { callApiWebV1Rpc } from "@/lib/apiWebV1/rpc";
 import { cashKrwForPayKrw, isAllowedChargePayKrw } from "@/lib/cash/chargePackages";
+import { isTossAllowedUser } from "@/lib/payments/tossGate";
 import { recoverPastDueSubscriptionsForStudent } from "@/lib/subscribe/subscriptionRenewalBatch";
 import { krwWonToCents, parseUserIdFromCashOrderId, recordCashTopupCore } from "@/lib/toss/tossTopupCore";
 
@@ -51,6 +52,8 @@ export async function recordCashTopupFromTossOrder(params: {
   return recordCashTopupCore(orderId, payAmountWon, {
     isAllowedPayKrw: isAllowedChargePayKrw,
     cashKrwForPayKrw,
+    // 토스 심사 게이트(웹훅 보강) — 비허용 유저의 orderId 는 적립하지 않는다.
+    isTossAllowedUser,
     recordTopupV2: async (userId, amountCents, orderRef) => {
       const res = await callApiWebV1Rpc(admin, "record_cash_topup_v2", {
         p_user_id: userId,

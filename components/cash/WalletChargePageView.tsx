@@ -14,10 +14,16 @@ type Props = {
   data: WalletChargePageData;
   breakdown: WalletBalanceBreakdown;
   actionError?: string | null;
+  /** 토스 심사 게이트 — 서버(page)에서 판정. false 면 카드 결제수단을 렌더하지 않는다. */
+  tossEnabled: boolean;
+  /** 본인인증 실명 기반 기본 입금자명(규칙 위반이면 빈 문자열). */
+  defaultDepositorName: string;
+  /** 진행 중 무통장 주문의 로컬 id. */
+  pendingInvoiceId: string | null;
 };
 
 export function WalletChargePageView(props: Props) {
-  const { user, profile, data, breakdown, actionError } = props;
+  const { user, profile, data, breakdown, actionError, tossEnabled, defaultDepositorName, pendingInvoiceId } = props;
   const displayName =
     profile?.full_name?.trim() || profile?.nickname?.trim() || user.email?.split("@")[0] || "회원";
 
@@ -78,7 +84,14 @@ export function WalletChargePageView(props: Props) {
                 </p>
               ) : null}
 
-              <CashChargeWidget userId={user.id} currentBalance={breakdown.totalCash} isAuthenticated />
+              <CashChargeWidget
+                userId={user.id}
+                currentBalance={breakdown.totalCash}
+                isAuthenticated
+                tossEnabled={tossEnabled}
+                defaultDepositorName={defaultDepositorName}
+                pendingInvoiceId={pendingInvoiceId}
+              />
 
               <WalletChargeRecentSummary rows={data.ledgerPreview.rows} error={data.ledgerPreview.error} />
             </main>
