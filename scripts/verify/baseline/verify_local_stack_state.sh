@@ -53,9 +53,17 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 96본 pack(생성기 95 + PR60 1) 기준
-# (tables=84 functions=221 policies=175 buckets=13)이며, 프로덕션 원장 96본
-# 실측과 일치한다. PG17 CLI 재생에서도 같은 값이 재현된다.
+# 기대치는 100본 pack(생성기 99 + PR60 1) 기준
+# (tables=85 functions=221 policies=176 buckets=13)이며, PG17 CLI 재생 실측과
+# 일치한다. (프로덕션 원장은 99본 — 20260830100100 미적용 상태다.)
+# 99본→100본(페이싱크 무통장입금 m1) 델타:
+#   tables   +1 = paysync_invoices (20260830100100)
+#   policies +1 = paysync_invoices_select_own — 본인 row SELECT 만 여는 정책.
+#                 (billing_keys·portone_webhook_events 같은 service_role 전용
+#                  테이블은 정책 0 이라 policies 를 안 바꿨지만, 이 표는 학생이
+#                  '진행 중 무통장 주문'을 조회해야 해서 SELECT 정책이 1개 붙는다.)
+#                 functions·buckets 는 불변(트리거는 기존 adg 함수 재사용).
+# 96본→99본(TZ-FIX) 델타: 전부 함수 본문 치환이라 위 4개 카운트 불변.
 # 92본→96본(정산 원천징수 hotfix 역수입) 델타:
 #   functions +3 = calc_withholding_cents + mentor_settlement_lines
 #                + mentor_settlement_summary (20260827100200~100300 —
@@ -96,11 +104,11 @@ count_check(){ # count_check <label> <expected> <sql>
   echo "$1=$got" >> "$EV/structure_counts.txt"
   [ "$got" = "$2" ] && say "$1=$got" || bad "$1=$got — PG16 replay 실측 기대치 $2 와 다르다"
 }
-count_check tables 84 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
+count_check tables 85 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
 count_check functions 221 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
-count_check policies 175 "select count(*) from pg_policies where schemaname='public'"
+count_check policies 176 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"
 
 echo "=== [5] M13 trigger function ACL (anon/authenticated EXECUTE 불가)"
