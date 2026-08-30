@@ -37,12 +37,12 @@ export type HomePopupConfig = {
 
 export const HOME_POPUP_CONFIG: HomePopupConfig = {
   enabled: true,
-  id: "2026-09-sample-event",
-  imageSrc: "/popups/2026-09-sample-event.png",
-  imageAlt: "9월 이벤트 안내",
-  imageWidth: 800,
-  imageHeight: 1000,
-  linkHref: "/notices",
-  startsAt: "2026-09-01T00:00:00+09:00",
-  endsAt: "2026-09-30T23:59:59+09:00",
+  id: "2026-08-31-prelaunch-notice",
+  imageSrc: "/popups/2026-08-31-prelaunch-notice.png",
+  imageAlt: "9월 1일 이벤트 시작 안내",
+  imageWidth: 600,
+  imageHeight: 600,
+  linkHref: null,
+  startsAt: "2026-08-31T00:01:00+09:00",
+  endsAt: "2026-08-31T23:59:59+09:00",
 };
