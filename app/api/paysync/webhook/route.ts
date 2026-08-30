@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { cashKrwForPayKrw, isAllowedChargePayKrw } from "@/lib/cash/chargePackages";
+import { logPaysyncTopupAudit, recordPaysyncTopup } from "@/lib/paysync/paysyncTopupServer";
 import {
   decidePaysyncTopup,
   isKnownPaysyncTrigger,
@@ -11,7 +13,7 @@ import {
   type PaysyncSignatureVerdict,
 } from "@/lib/paysync/verifyPaysyncWebhookSignature";
 
-// 페이싱크 무통장입금 웹훅 수신 (Phase 1).
+// 페이싱크 무통장입금 웹훅 수신 + 적립 (Phase 1~2).
 //
 // 정본: https://docs.paysync.kr/api-reference/webhooks/overview.md
 //
@@ -19,7 +21,7 @@ import {
 //   * 성공은 **정확히 200** 만 성공으로 기록된다 — 201·204 도 실패 취급이다.
 //   * 그 외(3xx/4xx/5xx/타임아웃)는 실패로 기록되고 실패 알림 메일이 발송된다.
 //   * 응답 타임아웃 10초. 페이싱크는 **자동 재시도를 하지 않는다** — 무거운 후처리로
-//     핸들러를 늘리지 않는다. 유실 복구는 Phase 2 보정 크론이 담당한다.
+//     핸들러를 늘리지 않는다. 유실 복구는 보정 크론(paysync-reconcile)이 담당한다.
 //
 // 그래서 서명이 유효한 요청은 처리 결과와 무관하게 200 으로 닫고, 처리하지 못한 사유는
 // 로그·감사 기록으로 남긴다(재전송을 유도해봐야 페이싱크가 재시도하지 않는다).
@@ -80,7 +82,7 @@ export async function POST(req: NextRequest) {
   try {
     parsedBody = JSON.parse(rawBody);
   } catch (e) {
-    console.error("[paysync/webhook] invalid json", e, { webhookId: verdict.webhookId });
+    console.error("[paysync/webhook] invalid json", e, JSON.stringify({ webhookId: verdict.webhookId }));
     await logPaysyncWebhookAudit({
       outcome: "invalid_json",
       webhookId: verdict.webhookId,
@@ -110,34 +112,72 @@ export async function POST(req: NextRequest) {
     return okResponse({ skipped: decision.skip });
   }
 
-  // ── Phase 2 경계 ────────────────────────────────────────────────────────────
-  // 여기부터가 실제 적립이다: 로컬 `paysync_invoices` 대조 → `record_cash_topup_v2`
-  // (`p_order_ref` = `ivc_...` 가 멱등키) → status/paid_at 기록 → past_due 복구.
-  // 그 테이블과 주문 선발급(POST /v1/invoices)은 킥오프 문서 §4·§5(Phase 2·3) 항목이라
-  // 아직 없다. 대조할 정본이 없는 상태에서 metadata 만 믿고 적립하면, 대시보드에서
-  // 수기 발행된 주문의 metadata 로 임의 계정에 캐시를 넣을 수 있다.
-  // 그래서 Phase 1 은 **적립하지 않고 기본 차단**으로 닫고, 판정 결과만 남긴다.
-  console.log(
-    "[paysync/webhook] topup_deferred",
-    JSON.stringify({
-      ...base,
-      userId: decision.userId,
-      payAmountWon: decision.payAmountWon,
-      cashKrw: decision.cashKrw,
-      paidFlag: decision.paidFlag,
-    }),
-  );
-  await logPaysyncWebhookAudit({
-    outcome: "topup_deferred_phase2",
-    ...base,
-    userId: decision.userId,
-    payAmountWon: decision.payAmountWon,
-    cashKrw: decision.cashKrw,
-    // 실측상 false 로 오는 경우가 있어 판정 근거에서 제외했다 — 값 자체는 남긴다.
-    paidFlag: decision.paidFlag,
-  });
+  // ── 적립 (Phase 2) ─────────────────────────────────────────────────────────
+  // 로컬 paysync_invoices 대조 → 페이싱크 재조회 정본 대조 → F11 원장 → status 전이.
+  // 판정·순서는 recordPaysyncTopupCore 가 정본이다(여기서 분기하지 않는다).
+  //
+  // 실패해도 200 으로 닫는다 — 페이싱크는 재시도하지 않으므로 비200 을 돌려봐야
+  // 복구되지 않는다. 유실·일시 실패는 보정 크론(paysync-reconcile)이 회수한다.
+  let admin: ReturnType<typeof createServiceRoleClient>;
+  try {
+    admin = createServiceRoleClient();
+  } catch (e) {
+    console.error("[paysync/webhook] service role client", e);
+    return okResponse({ error: "server_config" });
+  }
 
-  return okResponse({ received: true, deferred: "phase2_topup" });
+  try {
+    const result = await recordPaysyncTopup({
+      admin,
+      paysyncInvoiceId: decision.invoiceId,
+      eventUserId: decision.userId,
+      trigger: event.trigger,
+      // 10초 응답 제한 안에서 끝나야 한다 — 재조회에 4초 상한.
+      lookupTimeoutMs: 4_000,
+    });
+
+    if ("skip" in result) {
+      console.log("[paysync/webhook] topup_skipped", JSON.stringify({ ...base, skip: result.skip }));
+      await logPaysyncTopupAudit(admin, { outcome: "topup_skipped", skip: result.skip, ...base });
+      return okResponse({ skipped: result.skip });
+    }
+
+    if (!result.ok) {
+      console.error("[paysync/webhook] topup_failed", JSON.stringify({ ...base, failed: result.failed }));
+      await logPaysyncTopupAudit(admin, { outcome: "topup_failed", failed: result.failed, ...base });
+      return okResponse({ failed: result.failed });
+    }
+
+    if (!result.duplicate) {
+      revalidatePath("/wallet");
+      revalidatePath("/wallet/charge");
+      revalidatePath("/wallet/ledger");
+    }
+
+    console.log(
+      "[paysync/webhook] topup_recorded",
+      JSON.stringify({ ...base, userId: result.userId, cashKrw: result.cashKrw, duplicate: result.duplicate }),
+    );
+    await logPaysyncTopupAudit(admin, {
+      outcome: result.duplicate ? "topup_duplicate" : "topup_recorded",
+      ...base,
+      userId: result.userId,
+      cashKrw: result.cashKrw,
+      // 웹훅 페이로드의 paid 값 — 판정에는 쓰지 않고 기록만 한다(실측상 false 로 온다).
+      paidFlag: decision.paidFlag,
+      staleStatus: result.staleStatus,
+    });
+
+    return okResponse({ recorded: !result.duplicate, duplicate: result.duplicate });
+  } catch (e) {
+    console.error("[paysync/webhook] unexpected", e, JSON.stringify({ invoiceId: decision.invoiceId }));
+    try {
+      await logPaysyncTopupAudit(admin, { outcome: "error", ...base, message: e instanceof Error ? e.message : String(e) });
+    } catch (logErr) {
+      console.error("[paysync/webhook] error audit failed", logErr);
+    }
+    return okResponse({ error: "unexpected" });
+  }
 }
 
 /** 엔드포인트 도달 확인용(공개 URL 포워딩·경로 점검). 설정 상태는 노출하지 않는다. */
