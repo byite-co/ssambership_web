@@ -3,6 +3,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { isAllowedChargePayKrw } from "@/lib/cash/chargePackages";
+import { isTossAllowedUser } from "@/lib/payments/tossGate";
 import { recordCashTopupFromTossOrder } from "@/lib/toss/cashTopupFromPayment";
 import type { ConfirmCashTopupOutcome } from "@/lib/toss/tossTopupCore";
 import { confirmCashTopupCore } from "@/lib/toss/tossTopupCore";
@@ -35,6 +36,8 @@ export async function confirmCashTopupForCurrentUser(input: {
       const { data } = await supabase.auth.getUser();
       return data?.user?.id ?? null;
     },
+    // 토스 심사 게이트 — allowlist 비허용 계정은 Toss 외부 호출 전에 차단된다.
+    isTossAllowedUser,
     isAllowedPayKrw: isAllowedChargePayKrw,
     hasTossSecret: () => Boolean(process.env.TOSS_SECRET_KEY?.trim()),
     tossConfirm: async ({ paymentKey, orderId, amount }) => {

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Check } from "lucide-react";
 import { loadTossPayments } from "@tosspayments/tosspayments-sdk";
 import { CASH_CHARGE_PACKAGES } from "@/lib/cash/chargePackages";
+// 순수 모듈(env 미접근) — 게이트 고정 문구는 서버 코어와 단일 소스를 공유한다.
+import { CONFIRM_ERROR_MESSAGES } from "@/lib/toss/tossTopupCore";
 
 type PaymentMethod = "card" | "easy" | "bank";
 
@@ -16,9 +18,11 @@ type Props = {
   userId: string;
   currentBalance: number;
   isAuthenticated?: boolean;
+  /** 토스 심사 게이트 — 서버에서 판정한 값. false 면 카드 수단을 아예 렌더하지 않는다. */
+  tossEnabled: boolean;
 };
 
-export function CashChargeWidget({ userId, currentBalance }: Props) {
+export function CashChargeWidget({ userId, currentBalance, tossEnabled }: Props) {
   const [selectedPayKrw, setSelectedPayKrw] = useState<number>(CASH_CHARGE_PACKAGES[0].payKrw);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("card");
   const [loading, setLoading] = useState(false);
@@ -29,6 +33,12 @@ export function CashChargeWidget({ userId, currentBalance }: Props) {
   const projectedBalance = currentBalance + selected.cashKrw;
 
   async function handleCharge() {
+    // 서버 게이트(confirm)와 동일 판정 — 비허용 계정은 결제창 자체를 열지 않는다.
+    if (!tossEnabled) {
+      setInfo(null);
+      setError(CONFIRM_ERROR_MESSAGES.toss_not_allowed);
+      return;
+    }
     if (paymentMethod !== "card") {
       setError(null);
       setInfo("준비 중인 결제 수단입니다. 현재는 신용/체크카드만 이용할 수 있어요.");
@@ -74,10 +84,12 @@ export function CashChargeWidget({ userId, currentBalance }: Props) {
   }
 
   const payMethods: { id: PaymentMethod; label: string; ready: boolean }[] = [
-    { id: "card", label: "신용/체크카드", ready: true },
+    // 토스 심사 게이트: 비허용 계정에는 카드 수단을 아예 렌더하지 않는다(숨김 아님, 미렌더).
+    ...(tossEnabled ? [{ id: "card" as const, label: "신용/체크카드", ready: true }] : []),
     { id: "easy", label: "간편결제", ready: false },
     { id: "bank", label: "무통장입금", ready: false },
   ];
+  const renderedMethods = payMethods.filter((m) => m.ready);
 
   function selectPaymentMethod(m: (typeof payMethods)[number]) {
     if (!m.ready) {
@@ -148,8 +160,13 @@ export function CashChargeWidget({ userId, currentBalance }: Props) {
           <span className="block h-4 w-[3px] shrink-0 rounded-sm bg-[#2563EB]" aria-hidden />
           결제 수단
         </h2>
+        {renderedMethods.length === 0 ? (
+          <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700" role="status">
+            현재 이용 가능한 결제 수단이 없습니다.
+          </p>
+        ) : (
         <div className="mt-4 flex flex-wrap gap-2">
-          {payMethods.filter((m) => m.ready).map((m) => {
+          {renderedMethods.map((m) => {
             const active = paymentMethod === m.id;
             return (
               <button
@@ -177,6 +194,7 @@ export function CashChargeWidget({ userId, currentBalance }: Props) {
             );
           })}
         </div>
+        )}
       </div>
 
       <hr className="my-5 border-0 border-t border-[#e2e8f2]" />
@@ -217,7 +235,7 @@ export function CashChargeWidget({ userId, currentBalance }: Props) {
 
       <button
         type="button"
-        disabled={loading || paymentMethod !== "card"}
+        disabled={loading || !tossEnabled || paymentMethod !== "card"}
         onClick={() => void handleCharge()}
         className="inline-flex min-h-[52px] w-full items-center justify-center rounded-xl bg-[#2563EB] px-5 py-3.5 text-base font-extrabold text-white transition hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-50"
       >

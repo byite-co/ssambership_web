@@ -6,10 +6,10 @@
 //   2) recordCashTopupCore   — 원장 멱등 기록 + past_due 복구(best-effort) 오케스트레이션.
 //      confirm·webhook 이 recordCashTopupFromTossOrder(서버 래퍼)를 통해 공유한다.
 //
-// 검증 순서 계약(§confirm): 입력 형식 → 인증 → orderId 파싱 → 소유자 일치 → 패키지
-// allowlist → secret → (그제서야) Toss 외부 승인 → 응답 상태·orderId·소유자·금액 재검증 →
-// 멱등 원장. 미로그인·타인 orderId·형식 오류·비허용 패키지·secret 누락에서는
-// Toss 외부 호출이 정확히 0회다.
+// 검증 순서 계약(§confirm): 입력 형식 → 인증 → 토스 심사 게이트(allowlist) → orderId
+// 파싱 → 소유자 일치 → 패키지 allowlist → secret → (그제서야) Toss 외부 승인 →
+// 응답 상태·orderId·소유자·금액 재검증 → 멱등 원장. 미로그인·게이트 비허용·타인
+// orderId·형식 오류·비허용 패키지·secret 누락에서는 Toss 외부 호출이 정확히 0회다.
 //
 // 기승인 수렴 계약(§4-2): Toss 가 ALREADY_PROCESSED_PAYMENT 로 응답하면 정본 주문을
 // orderId 로 조회해 orderId·userId·amount 가 **전부** 일치할 때만 성공으로 수렴한다.
@@ -52,6 +52,7 @@ export const CONFIRM_ERROR_MESSAGES: Record<string, string> = {
   card_limit: "카드 한도 또는 잔액이 부족해요. 다른 결제 수단을 이용해 주세요.",
   payment_not_found: "결제 정보를 찾을 수 없습니다. 충전 화면에서 다시 시도해 주세요.",
   provider_error: "결제사 오류로 승인에 실패했어요. 잠시 후 다시 시도해 주세요.",
+  toss_not_allowed: "현재 계정에서는 카드 결제를 이용할 수 없습니다.",
 };
 
 const FALLBACK_MESSAGE = CONFIRM_ERROR_MESSAGES.payment_failed;
@@ -144,6 +145,11 @@ export type RecordTopupPortResult =
 export type ConfirmCashTopupPorts = {
   /** 현재 인증 사용자 id(없으면 null). Toss 호출보다 반드시 먼저 평가된다. */
   getAuthenticatedUserId: () => Promise<string | null>;
+  /**
+   * 토스 심사 게이트(tossGate 주입) — 심사용 allowlist 계정만 카드 결제 허용.
+   * 인증 직후에 평가되고, 비허용이면 이후 단계(외부 호출 포함)가 전부 0회다.
+   */
+  isTossAllowedUser: (userId: string) => boolean;
   /** 서버 allowlist 패키지 검사(chargePackages 정본을 주입). */
   isAllowedPayKrw: (payKrw: number) => boolean;
   /** TOSS_SECRET_KEY 존재 여부. */
@@ -181,6 +187,10 @@ export async function confirmCashTopupCore(
   // 2) 인증
   const userId = await ports.getAuthenticatedUserId();
   if (!userId) return fail(401, "unauthorized", userMessageForConfirmCode("unauthorized"));
+  // 2-b) 토스 심사 게이트 — 심사용 allowlist 계정만 카드 결제 허용(비허용 시 이후 0회)
+  if (!ports.isTossAllowedUser(userId)) {
+    return fail(403, "toss_not_allowed", userMessageForConfirmCode("toss_not_allowed"));
+  }
   // 3) orderId 에서 사용자 식별자 파싱
   const orderUserId = parseUserIdFromCashOrderId(orderId);
   if (!orderUserId) return fail(400, "invalid_order", userMessageForConfirmCode("invalid_order"));
@@ -261,6 +271,11 @@ export type RecordCashTopupPorts = {
   isAllowedPayKrw: (payKrw: number) => boolean;
   cashKrwForPayKrw: (payKrw: number) => number | null;
   /**
+   * 토스 심사 게이트(웹훅 경로 보강) — orderId 에서 파싱한 userId 가 allowlist 를
+   * 통과할 때만 적립한다. 비허용이면 F11 호출·past_due 복구가 전부 0회다.
+   */
+  isTossAllowedUser: (userId: string) => boolean;
+  /**
    * F11 `api_web_v1.record_cash_topup_v2(p_user_id, p_amount_cents, p_order_ref)` 포트.
    * envelope 성공이면 duplicate 플래그, 실패면 안정 코드(ORDER_REF_INVALID ·
    * ORDER_REF_OWNER_MISMATCH · LEDGER_FIELD_MISMATCH · 전송 오류)를 돌려준다.
@@ -310,6 +325,10 @@ export async function recordCashTopupCore(
   const userId = parseUserIdFromCashOrderId(orderId);
   if (!userId) {
     return { ok: false, code: "invalid_order", message: "주문 번호 형식이 올바르지 않습니다." };
+  }
+  // 토스 심사 게이트(웹훅 보강) — 비허용 유저의 orderId 는 적립하지 않는다(F11 호출 0).
+  if (!ports.isTossAllowedUser(userId)) {
+    return { ok: false, code: "toss_not_allowed", message: CONFIRM_ERROR_MESSAGES.toss_not_allowed };
   }
   const amountCents = krwWonToCents(cashKrw);
   if (amountCents <= 0) {

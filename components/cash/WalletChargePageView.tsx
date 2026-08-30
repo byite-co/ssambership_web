@@ -14,10 +14,12 @@ type Props = {
   data: WalletChargePageData;
   breakdown: WalletBalanceBreakdown;
   actionError?: string | null;
+  /** 토스 심사 게이트 — 서버(page)에서 판정. false 면 카드 결제수단을 렌더하지 않는다. */
+  tossEnabled: boolean;
 };
 
 export function WalletChargePageView(props: Props) {
-  const { user, profile, data, breakdown, actionError } = props;
+  const { user, profile, data, breakdown, actionError, tossEnabled } = props;
   const displayName =
     profile?.full_name?.trim() || profile?.nickname?.trim() || user.email?.split("@")[0] || "회원";
 
@@ -78,7 +80,7 @@ export function WalletChargePageView(props: Props) {
                 </p>
               ) : null}
 
-              <CashChargeWidget userId={user.id} currentBalance={breakdown.totalCash} isAuthenticated />
+              <CashChargeWidget userId={user.id} currentBalance={breakdown.totalCash} isAuthenticated tossEnabled={tossEnabled} />
 
               <WalletChargeRecentSummary rows={data.ledgerPreview.rows} error={data.ledgerPreview.error} />
             </main>

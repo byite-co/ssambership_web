@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { revalidatePath } from "next/cache";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
+import { isTossAllowedUser } from "@/lib/payments/tossGate";
 import {
   logWebhookCashTopupRecovery,
+  parseUserIdFromCashOrderId,
   recordCashTopupFromTossOrder,
 } from "@/lib/toss/cashTopupFromPayment";
 import {
@@ -167,6 +169,29 @@ export async function POST(req: NextRequest) {
   if (!paymentKey) {
     console.error("[toss/webhook] missing paymentKey", { orderId, data: webhookLogData(data) });
     return okResponse({ recovered: false, skipped: "payment_key_missing" });
+  }
+
+  // 토스 심사 게이트 — 비허용 유저의 주문은 Toss 재조회·적립 없이 차단한다(원장
+  // 코어의 게이트와 이중 방어). DONE 웹훅이 게이트에 막혔다 = 돈은 결제됐는데
+  // 적립이 없는 상태다. 응답은 이 라우트의 기존 계약대로 200(비2xx는 서명 실패
+  // 401뿐) — Toss 재시도로 복구하는 경로가 아니라, 감사 로그(admin_action_logs)의
+  // blocked_toss_gate 항목을 근거로 환불 또는 수동 적립으로 대사한다.
+  const webhookUserId = parseUserIdFromCashOrderId(orderId);
+  if (webhookUserId && !isTossAllowedUser(webhookUserId)) {
+    console.error("[toss/webhook] blocked by toss review gate", { orderId, payAmountWon });
+    try {
+      const admin = createServiceRoleClient();
+      await logWebhookCashTopupRecovery(admin, {
+        outcome: "blocked_toss_gate",
+        orderId,
+        payAmountWon,
+        paymentKey: maskPaymentKey(paymentKey),
+        eventCreatedAt: event.createdAt ?? null,
+      });
+    } catch (e) {
+      console.error("[toss/webhook] gate audit log failed", e);
+    }
+    return okResponse({ recovered: false, skipped: "toss_not_allowed" });
   }
 
   const verifiedPayment = await verifyWebhookPaymentWithToss({ orderId, paymentKey, payAmountWon });
