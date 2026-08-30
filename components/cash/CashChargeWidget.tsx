@@ -8,6 +8,7 @@ import { CASH_CHARGE_PACKAGES } from "@/lib/cash/chargePackages";
 import { requestPaysyncChargeAction } from "@/lib/paysync/paysyncChargeActions";
 // 순수 모듈(env 미접근) — 클라·서버가 같은 입금자명 규칙을 쓴다.
 import { DEPOSITOR_NAME_ERROR, isValidDepositorName } from "@/lib/paysync/depositorName";
+import { CASH_RECEIPT_PHONE_ERROR, isValidReceiptPhone } from "@/lib/paysync/cashReceipt";
 // 순수 모듈(env 미접근) — 게이트 고정 문구는 서버 코어와 단일 소스를 공유한다.
 import { CONFIRM_ERROR_MESSAGES } from "@/lib/toss/tossTopupCore";
 
@@ -42,6 +43,9 @@ export function CashChargeWidget({
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(tossEnabled ? "card" : "bank");
   const [depositorName, setDepositorName] = useState<string>(defaultDepositorName);
   const [depositorTouched, setDepositorTouched] = useState(false);
+  const [receiptRequested, setReceiptRequested] = useState(false);
+  const [receiptPhone, setReceiptPhone] = useState("");
+  const [receiptTouched, setReceiptTouched] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -110,6 +114,13 @@ export function CashChargeWidget({
 
   const bankSelected = paymentMethod === "bank";
   const depositorInvalid = bankSelected && depositorTouched && !isValidDepositorName(depositorName);
+  const receiptInvalid = receiptRequested && receiptTouched && !isValidReceiptPhone(receiptPhone);
+  // 현금영수증을 신청했는데 번호가 유효하지 않으면 발급을 막는다 — 그대로 보내면
+  // 주문 발급 자체가 422 로 실패해 충전이 통째로 막힌다.
+  const bankSubmitBlocked =
+    !isValidDepositorName(depositorName) ||
+    (receiptRequested && !isValidReceiptPhone(receiptPhone)) ||
+    Boolean(pendingInvoiceId);
 
   function selectPaymentMethod(m: (typeof payMethods)[number]) {
     if (!m.ready) {
@@ -265,6 +276,55 @@ export function CashChargeWidget({
                 {DEPOSITOR_NAME_ERROR}
               </p>
             ) : null}
+
+            {/* 현금영수증(소득공제) — 선택 사항. 발행 결과는 별도 이벤트로 오지 않아
+                우리가 상태를 추적하지 않는다(페이싱크 대시보드에서 확인). */}
+            <div className="mt-4 rounded-xl border border-[#e2e8f2] bg-[#F9FAFB] p-4">
+              <label className="flex items-center gap-2.5">
+                <input
+                  type="checkbox"
+                  checked={receiptRequested}
+                  onChange={(e) => {
+                    setReceiptRequested(e.target.checked);
+                    setError(null);
+                  }}
+                  className="h-4 w-4 shrink-0 rounded border-[#cbd5e1] text-[#2563EB] focus:ring-[#2563EB]/30"
+                />
+                <span className="text-sm font-bold text-[#0f172a]">현금영수증 신청 (소득공제용)</span>
+              </label>
+
+              {receiptRequested ? (
+                <>
+                  <label htmlFor="paysync-receipt-phone" className="sr-only">
+                    현금영수증 휴대폰 번호
+                  </label>
+                  <input
+                    id="paysync-receipt-phone"
+                    type="tel"
+                    inputMode="numeric"
+                    autoComplete="tel"
+                    value={receiptPhone}
+                    onChange={(e) => {
+                      setReceiptPhone(e.target.value);
+                      setError(null);
+                    }}
+                    onBlur={() => setReceiptTouched(true)}
+                    aria-invalid={receiptInvalid}
+                    placeholder="휴대폰 번호 (하이픈 없이)"
+                    className={[
+                      "mt-3 block w-full rounded-xl border px-4 py-3 text-sm font-bold tabular-nums text-[#0f172a] transition",
+                      "focus:outline-none focus:ring-2 focus:ring-[#2563EB]/30",
+                      receiptInvalid ? "border-[#DC2626] bg-[#fef2f2]" : "border-[#e2e8f2] bg-white",
+                    ].join(" ")}
+                  />
+                  {receiptInvalid ? (
+                    <p className="mt-1 text-xs font-bold text-[#DC2626]" role="alert">
+                      {CASH_RECEIPT_PHONE_ERROR}
+                    </p>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
           </div>
         </>
       ) : null}
@@ -327,9 +387,11 @@ export function CashChargeWidget({
         <form action={requestPaysyncChargeAction}>
           <input type="hidden" name="payKrw" value={selected.payKrw} />
           <input type="hidden" name="depositorName" value={depositorName} />
+          <input type="hidden" name="cashReceiptRequested" value={receiptRequested ? "1" : "0"} />
+          <input type="hidden" name="cashReceiptPhone" value={receiptRequested ? receiptPhone : ""} />
           <button
             type="submit"
-            disabled={loading || !isValidDepositorName(depositorName) || Boolean(pendingInvoiceId)}
+            disabled={loading || bankSubmitBlocked}
             className="inline-flex min-h-[52px] w-full items-center justify-center rounded-xl bg-[#2563EB] px-5 py-3.5 text-base font-extrabold text-white transition hover:bg-[#1d4ed8] disabled:cursor-not-allowed disabled:opacity-50"
           >
             캐시 충전하기

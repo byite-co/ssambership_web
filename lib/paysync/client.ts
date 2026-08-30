@@ -140,6 +140,12 @@ export type CreatePaysyncInvoiceInput = {
   metadata: Record<string, string>;
   /** 기본 "1d". 최대 365일. */
   expireAfter?: string;
+  /**
+   * 현금영수증(소득공제 PERSONAL). 결제 완료 시 페이싱크가 자동 발행을 시도한다.
+   * 생략하면 발행하지 않는다 — 발행 결과는 별도 이벤트로 오지 않으므로(문서 FAQ)
+   * 우리 쪽에서 상태를 추적하지 않는다.
+   */
+  cashReceipt?: { type: "PERSONAL"; identifier: string } | null;
 };
 
 /**
@@ -163,6 +169,7 @@ export function createPaysyncInvoice(input: CreatePaysyncInvoiceInput, timeoutMs
       amount: input.amountWon,
       expireAfter: input.expireAfter ?? "1d",
       metadata: input.metadata,
+      ...(input.cashReceipt ? { cashReceipt: input.cashReceipt } : {}),
     },
   });
 }

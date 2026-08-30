@@ -25,7 +25,16 @@ export async function requestPaysyncChargeAction(formData: FormData): Promise<vo
   const depositorName = textFromForm(formData.get("depositorName"));
 
   const admin = createServiceRoleClient();
-  const result = await issuePaysyncInvoice({ admin, userId: user.id, payKrw, depositorName });
+  const result = await issuePaysyncInvoice({
+    admin,
+    userId: user.id,
+    payKrw,
+    depositorName,
+    cashReceipt: {
+      requested: textFromForm(formData.get("cashReceiptRequested")) === "1",
+      phone: textFromForm(formData.get("cashReceiptPhone")) || null,
+    },
+  });
 
   if (!result.ok) {
     redirect(`/wallet/charge?error=${encodeURIComponent(result.message)}`);

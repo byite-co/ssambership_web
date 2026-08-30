@@ -17,6 +17,7 @@ import {
   fetchPaysyncInvoice,
 } from "@/lib/paysync/client";
 import { depositorNameError, normalizeDepositorName } from "@/lib/paysync/depositorName";
+import { buildCashReceiptInput } from "@/lib/paysync/cashReceipt";
 import { buildPaysyncLedgerOrderRef } from "@/lib/paysync/paysyncLedgerRef";
 import { userMessageForPaysyncCode } from "@/lib/paysync/paysyncErrorMessages";
 import { recordPaysyncTopup } from "@/lib/paysync/paysyncTopupServer";
@@ -72,6 +73,8 @@ export async function issuePaysyncInvoice(params: {
   userId: string;
   payKrw: number;
   depositorName: string;
+  /** 현금영수증(소득공제) 신청 여부와 휴대폰 번호. 미신청이면 생략. */
+  cashReceipt?: { requested: boolean; phone: string | null };
 }): Promise<IssueResult> {
   const { admin, userId, payKrw } = params;
   const depositorName = normalizeDepositorName(params.depositorName);
@@ -85,6 +88,14 @@ export async function issuePaysyncInvoice(params: {
   const nameError = depositorNameError(depositorName);
   if (nameError) return { ok: false, message: nameError };
 
+  // 현금영수증 입력은 발급 전에 거른다 — 잘못된 번호면 주문 발급 자체가 422 로 실패해
+  // 충전이 통째로 막힌다.
+  const receipt = buildCashReceiptInput({
+    requested: params.cashReceipt?.requested === true,
+    phone: params.cashReceipt?.phone ?? null,
+  });
+  if (!receipt.ok) return { ok: false, message: receipt.message };
+
   // 2) 본인 pending 재사용 — 외부 호출 없이 기존 주문으로 안내한다.
   const existing = await findOwnPendingInvoice(admin, userId);
   if (existing) return { ok: true, invoice: existing, reused: true };
@@ -95,6 +106,7 @@ export async function issuePaysyncInvoice(params: {
     amountWon: payKrw,
     metadata: { userId, ref: "wallet-charge" },
     expireAfter: "1d",
+    cashReceipt: receipt.cashReceipt,
   });
 
   if (!created.ok) {
