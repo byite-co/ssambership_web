@@ -12,6 +12,9 @@ export const PAYSYNC_USER_MESSAGES: Record<string, string> = {
   server_config: "결제 설정이 준비되지 않았습니다.",
   transport_failed: "결제사 연결에 실패했어요. 잠시 후 다시 시도해 주세요.",
   malformed_response: "결제사 응답을 확인하지 못했어요. 잠시 후 다시 시도해 주세요.",
+  // 프레임워크 단 400(문서의 code 봉투가 아닌 응답) — 우리 요청 형식 문제이므로
+  // 사용자에게는 원인을 노출하지 않는다(requestId 는 서버 로그에만).
+  bad_request: "결제 요청 형식이 올바르지 않습니다. 잠시 후 다시 시도해 주세요.",
 
   // ── 인증·권한(전부 서버 설정 문제 — 사용자에게 원인 노출 금지) ──────────
   NOT_AUTHORIZED: "결제 설정이 준비되지 않았습니다.",

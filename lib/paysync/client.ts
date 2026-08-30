@@ -90,10 +90,21 @@ async function callPaysync<T>(
     clearTimeout(timer);
   }
 
-  const body = (await res.json().catch(() => null)) as { code?: unknown; data?: unknown } | null;
+  const body = (await res.json().catch(() => null)) as
+    | { code?: unknown; data?: unknown; error?: unknown; requestId?: unknown }
+    | null;
+
   if (!body || typeof body.code !== "string") {
-    console.error("[paysync/client] malformed response", { path, status: res.status });
-    return fail("malformed_response", res.status);
+    // 실측(2026-08-30): 프레임워크 단 검증 실패(400)는 `code` 없이
+    // `{timestamp, path, status, error, requestId}` 로 온다 — 문서의 "모든 응답은 code 를
+    // 포함한다"와 어긋난다. 성공으로 승격하지 않고, 지원 문의용 requestId 만 남긴다.
+    console.error("[paysync/client] non-envelope response", {
+      path,
+      status: res.status,
+      error: typeof body?.error === "string" ? body.error : null,
+      requestId: typeof body?.requestId === "string" ? body.requestId : null,
+    });
+    return fail(res.status === 400 ? "bad_request" : "malformed_response", res.status);
   }
 
   if (!SUCCESS_CODES.has(body.code)) {
@@ -117,6 +128,42 @@ export function fetchPaysyncInvoice(invoiceId: string, timeoutMs?: number) {
   return callPaysync<PaysyncInvoiceResource>(`/invoices/${encodeURIComponent(invoiceId)}`, {
     method: "GET",
     timeoutMs,
+  });
+}
+
+export type CreatePaysyncInvoiceInput = {
+  /** 입금자명 — 페이싱크 자동 매칭 키. 공백 없이 1~5자(INVALID_CUSTOMER_NAME). */
+  depositorName: string;
+  /** 결제 금액(원). 패키지 allowlist 검증은 호출부 책임. */
+  amountWon: number;
+  /** 최대 5쌍 · 키 64자 · 값 1024자. */
+  metadata: Record<string, string>;
+  /** 기본 "1d". 최대 365일. */
+  expireAfter?: string;
+};
+
+/**
+ * 주문 발급 — `POST /v1/invoices`.
+ *
+ * `bankAccountIds` 는 **필수**다(빈 배열 = 전 계좌 수신). 문서 §요청 본문이 required 로
+ * 표시하는데 개요 페이지의 예시에는 빠져 있다 — 빠뜨리면 `code` 없는 400 이 온다
+ * (2026-08-30 실측). 다중 계좌 라우팅이 필요해지면 그때 채운다.
+ *
+ * 409 `INVOICE_ALREADY_EXISTS` 는 같은 입금자명·금액의 미결제 주문이 이미 있다는
+ * 뜻이다(동명이인 충돌 포함) — 호출부가 본인 pending 주문 재사용/재시도 안내를
+ * 판단한다(§5).
+ */
+export function createPaysyncInvoice(input: CreatePaysyncInvoiceInput, timeoutMs?: number) {
+  return callPaysync<PaysyncInvoiceResource>("/invoices", {
+    method: "POST",
+    timeoutMs,
+    body: {
+      bankAccountIds: [],
+      customer: { name: input.depositorName },
+      amount: input.amountWon,
+      expireAfter: input.expireAfter ?? "1d",
+      metadata: input.metadata,
+    },
   });
 }
 
