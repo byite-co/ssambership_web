@@ -27,14 +27,45 @@ test("confirm 라우트: page 와 같은 서버 코어 사용 + 직접 Toss fetc
   assert.ok(route.includes('revalidatePath("/wallet")'), "성공 revalidate 계약이 사라짐");
 });
 
-test("webhook: 기존 계약 유지 — confirm 코어 미편입·서명/DONE 게이트·record 정본·Cookie/SITE_URL 0", () => {
+test("webhook: 기존 계약 유지 — confirm 코어 미편입·DONE 게이트·record 정본·Cookie/SITE_URL 0", () => {
   const webhook = read("app/api/toss/webhook/route.ts");
   assert.ok(!webhook.includes("confirmCashTopupForCurrentUser"), "webhook 이 인증 세션 confirm 코어에 편입됨");
-  assert.ok(webhook.includes("verifyTossWebhookSignature"), "서명 검증이 사라짐");
+  assert.ok(webhook.includes("verifyTossWebhookSignature"), "서명 검증 자체가 사라짐");
   assert.ok(webhook.includes('"DONE"') || webhook.includes("'DONE'"), "DONE 게이트가 사라짐");
   assert.ok(webhook.includes("recordCashTopupFromTossOrder"), "원장 멱등 정본 호출이 사라짐");
   assert.ok(!webhook.includes("NEXT_PUBLIC_SITE_URL"), "webhook 에 SITE_URL 의존이 생김");
   assert.ok(!webhook.includes("cookies()") && !webhook.includes("Cookie:"), "webhook 에 사용자 Cookie 의존이 생김");
+});
+
+test("webhook 서명 정책: 헤더가 있을 때만 검증한다(Toss 공식 — 결제 이벤트엔 서명이 없다)", () => {
+  // 정본: docs.tosspayments.com/reference/using-api/webhook-events
+  //   "tosspayments-webhook-signature 는 payout.changed 와 seller.changed 웹훅 헤더에만 포함됩니다."
+  // 서명을 무조건 요구하면 PAYMENT_STATUS_CHANGED 는 구조적으로 항상 401 이 되어
+  // 이 라우트가 영영 결제를 처리하지 못한다(회귀 시 이 테스트가 먼저 깨진다).
+  const webhook = read("app/api/toss/webhook/route.ts");
+
+  // 검증은 조건부여야 한다 — `if (signature)` 안에서만 호출된다.
+  const guardIdx = webhook.indexOf("if (signature)");
+  const verifyIdx = webhook.indexOf("verifyTossWebhookSignature(rawBody");
+  assert.ok(guardIdx > 0, "서명 존재 여부 분기가 없다 — 무조건 검증으로 되돌아갔다");
+  assert.ok(verifyIdx > guardIdx, "서명 검증이 존재 분기 밖에서 호출된다(무조건 401 회귀)");
+
+  // 서명이 없다고 401 로 끊으면 안 된다: 401 은 '헤더가 있는데 틀린' 경우 뿐이다.
+  assert.ok(
+    webhook.includes("invalid signature (header present)"),
+    "401 사유가 '헤더 존재 + 불일치'로 좁혀져 있지 않다",
+  );
+
+  // 서명이 없는 이벤트의 실제 보안 근거 — 적립 전 Toss 재조회 정본 대조가 남아 있어야 한다.
+  assert.ok(
+    webhook.includes("verifyWebhookPaymentWithToss"),
+    "재조회 정본 대조가 사라졌다 — 서명이 없는 경로에서 페이로드만 믿게 된다",
+  );
+  // 재조회는 적립(record) 보다 반드시 앞이다.
+  const lookupIdx = webhook.indexOf("await verifyWebhookPaymentWithToss");
+  const recordIdx = webhook.indexOf("await recordCashTopupFromTossOrder");
+  assert.ok(lookupIdx > 0 && recordIdx > 0, "재조회·적립 호출을 찾지 못했다");
+  assert.ok(lookupIdx < recordIdx, "적립이 재조회보다 앞선다 — 페이로드만으로 돈이 움직인다");
 });
 
 test("원장 정본 배선: recordCashTopupFromTossOrder 가 순수 코어에 위임(판정 이중화 금지)", () => {
