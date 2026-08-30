@@ -162,7 +162,7 @@ export function CashChargeWidget({ userId, currentBalance, tossEnabled }: Props)
         </h2>
         {renderedMethods.length === 0 ? (
           <p className="mt-4 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700" role="status">
-            현재 이용 가능한 결제 수단이 없습니다.
+            {CONFIRM_ERROR_MESSAGES.toss_not_allowed}
           </p>
         ) : (
         <div className="mt-4 flex flex-wrap gap-2">

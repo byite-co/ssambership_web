@@ -1,5 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import { loadEnvLocal } from "./env";
+// .ts 확장자 명시: playwright 외에 node --experimental-strip-types 러너
+// (scripts/e2e/runTossGateE2e.ts)도 이 모듈을 import 한다(확장자 없으면 node 해석 실패).
+import { loadEnvLocal } from "./env.ts";
 
 const env = loadEnvLocal();
 const URL = env.NEXT_PUBLIC_SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
