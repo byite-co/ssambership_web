@@ -1,5 +1,6 @@
 import { HomeLanding } from "@/components/landing/HomeLanding";
 import { LandingLayout } from "@/components/landing/LandingLayout";
+import { HomeImagePopup } from "@/components/popup/HomeImagePopup";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { emptyHomeLandingData, loadHomeLandingData } from "@/lib/landing/landingPageQueries";
 import { createClient } from "@/lib/supabase/server";
@@ -22,6 +23,7 @@ export default async function LandingPage() {
   return (
     <LandingLayout user={user} profile={profile}>
       <HomeLanding data={data} profile={profile} />
+      <HomeImagePopup />
     </LandingLayout>
   );
 }
