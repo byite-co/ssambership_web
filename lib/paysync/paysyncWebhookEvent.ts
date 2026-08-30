@@ -93,8 +93,6 @@ export type PaysyncTopupSkipReason =
   | "invoice_missing"
   /** 주문 ID 가 없거나 `ivc_` 접두사가 아님. */
   | "invoice_id_invalid"
-  /** `paid` 가 true 가 아님. */
-  | "not_paid"
   /** `metadata.userId` 없음 — 우리가 발급하지 않은 주문(대시보드 수기 발행 등). */
   | "user_id_missing"
   /** 금액이 양의 정수가 아님. */
@@ -110,6 +108,11 @@ export type PaysyncTopupDecision =
       payAmountWon: number;
       cashKrw: number;
       trigger: string | null;
+      /**
+       * 페이로드의 `invoice.paid` 원본 값. 판정에는 쓰지 않고 감사 로그로만 남긴다 —
+       * 실측상 `invoice.paid` 이벤트인데도 false 로 오는 경우가 있다(아래 주석 참조).
+       */
+      paidFlag: boolean;
     }
   | { ok: false; skip: PaysyncTopupSkipReason };
 
@@ -123,6 +126,19 @@ export type PaysyncTopupDecisionPorts = {
 /**
  * 적립 대상 여부 판정. 외부 호출·DB 접근 없이 페이로드만으로 결정하며,
  * 거부 사유를 그대로 돌려 라우트가 수신 로그에 남길 수 있게 한다.
+ *
+ * `invoice.paid` 필드를 판정 근거로 쓰지 않는 이유 (2026-08-30 실측):
+ *   3원 실입금이 자동 매칭된 실제 `invoice.paid` 웹훅의 원본 바디가
+ *   `{"invoice":{...,"paid":false},"trigger":"AUTOMATIC_MATCHING","type":"invoice.paid"}`
+ *   였다. 같은 주문을 `GET /v1/invoices/{id}` 로 조회하면 `paid: true` 다. 즉 페이싱크가
+ *   상태 전이가 커밋되기 전 스냅샷을 이벤트에 실어 보낸다(문서 §invoice.paid 는
+ *   "이 이벤트에서는 항상 true" 라고 명시 — 문서와 구현이 어긋난다).
+ *   따라서 결제 완료의 근거는 **서명된 이벤트 타입(`invoice.paid`)** 이고, 페이로드의
+ *   `paid` 불리언은 신뢰하지 않는다. 값은 paidFlag 로 보존해 감사 로그에만 남긴다.
+ *
+ * 이 완화가 안전한 이유: 적립 직전에 `GET /v1/invoices/{id}` 재조회로 `paid: true` 와
+ * 금액을 정본 대조하는 것이 Phase 2 계약이다(토스 웹훅의 verifyWebhookPaymentWithToss
+ * 와 같은 패턴). 페이로드만으로 돈을 움직이지 않는다.
  */
 export function decidePaysyncTopup(
   event: PaysyncWebhookEvent,
@@ -133,7 +149,6 @@ export function decidePaysyncTopup(
   const invoice = event.invoice;
   if (!invoice) return { ok: false, skip: "invoice_missing" };
   if (!invoice.id || !invoice.id.startsWith("ivc_")) return { ok: false, skip: "invoice_id_invalid" };
-  if (!invoice.paid) return { ok: false, skip: "not_paid" };
   if (!invoice.userId) return { ok: false, skip: "user_id_missing" };
 
   const payAmountWon = invoice.amountWon;
@@ -150,5 +165,6 @@ export function decidePaysyncTopup(
     payAmountWon,
     cashKrw,
     trigger: event.trigger,
+    paidFlag: invoice.paid,
   };
 }

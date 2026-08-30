@@ -68,6 +68,7 @@ test("정상 적립 판정: 허용 패키지 금액이면 지급 캐시까지 �
     assert.equal(d.payAmountWon, 30_000);
     assert.equal(d.cashKrw, 30_000);
     assert.equal(d.trigger, "AUTOMATIC_MATCHING");
+    assert.equal(d.paidFlag, true);
   }
 });
 
@@ -94,9 +95,6 @@ test("기본 닫힘: 우리 주문이 아니면 적립하지 않는다", () => {
     [{ id: "abc" }, "invoice_id_invalid"],
     [{ id: "" }, "invoice_id_invalid"],
     [{ id: null }, "invoice_id_invalid"],
-    // paid 플래그 위조 방지
-    [{ paid: false }, "not_paid"],
-    [{ paid: "true" }, "not_paid"],
   ];
   for (const [invoiceOver, skip] of cases) {
     const d = decidePaysyncTopup(parsePaysyncWebhookEvent(paidPayload({}, invoiceOver)), PORTS);
@@ -159,4 +157,45 @@ test("킥오프 문서의 `data.metadata` 표기는 실제 페이로드와 다�
   const wrongShape = { type: "invoice.paid", data: { id: "ivc_x", amount: 30_000, paid: true, metadata: { userId: USER } } };
   const d = decidePaysyncTopup(parsePaysyncWebhookEvent(wrongShape), PORTS);
   assert.deepEqual(d, { ok: false, skip: "invoice_missing" });
+});
+
+test("실측 회귀: invoice.paid 인데 paid:false 인 실제 페이로드도 적립 판정을 통과한다", () => {
+  // 2026-08-30 3원 실입금 자동매칭 건의 원본 바디(고객 정보만 치환). 페이싱크는 상태 전이
+  // 커밋 전 스냅샷을 보내 `paid: false` 가 실려 온다 — 문서(§"항상 true")와 어긋난다.
+  // 결제 완료의 근거는 서명된 이벤트 타입이므로 paid 불리언으로 막지 않는다.
+  const real = {
+    invoice: {
+      id: "ivc_hjjwt6ux9g9ltplsqofn02ct",
+      issuerId: "acc_b9q0qy9opyu551sacd9m5hi6",
+      bankAccountIds: [],
+      customer: { name: "테스트", email: "test@example.com", phoneNumber: "01000000000" },
+      cashReceipt: null,
+      amount: 30_000,
+      paid: false,
+      metadata: { userId: USER },
+      issuedAt: "2026-08-30T09:35:08.677Z",
+      expiresAt: null,
+      deletedAt: null,
+    },
+    trigger: "AUTOMATIC_MATCHING",
+    type: "invoice.paid",
+  };
+  const d = decidePaysyncTopup(parsePaysyncWebhookEvent(real), PORTS);
+  assert.equal(d.ok, true, "paid:false 때문에 막히면 실입금이 영영 적립되지 않는다");
+  if (d.ok) {
+    assert.equal(d.userId, USER);
+    assert.equal(d.payAmountWon, 30_000);
+    // 원본 값은 감사용으로 보존한다.
+    assert.equal(d.paidFlag, false);
+  }
+});
+
+test("실측 회귀: 필드 순서가 invoice→trigger→type 여도 동일하게 파싱된다", () => {
+  const e = parsePaysyncWebhookEvent({
+    invoice: { id: "ivc_x", amount: 30_000, paid: false, metadata: { userId: USER } },
+    trigger: "AUTOMATIC_MATCHING",
+    type: "invoice.paid",
+  });
+  assert.equal(e.type, "invoice.paid");
+  assert.equal(e.invoice?.id, "ivc_x");
 });

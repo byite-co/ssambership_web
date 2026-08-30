@@ -124,6 +124,7 @@ export async function POST(req: NextRequest) {
       userId: decision.userId,
       payAmountWon: decision.payAmountWon,
       cashKrw: decision.cashKrw,
+      paidFlag: decision.paidFlag,
     }),
   );
   await logPaysyncWebhookAudit({
@@ -132,6 +133,8 @@ export async function POST(req: NextRequest) {
     userId: decision.userId,
     payAmountWon: decision.payAmountWon,
     cashKrw: decision.cashKrw,
+    // 실측상 false 로 오는 경우가 있어 판정 근거에서 제외했다 — 값 자체는 남긴다.
+    paidFlag: decision.paidFlag,
   });
 
   return okResponse({ received: true, deferred: "phase2_topup" });
