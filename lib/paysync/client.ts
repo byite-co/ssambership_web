@@ -167,4 +167,16 @@ export function createPaysyncInvoice(input: CreatePaysyncInvoiceInput, timeoutMs
   });
 }
 
+/**
+ * 주문 삭제 — `DELETE /v1/invoices/{id}`. 미결제 주문만 삭제할 수 있다.
+ * 이미 결제된 주문은 403 `INVOICE_ALREADY_PAID` 로 거부된다 — 호출부는 그 경우
+ * 로컬을 canceled 로 내리면 안 된다(입금된 돈이 있다).
+ */
+export function deletePaysyncInvoice(invoiceId: string, timeoutMs?: number) {
+  return callPaysync<null>(`/invoices/${encodeURIComponent(invoiceId)}`, {
+    method: "DELETE",
+    timeoutMs,
+  });
+}
+
 export { PAYSYNC_API_BASE, PAYSYNC_USER_MESSAGES };

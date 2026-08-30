@@ -30,12 +30,21 @@ test.describe("토스 게이트 — /wallet/charge 카드 수단 노출", () => 
 
     await openChargePage(page);
 
-    // 카드 결제수단이 DOM 에 아예 없다(숨김 아님, 미렌더).
+    // 카드 결제수단이 DOM 에 아예 없다(숨김 아님, 미렌더). — 게이트의 본질 불변식.
     await expect(page.getByRole("button", { name: "신용/체크카드" })).toHaveCount(0);
     // 안내 문구는 CONFIRM_ERROR_MESSAGES.toss_not_allowed 원문 그대로다.
     await expect(page.getByText(GATE_MESSAGE, { exact: true })).toBeVisible();
-    // 충전 실행 버튼도 비활성(결제창 진입 자체가 불가).
-    await expect(page.getByRole("button", { name: "캐시 충전하기" })).toBeDisabled();
+
+    // Phase 3 이후: 비허용 계정에도 **무통장입금**이라는 대체 수단이 열린다.
+    // 그래서 "충전 버튼이 비활성"은 더 이상 게이트의 불변식이 아니다(구 단언 폐기 —
+    // 그건 무통장입금이 '준비 중'이던 시절의 부수적 사실이었다).
+    // 대신 게이트가 지켜야 할 것을 더 정확히 단언한다:
+    //   ① 카드 경로가 어떤 형태로도 노출되지 않는다
+    //   ② 대체 수단(무통장입금)이 기본 선택되어 사용자가 막히지 않는다
+    await expect(page.getByRole("button", { name: "무통장입금" })).toBeVisible();
+    await expect(page.getByLabel("입금자명")).toBeVisible();
+    // 카드 관련 표면이 DOM 전체에 없다(라벨·배지 어느 형태로도).
+    await expect(page.getByText("신용/체크카드", { exact: true })).toHaveCount(0);
   });
 
   test("시나리오 B(허용): allowlist 등재 계정 → 카드 수단 렌더 + 안내 문구 없음", async ({ page }) => {
