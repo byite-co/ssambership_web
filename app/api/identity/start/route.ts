@@ -6,9 +6,14 @@ import {
   startIdentityVerification,
   type IdentityVerificationKind,
 } from "@/lib/identity/service";
+import { resolveRequestOrigin } from "@/lib/http/requestOrigin";
 
 // S-C: 본인인증 시작 (로그인 필수, kind 전이 규칙·스로틀은 service 가 검증).
 // 인증 플로우는 게이트 플래그와 무관하게 상시 활성(부록 C).
+//
+// return_url 은 요청이 들어온 호스트(허용목록: ssambership.com / www.ssambership.com) 기준으로
+// 조립한다 — 시작 호스트 == 복귀 호스트여야 host-only 세션 쿠키가 NICE 복귀 요청에 실린다.
+// 허용목록 밖(프리뷰 등)은 APP_URL 폴백.
 
 function isKind(value: unknown): value is IdentityVerificationKind {
   return value === "self" || value === "guardian";
@@ -53,7 +58,8 @@ export async function POST(req: NextRequest) {
   }
 
   const admin = createServiceRoleClient();
-  const result = await startIdentityVerification(admin, { userId: user.id, kind });
+  const origin = resolveRequestOrigin(req.headers, { allowLocalhost: process.env.NODE_ENV !== "production" });
+  const result = await startIdentityVerification(admin, { userId: user.id, kind, appUrl: origin ?? undefined });
   if (!result.ok) {
     return NextResponse.json(
       { ok: false, error: result.code, message: result.message },

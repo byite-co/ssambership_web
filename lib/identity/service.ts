@@ -159,7 +159,16 @@ export type StartVerificationResult =
  */
 export async function startIdentityVerification(
   admin: SupabaseClient,
-  opts: { userId: string; kind: IdentityVerificationKind }
+  opts: {
+    userId: string;
+    kind: IdentityVerificationKind;
+    /**
+     * return_url/close_url 조립 기준 오리진. 요청이 들어온 호스트(허용목록 검증 완료)를 넘기면
+     * 시작 호스트 == 복귀 호스트가 되어 www/apex 어느 쪽에서 시작해도 세션 쿠키가 복귀에 실린다.
+     * 미지정 시 APP_URL(NEXT_PUBLIC_SITE_URL) 폴백.
+     */
+    appUrl?: string;
+  }
 ): Promise<StartVerificationResult> {
   let user: { id: string; identity_verified_at: string | null } | null;
   let verifiedRows: IdentityVerificationRow[];
@@ -221,7 +230,7 @@ export async function startIdentityVerification(
   const vid = randomUUID();
   let appUrl: string;
   try {
-    appUrl = resolveAppUrl();
+    appUrl = opts.appUrl?.trim().replace(/\/+$/, "") || resolveAppUrl();
   } catch {
     logError("APP_URL/NEXT_PUBLIC_SITE_URL 미설정", {});
     return { ok: false, status: 500, code: "APP_URL_MISSING", message: "설정 오류입니다. 관리자에게 문의해 주세요." };

@@ -10,6 +10,7 @@ import {
   recoverStuckProcessing,
   resolveAppUrl,
 } from "@/lib/identity/service";
+import { resolveRequestOrigin } from "@/lib/http/requestOrigin";
 
 // S-C: NICE 표준창 복귀 핸들러 — 팝업(또는 모바일 동일창) 안에서 실행된다.
 //
@@ -17,8 +18,11 @@ import {
 //  - CAS 락(pending→processing)으로 NICE result 1회성(3033)을 보장 — 락 실패(새로고침 등)는
 //    현재 status 기준 결과 HTML 만 반환하고 result API 를 재호출하지 않는다.
 //  - 응답 HTML 은 status/code 토큰만 담는다 — enc_data·개인정보는 HTML/URL 에 절대 미포함.
-//  - opener 가 있으면 postMessage(APP_ORIGIN 한정) 후 close, 없으면(팝업 차단·동일창 진행)
+//  - opener 가 있으면 postMessage(복귀 요청의 오리진 한정) 후 close, 없으면(팝업 차단·동일창 진행)
 //    /onboarding/verify 로 이동 — 동일창 플로우를 정식 지원한다.
+//  - postMessage targetOrigin 은 이 페이지를 서빙한 호스트(= start 호스트 = 부모창 origin)다.
+//    고정 APP_URL 을 쓰면 www/apex 가 어긋날 때 부모창이 메시지를 받지 못한다.
+//  - 무음 조기종료 분기는 [identity/return] early-exit 로그를 남긴다(vid·code·host 만, 개인정보 없음).
 
 type PopupResult = { status: string; code: string };
 
@@ -43,15 +47,9 @@ function headlineFor(status: string): { title: string; sub: string } {
   return { title: "인증을 완료하지 못했습니다", sub: "창이 닫히면 안내에 따라 다시 시도해 주세요." };
 }
 
-function htmlResponse(result: PopupResult): Response {
+function htmlResponse(result: PopupResult, appOrigin: string): Response {
   const status = sanitizeToken(result.status, "failed");
   const code = sanitizeToken(result.code, "UNKNOWN");
-  let appOrigin = "";
-  try {
-    appOrigin = new URL(resolveAppUrl()).origin;
-  } catch {
-    appOrigin = "";
-  }
   const fallbackPath = `/onboarding/verify?status=${encodeURIComponent(status)}&code=${encodeURIComponent(code)}`;
   const payload = JSON.stringify({ type: "nice-identity", status, code });
   const { title, sub } = headlineFor(status);
@@ -105,8 +103,28 @@ function htmlResponse(result: PopupResult): Response {
   });
 }
 
+/** postMessage targetOrigin — 복귀 요청의 오리진(허용목록) 우선, 아니면 APP_URL 폴백. */
+function resolvePopupOrigin(req: NextRequest): string {
+  const fromRequest = resolveRequestOrigin(req.headers, { allowLocalhost: process.env.NODE_ENV !== "production" });
+  if (fromRequest) return fromRequest;
+  try {
+    return new URL(resolveAppUrl()).origin;
+  } catch {
+    return "";
+  }
+}
+
+function requestHost(req: NextRequest): string | null {
+  return req.headers.get("x-forwarded-host") ?? req.headers.get("host");
+}
+
 async function handleReturn(req: NextRequest, bodyParams: URLSearchParams | null): Promise<Response> {
   const query = req.nextUrl.searchParams;
+  const appOrigin = resolvePopupOrigin(req);
+  const host = requestHost(req);
+  const earlyExit = (code: string, vid: string | null): void => {
+    console.error("[identity/return] early-exit", { code, vid, host });
+  };
   const pick = (key: string): string | null => {
     const q = query.get(key);
     if (q && q.trim()) return q.trim();
@@ -118,17 +136,18 @@ async function handleReturn(req: NextRequest, bodyParams: URLSearchParams | null
   const webTransactionId = pick("web_transaction_id");
   // close_url 경유(사용자 취소) — 인증 데이터가 없으면 취소 안내만
   if (!webTransactionId && query.get("close") === "1") {
-    return htmlResponse({ status: "closed", code: "CLOSED" });
+    return htmlResponse({ status: "closed", code: "CLOSED" }, appOrigin);
   }
   if (!webTransactionId) {
     // 파라미터 키 이름만 로그(값 로그 금지)
-    console.error("[identity/return] web_transaction_id 부재", { queryKeys: [...query.keys()] });
-    return htmlResponse({ status: "failed", code: "MISSING_WEB_TX" });
+    console.error("[identity/return] web_transaction_id 부재", { queryKeys: [...query.keys()], host });
+    return htmlResponse({ status: "failed", code: "MISSING_WEB_TX" }, appOrigin);
   }
 
   const vid = pick("vid") ?? req.cookies.get(NICE_VID_COOKIE)?.value?.trim() ?? null;
   if (!vid) {
-    return htmlResponse({ status: "failed", code: "MISSING_VID" });
+    earlyExit("MISSING_VID", null);
+    return htmlResponse({ status: "failed", code: "MISSING_VID" }, appOrigin);
   }
 
   // 팝업 세션 유저와 행 소유자 일치 검증
@@ -136,20 +155,24 @@ async function handleReturn(req: NextRequest, bodyParams: URLSearchParams | null
   const { data: auth } = await supabase.auth.getUser();
   const sessionUserId = auth?.user?.id ?? null;
   if (!sessionUserId) {
-    return htmlResponse({ status: "failed", code: "NO_SESSION" });
+    earlyExit("NO_SESSION", vid);
+    return htmlResponse({ status: "failed", code: "NO_SESSION" }, appOrigin);
   }
 
   const admin = createServiceRoleClient();
   const row = await loadVerificationById(admin, vid);
   if (!row) {
-    return htmlResponse({ status: "failed", code: "NOT_FOUND" });
+    earlyExit("NOT_FOUND", vid);
+    return htmlResponse({ status: "failed", code: "NOT_FOUND" }, appOrigin);
   }
   if (row.user_id !== sessionUserId) {
-    return htmlResponse({ status: "failed", code: "FORBIDDEN" });
+    earlyExit("FORBIDDEN", vid);
+    return htmlResponse({ status: "failed", code: "FORBIDDEN" }, appOrigin);
   }
 
   if (await expirePendingIfStale(admin, row)) {
-    return htmlResponse({ status: "expired", code: "PENDING_TIMEOUT" });
+    earlyExit("PENDING_TIMEOUT", vid);
+    return htmlResponse({ status: "expired", code: "PENDING_TIMEOUT" }, appOrigin);
   }
 
   const locked = await casLockForProcessing(admin, vid);
@@ -157,29 +180,37 @@ async function handleReturn(req: NextRequest, bodyParams: URLSearchParams | null
     // 중복 실행(새로고침 등) — 현재 status 기준 결과만 반환, result API 재호출 금지(3033 예방)
     const current = await loadVerificationById(admin, vid);
     if (!current) {
-      return htmlResponse({ status: "failed", code: "NOT_FOUND" });
+      earlyExit("NOT_FOUND", vid);
+      return htmlResponse({ status: "failed", code: "NOT_FOUND" }, appOrigin);
     }
     if (current.status === "verified") {
-      return htmlResponse({ status: "verified", code: "ALREADY_DONE" });
+      earlyExit("ALREADY_DONE", vid);
+      return htmlResponse({ status: "verified", code: "ALREADY_DONE" }, appOrigin);
     }
     if (current.status === "processing") {
       if (await recoverStuckProcessing(admin, current)) {
-        return htmlResponse({ status: "failed", code: "STUCK_PROCESSING" });
+        earlyExit("STUCK_PROCESSING", vid);
+        return htmlResponse({ status: "failed", code: "STUCK_PROCESSING" }, appOrigin);
       }
-      return htmlResponse({ status: "processing", code: "IN_PROGRESS" });
+      earlyExit("IN_PROGRESS", vid);
+      return htmlResponse({ status: "processing", code: "IN_PROGRESS" }, appOrigin);
     }
     if (current.status === "expired") {
-      return htmlResponse({ status: "expired", code: sanitizeToken(current.failure_code, "PENDING_TIMEOUT") });
+      return htmlResponse({ status: "expired", code: sanitizeToken(current.failure_code, "PENDING_TIMEOUT") }, appOrigin);
     }
     if (current.status === "failed") {
-      return htmlResponse({ status: "failed", code: sanitizeToken(current.failure_code, "UNKNOWN") });
+      return htmlResponse({ status: "failed", code: sanitizeToken(current.failure_code, "UNKNOWN") }, appOrigin);
     }
     // pending 인데 CAS 만 진 레이스 — 다른 실행이 진행 중
-    return htmlResponse({ status: "processing", code: "IN_PROGRESS" });
+    earlyExit("IN_PROGRESS", vid);
+    return htmlResponse({ status: "processing", code: "IN_PROGRESS" }, appOrigin);
   }
 
   const outcome = await completeIdentityVerification(admin, { row: locked, webTransactionId });
-  return htmlResponse(outcome);
+  if (outcome.code === "INTEGRITY_FAIL") {
+    earlyExit("INTEGRITY_FAIL", vid);
+  }
+  return htmlResponse(outcome, appOrigin);
 }
 
 export async function GET(req: NextRequest) {
