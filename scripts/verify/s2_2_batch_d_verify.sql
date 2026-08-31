@@ -364,6 +364,14 @@ begin
       v_res2 := api_web_v1.mentor_payout_account_update_self('카카오뱅크', '1234567');
       v_ok := v_ok and v_res2->>'code' = 'PAYOUT_ACCOUNT_NUMBER_INVALID';
       v_det := v_det || ' | allowlist+형식 거부';
+      -- 189: iM뱅크 allowlist 허용
+      v_res2 := api_web_v1.mentor_payout_account_update_self('iM뱅크', '12345678901234');
+      v_ok := v_ok and (v_res2->>'ok')::boolean and v_res2->>'account_masked' = '**********1234';
+      v_res2 := api_web_v1.mentor_payout_account_update_self('IM뱅크', '12345678901234');
+      v_ok := v_ok and v_res2->>'code' = 'PAYOUT_BANK_NAME_INVALID';
+      v_det := v_det || ' | iM뱅크 허용·IM뱅크 거부';
+      v_res2 := api_web_v1.mentor_payout_account_update_self('카카오뱅크', '12345678901234');
+      v_ok := v_ok and (v_res2->>'ok')::boolean;
     end if;
     execute 'reset role';
     if v_ok then
