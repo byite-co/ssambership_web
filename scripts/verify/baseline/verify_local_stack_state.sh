@@ -53,9 +53,14 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 100본 pack(생성기 99 + PR60 1) 기준
-# (tables=85 functions=221 policies=176 buckets=13)이며, PG17 CLI 재생 실측과
-# 일치한다. (프로덕션 원장은 99본 — 20260830100100 미적용 상태다.)
+# 기대치는 103본 pack(생성기 102 + PR60 1) 기준
+# (tables=85 functions=222 policies=176 buckets=13)이며, PG17 CLI 재생 실측과
+# 일치한다. (프로덕션 원장은 102본 — 20260831100100 미적용 상태다.)
+# 100본→103본(원장 화해 2본 역수입 + iM뱅크 allowlist) 델타:
+#   functions +1 = tmp_auto_school_verification (20260830150838 hotfix 역수입 —
+#                트리거 부착 자체는 카운트 불변)
+#   (20260830140804 는 app_notices 컬럼+CHECK 추가, 20260831100100 은 F13 본문
+#    치환(allowlist 16→17)이라 위 4개 카운트를 바꾸지 않는다.)
 # 99본→100본(페이싱크 무통장입금 m1) 델타:
 #   tables   +1 = paysync_invoices (20260830100100)
 #   policies +1 = paysync_invoices_select_own — 본인 row SELECT 만 여는 정책.
@@ -106,7 +111,7 @@ count_check(){ # count_check <label> <expected> <sql>
 }
 count_check tables 85 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
-count_check functions 221 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+count_check functions 222 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
 count_check policies 176 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"
