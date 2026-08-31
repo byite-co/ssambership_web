@@ -22,6 +22,7 @@ const BANK_OPTIONS = [
   "신협",
   "새마을금고",
   "우체국",
+  "iM뱅크",
 ] as const;
 
 type Props = {
