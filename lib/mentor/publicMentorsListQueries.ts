@@ -155,6 +155,8 @@ export type MentorPublicListCard = {
   stats: MentorListStats;
   /** cap 마감 여부 (구체 수치는 학생 미노출 — boolean만) */
   subscriptionClosed: boolean;
+  /** 한줄 소개(intro_line)를 초기값(공란)에서 직접 작성했는지 — 기본 정렬 그룹 내 우선 노출 키 */
+  hasCustomIntro: boolean;
 };
 
 export type PublicMentorsListResult = {
@@ -410,10 +412,44 @@ function cardMatchesFilters(f: MentorsListFilters, card: MentorPublicListCard): 
   return true;
 }
 
+/**
+ * 기본(인기순) 정렬의 1차 키: 학교인증(school_tier × verified_major_category) 기반 그룹 랭크.
+ * 0: 서연고 & 메디컬 → 1: 그 외 메디컬(미분류·서성한·중경외시 포함) → 2: 서연고 일반과
+ * → 3: 나머지 대학 일반과 → 4: 학교 미인증(승인된 verification 없음 → schoolTier 공란).
+ * schoolTier 는 mentorDisplayFields 에서 "그외"→"미분류" 정규화가 끝난 값이다.
+ */
+function tierGroupRank(card: MentorPublicListCard): number {
+  const d = card.display;
+  const tier = (d.schoolTier ?? "").trim();
+  if (!d.schoolVerified || !tier) return 4;
+  const isSky = tier === "서연고";
+  const isMedical = (d.verifiedMajorCategory ?? "").trim() === "메디컬";
+  if (isSky && isMedical) return 0;
+  if (isMedical) return 1;
+  if (isSky) return 2;
+  return 3;
+}
+
+/**
+ * 기본 정렬의 2차 키(동일 그룹 내): 멘토가 작성한 상세 소개(bio, 최대 500자) 길이 내림차순.
+ * 한줄 소개(intro)는 50자 캡 + bio 폴백이 섞여 변별 지표로 부적합 — 순수 bio 컬럼만 잰다.
+ * 동률(미작성 데모 계정 등)은 기존 인기 점수로 폴백한다.
+ */
+function descriptionLength(card: MentorPublicListCard): number {
+  return (card.display.bio ?? "").trim().length;
+}
+
 function sortKey(f: MentorsListSort): (a: MentorPublicListCard, b: MentorPublicListCard) => number {
   switch (f) {
     case "popular":
       return (a, b) => {
+        const g = tierGroupRank(a) - tierGroupRank(b);
+        if (g !== 0) return g;
+        // 그룹 내 2차: 한줄 소개를 초기값(공란)에서 직접 작성한 멘토 우선.
+        const intro = Number(b.hasCustomIntro) - Number(a.hasCustomIntro);
+        if (intro !== 0) return intro;
+        const len = descriptionLength(b) - descriptionLength(a);
+        if (len !== 0) return len;
         const scoreA = (a.reviewCount ?? 0) * 10 + (a.avgRating ?? 0);
         const scoreB = (b.reviewCount ?? 0) * 10 + (b.avgRating ?? 0);
         return scoreB - scoreA;
@@ -561,6 +597,10 @@ export async function loadPublicMentorsList(
     const plan = planBatch.byMentor.get(u.id);
     const byTier = plan?.byTier ?? null;
     const { tierPrices, minPriceKrw } = buildTierPrices(byTier);
+    // 한줄 소개 작성 여부는 intro_line 원본 컬럼으로만 판정한다 — display.intro 는
+    // 공란일 때 bio/about 폴백이 섞여 "작성함"으로 오판될 수 있다. 초기설정값은 공란(가입 폼 기본 "").
+    const introLineRaw = (prow as Record<string, unknown> | null)?.intro_line;
+    const hasCustomIntro = typeof introLineRaw === "string" && introLineRaw.trim().length > 0;
     const card: MentorPublicListCard = {
       mentorId: u.id,
       display,
@@ -578,6 +618,7 @@ export async function loadPublicMentorsList(
         satisfactionLabel: rev.avg != null ? `${Math.round((rev.avg / 5) * 100)}%` : "—",
       },
       subscriptionClosed: capMap.get(u.id)?.isFull ?? false,
+      hasCustomIntro,
     };
     if (cardMatchesFilters(filters, card)) {
       cards.push(card);
