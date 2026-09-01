@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { CommunityBoardDetail } from "@/components/community/CommunityBoardDetail";
 import { CommunityLayoutShell } from "@/components/community/CommunityLayoutShell";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
@@ -18,6 +19,12 @@ import { isUserBlocksEnabled } from "@/lib/shell/featureFlags";
 type Props = {
   params: Promise<{ id: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+// 게시판 상세는 회원이 작성한 글이라 개인정보 노출 범위 판단이 끝나지 않아 의도적으로 색인에서 제외한다.
+// follow: true — 색인만 막고 링크 추적은 허용해, 커뮤니티 목록에서 이어지는 크롤 경로가 끊기지 않게 한다.
+export const metadata: Metadata = {
+  robots: { index: false, follow: true },
 };
 
 export default async function CommunityBoardDetailPage(props: Props) {

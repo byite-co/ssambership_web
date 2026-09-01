@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { MentorRecentRecorder } from "@/components/mentor/MentorRecentRecorder";
 import { PublicMentorDetailBody, PublicMentorNotFoundBody } from "@/components/mentor/PublicMentorDetailBody";
 import { buildMentorProfileDisplay } from "@/lib/mentor/mentorDisplayFields";
@@ -15,6 +16,12 @@ import { applySchoolClassificationLabels, loadSchoolClassificationCatalogs } fro
 
 type Props = {
   params: Promise<{ mentorId: string }>;
+};
+
+// 멘토 상세는 멘토 실명·학교 등 개인정보의 공개 범위 판단이 끝나지 않아 의도적으로 색인에서 제외한다.
+// follow: true — 색인만 막고 링크 추적은 허용해, 멘토 찾기 목록에서 이어지는 크롤 경로가 끊기지 않게 한다.
+export const metadata: Metadata = {
+  robots: { index: false, follow: true },
 };
 
 export default async function MentorDetailByIdPage(props: Props) {

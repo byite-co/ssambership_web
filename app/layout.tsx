@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono } from "next/font/google";
+import { siteUrl } from "@/lib/seo/siteUrl";
 import "./globals.css";
 
 const geistMono = Geist_Mono({
@@ -8,8 +9,30 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "쌤버십 웹",
-  description: "학생-멘토 질문/구독/커뮤니티 플랫폼",
+  // 상대 경로 canonical·OG 값을 절대 URL로 확정하기 위한 기준 origin
+  metadataBase: new URL(siteUrl()),
+  title: {
+    default: "쌤버십",
+    template: "%s | 쌤버십",
+  },
+  description:
+    "쌤버십은 공부하다 막힌 문제를 대학생 멘토에게 질문하고, 멘토별 질문방에서 답변과 학습 관리를 이어받는 구독형 질문 멘토링 서비스입니다.",
+  // canonical 은 의도적으로 루트에 두지 않는다.
+  // Next.js 메타데이터는 하위 세그먼트가 alternates 를 선언하지 않으면 부모 값을 그대로
+  // 물려주므로, 루트에 canonical: "/" 를 두면 /about·/legal/*·/mentors 등 사이트맵에 실은
+  // 모든 URL 이 홈을 canonical 로 가리킨다(= 전부 홈의 중복으로 신고되어 색인에서 탈락).
+  // 실측으로 확인한 동작이다. 페이지별 canonical 은 각 페이지가 직접 선언해야 하며,
+  // 그 작업 전까지는 canonical 을 아예 내보내지 않는 편이 안전하다.
+  openGraph: {
+    type: "website",
+    siteName: "쌤버십",
+    locale: "ko_KR",
+    url: siteUrl(),
+    // title.template이 적용되지 않는 자리이므로 평문 서비스명을 직접 넣는다.
+    title: "쌤버십",
+    description:
+      "쌤버십은 공부하다 막힌 문제를 대학생 멘토에게 질문하고, 멘토별 질문방에서 답변과 학습 관리를 이어받는 구독형 질문 멘토링 서비스입니다.",
+  },
 };
 
 export const viewport: Viewport = {

@@ -10,6 +10,7 @@ import {
   incrementShortformView,
 } from "@/lib/community/communityShortformQueries";
 import { anonViewerKeyFromRequestHeaders } from "@/lib/community/viewEventKey";
+import type { Metadata } from "next";
 import { headers } from "next/headers";
 import Link from "next/link";
 import { VideoOff } from "lucide-react";
@@ -22,6 +23,12 @@ import { isUserBlocksEnabled } from "@/lib/shell/featureFlags";
 type Props = {
   params: Promise<{ id: string }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
+};
+
+// 숏폼 상세는 회원이 올린 콘텐츠라 개인정보 노출 범위 판단이 끝나지 않아 의도적으로 색인에서 제외한다.
+// follow: true — 색인만 막고 링크 추적은 허용해, 숏폼 목록에서 이어지는 크롤 경로가 끊기지 않게 한다.
+export const metadata: Metadata = {
+  robots: { index: false, follow: true },
 };
 
 export default async function CommunityShortformDetailPage(props: Props) {
