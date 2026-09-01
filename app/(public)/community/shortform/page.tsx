@@ -11,6 +11,11 @@ import type { ShortformCategorySlug } from "@/lib/community/communityShortformCo
 import { SURFACE_CARD } from "@/lib/ui/surfaceCard";
 import { CommunityShortformUploadFab } from "@/components/community/CommunityShortformUploadFab";
 
+export const metadata = {
+  title: "숏폼",
+  description: "쌤버십 멘토들이 올린 짧은 학습 영상을 주제별로 둘러볼 수 있는 숏폼 피드입니다.",
+};
+
 type Props = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 
 export default async function CommunityShortformPage(props: Props) {

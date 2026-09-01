@@ -7,6 +7,11 @@ import { listShortformFeed } from "@/lib/community/communityShortformQueries";
 import { fetchBlockedUserIds, filterBlockedAuthors } from "@/lib/blocks/userBlocksQueries";
 import { isUserBlocksEnabled } from "@/lib/shell/featureFlags";
 
+export const metadata = {
+  title: "커뮤니티",
+  description: "대학생 멘토의 짧은 학습 영상과 인기 게시글을 한곳에서 둘러보는 쌤버십 커뮤니티입니다.",
+};
+
 export default async function CommunityLandingPage() {
   const { user, profile } = await getServerUserWithProfile();
   const supabase = await createClient();

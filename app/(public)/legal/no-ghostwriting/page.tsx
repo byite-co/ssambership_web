@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { PolicyDraftBanner } from "@/components/legal/PolicyDraftBanner";
 
+export const metadata = {
+  title: "세특·자소서 대필 금지 정책",
+  description: "쌤버십은 학교 제출용 문서의 대필·대행을 제공하지 않습니다. 멘토링 운영 범위와 그 경계를 안내합니다.",
+};
+
 export default function LegalNoGhostwritingPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-10">

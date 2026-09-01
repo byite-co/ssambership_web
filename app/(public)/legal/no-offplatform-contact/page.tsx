@@ -1,5 +1,10 @@
 import { PolicyDraftBanner } from "@/components/legal/PolicyDraftBanner";
 
+export const metadata = {
+  title: "외부 연락처 교환 금지 정책",
+  description: "맞춤의뢰에서 멘토 선택·거래 성립 전 카카오·전화·SNS 등 외부 연락처 교환을 허용하지 않는 기준을 안내합니다.",
+};
+
 export default function LegalNoOffplatformContactPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-10">
