@@ -421,3 +421,135 @@ test("사이트맵 경로의 page.tsx 는 리다이렉트 전용 스텁이 아�
       offenders.map((o) => `  ${o}`).join("\n"),
   );
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 10. 사이트맵 라우트의 페이지별 metadata 존재
+//
+//    #101 로 18개 URL 을 네이버에 알릴 수 있게 됐지만, 개별 metadata 가 없는 페이지는
+//    검색 결과에 루트 기본값("쌤버십" + 루트 description)으로만 떠서 페이지를 구분할
+//    근거가 없다. 정적 `export const metadata` 든 `generateMetadata` 든 하나는 있어야 한다.
+//    빌드 산출물을 파싱하지 않고 소스 텍스트로 검사한다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PAGE_METADATA_EXPORT = /export\s+(?:const\s+metadata\b|(?:async\s+)?function\s+generateMetadata\b)/;
+
+test("사이트맵 라우트의 page.tsx 는 전부 개별 metadata(export const metadata 또는 generateMetadata)를 가진다 — 없으면 검색 결과에 루트 기본값만 노출되어 페이지를 구분할 수 없다", () => {
+  const routeMap = buildRouteMap();
+  const missing: string[] = [];
+  let checked = 0;
+
+  for (const route of PUBLIC_SITEMAP_ROUTES) {
+    for (const file of routeMap.get(route) ?? []) {
+      checked += 1;
+      const src = stripComments(readSource(join(REPO_ROOT, file)));
+      if (!PAGE_METADATA_EXPORT.test(src)) missing.push(`${route} → ${file}`);
+    }
+  }
+
+  assert.ok(checked > 0, "검사한 page.tsx 가 0개 — 라우트 맵 계산이 깨졌다");
+  assert.deepEqual(
+    missing,
+    [],
+    "개별 metadata 가 없는 사이트맵 페이지(검색 결과에 루트 기본값만 노출된다):\n" +
+      missing.map((m) => `  ${m}`).join("\n"),
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 11. 정적 metadata title 의 브랜드명 중복 차단
+//
+//    루트 layout 의 title.template 이 " | 쌤버십" 을 붙이므로, 페이지 title 에 브랜드명을
+//    또 넣으면 "커뮤니티 | 쌤버십 | 쌤버십" 이 된다. 홈(app/page.tsx)만 예외로
+//    `title: { absolute: ... }` 를 써 템플릿을 우회하므로 검사에서 제외한다.
+//    검사 범위는 사이트맵 라우트로 한정한다(다른 페이지의 기존 중복 브랜딩은 별건).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** `export const metadata = { ... }` 블록 본문을 중괄호 깊이로 잘라낸다. 없으면 null. */
+function extractStaticMetadataBlock(src: string): string | null {
+  const start = src.search(/export\s+const\s+metadata\b[^{]*{/);
+  if (start < 0) return null;
+  const open = src.indexOf("{", start);
+  let depth = 0;
+  for (let i = open; i < src.length; i += 1) {
+    const ch = src[i];
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return src.slice(open + 1, i);
+    }
+  }
+  return null;
+}
+
+test("사이트맵 라우트의 정적 metadata title 은 '쌤버십' 을 포함하지 않는다(홈 제외) — 루트 template 이 브랜드명을 붙여 'X | 쌤버십 | 쌤버십' 이 된다", () => {
+  const routeMap = buildRouteMap();
+  const offenders: string[] = [];
+  let checked = 0;
+
+  for (const route of PUBLIC_SITEMAP_ROUTES) {
+    if (route === "/") continue; // 홈은 title.absolute 로 템플릿을 우회한다
+    for (const file of routeMap.get(route) ?? []) {
+      const src = stripComments(readSource(join(REPO_ROOT, file)));
+      const block = extractStaticMetadataBlock(src);
+      if (!block) continue; // generateMetadata 등 동적 케이스는 이 계약의 대상이 아니다
+      const title = /(?:^|[\s,{])title\s*:\s*(["'`])([\s\S]*?)\1/.exec(block);
+      if (!title) continue; // title 이 객체(absolute 등)이거나 없음 — 여기서는 판정하지 않는다
+      checked += 1;
+      if (title[2].includes("쌤버십")) offenders.push(`${route} → ${file}: title=${JSON.stringify(title[2])}`);
+    }
+  }
+
+  assert.ok(checked > 0, "검사한 정적 title 이 0개 — 추출 정규식이 깨졌다");
+  assert.deepEqual(
+    offenders,
+    [],
+    "title 에 브랜드명이 들어가 template 과 중복된다(' | 쌤버십' 은 루트가 붙인다):\n" +
+      offenders.map((o) => `  ${o}`).join("\n"),
+  );
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 12. 루트 openGraph 의 title·description·url 상속 차단
+//
+//    Next.js 는 하위 페이지가 openGraph 를 선언하지 않으면 루트의 openGraph 객체를
+//    통째로 물려준다. 루트에 title/description/url 을 두면 18개 페이지 전부의 og 값이
+//    홈으로 고정된다(#101 의 canonical 사고와 같은 상속 경로). 루트가 이 세 키를 갖지
+//    않으면 Next 가 각 페이지의 resolved title/description 으로 og 값을 채운다.
+//    그래서 루트 openGraph 는 type · siteName · locale 만 가진다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** `openGraph: { ... }` 블록 본문을 중괄호 깊이로 잘라낸다. 없으면 null. */
+function extractOpenGraphBlock(src: string): string | null {
+  const start = src.search(/\bopenGraph\s*:\s*{/);
+  if (start < 0) return null;
+  const open = src.indexOf("{", start);
+  let depth = 0;
+  for (let i = open; i < src.length; i += 1) {
+    const ch = src[i];
+    if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return src.slice(open + 1, i);
+    }
+  }
+  return null;
+}
+
+test("루트 app/layout.tsx 의 openGraph 에 title·description·url 이 없다 — 루트에 두면 사이트맵 페이지 전부에 상속되어 og 값이 홈으로 고정된다", () => {
+  const src = stripComments(readSource(join(REPO_ROOT, "app", "layout.tsx")));
+  const block = extractOpenGraphBlock(src);
+  assert.ok(block, "app/layout.tsx 에서 openGraph 블록을 찾지 못했다 — 사이트 공통 og 설정이 사라졌다");
+
+  // 추출이 실제 블록을 잡았는지(빈 문자열·엉뚱한 블록이 아닌지) 먼저 못박는다.
+  for (const key of ["type", "siteName", "locale"]) {
+    assert.match(block, new RegExp(`(?:^|[\\s,{])${key}\\s*:`), `루트 openGraph 에 ${key} 가 없다 — 사이트 공통 값은 루트가 가져야 한다`);
+  }
+
+  for (const key of ["title", "description", "url"]) {
+    assert.doesNotMatch(
+      block,
+      new RegExp(`(?:^|[\\s,{])${key}\\s*:`),
+      `루트 openGraph 에 ${key} 가 있다 — 하위 페이지 전부에 상속되어 og:${key} 가 홈 값으로 고정된다. 페이지별 title/description 에서 Next 가 채우게 두라`,
+    );
+  }
+});

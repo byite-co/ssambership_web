@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { PolicyDraftBanner } from "@/components/legal/PolicyDraftBanner";
 
+export const metadata = {
+  title: "저작권·업로드 가이드",
+  description: "쌤버십 게시글·영상 업로드 시 지켜야 할 저작권 원칙과 원 출처·이용 권한 표기 기준을 안내합니다.",
+};
+
 export default function LegalCopyrightPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-10">

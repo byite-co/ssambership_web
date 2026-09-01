@@ -1,6 +1,11 @@
 import Link from "next/link";
 import { PolicyDraftBanner } from "@/components/legal/PolicyDraftBanner";
 
+export const metadata = {
+  title: "커뮤니티 이용규칙",
+  description: "쌤버십 게시판·숏폼 커뮤니티의 이용 규칙과 영역별 검수·신고 정책을 안내합니다.",
+};
+
 export default function LegalCommunityGuidelinesPage() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-10">

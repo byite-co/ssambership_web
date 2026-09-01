@@ -10,6 +10,11 @@ import { fetchBlockedUserIds, filterBlockedAuthors } from "@/lib/blocks/userBloc
 import { isUserBlocksEnabled } from "@/lib/shell/featureFlags";
 import { SURFACE_CARD } from "@/lib/ui/surfaceCard";
 
+export const metadata = {
+  title: "커뮤니티 게시판",
+  description: "쌤버십 커뮤니티 게시판입니다. 학생과 멘토가 올린 글을 읽고 함께 이야기를 나눌 수 있습니다.",
+};
+
 type Props = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 
 export default async function CommunityBoardPage(props: Props) {
