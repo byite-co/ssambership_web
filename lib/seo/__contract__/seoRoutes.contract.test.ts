@@ -553,3 +553,33 @@ test("루트 app/layout.tsx 의 openGraph 에 title·description·url 이 없다
     );
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 13. middleware matcher 의 정적 확장자 제외
+//
+//    네이버 검색로봇은 robots.txt 가 5xx 면 사이트 전체를 수집 차단으로 해석한다.
+//    robots.txt · sitemap.xml · 소유확인 html 은 미들웨어(x-pathname·x-return-to 세팅)를
+//    탈 이유가 없으므로 matcher 의 확장자 제외 목록에 txt·xml·html 을 둔다 — 미들웨어
+//    런타임 오류가 정적 자산까지 5xx 로 번지는 경로를 끊는다.
+// ─────────────────────────────────────────────────────────────────────────────
+
+test("middleware.ts matcher 확장자 제외 목록에 txt·xml 이 있다 — robots.txt·sitemap.xml 이 미들웨어를 타지 않아야 5xx 시 사이트 전체 수집 차단으로 해석되는 사고를 막는다", () => {
+  const src = stripComments(readSource(join(REPO_ROOT, "middleware.ts")));
+  const matcher = /matcher\s*:\s*\[\s*"([^"]+)"/.exec(src);
+  assert.ok(matcher, "middleware.ts 에서 config.matcher 문자열을 찾지 못했다");
+
+  const exts = /\(\?:([a-z0-9?|]+)\)/.exec(matcher[1]);
+  assert.ok(exts, `matcher 에서 확장자 제외 그룹 (?:...) 을 찾지 못했다: ${matcher[1]}`);
+  const list = exts[1].split("|");
+
+  for (const ext of ["txt", "xml"]) {
+    assert.ok(list.includes(ext), `matcher 확장자 제외 목록에 ${ext} 가 없다 — /robots.txt·/sitemap.xml 이 미들웨어를 탄다: ${exts[1]}`);
+  }
+  assert.ok(list.includes("html"), `matcher 확장자 제외 목록에 html 이 없다 — 네이버 소유확인 html 이 미들웨어를 탄다: ${exts[1]}`);
+
+  // 기존 제외 항목은 유지돼야 한다(K 는 추가만).
+  for (const keep of ["_next/static", "_next/image", "favicon.ico"]) {
+    assert.ok(matcher[1].includes(keep), `matcher 에서 기존 제외 항목 ${keep} 이 사라졌다`);
+  }
+});
+
