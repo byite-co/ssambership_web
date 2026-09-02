@@ -18,7 +18,7 @@
 
 1. **DB 변경은 한 문장이다.** `alter table public.connection_notes drop constraint connection_notes_room_author_unique` 한 줄이면 누적 구조가 열린다. 컬럼·RLS·트리거는 손대지 않는다. 라이브 행이 **0건**(방도 0건)이라 데이터 정리는 필요 없고, 지금이 가장 싼 시점이라는 인계 문서의 판단은 실측으로 확인됐다.
 2. **진짜 위험은 DB가 아니라 이미 배포된 앱이다.** 스토어 앱(1.0.0+19)의 저장 함수 `upsertMyNote`는 "내 노트 중 최신 1건을 UPDATE하고 **나머지 내 노트를 전부 DELETE**"한다. 제약을 지우고 타임라인에 내 노트가 여러 장 쌓인 뒤 구버전 앱에서 저장을 한 번 누르면, 그 사용자의 과거 노트가 사라진다. 이 경로는 코드로 확인했다(§5).
-3. 따라서 순서가 곧 안전장치다. **① 제약 제거(무해) → ② 앱 신버전 배포 → ③ 강제 업데이트 게이트 상향 → ④ 웹·앱 UI에서 여러 장 허용.** ④를 ③ 앞에 두면 위험이 열린다. 단 게이트는 **콜드 스타트에서만** 평가되므로(§5-2) 순서만으로는 구멍이 남고, 서버가 스스로 막는 방어(§5-3: **수정은 15분 창, 삭제는 불가**, `created_at` 불변 트리거)를 함께 넣는 것을 권장한다 — 오너 결정 #2.
+3. 따라서 순서가 곧 안전장치다. **① 제약 제거(무해) → ② 앱 신버전 배포 → ③ 강제 업데이트 게이트 상향 → ④ 웹·앱 UI에서 여러 장 허용.** ④를 ③ 앞에 두면 위험이 열린다. 단 게이트는 **콜드 스타트에서만** 평가되므로(§5-2) 순서만으로는 구멍이 남고, 서버가 스스로 막는 방어(§5-3: **authenticated의 UPDATE·DELETE 정책을 제거한 엄격한 append-only** — 트리거·함수 없이 `drop policy` 2문)를 함께 넣는 것을 권장한다 — 오너 결정 #2. 초안의 "수정 15분 창"은 구앱이 저장 순간에 UPDATE 대상을 다시 고르기 때문에 다른 기기에서 남긴 노트를 덮어쓰는 창이 남아(§5-3 표) 권장에서 내렸다.
 4. 웹 쓰기 경로는 **이미 append(INSERT)** 다. 웹이 1장으로 보이는 이유는 패널의 "내 노트 추가" 버튼을 숨기는 UI 조건 한 줄 때문이다. 앱은 UPDATE 구조라 저장 함수를 바꿔야 한다.
 5. 손글씨(`ink_path`·`ink_thumb_path`·버킷 `connection-note-ink`)는 컬럼·버킷·경로 규약만 남아 있고 저장·표시 코드가 0건이다. 이번 개편에서 건드리지 않는다(컬럼 유지, 기능 없음).
 
@@ -124,7 +124,7 @@ RLS 관찰: `cn_select`는 방 당사자만, 쓰기 정책 3개(`cn_insert`/`cn_
 | 행 | 노트 1장 = `connection_notes` 1행. 작성자(`author_id`·`author_role`)가 남긴 순서대로 쌓인다 |
 | 정렬 키 | 조회는 앱·웹 모두 **`created_at desc, id desc` + 명시적 `limit`**(최신 우선 — 앱 방 홈 미리보기 2종이 "첫 행 = 최신" 전제라 **무변경**; 웹에는 미리보기 소비자가 없음), 타임라인 화면은 그 목록을 **뒤집어** 오래된 것 위·최신 아래로 그린다. `updated_at` 정렬 폐기(수정 시 순서가 튀는 것 방지). **`asc` + limit 없음은 금지** — PostgREST 서버 max-rows(기본 1000)가 **최신** 행을 조용히 잘라낸다 |
 | 쓰기 | INSERT만. 웹: 구독 활성(서버 액션 가드) + 방 당사자(RLS). **앱: 방 당사자(RLS)만** — 구독 규칙이 앱 경로에는 없다(결정 #8) |
-| 수정·삭제 | **결정 #2**. 권장: **수정은 작성 후 15분 이내 본인 행만, 삭제는 불가**(append-only 기록) + `created_at` 불변 트리거. 이 조합이 구클라이언트 DELETE 경로를 서버에서 완전히 무력화한다(§5-3) |
+| 수정·삭제 | **결정 #2**. 권장: **둘 다 불가**(authenticated에 UPDATE·DELETE 정책 없음 — `question_messages`와 같은 append-only, `002_p0:227-248`). 오타·정정은 새 노트로 남긴다. 이 모양만이 구클라이언트의 UPDATE+DELETE 경로를 배포 순서·기기 수와 무관하게 무력화한다(§5-3). 대안(15분 창)의 잔여 위험은 §5-3 표 |
 | 본문 | 텍스트. 길이 상한 **결정 #3**(권장 2,000자, 클라이언트 강제) |
 | 손글씨 | 컬럼 유지, 기능 없음 |
 | 조회 | `created_at desc` **limit 200**(결정 #4) — 현재 인덱스 `idx_cn_msr`는 `updated_at desc`라 새 정렬은 §4의 `idx_cn_room_created`가 받친다. '이전 노트 보기'는 후속 |
@@ -142,9 +142,9 @@ RLS 관찰: `cn_select`는 방 당사자만, 쓰기 정책 3개(`cn_insert`/`cn_
 | C | `create index if not exists idx_cn_room_created on public.connection_notes (mentor_student_room_id, created_at, id);` | 타임라인 정렬용. **`id`를 동률 해소 키로 포함** — 같은 트랜잭션의 INSERT는 `created_at`(=`now()`, 트랜잭션 고정)이 같아 순서가 비결정적이다. 오름차순 btree 하나로 `ORDER BY created_at, id`와 `… DESC, id DESC`(역방향 스캔) 둘 다 받으므로 `DESC` 지정 불필요. 제약이 만든 unique index가 사라져도 `idx_cn_author`(048, 같은 컬럼 목록)가 남아 구앱의 (방, 작성자) 조회 경로는 유지된다. `idx_cn_msr`(`updated_at desc`)는 클라이언트가 `created_at` 정렬로 옮기면 dead가 되지만 **build 19 호환용으로 게이트 상향 전까지 유지** |
 | D | `comment on table public.connection_notes is '…누적 타임라인…';` | 계약 기록 |
 | E | 사후 확인 DO 블록(제약 부재·인덱스 존재) | 실패 시 예외 |
-| F-1 | (**결정 #2** 채택 시) `cn_update`를 "작성 후 15분 이내 본인 행"으로 재정의 | 정책 이름 불변(drop/create 같은 이름) |
-| F-2 | (**결정 #2** 권장안) `cn_delete` 정책 **제거** → authenticated 삭제 불가. 대안: 15분 창으로 재정의(잔여 위험 §5-3) | 정책 수 176→**175**(제거 시) |
-| F-3 | (**결정 #2** 채택 시) `created_at` 불변 트리거 `trg_cn_created_at_immutable` + 함수 `connection_notes_forbid_created_at_change()` — 창 안의 행을 `created_at = now()`로 갱신해 창을 무한 연장하는 우회 차단(`WITH CHECK`에 창을 넣어도 `now()`는 통과하므로 정책만으로는 못 막는다). **`created_at`만 고정할 것** — `author_id`는 FK `on delete set null`(048)이라 사용자 삭제 시 참조 무결성 동작이 UPDATE로 실행돼 BEFORE UPDATE 트리거를 탄다; `author_id`까지 고정하면 **회원 탈퇴가 깨진다** | 함수 수 222→**223** |
+| F-1 | (**결정 #2** 권장안 (c)) `drop policy if exists "cn_update"` → authenticated UPDATE는 RLS 필터로 **0행**(오류 없음). 구앱의 "최신 내 노트 UPDATE"가 0행이 되어 `.single()` 예외 → DELETE 블록에 도달하지 못한다 | 정책 수 −1 |
+| F-2 | (**결정 #2** 권장안 (c)) `drop policy if exists "cn_delete"` → authenticated DELETE는 항상 0행. service_role(계정 삭제 워커·e2e admin)은 RLS 우회라 무영향, FK `on delete set null`(048)도 정책과 무관하게 동작 | 정책 수 176→**174**(functions 222 불변) |
+| F-3 | (**대안 (b′)** 채택 시에만, F-1/F-2 대신) `cn_update`를 "작성 후 15분 이내 본인 행"으로 재정의(같은 이름) + `cn_delete` 제거 + `created_at` 불변 트리거 `trg_cn_created_at_immutable`·함수 `connection_notes_forbid_created_at_change()` — `WITH CHECK`에 창을 넣어도 `created_at = now()`로 창을 연장하는 우회는 못 막아 트리거가 필요. **`created_at`만 고정할 것** — `author_id`는 FK `on delete set null`(048)이라 사용자 삭제 시 참조 무결성 동작이 UPDATE로 실행돼 BEFORE UPDATE 트리거를 탄다; `author_id`까지 고정하면 **회원 탈퇴가 깨진다**. 본문은 §12-1 말미 `[ALT-b′]` 블록 | policies 175 · functions 223 |
 
 **바꾸지 않는 것**: 컬럼 전부(잉크 2열 포함) · `cn_select`/`cn_insert` · 기존 트리거 `trg_cn_set_updated` · FK 2종 · 버킷.
 
@@ -157,10 +157,10 @@ alter table public.connection_notes
   add constraint connection_notes_room_author_unique unique (mentor_student_room_id, author_id);
 drop index if exists public.idx_cn_room_created;
 comment on table public.connection_notes is null;
--- F 채택 시:
-drop trigger if exists trg_cn_created_at_immutable on public.connection_notes;
-drop function if exists public.connection_notes_forbid_created_at_change();
--- cn_update 는 085:43-66 원문으로 재정의, cn_delete 는 085:67-78 원문으로 재생성(F-2가 제거했으므로)
+-- F(권장안 c): cn_update 는 085:43-66, cn_delete 는 085:67-78 원문으로 재생성
+-- 대안 (b′) 였다면 그 전에:
+-- drop trigger if exists trg_cn_created_at_immutable on public.connection_notes;
+-- drop function if exists public.connection_notes_forbid_created_at_change();
 ```
 
 ### 4-3. 저장소 마이그레이션 절차 (이 저장소의 현행 규약)
@@ -174,15 +174,15 @@ drop function if exists public.connection_notes_forbid_created_at_change();
 | 3 | `supabase/migrations/2026MMDD100100_…sql` | **생성기** | `python3 scripts/verify/baseline/build_native_migration_pack.py` 가 복사. 직접 편집 금지 |
 | 4 | `supabase/baseline/native_migration_pack_manifest.tsv` | 생성기 | 행 1개 추가(현재 102행 → 103; `191`까지면 104) |
 | 5 | `docs/audit/sql_apply_manifest.md` | 사람 | 신규 SQL 등재 행 |
-| 6 | `docs/audit/db_expected_state.md:39` | 사람 | `connection_notes` 행에 "(방, 작성자) 유일성 없음(설계) · 타임라인 · (채택 시) 수정 15분 창·삭제 정책 없음" 추기 |
+| 6 | `docs/audit/db_expected_state.md:39` | 사람 | `connection_notes` 행에 "(방, 작성자) 유일성 없음(설계) · 타임라인 · (권장안) authenticated UPDATE·DELETE 정책 없음(append-only)" 추기 |
 | 7 | `CLAUDE.md` 핵심 테이블 표 | 사람 | `connection_notes` 행 정정(`status` 컬럼은 어떤 SQL에도 없다 → `author_id, author_role, body, ink_path, ink_thumb_path`) |
-| 8 | `contracts/snapshots/staging_contract.json` | 도구 | F(정책 재작성) 채택 시 적용 후 재추출 — `npm run contracts:verify`가 정책 md5를 대조한다 |
-| 9 | `scripts/verify/baseline/verify_local_stack_state.sh:56-58, 112-117` | 사람 | 헤더 주석을 "104본 pack(생성기 103 + PR60 1)"으로, "103본→104본(연결노트 타임라인) 델타" 블록 추가 — **A~E만이어도 필요**(관례). F 채택 시 `:114` functions 223 · `:116` policies 175 |
+| 8 | `contracts/snapshots/staging_contract.json` | 도구 | F(정책 제거) 적용 후 재추출(`cn_update`·`cn_delete` md5 행이 사라진다) — `npm run contracts:verify`가 정책 md5를 대조한다(CI에 없고 수동) |
+| 9 | `scripts/verify/baseline/verify_local_stack_state.sh:56-58, 112-117` | 사람 | 헤더 주석을 "104본 pack(생성기 103 + PR60 1)"으로, "103본→104본(연결노트 타임라인) 델타" 블록 추가 — **A~E만이어도 필요**(관례). F 권장안 (c)면 `:116` policies **174**(functions 222 불변); 대안 (b′)면 `:114` functions 223 · `:116` policies 175 |
 | 10 | `scripts/verify/connection_notes_timeline_verify.sql` | 사람 | 신규 검증 스크립트(§8-3) |
-| 11 | `docs/audit/db_permission_audit_queries.sql:232-249` (B5) | 사람 | F 채택 시 기대 정책 집합(3개, `cn_update`에 `created_at`, `cn_delete` 부재, 트리거 존재)으로 갱신 |
+| 11 | `docs/audit/db_permission_audit_queries.sql:232-249` (B5) | 사람 | F 권장안 (c)면 기대 정책 집합 {`cn_select`, `cn_insert`}(UPDATE/DELETE 행 0)로, (b′)면 3개(`cn_update`에 `created_at`) + 트리거 존재로 갱신 |
 | — | `supabase/sql/INDEX.md` · `docs/audit/apply_manifest_prod.md` | — | **손대지 않음**(059 이후 미관리 / 189 커밋도 미수정) |
 
-검증(로컬, PR 전): `validate_native_migration_pack.py` · `validate_replay_manifest.sh` PASS, 생성기 재실행 diff 0. CI `db-migration-pack-verify.yml`이 PG17 + Supabase CLI replay로 다시 검증한다. `verify_local_stack_state.sh`의 구조 카운트(tables 85 · functions 222 · policies 176 · buckets 13, `:112-117`)는 A~E만이면 **바뀌지 않는다**(제약·인덱스는 그 카운트에 없다). F를 채택하면 **functions 223(F-3 함수)** · **policies 175(F-2 제거 시)** 로 기대치를 함께 갱신해야 한다(선례: `ea146b5` "로컬 스택 구조 카운트 기대치 갱신"). `run_local_stack_emulation.sh`의 STRICT 축(constraints·indexes md5)은 `PR60_FORWARD`가 설정된 `[6]` 블록에서 PR #60 전후 지문만 대조한다(`:101-117`) — 일반 마이그레이션 추가에는 적용되지 않으므로 기대값 갱신은 없다. `parent_schema_fingerprint.sh`의 constraints·indexes 축은 바뀌지만 `db-apply-pending`은 그 diff를 증적으로만 남기고 강제하지 않는다(`:175`).
+검증(로컬, PR 전): `validate_native_migration_pack.py` · `validate_replay_manifest.sh` PASS, 생성기 재실행 diff 0. CI `db-migration-pack-verify.yml`이 PG17 + Supabase CLI replay로 다시 검증한다. `verify_local_stack_state.sh`의 구조 카운트(tables 85 · functions 222 · policies 176 · buckets 13, `:112-117`)는 A~E만이면 **바뀌지 않는다**(제약·인덱스는 그 카운트에 없다). F 권장안 (c)(정책 2개 제거)면 **policies 174**(functions 222 불변), 대안 (b′)면 **functions 223 · policies 175** 로 기대치를 함께 갱신해야 한다(선례: `ea146b5` "로컬 스택 구조 카운트 기대치 갱신"). `run_local_stack_emulation.sh`의 STRICT 축(constraints·indexes md5)은 `PR60_FORWARD`가 설정된 `[6]` 블록에서 PR #60 전후 지문만 대조한다(`:101-117`) — 일반 마이그레이션 추가에는 적용되지 않으므로 기대값 갱신은 없다. `parent_schema_fingerprint.sh`의 constraints·indexes 축은 바뀌지만 `db-apply-pending`은 그 diff를 증적으로만 남기고 강제하지 않는다(`:175`).
 
 적용: **`db-apply-pending.yml` workflow_dispatch**(dry-run → 승인 → apply, confirmation 문자열). MCP `apply_migration` 직접 적용은 저장소 규칙상 금지(적용하면 같은 세션에서 역수입까지 해야 한다 — `CLAUDE.md` "마이그레이션 hotfix 역수입 규칙"). **중요한 성질**: 이 워크플로는 (로컬 pack) − (원장) 차집합 **전량**을 `supabase db push` 한 번으로 적용하고 사후에 원장 = pack 전체를 요구한다(`:130, 154, 169`). 따라서 **`190`만 적용하고 `191`을 main에 미리 넣어 둘 수 없다** — `191`은 ③ 시점에 머지해야 하고, `190`은 아직 미적용인 `189`와 함께 적용된다(§9). CLI `db push`는 원격 마지막 version보다 앞서는 로컬 파일을 `--include-all` 없이는 거부하므로(워크플로는 이 플래그를 넘기지 않는다) version 순서 규칙(위 2번)이 실제로 걸린다.
 
@@ -231,20 +231,27 @@ update public.mobile_app_version_policies
 
 ### 5-3. 방어 2 — 서버 정책 (권장 · **결정 #2**)
 
-순서는 운영 규율에 기대는 방어다. DB가 스스로 막게 하려면 정책을 바꿔야 하는데, **"수정·삭제 모두 15분 창"만으로는 부족하다.** 구앱의 저장 순서는 UPDATE(최신 내 노트) → 성공 시 DELETE(나머지 내 노트)이고, RLS는 거부가 아니라 **필터**라서:
+순서는 운영 규율에 기대는 방어다. DB가 스스로 막게 하려면 정책을 바꿔야 한다. 구앱의 저장 순서는 **저장 시점에** 내 노트를 다시 SELECT(`updated_at desc`, `question_room_write_repository.dart:202-207`) → 그 첫 행을 UPDATE(`:209-218`) → 성공 시 나머지 내 노트 DELETE(`:221-233`)이고, RLS는 거부가 아니라 **필터**다. 편집기는 화면 진입 시 한 번만 시드되므로(`connection_notes_screen.dart:140-144`, `mine.first`) **UPDATE 대상은 "사용자가 보고 있던 노트"가 아니라 "저장 순간 가장 최근에 갱신된 내 노트"** 다 — 그 사이 같은 계정이 신앱·웹에서 남긴 노트가 있으면 그 노트의 본문이 구앱 편집기 텍스트로 덮어써지고 '노트를 저장했어요.'가 뜬다. 따라서 "수정 창을 좁힌다"는 방어는 창의 길이만큼 덮어쓰기를 남긴다.
 
-| 상황 | 창 정책(수정·삭제 15분) 아래 구앱 동작 | 결과 |
-|---|---|---|
-| 최신 내 노트가 15분 지남 | UPDATE 0행 → `.select().single()` 예외 → 레포에서 미포착 → DELETE 블록에 **도달 못 함** → 화면 `catch`가 스낵바 '저장에 실패했어요. 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.' (`connection_notes_screen.dart:98-103`, `friendly_error.dart:11-14`). 크래시 없음, 편집기 텍스트 유지 | **보존** |
-| 최신 내 노트가 15분 이내 | UPDATE 성공(= 정정 창 동작) → DELETE 실행: 15분 지난 행은 0행, **15분 이내 행은 삭제됨** → '노트를 저장했어요.' | **잔여 손실**(최근 15분 내 내 노트) |
+| 정책 모양 | 구앱 UPDATE(최신 내 노트) | 구앱 DELETE(나머지 내 노트) | 잔여 손실 | DB 비용 |
+|---|---|---|---|---|
+| (a) 현행 — 본인 행 언제나 | 성공 | **성공** | 과거 내 노트 전부 삭제 | 0 |
+| (b) 수정·삭제 모두 15분 창 | 15분 내 행이면 성공 | 15분 내 행 **삭제** | 15분 내 내 노트 삭제 + 본문 덮어쓰기 | 정책 2 재정의 + 트리거·함수 |
+| (b′) 수정 15분 창 + 삭제 불가 + `created_at` 불변 트리거(초안 권장) | 15분 내 행이면 성공 | 0행(`catch (_)` 무음) | **다른 기기에서 15분 내 남긴 내 노트의 본문 덮어쓰기**(시간 한정) | 정책 1 재정의·1 제거 + 함수·트리거 1 → policies 175 · functions 223 |
+| (c′) 수정 무제한 + 삭제 불가 | 성공 | 0행 | 다른 기기에서 남긴 최신 내 노트 본문 덮어쓰기(**시간 무제한**) | 정책 1 제거 → 175 |
+| **(c) 수정·삭제 모두 불가** | **0행 → `.select().single()` 예외 → 레포 미포착 → DELETE 블록 도달 못 함 → 화면 `catch` 스낵바 '저장에 실패했어요. 요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.'**(`connection_notes_screen.dart:98-103`, `friendly_error.dart:11-14`; 크래시 없음, 편집기 텍스트 유지) | 0행 | **없음** | 정책 2 제거 → **174**, 함수·트리거 0 |
 
-잔여 손실을 없애는 조합이 **"수정 15분 창 + 삭제 불가"** 다. `cn_delete` 정책을 제거하면 authenticated는 어떤 행도 지울 수 없고(구앱의 DELETE는 항상 0행, `catch (_)`로 무음), UPDATE는 창 안의 최신 장 1건에만 닿는다 — 즉 구앱이 할 수 있는 최악이 "방금 쓴 내 노트를 고쳐 쓰기"가 된다. 여기에 `created_at` **불변 트리거**(F-3)를 붙여야 하는데, 창 정책의 `WITH CHECK`만으로는 클라이언트가 창 안의 행을 `created_at = now()`로 갱신해 창을 무한히 연장하는 우회를 막지 못하기 때문이다.
+권장은 **(c)**.
+1. 어떤 배포 순서·게이트 구멍(§5-2)·두 기기 병용에서도 **기존 행이 바뀌거나 사라질 수 없다.** 구앱이 할 수 있는 것은 "그 방에 내 노트가 0장일 때 첫 노트 INSERT"(정당한 타임라인 항목)뿐이고, 이미 있으면 저장이 실패 스낵바로 끝난다. 순서(§5-2)와 게이트(`191`)는 데이터 안전장치가 아니라 구앱의 "저장 실패" 상태를 끝내는 UX 장치가 된다.
+2. 코드베이스 선례: `question_messages`도 `qm_select`/`qm_insert`뿐이다(`supabase/sql/002_p0_subscriptions_questions_draft.sql:227-248`, 주석 "update/delete 없음(append)"). 메시지처럼 노트도 불변인 것이 일관된다.
+3. 가장 싼 DDL — 트리거·함수·정책 재정의 없이 `drop policy` 2문. 구조 카운트는 policies 176→174만 움직인다.
+4. 제품 의미: 타임라인은 기록이고 오타·정정은 **새 노트**로 남긴다. 웹의 인라인 수정 UI·삭제 UI는 제거된다 — 결정 #2의 유일한 UX 비용은 웹의 기존 인라인 수정 어포던스다(앱에는 원래 없다).
 
-- 제품 의미: 타임라인은 "곧 불변"이 된다. 오타는 15분 안에 고치고, 지우기는 없다(잘못 쓴 노트는 정정 노트로 덮는다). 웹의 수정 UI는 창 안에서만, 삭제 UI는 사라진다.
-- 비용: 정책 1개 재정의 + 정책 1개 제거 + 트리거 함수 1개 → §4-3의 구조 카운트 기대치 갱신(policies 175 · functions 223).
-- 대안(삭제도 15분 창): UI에 삭제가 남지만 위 표의 잔여 손실이 남는다 — 같은 계정이 15분 안에 신·구 두 기기를 번갈아 쓰는 경우에 한정되므로 작지만 0은 아니다.
+(b′)를 고르면 정정 창은 얻지만 위 표의 시간 한정 덮어쓰기가 남고, 창을 안전하게 만들기 위한 함수·트리거(`created_at`만 고정, `author_id` 고정 금지 — §4-1 F-3)와 웹의 창 판정 헬퍼 공유·`.select("id")` 영향 행 검사(§7-3)가 따라온다. 그 SQL은 §12-1 말미 `[ALT-b′]` 블록에 둔다.
 
-채택하지 않으면 방어 1만 남는다. 그 경우 §9의 ③(게이트 상향)을 ④ 전에 **반드시** 끝내고, 위 게이트 구멍 때문에 ③과 ④ 사이에 **재시작 유예(권장 48시간 이상)** 를 두어야 하며, 두 기기 병용 사용자의 위험은 그래도 남는다.
+`.single()`이 0행에 예외를 던진다는 것은 postgrest 라이브러리 동작이라 오프라인 확인이 안 됐다(§11 #5). 던지지 않더라도 (c)에서는 DELETE 정책이 없어 손실은 없다 — 예외 여부는 "실패 스낵바 vs 거짓 성공 스낵바"의 UX 차이만 만든다.
+
+채택하지 않으면((a)) 방어 1만 남는다. 그 경우 §9의 ③(게이트 상향)을 ④ 전에 **반드시** 끝내고, 게이트 구멍 때문에 ③과 ④ 사이에 **재시작 유예(권장 48시간 이상)** 를 두어야 하며, 두 기기 병용 사용자의 위험은 그래도 남는다.
 
 ---
 
@@ -254,7 +261,7 @@ update public.mobile_app_version_policies
 |---|---|---|
 | `data/question_room_write_repository.dart` | `upsertMyNote` → **`appendMyNote(roomId, body)`**: INSERT 블록(`:237-247`)만 남기고 SELECT-existing(`:202-207`)·UPDATE(`:210-218`)·DELETE(`:221-233`) 경로 삭제. `_currentAuthorRoleCode` 유지. 문서 주석(`:185-193`, "UNIQUE 없음" 근거) 교체 | — |
 | `data/question_room_read_repository.dart` | `notes(roomId)` 정렬을 `updated_at desc` → **`created_at desc, id desc`**(최신 우선 유지). 미리보기 2종은 그대로 동작. 화면이 `.reversed`로 뒤집는다. 페이징(결정 #4)을 채택하면 `recentMessages`/`messagesBefore`·`MessageCursor(createdAt:, id:)`·`messageCursorBeforeFilter`를 그대로 미러링 | — |
-| `ui/connection_notes_screen.dart` | '상대 노트'/'내 노트' 2섹션 → **한 타임라인**(학생·멘토 카드 혼합, 기존 `_NoteCard` + `AppBadge` 작성자 배지 그대로, 내 카드는 `mine` 플래그로 톤만) + 하단 **작성 카드**(기존 `AppCard` + `TextField` + `PrimaryButton`, 라벨 '내 노트 저장' → **'노트 남기기'**, 힌트 문구 교체). 저장 성공 시 **`_editor.clear()`를 명시 호출**한 뒤 `_reload()` — `_seeded`를 지우는 것만으로는 편집기가 비지 않는다(`:140-144`). `mine`/`others` 분리·`_seeded` 삭제. 카드 시각을 `updatedAt`(`:217`) → **`createdAt`**. 빈 상태 `EmptyState` 유지. 생성자 seam(`notesLoader`·`onSaveNote`·`currentUserId`) 유지 — 테스트가 의존 | `Scaffold`·`AppBar('연결노트')`·`ListView` 유지 |
+| `ui/connection_notes_screen.dart` | '상대 노트'/'내 노트' 2섹션 → **한 타임라인**(학생·멘토 카드 혼합, 기존 `_NoteCard` + `AppBadge` 작성자 배지 그대로, 내 카드는 `mine` 플래그로 톤만) + 하단 **작성 카드**(기존 `AppCard` + `TextField` + `PrimaryButton`, 라벨 '내 노트 저장' → **'노트 남기기'**, 힌트 문구 교체). 저장 성공 시 **`_editor.clear()`를 명시 호출**한 뒤 `_reload()` — `_seeded`를 지우는 것만으로는 편집기가 비지 않는다(`:140-144`). `mine`/`others` 분리·`_seeded` 삭제. 카드 시각을 `updatedAt`(`:217`) → **`createdAt`**. 빈 상태 `EmptyState` 유지 — 단 본문 '질문하고 답변을 확인하면 노트가 쌓여요'(`:159`)는 구 모델(질문·답변에서 노트가 생긴다) 설명이라 '첫 노트를 남겨 보세요'류로 교체(**카피 결정 #5**). 생성자 seam(`notesLoader`·`onSaveNote`·`currentUserId`) 유지 — 테스트가 의존 | `Scaffold`·`AppBar('연결노트')`·`ListView` 유지 |
 | `ui/mentor_room_home_screen.dart` | **변경 없음** — 조회가 최신 우선을 유지하므로 `break`-on-first(`:50-55`)가 그대로 "최신 멘토 노트" | 카드 유지 |
 | `ui/mentor/student_room_home_screen.dart` | **변경 없음** — `??=`(`:58-65`)가 그대로 "최신" | 카드 유지 |
 | `shared/labels/question_room_labels.dart` | 변경 없음('학생'/'멘토'/'작성자 미상') | — |
@@ -262,7 +269,8 @@ update public.mobile_app_version_policies
 | `lib/core/ink/ink_storage_paths.dart` | **삭제 금지**(§2-2 테스트 행). 경로 규약이 `{roomId}/{authorId}/ink.json` 작성자당 1파일이라 여러 장 노트와 호환되지 않는다 — 손글씨를 되살릴 때 노트 id 기준으로 바꿔야 한다는 메모만 남긴다 | — |
 | `docs/APP_FEATURE_STATUS.md:142` | "`upsertMyNote` 실쿼리" 설명을 `appendMyNote`·타임라인으로 갱신 | — |
 | (선택) 본문 길이 | `TextField(maxLength: 2000)` — **결정 #3** | — |
-| (선택) 편집 창 | 앱에 수정·삭제 UI는 **추가하지 않는다**(현행에도 없음). 창 정책은 서버만 | — |
+| 수정·삭제 | 앱에 수정·삭제 UI는 **추가하지 않는다**(현행에도 없음). 권장안 (c)면 서버도 막는다 | — |
+| (선택) 구독 만료 읽기 전용 표시 | 세 진입점이 이미 `SubscriptionSummary? sub`를 들고 있다(`question_list_screen.dart:37`, `mentor_room_home_screen.dart:29, 163`, `mentor/student_room_home_screen.dart:111`) → 화면에 선택 인자로 넘겨 `sub != null && !sub.isActive`면 작성 카드 비활성 + 문장. 딥링크(`sub == null`)는 fail-open이라 **표시 전용, 구속력 없음** — 결정 #8 (a′) | 카드 자리 유지 |
 | `ConversationBubble` 사용 여부 | 계층 테스트상 허용(feature → shared 방향)이나 `_NoteCard`(`AppCard` + `AppBadge`)를 유지하는 쪽이 골격 유지·`note_author_badge_test` 계약에 맞다 → 1차는 `_NoteCard` | — |
 
 `docs/SCAN_INK_PLAN.md`(앱 저장소) 참조 주석은 그대로 둔다.
@@ -276,9 +284,9 @@ update public.mobile_app_version_policies
 - 2열('학생의 노트'/'멘토의 노트') 유지 여부는 **결정 #1**. 권장은 **한 타임라인**: `columns` 상수(`:277`)의 `NoteColumn` 2개를 `created_at` 정렬 병합 카드 한 `<section>`으로 바꾸고(기존 `NoteItem`·좌측 색 띠·작성자 라벨 재사용), 추가 버튼 1개와 총 장수를 그 섹션 헤더에 둔다(≈60줄). `<aside>` 420px 레일(`:345`)·헤더(함께한 기간·함께한 질문)·모바일 토글(`:326`)·모달 인스턴스는 그대로.
 - 카드 목록 구성(정렬·`side` 판정·`editable`)을 **순수 헬퍼 `lib/qna/connectionNoteTimeline.ts`** 로 뽑아낸다 — 이 저장소의 contract 러너가 `lib/**`만 훑고 TSX를 렌더할 수 없어(§8-2) 헬퍼로 빼야 테스트가 된다.
 - 정렬: 조회는 `created_at desc, id desc` + `limit 200`, 패널이 뒤집어 위→아래. 카드 id 폴백 ``${aid}-${body.slice(0, 8)}``(`:238`)은 같은 작성자의 여러 장에서 충돌 가능 → `id` 없는 행은 건너뛴다(PK라 실제로는 항상 있음).
-- 날짜 라벨: `updated_at ?? created_at`(`:242`) → **`created_at`**, `updated_at`이 다르면 작은 '수정됨' 표시.
-- 모달 상태: 저장 성공(`actionFeedback.kind === 'note' && ok`) 시 **닫고 초기화**하거나 패널을 `formRevision`에 key — 1장 시절엔 방당 한 번이라 묻혔지만 타임라인에서는 매번 반복된다. 저장 실패 시 `draftNoteBody`를 패널 → 모달 `defaultBody`로 **연결**(결정 #10, 지금은 dead).
-- 수정·삭제: **결정 #2(b′)** 채택 시 `editable`(`:245`)에 `isWithinNoteEditWindow(created_at, now)`(15분, 헬퍼 공유) 추가하고 **삭제 버튼·`deleteConnectionNoteAction` 호출 UI를 제거**(정책이 없으니 DELETE는 0행). 서버 액션 `deleteConnectionNoteAction`은 dead가 되므로 삭제 권고. (b) 채택 시에는 삭제도 창 조건이고, 확인 UI는 `window.confirm`(`:116`, 코드베이스 유일) 대신 카드 안 2단계 인라인 확인('삭제' → '정말 삭제/취소', ≈10줄)을 권장 — `AppToast`는 타이머 토스트라 확인 용도가 아니다.
+- 날짜 라벨: `updated_at ?? created_at`(`:242`) → **`created_at`**. (b′) 채택 시에만 `updated_at`이 다르면 작은 '수정됨' 표시((c)에서는 사용자 수정이 없어 불필요).
+- 모달 상태: 저장 성공(`actionFeedback.kind === 'note' && ok`) 시 **닫고 초기화**하거나 패널을 `formRevision`에 key(두 워크스페이스가 이미 `rev`를 들고 채팅 form에 쓴다 — `QuestionRoomStudentDesignWorkspace.tsx:180, 790` · `QuestionRoomMentorDesignWorkspace.tsx:175, 452`; 리다이렉트마다 `t`가 바뀌므로 `key={`notes-${rev}`}` 한 줄로 모달이 닫힌 채 재마운트된다) — 1장 시절엔 방당 한 번이라 묻혔지만 타임라인에서는 매번 반복된다. 저장 실패 시 `draftNoteBody`를 패널 → 모달 `defaultBody`로 **연결**(결정 #10, 지금은 dead).
+- 수정·삭제: **결정 #2 권장안 (c)** 채택 시 `NoteItem`의 인라인 수정 form(`:61`)·삭제 form(`:114`)·`window.confirm`(`:116`, 코드베이스 유일의 native confirm)·`Pencil`/`Trash2` import(`:4`)·`editable` 필드(`:42, 245`)를 제거한다 — 남기면 RLS 0행에도 '노트를 수정했습니다.'/'삭제했습니다.'로 리다이렉트하는 거짓 성공이 된다(§7-3). (b′) 채택 시 `editable`(`:245`)에 `isWithinNoteEditWindow(created_at, now)`(15분, 헬퍼 공유)를 추가하고 삭제 UI만 제거. (b) 채택 시에는 삭제도 창 조건이고, 확인 UI는 `window.confirm` 대신 카드 안 2단계 인라인 확인('삭제' → '정말 삭제/취소', ≈10줄)을 권장 — `AppToast`는 타이머 토스트라 확인 용도가 아니다.
 - 카운트 배지: 총 장수.
 
 ### 7-2. `components/qna/QuestionRoomNewNoteModal.tsx`
@@ -288,10 +296,10 @@ update public.mobile_app_version_policies
 
 ### 7-3. 조회·액션·문서
 - `lib/qna/questionRoomQueries.ts` `fetchConnectionNotesForRoom`(`:176-188`): `.order("created_at", { ascending: false }).order("id", { ascending: false }).limit(200)`. 패널이 뒤집는다.
-- `lib/qna/questionRoomActions.ts`: INSERT·가드·리다이렉트 계약은 그대로. **결정 #2 채택 시 `updateConnectionNoteAction`은 변경 필요** — 사전 조회(`:589-593`)에서 `created_at`도 읽어 창 밖이면 명시 오류로 거절하고, UPDATE에 `.select("id")`를 붙여 **0행이면 실패로 처리**(`:601-607`은 지금 영향 행을 보지 않아 RLS 필터 0행에도 '노트를 수정했습니다.'). (b′)면 `deleteConnectionNoteAction` 제거, (b)면 삭제도 같은 처리(`:648`).
+- `lib/qna/questionRoomActions.ts`: INSERT(`saveConnectionNoteAction` `:489-556`)·가드·리다이렉트 계약은 그대로. **결정 #2 권장안 (c)면 `updateConnectionNoteAction`(`:559-608`)·`deleteConnectionNoteAction`(`:611-655`)을 삭제** — 정책이 없어 항상 0행인데 `:601-607`/`:648`은 영향 행을 보지 않아 '노트를 수정했습니다.'/'삭제했습니다.'로 리다이렉트한다(거짓 성공). ①(190 적용)과 ④(웹 배포) 사이에는 이 거짓 성공이 실제로 노출되므로 ④를 ① 직후로 당기거나 두 액션 제거만 먼저 배포한다. (b′)면 `updateConnectionNoteAction`은 사전 조회(`:589-593`)에서 `created_at`도 읽어 창 밖이면 명시 오류로 거절하고 UPDATE에 `.select("id")`를 붙여 **0행이면 실패 처리**, 삭제 액션은 제거. (b)면 삭제도 같은 처리.
 - `?dNote=` 초안 보존: 지금은 dead 경로(§2-3). **결정 #10** — (권장) `draftNoteBody`·`actionFeedback`을 두 디자인 워크스페이스에서 패널로 넘겨 모달 `defaultBody`에 연결 / (대안) `dNote` 배관 전체와 `questionRoomRedirect.contract.test.ts:151-163`의 `dNote` 단언 제거.
 - 레거시 `initialNoteText`/`studentNoteText`/`mentorNoteText`와 `QuestionRoomWorkspace.tsx:270` 이하 구형 렌더: 실사용 도달 경로가 없다(§2-3). 이번 개편의 필수 범위는 아니며, 상세 4개 페이지의 `extractNoteText(bundle.notes.rows[0])` 계산과 함께 **별도 정리 PR에서 삭제**를 권고한다. 남겨 두면 "첫 1건"이 정렬 변경 후 "가장 오래된 1건"이 되어 의미가 어긋난다.
-- `CLAUDE.md` 핵심 테이블 표 `connection_notes` 행 정정(`status` → `author_id, author_role, body, ink_path, ink_thumb_path`, append-only 명시; `:40` "room 단위"에 "작성자당 여러 장" 추가) · `docs/audit/db_expected_state.md:39`에 "유일 제약 없음(설계) · (채택 시) 수정 15분 창·삭제 정책 없음" 추기 · 정책을 다시 쓰면 `contracts/snapshots/staging_contract.json` 재추출 · `docs/architecture/purpose-report/04-subscription-qna.md`의 "연결노트 패널" 절은 감사 스냅샷이므로 그대로 둔다.
+- `CLAUDE.md` 핵심 테이블 표 `connection_notes` 행 정정(`status` → `author_id, author_role, body, ink_path, ink_thumb_path`, append-only 명시; `:40` "room 단위"에 "작성자당 여러 장" 추가) · `docs/audit/db_expected_state.md:39`에 "유일 제약 없음(설계) · (권장안) UPDATE·DELETE 정책 없음" 추기 · 정책을 다시 쓰면 `contracts/snapshots/staging_contract.json` 재추출 · `docs/architecture/purpose-report/04-subscription-qna.md`의 "연결노트 패널" 절은 감사 스냅샷이므로 그대로 둔다.
 - 별도 정리 PR(개편 필수 아님): `QuestionRoomWorkspace.tsx:152-163, 269-560`의 구형 렌더와 memo, 4개 페이지의 `initialNoteText` 계산·prop(`:111`).
 
 ---
@@ -317,16 +325,15 @@ update public.mobile_app_version_policies
 | `lib/qna/__contract__/connectionNoteFreeRoom.contract.test.ts` | 유지 | 가드 계약 불변(가드는 노트 행을 읽지 않는다) |
 | `lib/qna/__contract__/questionRoomRedirect.contract.test.ts` | 유지 | `kind=note` 계약 불변. 결정 #10에서 `dNote` 배관을 제거하면 `:151-163` 단언도 제거 |
 | `lib/qna/__contract__/mentorRoomDetailWiring.contract.test.ts` · `lib/account/__contract__/accountDeletionBucketCoverage.contract.test.ts` | 유지 | 패널·조회 변경과 무관 / 계정 삭제 커버리지는 `author_id` 조인이라 행 수 무관 |
-| 신규 `lib/qna/connectionNoteTimeline.ts` + `__contract__/connectionNoteTimeline.contract.test.ts` | 추가 | 패널에서 뽑아낸 순수 헬퍼: 같은 작성자 N행이 모두 카드가 됨 · `created_at`(동률 `id`) 정렬 · `side` 판정(방 id → `author_role` 폴백) · `editable = 본인 && (결정 #2) 15분 이내` · desc+limit 조회를 뒤집는 형태. **`components/` 아래 컨트랙트 테스트는 불가** — 러너가 `lib/**/__contract__/*.contract.test.ts`만 훑고(`package.json:10`) TSX를 렌더할 수 없다 |
+| 신규 `lib/qna/connectionNoteTimeline.ts` + `__contract__/connectionNoteTimeline.contract.test.ts` | 추가 | 패널에서 뽑아낸 순수 헬퍼: 같은 작성자 N행이 모두 카드가 됨 · `created_at`(동률 `id`) 정렬 · `side` 판정(방 id → `author_role` 폴백) · `editable`은 권장안 (c)면 필드 자체를 없애고, (b′)면 `본인 && 15분 이내` · desc+limit 조회를 뒤집는 형태 · `id`가 문자열이 아닌 행은 건너뜀. **`components/` 아래 컨트랙트 테스트는 불가** — 러너가 `lib/**/__contract__/*.contract.test.ts`만 훑고(`package.json:10`) TSX를 렌더할 수 없다 |
 | 신규 `lib/qna/__contract__/connectionNotesPanelWiring.contract.test.ts` | 추가 | 소스 텍스트 회귀(패턴: `mentorRoomDetailWiring`): 패널에 `cards.length === 0` 조건·unique 주석이 없을 것 · 조회가 `created_at` + 명시 limit일 것 · 모달이 학생 전용 placeholder를 멘토에게 쓰지 않을 것 |
-| 신규 `lib/qna/__contract__/connectionNoteEditWindow.contract.test.ts` | 추가(결정 #2 시) | `isWithinNoteEditWindow` 경계(14:59 허용 · 15:00 거부 · 잘못된 `created_at` 거부) — 패널 `editable`과 액션 사전 검사가 같은 함수를 써서 클라이언트·서버가 어긋나지 않게 |
+| 신규 `lib/qna/__contract__/connectionNoteEditWindow.contract.test.ts` | 추가(결정 #2 **(b′)** 채택 시에만) | `isWithinNoteEditWindow` 경계(14:59 허용 · 15:00 거부 · 잘못된 `created_at` 거부) — 패널 `editable`과 액션 사전 검사가 같은 함수를 써서 클라이언트·서버가 어긋나지 않게 |
 | `e2e/connection-note-guard.spec.ts` | 수정 | 시드 INSERT 전에 해당 방의 `connection_notes` 정리(`.delete().eq('mentor_student_room_id', roomId)`) · INSERT 오류 `null` 단언 · 제약 제거 후 케이스: 같은 학생이 2장 INSERT 모두 성공 + `created_at` 순 2행 조회 |
 
 ### 8-3. DB
-- 마이그레이션 자체 검증 블록(E): 제약 부재 · **다른 unique index도 없음** · `idx_cn_room_created` 컬럼 목록 · `idx_cn_author` 생존 · (F) 정책 수 3, `cn_update`에 `created_at`, `cn_delete` 부재, 트리거·함수 존재 — F 문장이 빠져도 통과하는 검증이면 의미가 없다.
-- 신규 `scripts/verify/connection_notes_timeline_verify.sql`(패턴 `s2_2_batch_d_verify.sql`: `begin` → 로컬 가드 → fixture → `set_config('request.jwt.claims', …)` + `set local role authenticated` → 검증 → `rollback`): 같은 (방, 작성자) INSERT 2회 성공 · `ORDER BY created_at, id` 결정적 · (F) 15분 지난 행 UPDATE 0행/창 안 1행 · DELETE 0행 · `set created_at = now()` → 예외 · **fixture 사용자 삭제 시 FK set-null이 트리거에 막히지 않음** · 구앱 시뮬레이션(최신 UPDATE + 나머지 DELETE) 후 과거 행 무손실.
-- (결정 #2) `scripts/verify/`에 정책 검증 추가: 본인 행이라도 `created_at < now() - 15min`이면 UPDATE/DELETE 0행. 스타일은 `s2_2_batch_d_verify.sql`(트랜잭션 내 fixture → 검증 → rollback).
-- 구클라이언트 시뮬레이션: 한 작성자 행 3건 시드(최신 1건은 15분 이내, 2건은 그 이전) → "최신 1건 UPDATE + 나머지 DELETE"를 authenticated 컨텍스트로 실행 → **UPDATE 1행(정정), DELETE 0행**(F-2 채택 시) 확인. `created_at = now()` UPDATE가 트리거로 거부되는지(F-3) 확인.
+- 마이그레이션 자체 검증 블록(E): 제약 부재 · **다른 unique index도 없음** · `idx_cn_room_created` 컬럼 목록 · `idx_cn_author` 생존 · (F 권장안) `pg_policies`가 정확히 {`cn_select` SELECT, `cn_insert` INSERT} 2행이고 `cmd IN ('UPDATE','DELETE')` 행 0 · RLS 활성 — (b′)면 3행 + `cn_update`에 `created_at` + 트리거·함수 ACL. F 문장이 빠져도 통과하는 검증이면 의미가 없다.
+- 신규 `scripts/verify/connection_notes_timeline_verify.sql`(패턴 `s2_2_batch_d_verify.sql`: `begin` → 로컬 가드 → fixture → `set_config('request.jwt.claims', …)` + `set local role authenticated` → 검증 → `rollback`): 같은 (방, 작성자) INSERT 2회 성공 · `ORDER BY created_at, id` 결정적 · (F 권장안) 본인 행이라도 UPDATE 0행 · DELETE 0행 · 구앱 시뮬레이션(최신 UPDATE + 나머지 DELETE) 후 **행 수뿐 아니라 각 행의 `body`·`updated_at`이 시드 값과 동일**(카운트만 세면 덮어쓰기를 놓친다) · **fixture 사용자 삭제 시 FK set-null 성공**(정책 제거와 무관함을 확인) · (b′)면 창 안 1행/창 밖 0행 · `set created_at = now()` → 예외 · FK set-null이 트리거에 막히지 않음.
+- 구클라이언트 시뮬레이션(권장안 (c)): 한 작성자 행 3건 시드 → "`updated_at` 최신 1건 UPDATE + 나머지 DELETE"를 authenticated 컨텍스트(`set_config('request.jwt.claims', …)` + `set local role authenticated`, 패턴 `s2_2_batch_d_verify.sql:210-213`)로 실행 → **UPDATE 0행 · DELETE 0행 · 3행의 본문·`updated_at` 불변**. (b′)면 최신 1건이 15분 이내일 때 UPDATE 1행(정정)·DELETE 0행, `created_at = now()` UPDATE는 트리거로 거부.
 
 ---
 
@@ -334,13 +341,13 @@ update public.mobile_app_version_policies
 
 | # | 단계 | 게이트(다음으로 넘어가는 조건) |
 |---|---|---|
-| ① | DB: `190` 머지 → `db-apply-pending` apply(미적용 `189`와 **함께** 전량 적용) | 원장에 version 등재 · pg_constraint에서 제약 부재 확인 · 웹·앱 동작 변화 **없음**(웹 버튼 숨김·앱 UPDATE 그대로). **`191`은 이 시점에 main에 있으면 안 된다**(같이 적용돼 전원 강제 업데이트) |
+| ① | DB: `190` 머지 → `db-apply-pending` apply(미적용 `189`와 **함께** 전량 적용) | 원장에 version 등재 · pg_constraint에서 제약 부재 확인 · (권장안) `pg_policies`가 `cn_select`/`cn_insert` 2행 · 웹 동작 변화 없음(버튼 숨김 그대로) · 구앱은 내 노트가 이미 있는 방에서 '저장'이 실패 스낵바로 끝난다(라이브 0행이라 실제 영향 0) · 웹의 기존 수정·삭제 버튼은 0행에 거짓 성공을 띄우므로 ④를 바로 잇는다(§7-3). **`191`은 이 시점에 main에 있으면 안 된다**(같이 적용돼 전원 강제 업데이트) |
 | ② | 앱: `appendMyNote` + 타임라인 화면 빌드 → 스토어 심사·배포 | CI(analyze·test) 그린 · 스토어 게시 완료 · 결제 무관 기능이라 심사 리스크 낮음(인계 §5 권고 순서 ①단계에 해당) |
 | ③ | 버전 게이트: `191`을 **양 스토어 게시 완료 후** 머지 → `db-apply-pending` apply (`min_supported_build`를 ②의 build로, **forceUpdate**) | 적용 전 `mobile_app_version_policies` 현재값 읽어 `sql_apply_manifest` 행에 기록(롤백용) · 원장 등재 · `get_mobile_app_version_policy('ios'/'android')` 응답 확인 · 구앱(build 19) 콜드 스타트가 `ForceUpdateScreen`에서 멈추는 것을 테스트 기기로 확인 · 스토어 바이너리의 실제 `buildNumber`가 19인지 확인(§11) · **`store_url`·`message`를 두 플랫폼 행에 채운 채 적용**(현재 둘 다 비어 있어 게이트 화면의 스토어 버튼이 스낵바만 띄운다 — §5-2 · §11 #14) |
-| ④ | 웹: 패널 `canAdd` 개방 + 타임라인 정렬 + 카피 배포 | 결정 #2 채택 시 ③ 직후 가능. 미채택 시 ③ 후 **재시작 유예 48시간 이상**(게이트는 콜드 스타트에서만 평가) |
+| ④ | 웹: 패널 `canAdd` 개방 + 타임라인 정렬 + 카피 배포 | 결정 #2 권장안 (c) 채택 시 **① 직후 어느 때나**(DB가 구앱을 무해화하므로 ②·③과 무관; 거짓 성공 버튼 제거를 위해 오히려 ① 직후가 좋다). (b′)면 ① 직후 가능하나 15분 창 덮어쓰기가 남는다. (a)면 ③ 후 **재시작 유예 48시간 이상**(게이트는 콜드 스타트에서만 평가) |
 | ⑤ | 문서: `db_expected_state.md`·`CLAUDE.md` 행 갱신, 앱 `APP_FEATURE_STATUS.md`, 계약 문서 | — |
 
-결정 #2(수정 15분 창 + 삭제 불가 + `created_at` 불변)를 채택하면 ①에 정책이 포함되어 ④가 ③보다 먼저 가도 데이터 소실은 없다(구앱은 "방금 쓴 노트 고쳐 쓰기" 이상을 할 수 없다). 채택하지 않으면 **③→④ 순서와 재시작 유예가 유일한 방어**다.
+결정 #2 권장안 (c)(UPDATE·DELETE 정책 제거)를 채택하면 ①에 정책 제거가 포함되어 ④가 ②·③보다 먼저 가도 데이터 소실은 없다(구앱은 기존 행을 바꾸거나 지울 수 없고, 두 번째 저장은 실패 스낵바로 끝난다). (b′)면 15분 창 덮어쓰기만 남는다. (a)면 **③→④ 순서와 재시작 유예가 유일한 방어**다.
 
 클라우드 초기화가 예정돼 있다면 ①은 초기화 **후** 새 pack에 포함된 채로 재적용되면 되고, 초기화 전에 적용해도 행 0건이라 차이가 없다.
 
@@ -351,15 +358,16 @@ update public.mobile_app_version_policies
 | # | 질문 | 선택지 | 권장 |
 |---|---|---|---|
 | 1 | 웹 패널 레이아웃 | (a) 2열 유지(학생/멘토 각각 타임라인) · (b) 한 타임라인(역할 색 띠·라벨로 구분) | **(b)** — 학생 노트에 멘토가 답하는 흐름이 한 줄로 읽힌다. 앱도 (b)라 두 클라이언트가 같은 모양 |
-| 2 | 수정·삭제 정책 | (a) 현행(본인 행 언제나) · (b) 수정·삭제 모두 15분 창 · (b′) **수정 15분 창 + 삭제 불가** + `created_at` 불변 트리거 · (c) 수정·삭제 모두 불가 | **(b′)** — 오타 정정은 허용하면서 기록은 곧 불변. 구클라이언트의 DELETE 경로를 서버가 **완전히** 무력화한다(§5-3). (b)는 최근 15분 내 노트에 잔여 손실이 남는다 |
-| 3 | 본문 길이 상한 | (a) 없음(현행) · (b) 2,000자 클라이언트 강제 · (c) DB CHECK 추가 | **(b)** — DB 변경 최소. 상한값은 조정 가능 |
+| 2 | 수정·삭제 정책 | (a) 현행(본인 행 언제나) · (b) 수정·삭제 모두 15분 창 · (b′) 수정 15분 창 + 삭제 불가 + `created_at` 불변 트리거 · (c′) 수정 무제한 + 삭제 불가 · (c) **수정·삭제 모두 불가**(authenticated UPDATE·DELETE 정책 제거) | **(c)** — 유일하게 잔여 손실 0(§5-3 표). 구앱은 UPDATE 대상을 저장 순간 다시 고르므로 (b′)·(c′)는 다른 기기에서 남긴 내 노트를 덮어쓴다. `question_messages`와 같은 append-only 선례, 트리거·함수 없이 `drop policy` 2문(policies 174). 비용은 웹 인라인 수정 UI 제거(정정은 새 노트로). 초안 권장 (b′)에서 변경 |
+| 3 | 본문 길이 상한 | (a) 없음(현행) · (b) 2,000자 클라이언트 강제 · (c) DB CHECK 추가 | **(b)** — DB 변경 최소. 상한값은 조정 가능. (c)를 고르면 단위를 맞춰야 한다: `char_length`는 코드포인트, Flutter `maxLength`/`.characters`는 grapheme이라 이모지 노트가 클라이언트는 통과하고 DB에서 `23514`로 실패할 수 있다(구앱에는 설명 없는 실패 스낵바) |
 | 4 | 조회 상한 | (a) 무제한(현행) · (b) `created_at desc` **limit 200** + 클라이언트 반전 · (c) (b) + '이전 노트 보기' 커서 페이징 | **(b)** — 무제한 `asc`는 PostgREST max-rows(기본 1000)에 걸리면 **최신** 노트가 잘리므로 금지. 주 4~9 질문 방에서 200장은 수년치. 넘는 방이 생기면 (c)(앱은 `messagesBefore` 패턴 미러링) |
-| 5 | 카피 | 버튼 '노트 남기기' · 모달 제목 · 역할별 placeholder(§7-2 초안) | 초안 승인 또는 수정 |
+| 5 | 카피 | 버튼 '노트 남기기' · 모달 제목 · 역할별 placeholder(§7-2 초안) · 앱 빈 상태 본문('질문하고 답변을 확인하면 노트가 쌓여요' → '첫 노트를 남겨 보세요') · (c) 채택 시 안내 문장 '남긴 노트는 수정·삭제할 수 없어요. 고칠 내용은 새 노트로 남겨 주세요.' · 게이트 화면 `message`(§5-2) | 초안 승인 또는 수정 |
 | 6 | 앱 '내 노트' 편집기 위치 | (a) 하단 고정 카드(현행 자리) · (b) 채팅형 입력 바 | **(a)** — 골격 유지 |
-| 7 | 강제 업데이트 시점 | ②배포 직후 즉시 · 며칠 유예(recommend) 후 강제 | **즉시** — 결정 #2 미채택이면 더더욱 |
-| 8 | 앱 경로의 구독 규칙 | (a) 현행 비대칭 유지(웹만 차단, 앱은 RLS 방 당사자만) · (b) `cn_insert` 술어에 "활성 구독 또는 구독 이력 없는 무료 방" 조건 이관(웹 가드 `assertConnectionNoteWriteAllowed`와 같은 판정을 SQL로) · (c) append RPC 신설 | **1차 (a)** — 현행에도 없던 규칙이라 회귀가 아니다. (b)는 정책 술어에 `subscriptions` 서브쿼리가 들어가는 별도 DB 변경이므로 후속 트랙으로 분리(구클라이언트에도 묶이는 유일한 방법이라는 점은 기록) |
+| 7 | 강제 업데이트 시점 | ②배포 직후 즉시 · 며칠 유예(recommend) 후 강제 | **즉시**(양 스토어 게시 후, `store_url`·`message` 세팅 필수 — §5-2) — (c) 채택 시 게이트는 데이터 안전장치가 아니라 구앱의 "두 번째 저장 실패" 상태를 끝내는 UX 장치. 결정 #2 미채택이면 데이터 안전장치라 더더욱 즉시 |
+| 8 | 앱 경로의 구독 규칙 | (a) 현행 비대칭 유지(웹만 차단, 앱은 RLS 방 당사자만) · (a′) (a) + 표시 전용 완화: 세 진입점이 이미 든 `sub`를 화면에 넘겨 만료 시 작성 카드 비활성 + 문장(딥링크는 fail-open, §6) · (b) `cn_insert` 술어에 "활성 구독 또는 구독 이력 없는 무료 방" 조건 이관(웹 가드 `assertConnectionNoteWriteAllowed`와 같은 판정을 SQL로) · (c) append RPC 신설 | **1차 (a) 또는 (a′)** — 현행에도 없던 규칙이라 회귀가 아니다. (a′)는 DB 비용 0으로 웹 문구와 맞출 수 있으나 구속력은 없다. (b)는 정책 술어에 `subscriptions` 서브쿼리가 들어가는 별도 DB 변경이므로 후속 트랙으로 분리(구클라이언트에도 묶이는 유일한 방법이라는 점은 기록) |
 | 9 | 웹 추가 버튼의 쓰기 불가 상태 | (a) 항상 노출, 서버 거절에 맡김(지금은 일반 문구로 세탁돼 이유를 모름) · (b) 페이지가 `canWrite`를 서버 계산해 패널에 전달, 불가 시 비활성 + 힌트 · (c) 페이지의 오류 매핑을 고쳐 액션 문구를 통과시킴 | **(b)** 를 개편 PR에, (c)는 별도 PR — 세탁은 노트 외 액션에도 걸린 기존 결함 |
 | 10 | `dNote` 초안 보존 | (a) 워크스페이스 → 패널 → 모달 `defaultBody`로 연결 · (b) `dNote` 배관·계약 단언 제거 | **(a)** — 타임라인에서는 저장 시도가 잦아져 실패 시 글 소실이 체감된다 |
+| 11 | 타임라인 표시 순서 | (a) 오래된 것 위·최신 아래(조회 `desc`를 화면에서 뒤집음, 작성 카드는 하단 그대로) · (b) 최신 위(뉴스피드형, 작성 카드를 `ListView` 첫 자식으로) | **(a)** — 골격 유지(작성 카드 자리 불변; 방 홈 미리보기 2종 무변경은 두 안 모두) + 답글이 원 노트 **아래**에 읽힌다. (b)는 화면 구조 변경이고 답글이 원 노트 위에 놓인다 |
 
 ---
 
@@ -372,7 +380,7 @@ update public.mobile_app_version_policies
 | 3 | 스토어 바이너리의 `PackageInfo.buildNumber`가 실제로 19인지(CI가 `--build-number`를 따로 넘기면 다를 수 있다) — ③의 `min_supported_build` 값이 이에 걸린다 | 스토어 콘솔 · CI 워크플로 |
 | 4 | Flutter 웹 타깃(`web/` 디렉터리 존재, `kIsWeb` 분기)이 어딘가 배포돼 있는지 — 배포돼 있으면 게이트가 아예 없다 | 오너 |
 | 5 | `.select().single()` 0행 시 PostgREST 오류 코드(예상 `PGRST116`) — 라이브러리 소스 미확인. 앱의 `catch` 경로는 코드로 확인됨(§5-3) | 실기기 1회 |
-| 6 | 웹 `window.confirm` 삭제 확인 — 결정 #2(b′) 채택 시 삭제 UI 자체가 사라져 무관. (b) 채택 시 `AppToast`/모달로 바꿀지 | 관리자 콘솔 확인 모달 공통화 트랙과 함께 결정 |
+| 6 | 웹 `window.confirm` 삭제 확인 — 결정 #2 (c)·(b′) 채택 시 삭제 UI 자체가 사라져 무관. (b) 채택 시 `AppToast`/모달로 바꿀지 | 관리자 콘솔 확인 모달 공통화 트랙과 함께 결정 |
 | 7 | `supabase_realtime` publication에 `connection_notes`가 포함되는지 — 지금은 무관(앱·웹 모두 realtime 없음), 실시간 타임라인을 원할 때 필요 | DB 조회 |
 | 8 | 프로젝트의 PostgREST max-rows 설정값(기본 1000) — 결정 #4의 limit 근거 | Supabase 대시보드 API 설정 |
 | 9 | 웹 노트 모달이 서버 액션 리다이렉트 뒤 실제로 열린 채 남는지(React 클라이언트 상태 유지 여부) — 정적으로는 닫는 코드가 없다 | 브라우저 1회 |
@@ -401,8 +409,9 @@ update public.mobile_app_version_policies
 --   unique index 도 함께 제거됨 — 같은 컬럼의 idx_cn_author(048) 가 남아 (방, 작성자)
 --   조회 경로는 유지), 타임라인 정렬 인덱스 idx_cn_room_created(방, created_at, id) 를
 --   추가한다. 컬럼(잉크 2열 포함)·FK 2종·trg_cn_set_updated·cn_select·cn_insert 는 불변.
---   [F 절 — 오너 결정 #2 채택 시에만 포함] cn_update 를 "작성 후 15분 이내 본인 행" 으로
---   재정의(F-1), cn_delete 정책 제거(F-2), created_at 불변 트리거(F-3).
+--   [F 절 — 오너 결정 #2 권장안 (c)] cn_update·cn_delete 정책 제거(F-1, F-2) → authenticated 는
+--   INSERT 만 가능한 엄격한 append-only(question_messages 와 같은 모양, 002_p0:227-248).
+--   대안 (b′)(수정 15분 창 + 삭제 불가 + created_at 불변 트리거)는 말미 [ALT-b′] 블록.
 --
 -- Base: supabase/migrations/20260806033452_connection_notes_room_author_unique.sql
 --   (원장 20260806033452 — 제약 추가 1문) · RLS 원문 supabase/sql/085_connection_notes_author_rls.sql.
@@ -412,7 +421,7 @@ update public.mobile_app_version_policies
 --   pack 등재: supabase/baseline/post_ledger_backfills/2026MMDD100100_connection_notes_timeline_drop_unique.sql
 --
 -- Rollback: 말미 (R) 블록 — (방, 작성자) 중복 0행 전제로 제약 재생성 + 인덱스 제거
---   + [F] 085 원문 정책 2종 재생성 + 트리거·함수 제거. 데이터 무접촉.
+--   + [F] 085 원문 정책 2종 재생성(대안 b′ 였다면 트리거·함수 제거도). 데이터 무접촉.
 -- =============================================================================
 
 begin;
@@ -452,7 +461,83 @@ CREATE INDEX IF NOT EXISTS idx_cn_room_created
 COMMENT ON TABLE public.connection_notes IS
   '연결노트 — mentor_student_rooms 1방 = 누적 타임라인 1개. 한 작성자(author_id)가 여러 행을 append 한다. 정렬 (created_at, id). 2026-09 개편(190): 구 (방,작성자) UNIQUE 계약 폐기. 손글씨 ink_path/ink_thumb_path 는 예약 컬럼, 기능 없음.';
 
--- F. [오너 결정 #2 채택 시에만 — 미채택이면 F-1~F-3 과 E 의 F 검사를 삭제]
+-- F. [오너 결정 #2 권장안 (c) — 미채택이면 F 와 E 의 F 검사를 삭제, (b′) 채택이면 말미 ALT-b′ 로 대체]
+-- F-1. cn_update 제거 — authenticated 의 UPDATE 는 RLS 필터로 0행(오류 없음). 구앱(build 19)의
+--      '최신 내 노트 UPDATE' 가 0행이 되어 .select().single() 이 예외 → 나머지 노트 DELETE 블록에
+--      도달하지 못한다(write repo :209-233). 사용자 수정은 없다 — 정정은 새 노트로.
+DROP POLICY IF EXISTS "cn_update" ON public.connection_notes;
+
+-- F-2. cn_delete 제거 — authenticated 의 DELETE 는 항상 0행. service_role(계정 삭제 워커·e2e admin
+--      클라이언트)은 RLS 우회라 영향 없고, users FK ON DELETE SET NULL(048) 도 정책과 무관하게 동작한다.
+--      정책 수 176→174, 함수·트리거 변화 없음(functions 222).
+DROP POLICY IF EXISTS "cn_delete" ON public.connection_notes;
+
+-- E. 적용 직후 자가 검증
+DO $$
+DECLARE v_n int;
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint
+              WHERE conrelid = 'public.connection_notes'::regclass
+                AND conname  = 'connection_notes_room_author_unique') THEN
+    RAISE EXCEPTION '190_VERIFY: connection_notes_room_author_unique still present';
+  END IF;
+  SELECT count(*) INTO v_n FROM pg_indexes
+   WHERE schemaname = 'public' AND tablename = 'connection_notes'
+     AND indexdef LIKE 'CREATE UNIQUE INDEX%' AND indexname <> 'connection_notes_pkey';
+  IF v_n <> 0 THEN
+    RAISE EXCEPTION '190_VERIFY: unexpected unique index remains (%)', v_n;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes
+                  WHERE schemaname = 'public' AND tablename = 'connection_notes'
+                    AND indexname = 'idx_cn_room_created'
+                    AND indexdef LIKE '%(mentor_student_room_id, created_at, id)') THEN
+    RAISE EXCEPTION '190_VERIFY: idx_cn_room_created missing or wrong columns';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes
+                  WHERE schemaname = 'public' AND tablename = 'connection_notes'
+                    AND indexname = 'idx_cn_author') THEN
+    RAISE EXCEPTION '190_VERIFY: idx_cn_author missing (room, author lookup path lost)';
+  END IF;
+  -- [F] 정책이 정확히 cn_select(SELECT)·cn_insert(INSERT) 2행이고 UPDATE/DELETE 행은 0, RLS 활성
+  SELECT count(*) INTO v_n FROM pg_policies
+   WHERE schemaname = 'public' AND tablename = 'connection_notes';
+  IF v_n <> 2 THEN
+    RAISE EXCEPTION '190_VERIFY: connection_notes policy count % (expected 2)', v_n;
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_policies
+              WHERE schemaname = 'public' AND tablename = 'connection_notes'
+                AND cmd IN ('UPDATE', 'DELETE')) THEN
+    RAISE EXCEPTION '190_VERIFY: UPDATE/DELETE policy still present on connection_notes';
+  END IF;
+  SELECT count(*) INTO v_n FROM pg_policies
+   WHERE schemaname = 'public' AND tablename = 'connection_notes'
+     AND ((policyname = 'cn_select' AND cmd = 'SELECT')
+       OR (policyname = 'cn_insert' AND cmd = 'INSERT'));
+  IF v_n <> 2 THEN
+    RAISE EXCEPTION '190_VERIFY: cn_select/cn_insert missing (%)', v_n;
+  END IF;
+  IF NOT (SELECT relrowsecurity FROM pg_class WHERE oid = 'public.connection_notes'::regclass) THEN
+    RAISE EXCEPTION '190_VERIFY: RLS disabled on connection_notes';
+  END IF;
+END $$;
+
+commit;
+
+-- (R) Rollback — 별도 실행(정식 pack 은 forward-only). 아래 조회가 0행일 때만.
+-- select mentor_student_room_id, author_id, count(*) from public.connection_notes
+--   group by 1, 2 having count(*) > 1;
+-- alter table public.connection_notes
+--   add constraint connection_notes_room_author_unique unique (mentor_student_room_id, author_id);
+-- drop index if exists public.idx_cn_room_created;
+-- comment on table public.connection_notes is null;
+-- [F] supabase/sql/085_connection_notes_author_rls.sql 의 cn_update(:43-63)·cn_delete(:67-78) 원문 재생성.
+-- [ALT-b′ 였다면 그 전에] drop trigger if exists trg_cn_created_at_immutable on public.connection_notes;
+--   drop function if exists public.connection_notes_forbid_created_at_change();
+```
+
+**`[ALT-b′]` — 대안 (b′) 채택 시 F-1/F-2 대신 넣는 블록.** E의 F 검사는 "정책 3행 · `cn_update`의 qual/with_check에 `created_at` · `cn_delete` 부재 · 트리거 실재 · 함수가 anon/authenticated에 EXECUTE 불가"로 바꾸고, 구조 카운트 기대치는 policies 175 · functions 223.
+
+```sql
 -- F-1. cn_update — 작성 후 15분 이내 본인 행만(정정 창). 같은 이름 재정의(정책 수 불변).
 --      USING 이 기존 행을, WITH CHECK 가 갱신 결과 행을 창으로 제한한다. now() 는 STABLE
 --      (트랜잭션 시작 시각) 이라 정책식에 허용된다. WITH CHECK 만으로는 created_at 을
@@ -496,33 +581,8 @@ CREATE TRIGGER trg_cn_created_at_immutable
   BEFORE UPDATE ON public.connection_notes
   FOR EACH ROW EXECUTE FUNCTION public.connection_notes_forbid_created_at_change();
 
--- E. 적용 직후 자가 검증
-DO $$
-DECLARE v_n int;
-BEGIN
-  IF EXISTS (SELECT 1 FROM pg_constraint
-              WHERE conrelid = 'public.connection_notes'::regclass
-                AND conname  = 'connection_notes_room_author_unique') THEN
-    RAISE EXCEPTION '190_VERIFY: connection_notes_room_author_unique still present';
-  END IF;
-  SELECT count(*) INTO v_n FROM pg_indexes
-   WHERE schemaname = 'public' AND tablename = 'connection_notes'
-     AND indexdef LIKE 'CREATE UNIQUE INDEX%' AND indexname <> 'connection_notes_pkey';
-  IF v_n <> 0 THEN
-    RAISE EXCEPTION '190_VERIFY: unexpected unique index remains (%)', v_n;
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_indexes
-                  WHERE schemaname = 'public' AND tablename = 'connection_notes'
-                    AND indexname = 'idx_cn_room_created'
-                    AND indexdef LIKE '%(mentor_student_room_id, created_at, id)') THEN
-    RAISE EXCEPTION '190_VERIFY: idx_cn_room_created missing or wrong columns';
-  END IF;
-  IF NOT EXISTS (SELECT 1 FROM pg_indexes
-                  WHERE schemaname = 'public' AND tablename = 'connection_notes'
-                    AND indexname = 'idx_cn_author') THEN
-    RAISE EXCEPTION '190_VERIFY: idx_cn_author missing (room, author lookup path lost)';
-  END IF;
-  -- [F] 정책 3종(select/insert/update) · cn_update 창 · cn_delete 부재 · 트리거 실재 · 함수 ACL
+-- ▼ E 자가 검증 DO 블록 안에서 권장안의 [F] 검사 4개를 아래 검사로 교체한다.
+  -- [ALT-b′] 정책 3종(select/insert/update) · cn_update 창 · cn_delete 부재 · 트리거 실재 · 함수 ACL
   SELECT count(*) INTO v_n FROM pg_policies
    WHERE schemaname = 'public' AND tablename = 'connection_notes';
   IF v_n <> 3 THEN
@@ -551,20 +611,6 @@ BEGIN
                      OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))) THEN
     RAISE EXCEPTION '190_VERIFY: trigger function still executable by anon/authenticated';
   END IF;
-END $$;
-
-commit;
-
--- (R) Rollback — 별도 실행(정식 pack 은 forward-only). 아래 조회가 0행일 때만.
--- select mentor_student_room_id, author_id, count(*) from public.connection_notes
---   group by 1, 2 having count(*) > 1;
--- alter table public.connection_notes
---   add constraint connection_notes_room_author_unique unique (mentor_student_room_id, author_id);
--- drop index if exists public.idx_cn_room_created;
--- comment on table public.connection_notes is null;
--- [F] drop trigger if exists trg_cn_created_at_immutable on public.connection_notes;
--- [F] drop function if exists public.connection_notes_forbid_created_at_change();
--- [F] supabase/sql/085_connection_notes_author_rls.sql 의 cn_update(:43-63)·cn_delete(:67-78) 원문 재생성.
 ```
 
 ### 12-2. `191_mobile_app_version_policy_min_build_<N>.sql` (③ 시점에만 머지)
