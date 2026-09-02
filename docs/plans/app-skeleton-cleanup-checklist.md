@@ -15,7 +15,17 @@
 
 ## 0. 결론 요약
 
-(축별 실측이 끝나면 채운다)
+| | 값 |
+|---|---|
+| 항목 수 | **67** (타이포 13 · 반경/간격 17 · 오류 뷰 6 · 입력창 8 · 로딩 8 · 잔재 15) |
+| 판정 | **기계적 33** (픽셀 동일, 승인만 받으면 진행) · **결정 30** (값이 바뀜, §10에서 골라야 함) · **기록만 4** (바꾸지 않는 것을 명시) |
+| 골격 위반 제안 | **0건** (검토자 판정 기준, §11) |
+
+1. **"타이포 토큰 통일"은 기계적 스윕이 아니다.** 정본 `AppType`은 모든 스타일에 행간(`height` 1.25~1.45)과 고정폭 숫자를 넣지만 구 `AppTypography`와 인라인 `TextStyle`은 Material 기본(행간 1.43)을 상속한다. 그래서 구 토큰 28곳(IQ 4파일)의 치환은 **한 건도 픽셀 동일이 아니고**, 오너가 §3-3 매핑표를 승인해야 시작할 수 있다. 실제로 기계적으로 할 수 있는 것은 구 토큰 파일 삭제(T4) 하나다.
+2. **기계적 물량은 간격과 공용 위젯 3종에 있다.** 스케일 위의 `EdgeInsets` 64곳·`SizedBox` 122곳(값 동일 토큰 치환), 오류 뷰 21곳 → `ErrorState` 1개, 입력창 17곳 → `appInputDecoration` 헬퍼 1개, 로딩 32+9곳 → `LoadingState`·`InlineSpinner`. 이 넷을 끝내면 화면마다 베낀 코드 약 300줄이 사라지고 픽셀은 하나도 안 움직인다.
+3. **결정 항목은 세 가지 질문으로 묶인다.** (i) 스케일 밖 값(반경 8/10/14/18 · 간격 2/6/10/14 · 입력 패딩 14/10/12 · FAB 여유 88/96 · 배너 그림자)에 **토큰을 신설**(픽셀 동일)할지 **가까운 값으로 스냅**(1~4px 이동)할지, (ii) 타이포 매핑표를 그대로 승인할지, (iii) 아이콘 계열(`_rounded` 48종 vs 비-rounded 40종 64회)을 통일할지. 나머지는 마이크로 위젯 4개의 거취다.
+4. **재발 방지는 린트가 아니라 grep이다.** `flutter_lints`에는 리터럴 `TextStyle`/`Colors`/미사용 public 위젯을 잡는 규칙이 없다. `deprecated_member_use`를 warning으로 승격하고(그래서 `withOpacity` 5곳이 CI를 통과해 살아남았다) CI에 grep 스텝을 두는 것이 정직한 가드다(D14).
+5. **구조정본과 다른 실측**: `withOpacity` 1곳 → **5곳**, 반경 리터럴 14곳 → `lib/design/` 밖 **13곳**(+`quota_bar` 1), `AppType` 61파일 → `lib/design/` 밖 **54파일**, 오류 뷰는 "약 20파일"이 아니라 **정확히 21곳/20파일**이고 그중 19곳이 바이트 단위 같은 트리.
 
 ---
 
@@ -41,7 +51,7 @@
 
 | 항목 | 값 |
 |---|---|
-| 정본 `AppType`(`lib/design/typography_tokens.dart`) 사용 | **215곳 / 54파일** (`lib/design/` 밖) |
+| 정본 `AppType`(`lib/design/typography_tokens.dart`) 사용 | **216회 / 215줄 / 54파일** (`lib/design/` 밖; `settings_section.dart:209`가 한 줄에 2회) |
 | 구 `AppTypography`(`lib/design/tokens/typography.dart`) 사용 | **28곳 / 4파일** — 전부 개별질문(IQ): `iq_detail_screen` 15 · `iq_create_screen` 5(프로덕션 도달 불가 화면) · `iq_widgets` 5 · `mentor_iq_list_screen` 3. 토큰별 `caption` 21 · `body` 6 · `cardTitle` 1 · `titleLarge`/`title`/`sectionTitle`/`meta` **0** |
 | 두 체계의 구조적 차이 | `AppType`은 전 스타일에 **`height`(1.25~1.45)와 고정폭 숫자**를 넣고, `AppTypography`는 둘 다 없이 Material 3 기본(`bodyMedium` height 1.43 · letterSpacing 0.25)을 상속한다. 굵기도 다르다(w500/w700 vs w400/w600). `caption`은 색까지 다르다(`#475569` vs `#64748B`) |
 | **결론** | **`AppTypography → AppType` 치환은 한 건도 픽셀 동일이 아니다.** 이 축은 기계적 스윕이 아니라 **매핑표 승인(결정 #T-1)** 이다 |
@@ -67,6 +77,7 @@
 | T10 | PDF 페이지 번호 `TextStyle(fontSize: 12)` | 1곳 `pdf_page_select_screen.dart:236` | `AppType.caption.copyWith(color: ColorTokens.primary)`(진한 색 유지) vs `AppType.caption`(회색으로) **결정 #T-5** | **결정** | 행간 또는 색 | 〃 | 8 |
 | T11 | 굵기만 w800 + `AppAccent` | 1곳 `question_list_screen.dart:316-318` (26px 단계 원) | `AppType.body.copyWith(color: accent, fontWeight: w700)` — 번들이 실제로 그릴 수 있는 굵기를 선언. `InitialAvatar`로 교체 금지(크기·배경 다름) | **결정** | 선언 w800→w700(렌더 글리프는 Bold 700으로 동일할 것으로 예상, 런타임 미확인), 행간 +0.28px | 3파일, 단계 숫자 스타일 단언 없음 | 10 |
 | T12 | 검은 첨부 뷰어 위 `Colors.white`/`white70` | 2곳 `iq_detail_screen.dart:1599, 1611` | 타이포 토큰 해당 없음. on-dark 텍스트 색 토큰이 없으므로 §8 색 항목으로 이관, 이 축에서는 그대로 | **보류** | — | 3파일, 스타일 무관 | 12 |
+| T13 | 토큰 위에 **리터럴 굵기·행간을 덧씌우는** `copyWith` (검토자가 추가 발견) | `conversation_bubble.dart:143, 152`(`height: ConversationMetrics.bodyHeight` = **1.35** — 어느 토큰에도 없는 행간, 말풍선 전부) · `login_screen.dart:128`(caption + **w600**) · `mentor_inbox_screen.dart:287`(caption + w600) · `cash_section.dart:96`(body + **w700**) · (`lib/design/theme.dart:73` 하단 탭 라벨 12/w600, height 없음 — 디자인 계층 내부) | 3-1의 "인라인 32곳"에는 잡히지 않는 같은 부류. 12/w600 "강조 캡션"이 2곳, 14/w700 "강조 본문"이 1곳, 1.35 행간이 말풍선 계열 — `AppType.captionStrong`(12/w600)·`bodyStrong`(14/w700) 토큰 신설 vs 리터럴 승인 **결정 #T-7**. 말풍선 1.35는 `ConversationMetrics`가 이미 상수로 관리하고 테스트가 단언하므로 그대로 | **결정** | (토큰 신설 시) 픽셀 동일 | `conversation_bubble_test` | 13 |
 
 ### 3-3. 매핑표 (결정 #T-1 — 오너 승인 필요)
 
@@ -81,6 +92,8 @@
 | `meta` | 12/w500/muted | `caption` | 12/w400/muted/h1.4 | 굵기 ↓ | 0 |
 
 모든 행이 추가로 **고정폭 숫자**를 얻고 상속 행간 1.43을 잃는다. 근본 원인: `AppType`이 `height`를 갖는 반면 스타일 없는 `Text()`·인라인 사이트는 M3 기본 1.43을 쓴다. "진짜 기계적" 이행을 원하면 `AppType`에 height 없는 변형을 추가해야 하는데, 그것은 정돈이 아니라 **토큰 설계 변경**이다(결정 #T-6).
+
+검토자 판정: T1~T12 **전부 확인**(파일:줄·수치 재현), 기계적/결정 판정 전부 동의. 수치 정정 1건(위 216/215), 누락 6곳(T13으로 편입). 골격 위반 제안 0건.
 
 ### 3-4. 재현
 
@@ -301,17 +314,120 @@ grep -rn "byType(CircularProgressIndicator)" test | wc -l                       
 
 ## 8. 잔재 정리·일관성
 
-(작성 중)
+### 8-1. 실측 사실
+
+| 항목 | 값 |
+|---|---|
+| 미사용·dev 전용 위젯 | `EmptyScreen` 생성자 호출 **0**(갤러리에도 없음) · `Skeleton` 3곳·`SlideOverPanel` 1곳 — 전부 `lib/features/dev/widget_gallery.dart`, 라우터는 `kDevToolsEnabled`(= `!kReleaseMode`)일 때만 등록 → **릴리즈 빌드 도달 불가** |
+| `withOpacity(` | **5곳**(구조정본은 1곳으로 과소 집계): `skeleton.dart:44` · `status_pill.dart:80` · `app_badge.dart:27` · `initial_avatar.dart:37` · `cash_section.dart:114`. `withValues(alpha:)`는 이미 3곳 사용, CI Flutter **3.44.6** 고정. analyzer는 `deprecated_member_use`를 **info**로만 보고해 CI 게이트(`error|warning`)를 통과한다 → 살아남은 이유 |
+| 아이콘 | `Icons.*` **88종 / 159회** — `_rounded` 48종(95회) · `_outlined/_outline` 21종(30회) · 접미사 없음 19종(34회). **같은 글리프를 두 계열로 쓰는 것 11쌍**(`close`↔`close_rounded` 등). 테스트 16파일 35줄이 `find.byIcon`으로 비-rounded 글리프를 고정 |
+| `Colors.*` (`lib/design/` 밖) | **8파일 / 24줄** — 전부 정당한 예외(미디어 뷰어 흑백·잉크 펜 프리셋·`transparent`·이미지 오버레이 칩·`#0F172A` 원 위 흰 숫자) |
+| raw `Color(0x…)` (`lib/design/` 밖) | **3곳** — 스크림 `0x66000000` ×2(`shortform_detail:559` · `thumbnail_view:47`) · 배너 그림자 `0x1A0F172A`(`version_gate_screens:165`) |
+| 사설 마이크로 위젯 | `_ReadOnlyBadge`·`InitialAvatarLike`·`_EmptyQuestions`는 **픽셀 동일 공용 대체물이 없다**. `_BrandSymbol`(76px) vs 스플래시 `Image`(96px)는 **있다**(크기만 다른 같은 에셋). `_AvatarWithDot`는 이미 `InitialAvatar`를 감싼 래퍼(중복 아님) |
+| 코드와 어긋난 주석 | **7곳**(`README.md:12` · `app_card.dart:8` · `dimens.dart:11` · `mentors_screen.dart:1-3, 26` · `mentor_card.dart:13` · `mentor_detail_screen.dart:30`) |
+| 린트 | `flutter_lints 4.0.0` + 규칙 4개, `analyzer:` 절 없음. **리터럴 `TextStyle`/`Colors`/`Color(0x…)`나 미사용 public 클래스를 잡는 린트는 없다**(`unused_element`는 private만) |
+
+### 8-2. 항목
+
+| # | 항목 | 위치 | 현재 → 제안 | 판정 | 테스트 영향 | 순서 |
+|---|---|---|---|---|---|---|
+| D1 | `EmptyScreen` 삭제 | `lib/design/widgets/empty_screen.dart` | `git rm`. 정본은 `EmptyState`. 부수 효과: `Icons.widgets_outlined` 1종 소멸 | **기계적** | 없음 | 1 |
+| D2 | `Skeleton`·`SlideOverPanel` 처리 | `skeleton.dart` · `slide_over_panel.dart` / `widget_gallery.dart:135-139, 144` | (A) 카탈로그로 유지 + 헤더 주석 "프로덕션 호출부 없음 — 갤러리 전용" · (B) `lib/features/dev/widgets/`로 이동(import 2줄) · (C) 삭제 + 갤러리 섹션 제거. 셋 다 릴리즈 렌더 동일. `SlideOverPanel` 주석이 "연결노트·학생정보"용이라 연결노트 개편이 쓸 수 있음 → **결정 #D-1** | **기계적** | 없음 | 7 |
+| D3 | `withOpacity` → `withValues(alpha:)` 5곳 | 8-1의 5곳 | 8bit 양자화 결과 동일(0.12→31, 0.16→41, 0.20→51). 테스트에 `withOpacity` 비교 0건 | **기계적** | `status_tone_color_test` 통과 | 2 |
+| D4 | 아이콘 계열 통일(`_rounded`) | 비-rounded 64회(dev·도달불가 5회 포함): `close` ×6(`version_gate_screens:184` · `slide_over_panel:65` · `board_write_screen:233, 242` · `iq_create:606` · `chat_input_bar:188`) · `attach_file` ×5 · `search_off` ×3 · `favorite_border` ×3 · `refresh` ×2 · `play_circle_fill` ×2 · `undo`·`redo`·`system_update_alt`·`open_in_new`·`more_vert`·`front_hand`·`bookmark`·`bookmark_border`·`auto_fix_normal`·`arrow_drop_down`·`add` … + `_outlined` 21종 | 글리프가 바뀌므로 전부 **결정 #D-2**. 선택지: (a) 40종/64회 전부 `_rounded`(테스트 35줄 동반 수정) · (b) **같은 글리프 두 계열 혼용 11쌍(26곳)만** 정리 · (c) 그대로. 주의: `_outlined` 계열은 `_outlined_rounded`가 없어 `_rounded`로 가면 **외곽선→채움**으로 바뀐다(`help_outline`·`lock_outline`·`delete_outline`·`play_circle_outline`·`favorite_border`·`bookmark_border`처럼 base 이름 자체에 outline/border가 든 6종만 외곽선 유지). 토글 쌍(`favorite`/`favorite_border`, `bookmark`/`bookmark_border`)은 함께 이동 | **결정** | 16파일 35줄 `find.byIcon` | 12 |
+| D5 | `_ReadOnlyBadge`('조회만') | `cash_section.dart:106-118` | 패딩 8/2 · `muted`@16% · `AppType.caption`. 가장 가까운 `AppBadge`는 패딩 8/3 · `secondary`@12% · 11/w700 — 전 축이 다름. (a) 유지 · (b) `AppBadge`로 스냅(시각 변경) · (c) 값 동일 `AppBadge.muted` 변형 추가(호출부 1곳을 위한 API 확장) **결정 #D-3**. D3의 `withOpacity`만 기계적 | **결정** | `wallet_stale_test` | 10 |
+| D6 | `InitialAvatarLike`(단계 숫자 원) | `question_list_screen.dart:301-321`(호출 `:291`) | 화면 파일 안의 public 클래스, 호출 1곳. `InitialAvatar(size: 26)`는 배경(`elevated` vs accent@20%)·글자 크기(~14 vs 10.9)가 달라 대체 불가. 기계적 부분: private `_StepNumber`로 개명·`super.key` 제거(렌더 동일). 스냅은 **결정 #D-4** | **기계적**(개명) | `question_list_actions_test` · `small_viewport_states_test` 렌더만 | 8 |
+| D7 | `_AvatarWithDot` | `mentor_inbox_screen.dart:298-320` | `InitialAvatar(48)` + 경고 점 오버레이 래퍼 — 중복 아님. 변경 없음(두 번째 호출부가 생기면 승격) | (제외) | — | 13 |
+| D8 | `_EmptyQuestions` vs `EmptyState` | `question_list_screen.dart:254-275` | `ListView(24)` + 44px muted 아이콘 + 3단계 행 — `EmptyState`(`Center/Padding(32)` + 88px accentSoft 원 + 46px accent 아이콘, 자식 슬롯 없음)와 구조·색·스크롤이 다름 → 유지. 수렴하려면 `EmptyState(children:)` 슬롯 추가 + 시각 변경 수용 **결정 #D-5**. `ListView`→`Center` 교체는 소형 뷰포트 스크롤(골격)을 바꾼다 | **결정** | `question_list_actions_test` · `small_viewport_states_test` | 11 |
+| D9 | `BrandMark(size)` 공용 위젯 | `login_screen.dart:85, 182-195`(`_BrandSymbol` 76px) · `splash_screen.dart:18-23`(96px) | `lib/design/widgets/brand_mark.dart` `BrandMark({required double size})` → `Image.asset(brandLogoAsset, size, size, FilterQuality.medium)`. `Image.asset`은 내부적으로 `AssetImage`라 같은 위젯. 에셋 경로는 파라미터로 받아 `lib/design`→`lib/shared/constants` 의존을 피할 수 있음 | **기계적** | 없음(두 화면 테스트 없음) | 6 |
+| D10 | `Colors.*` 24줄 — 교체 대신 **허용 표식** | 8-1의 8파일 | 각 줄 끝에 한 가지 정확한 문자열 `// design-allow: <사유>`(미디어 뷰어 흑백 / 잉크 펜 프리셋 / transparent / 이미지 오버레이 칩)를 붙이고 D14의 CI grep이 그 줄을 제외. 값 동일 스왑 1건 가능: 역할색 위 흰 글자 `primary_button.dart:41` → `AppAccent.of(context).onAccent`(`0xFFFFFFFF`). `pdf_page_select:225`는 `ColorTokens.primary` 위라 `Colors.white` + 표식 유지 | **기계적**(주석) | 없음 | 5 |
+| D11 | raw `Color(0x…)` 3곳 → 값 동일 토큰 | `shortform_detail:559` · `thumbnail_view:47` · `version_gate_screens:163-169` | `ColorTokens.scrim = Color(0x66000000)`(신설) · `AppShape.floatingShadow = [BoxShadow(0x1A0F172A, blur 12, y4)]`(신설, §4 S17 (a)와 동일) | **기계적** | `force_update_screen_test` · `version_gate_shell_test` · `shortform_*_test` 렌더 | 4 |
+| D12 | 주석 정정 7곳 | `README.md:11-12`("네이티브 폴더 없음" — `android/`·`ios/` 존재, CI가 AAB 빌드) · `app_card.dart:8`·`dimens.dart:11`("카드 16" → 20; 16은 `block`) · `mentors_screen.dart:26`·`mentor_card.dart:13`·`mentor_detail_screen.dart:30`("'구독하기'는 웹 브릿지" — CTA 자체가 제거돼 `CommerceNoticeCard` 안내) · `mentors_screen.dart:1-3`(자기 자신이 불필요하다고 적은 TODO) | 주석·문서만 | **기계적** | `build_version_test`는 `app_constants.dart`만 읽음 | 3 |
+| D13 | `AppConstants.appVersion = '1.0.0'` 상수 | `app_constants.dart:18-19` · `settings_section.dart:244` | 보고만. `build_version_test:53-65`가 pubspec `versionName`과 일치를 고정(무단 drift 불가), `settings_section_test:103`·`android_signed_workflow_contract_test:142`가 리터럴 고정. (a) 유지 · (b) `package_info_plus` 런타임 값(+빌드번호 표시 시 '1.0.0 (19)') — 의존성·비동기·테스트 3개 재작성 **결정 #D-6** | **결정** | 3파일 | 14 |
+| D14 | 회귀 방지 가드 | `analysis_options.yaml` · `.github/workflows/flutter-ci.yml` | (1) `analyzer: errors: deprecated_member_use: warning` — CI가 이미 실패시키는 등급으로 승격(먼저 로컬 `flutter analyze`로 다른 deprecation이 없는지 확인). (2) `flutter pub get` 뒤 CI 스텝 "design-token guard": `withOpacity(` 0건 · `lib/design/` 밖 `Colors.*`(단 `design-allow` 제외) 0건 · `Color(0x…)`가 토큰 파일 밖 0건 · `lib/design/widgets/*.dart`의 public 클래스가 `lib/`(dev 제외)에서 참조 0건이면 실패. (3) 아이콘 `_rounded` 강제는 D4 결정 **후에만**(지금 켜면 64건 실패) | **기계적** | 없음 | 9 |
+| D15 | `dimens.dart` shim 삭제 | (§4 S15와 동일) | 〃 | **기계적** | 〃 | 6 |
+
+### 8-3. 결정 필요
+- **#D-1** `Skeleton`·`SlideOverPanel`: 카탈로그 유지 / dev로 이동 / 삭제 — 연결노트 개편이 `SlideOverPanel`을 쓸 가능성 고려.
+- **#D-2** 아이콘 계열: 전량 `_rounded`(64곳 + 테스트 35줄) / 혼용 11쌍만 / 그대로.
+- **#D-3** `_ReadOnlyBadge`: 유지 / `AppBadge` 스냅 / `AppBadge.muted` 변형.
+- **#D-4** `InitialAvatarLike`: 개명만 / `InitialAvatar(26)`로 스냅.
+- **#D-5** `_EmptyQuestions`: 유지 / `EmptyState(children:)` 확장.
+- **#D-6** 설정 화면 버전 표기: 상수 유지 / `package_info_plus`.
+- **#D-7** `Colors.*` 허용 표식 방식: 줄 단위 `design-allow` 주석 / CI 스텝에 경로 허용 목록.
+
+### 8-4. 재현
+```
+cd ssambership-app
+grep -rn "EmptyScreen\|empty_screen" lib test                                   # 정의만
+grep -rn "Skeleton(\|SlideOverPanel" lib | grep -v "^lib/design/widgets/"      # widget_gallery 4곳
+grep -rn "withOpacity(" lib | wc -l                                            # 5
+grep -rhoE "Icons\.[a-zA-Z0-9_]+" lib | sort | uniq -c | sort -rn | wc -l      # 88
+grep -rhoE "Icons\.[a-zA-Z0-9_]+" lib | grep -vE "_rounded$" | wc -l          # 64
+grep -rn "Colors\." lib | grep -v "^lib/design/" | wc -l                       # 24
+grep -rnE "Color\(0x[0-9A-Fa-f]{8}\)" lib | grep -v "^lib/design/"             # 3
+grep -rn "byIcon(" test | grep -vE "_rounded" | wc -l                          # 35
+```
 
 ---
 
 ## 9. 실행 순서 제안
 
-(작성 중)
+원칙: **PR 하나 = 한 축의 기계적 항목** → 오너 답을 받은 결정 항목은 별도 PR. 기계적 PR은 순서를 바꿔도 되지만 아래 순서가 충돌이 가장 적다(뒤 PR이 앞 PR의 토큰·위젯을 쓴다).
+
+| PR | 내용 | 항목 | 효과 | 선행 |
+|---|---|---|---|---|
+| ① 삭제·주석·린트 | dead 위젯·shim 삭제, 주석 정정, deprecation 스왑, 값 동일 토큰 2개 신설, 허용 표식, CI grep 가드 | D1 · D3 · D12 · D15(=S15) · S16 · L7 · D11(=S17(a)) · D10 · D14(1)(2) · T4는 **제외**(T1~T3 결정 뒤) | 파일 2개 삭제, 픽셀 0 | 로컬 `flutter analyze`로 다른 deprecation 확인 |
+| ② 간격·반경 기계적 | 스케일 위 `EdgeInsets`·`SizedBox` 토큰 치환, 값 동일 반경 치환 | S6 · S12 · S1 (S14는 ③ 뒤로) | 186곳 리터럴 → 토큰, 픽셀 0 | ① (shim 삭제 후) |
+| ③ 오류 뷰 | `ErrorState` 신설 + 21곳 이관 | E1 → E2 · E3 · E4 · E5 | 사설 클래스 4개·인라인 16곳 소멸(~190줄), T5의 21곳도 함께 사라짐 | ② (S24 토큰 사용) |
+| ④ 입력창 | `appInputDecoration`/`appLabeledInputDecoration` + `AppInputPadding` 토큰(=S8(a)) + `CommentInputBar` | I1 → I2 · I3 · I4 · I5 (I6은 선택) | 헬퍼 5개·`_inputBar` 2개 소멸 | ② |
+| ⑤ 로딩 | `LoadingState`·`InlineSpinner` | L1 → L2 · L3 · L4 | 32+9곳 통과점 확보(L8 재도장은 결정 뒤) | — |
+| ⑥ 마이크로 | `BrandMark`, `_StepNumber` 개명 | D9 · D6(개명) | — | — |
+| ⑦~ 결정 배치 | 오너 답을 받은 항목만, 축별로 | §10 | 값이 바뀌므로 §11-4 스크린샷 대조 | 각 답변 |
+
+②~⑤는 서로 독립이라 병렬 가능. 전체 기계적 물량은 6 PR, 합쳐서 대략 **+700/−1,100줄** 규모(공용 위젯 4파일 신설 vs 중복 제거).
 
 ## 10. 오너 결정 필요 항목
 
-(작성 중)
+축별 상세는 §3-3 · §4-2/4-3 · §5-3 · §6-3 · §7-3 · §8-3. 여기서는 답만 고르면 되도록 모았다. "권장"은 골격·테스트·리스크 기준의 내 의견이다.
+
+| # | 질문 | 선택지 | 권장 |
+|---|---|---|---|
+| T-1 | `AppTypography → AppType` 매핑표(§3-3) 승인 | 승인 / 행별 수정 | **승인** — IQ 4파일에 한정, `caption` 색 옅어짐만 실기기 1회 확인 |
+| T-2 | IQ 카드 제목(`iq_widgets:83, 147`) | `body`(값 기준) / `cardTitle`(역할 기준) | **`cardTitle`** |
+| T-3 · E-2 | 오류 문구 스타일 | `const TextStyle(color: danger)` 유지 / `AppType.body.copyWith` | **유지** — `ErrorState`가 그대로 품는다(픽셀 동일) |
+| T-4 | dead 화면의 13px | `caption`(12) / `body`(14) | **`caption`** |
+| T-5 | PDF 페이지 번호 | 진한 색 유지(`copyWith`) / `caption` 회색 | **유지** |
+| T-6 | height 없는 `AppType` 변형 신설 | 신설 / 안 함 | **안 함** — 토큰 설계 변경 |
+| T-7 | 12/w600 캡션 2곳 · 14/w700 본문 1곳 | `captionStrong`·`bodyStrong` 신설 / 리터럴 승인 | **신설**(픽셀 동일) |
+| S-1 | 반경 8 (6곳) | `AppShape.chip=8` 신설 / 12로 스냅 | **신설** — 36~72px 요소라 +4px 체감 큼 |
+| S-2 | 반경 10 (3곳) | `thumb=10` 신설 / 12로 스냅 | **12로 스냅** — 3곳, +2px, 단계 수 줄임(눈 확인) |
+| S-3 | `AppCard` 위 `InkWell` 반경 14 | 20으로 맞춤(리플만) / 유지 | **20** |
+| S-4 | 시트 상단 18 | `sheet=18` 신설 / 20 | **신설** — 다른 시트(28)와의 통일은 별개 |
+| S-5 · S-7 · S13 | 스케일 밖 간격 2/3/6/10/14 | `s2/s6/s10/s14` 신설 / 값별 스냅 / 리터럴 예외 | **신설**(주석 "미세 조정 스텝") — 49+곳 스냅은 전 화면 리듬 변경 |
+| S-6 | 입력 패딩 14/12·14/10 | `AppInputPadding` 토큰(④와 함께) / 16·12 스냅 | **토큰** |
+| S-8 | `EntranceCard` 18 | 16(기본) / 18 유지 | **16** — 카드 1개, 눈 확인 |
+| S-9 | FAB 여유 88/96 | 두 토큰 / 하나로 | **두 토큰** |
+| S-10 | `all(24)` 임시 토큰화 | ③ 전에 함 / 안 함 | **안 함** — ③이 흡수 |
+| S-11 · D11 | 배너 그림자 | `floatingShadow` 신설 / `cardShadow` | **신설** |
+| S-12 | dev 라우트 포함 | 포함 / 제외 | **포함**(같은 sed) |
+| E-1 | 재시도 버튼 2변형 | `retryVariant`로 둘 다 / 하나로 | **둘 다** |
+| E-3 | dev `s3_data_inspector` 이관 | 포함 / 제외 | **포함** |
+| E-4 | 위젯 이름 | `ErrorState` / `ErrorView` | **`ErrorState`** |
+| I-1 | `inputDecorationTheme` 정의 | 정의 / 안 함 | **안 함** — 전역 재도장 |
+| I-2 | IQ V4 5곳 | Material 기본 유지 / V1·V1L 스냅 | **유지**(IQ 정리 트랙에서) |
+| I-3 · I-4 | V1L vs V1, V2 10 vs 12 | 유지 / 수렴 | **유지** |
+| I-5 | 포커스·오류 테두리 | 추가 / 안 함 | **안 함**(디자인 변경) |
+| I-6 | 드롭다운 2종 | 유지 / 통일 | **유지** |
+| L-1 | 전면 로더 스켈레톤 재도장 | 지금 / 나중 / 안 함 | **나중** — `LoadingState` 통과점 확보 후 개편 트랙 |
+| L-2 | 인라인 스피너 크기 | 그대로 / 통일 | **그대로** |
+| L-3 · L-4 | `PrimaryButton.loading` · busy 문구 | (i)/(ii)/(iii) · 통일 | **보류** — 개편 트랙(시각·카피) |
+| L-5 · L-6 | 섹션 로더 named 생성자 · `color:` 노출 | — | **호출부 유지 · 노출** |
+| D-1 | `Skeleton`·`SlideOverPanel` | 카탈로그 유지 / dev 이동 / 삭제 | **유지**(A) — 연결노트 개편이 쓸 수 있음 |
+| D-2 | 아이콘 계열 | 전량 `_rounded` / 혼용 11쌍만 / 그대로 | **11쌍만**(26곳 + 테스트) |
+| D-3 · D-4 · D-5 | `_ReadOnlyBadge` · `InitialAvatarLike` · `_EmptyQuestions` | 유지 / 스냅·확장 | **유지**(개명만) |
+| D-6 | 설정 버전 표기 | 상수 / `package_info_plus` | **상수** |
+| D-7 | `Colors.*` 허용 표식 | 줄 단위 `design-allow` / 경로 목록 | **줄 단위** |
 
 ## 11. 검증 방법
 
@@ -328,4 +444,21 @@ grep -rn "byType(CircularProgressIndicator)" test | wc -l                       
 
 ## 12. 이 목록에 넣지 않은 것 (골격을 바꾸므로)
 
-(작성 중)
+| 발견 | 왜 제외했나 |
+|---|---|
+| `SizedBox` 스페이서 → `Gap` 또는 Flutter 3.27 `Column/Row(spacing:)` | 위젯 트리 변경 |
+| 스타일 없는 `Text()` 약 130곳 → `AppType.body` | 행간 1.43→1.45가 전 화면에 걸림 — 별도 결정 |
+| 로더 깜빡임 가드 정렬(`&& !snap.hasData` 2곳 vs `connectionState != done` 20곳) | 스피너가 보이는 **시점**이 바뀜(동작) |
+| 오류 뷰에 재시도 추가 · 아이콘/제목 추가 · 카피 통일('불러오지 못했습니다' vs '…못했어요') | 동작·디자인·문구 변경. 8개 테스트가 문구 단언 |
+| `iq_create_screen.dart` 삭제(프로덕션 도달 불가, `iq_create_boundary_test`가 진입 0을 계약) | 기능 그래프 결정. 지우면 T6·D4의 사이트 여럿이 함께 사라지므로 **먼저 결정하면 목록이 줄어든다** |
+| `_EmptyQuestions`의 `ListView` → `EmptyState`의 `Center` | 소형 뷰포트 스크롤 동작 변경 |
+| 필드 라벨 두 방식(위 `Text(caption)` vs `labelText`) 수렴 · 드롭다운 2종 통일 | 트리·픽셀 변경 |
+| `ThemeData.inputDecorationTheme`·`textTheme` 정의 | 전역 재도장 |
+| 아이콘 크기·아바타 크기·`Container` 치수·`Border` 두께 토큰 군 | 새 토큰 체계가 필요한 별개 결정 |
+| `lib/design/` 내부 컴포넌트 치수 20줄 · `ConversationMetrics` | 디자인 계층 소유, 테스트 단언 |
+| 두 바텀시트(18 vs Material 28) 통일 | 픽셀 변경 |
+| `use_colored_box`/`use_decorated_box` 린트 | `Container` 트리를 바꿔 `find.byType(Container)` 테스트 깨짐 |
+| `pubspec.yaml` `flutter: ">=3.22.0"` 하한(실효 3.27+) 상향 | 매니페스트 정정 — UI 아님. 별도 커밋 권고 |
+| 스낵바 `_snack` 헬퍼 4곳 중복 · `ScaffoldMessenger` 패턴 | 피드백 축(이번 목록 밖) |
+| `AppConstants.appVersion` 런타임화 | 의존성·비동기·테스트 3개(D13 참고) |
+| `docs/APP_FEATURE_STATUS.md`·`README.md` 본문 갱신 | D12의 주석 정정 외 문서 개정은 별도 |
