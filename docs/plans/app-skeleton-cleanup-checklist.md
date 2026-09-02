@@ -25,7 +25,7 @@
 2. **기계적 물량은 간격과 공용 위젯 3종에 있다.** 스케일 위의 `EdgeInsets` 64곳·`SizedBox` 122곳(값 동일 토큰 치환), 오류 뷰 21곳 → `ErrorState` 1개, 입력창 17곳 → `appInputDecoration` 헬퍼 1개, 로딩 32+9곳 → `LoadingState`·`InlineSpinner`. 이 넷을 끝내면 화면마다 베낀 코드 약 300줄이 사라지고 픽셀은 하나도 안 움직인다.
 3. **결정 항목은 세 가지 질문으로 묶인다.** (i) 스케일 밖 값(반경 8/10/14/18 · 간격 2/6/10/14 · 입력 패딩 14/10/12 · FAB 여유 88/96 · 배너 그림자)에 **토큰을 신설**(픽셀 동일)할지 **가까운 값으로 스냅**(1~4px 이동)할지, (ii) 타이포 매핑표를 그대로 승인할지, (iii) 아이콘 계열(`_rounded` 48종 vs 비-rounded 40종 64회)을 통일할지. 나머지는 마이크로 위젯 4개의 거취다.
 4. **재발 방지는 린트가 아니라 grep이다.** `flutter_lints`에는 리터럴 `TextStyle`/`Colors`/미사용 public 위젯을 잡는 규칙이 없다. `deprecated_member_use`를 warning으로 승격하고(그래서 `withOpacity` 5곳이 CI를 통과해 살아남았다) CI에 grep 스텝을 두는 것이 정직한 가드다(D14).
-5. **구조정본과 다른 실측**: `withOpacity` 1곳 → **5곳**, 반경 리터럴 14곳 → `lib/design/` 밖 **13곳**(+`quota_bar` 1), `AppType` 61파일 → `lib/design/` 밖 **54파일**, 오류 뷰는 "약 20파일"이 아니라 **정확히 21곳/20파일**이고 그중 19곳이 바이트 단위 같은 트리.
+5. **구조정본과 다른 실측**: `withOpacity` 1곳 → **5곳**, 반경 리터럴 14곳 → `lib/design/` 밖 **13곳**(+`quota_bar` 1), `AppType` 61파일 → `lib/design/` 밖 **54파일**, 오류 뷰는 "약 20파일"이 아니라 **정확히 21곳/20파일**이고 그중 19곳이 같은 위젯 트리(`Center > Padding(24) > Text`; 줄바꿈·후행 콤마는 다르므로 바이트 동일은 아니다).
 
 ---
 
@@ -173,10 +173,10 @@ grep -rn 'BoxShadow(' lib --include=*.dart | grep -v shape_tokens.dart          
 |---|---|
 | `const TextStyle(color: ColorTokens.danger)` 오류 문구 | **21곳 / 20파일** — 19곳은 `Center > Padding(EdgeInsets.all(24)) > Text(msg, textAlign: center, danger)` **동일 트리**, 2곳은 재시도 버튼 변형 |
 | 사설(private) 오류 클래스 | `_ErrorView`(`mentors_screen.dart:409-426`) · `_ErrorView`(`question_room_screen.dart:384-400`) · `_ErrorBox`(`s3_data_inspector.dart:125-142`, dev) — 세 개가 **빈 줄 하나·클래스명만 다른 같은 코드** · `_RetryView`(`mentors_screen.dart:428-454`, doc 주석 포함 27줄, `OutlinedButton` 재시도). 삭제 가능 총 **80줄** |
-| 재시도 변형 2종 | A `_RetryView`: `Column[Text, SizedBox(12), OutlinedButton('다시 시도')]` · B `notifications_screen.dart:418-430`: `Column[Text, SizedBox(8), TextButton('다시 시도')]` |
+| 재시도 변형 2종 | A `_RetryView`: `Column[Text, SizedBox(12), OutlinedButton('다시 시도')]` · B `notifications_screen.dart:418-434`(가드 `:418`, `return Center(` `:419-433`): `Column[Text, SizedBox(8), TextButton('다시 시도')]` · (참고) 세 번째 변형 `iq_detail_screen.dart:1303-1307`은 라벨이 '**재시도**'인 첨부 업로드 재시도 `TextButton` — E6 유지 목록 |
 | 텍스트 스타일 | 크기·행간 미지정 → Material `bodyMedium` 상속(14/w400/h1.43/ls0.25). **`AppType.body`로 바꾸면 행간 1.45·고정폭 숫자로 달라진다** — 공용 위젯은 `const TextStyle(color: danger)`를 그대로 품어야 픽셀 동일 |
-| `friendlyError()` | 오류 렌더 23회 중 19회가 `'…\n${friendlyError(e)}'` 한 문자열 |
-| 테스트 | **7개** 테스트 파일이 이 21개 문구 중 하나를 **문구로**(`find.text`/`textContaining`) 찾고, `Center`/`Padding`/`Column` 타입으로 찾는 곳은 **0**. 단 `question_room_safety_test.dart:198-199`는 채팅 오류 뷰가 떠 있는 동안 **`find.byType(Text)` 개수를 센다** → 공용 위젯은 `onRetry == null`일 때 메시지 `Text` **정확히 1개**(제목/본문 분리·`Column` 금지)여야 하고, 라벨 '다시 시도'는 그대로 |
+| `friendlyError()` | 오류 렌더 **21회** 중 19회가 `'…\n${friendlyError(e)}'` 한 문자열(나머지 2회: `settings_section.dart:146` 공백 결합 · `iq_detail_screen.dart:766`→`:1283` 첨부 오류) |
+| 테스트 | **7개** 테스트 파일이 이 21개 문구 중 하나를 **문구로**(`find.text`/`textContaining`) 찾고, `Center`/`Padding`/`Column` 타입으로 찾는 곳은 **0**. 단 `question_room_safety_test.dart:198-199`는 채팅 오류 뷰가 떠 있는 동안 `find.byType(Text)` 개수를 재지만 단언은 `:216`의 `greaterThan(0)`뿐이고, `:200/:215`가 `textContaining('대화를 불러오지 못했어요')`를 **findsOneWidget**으로 고정한다 → 메시지 문구가 든 `Text`는 **1개**여야 한다(제목/본문에 같은 문구를 나누어 넣지 말 것). `onRetry == null`일 때 `Text` 하나만 두는 것은 테스트가 아니라 픽셀 동일(E1)의 요구다. 라벨 '다시 시도'는 그대로 |
 
 ### 5-2. 항목
 
@@ -186,8 +186,8 @@ grep -rn 'BoxShadow(' lib --include=*.dart | grep -v shape_tokens.dart          
 | E2 | 사설 클래스 3개 → `ErrorState`, 클래스 삭제 | 호출 `mentors_screen.dart:215` · `question_room_screen.dart:225` · `s3_data_inspector.dart:109, 262, 335` / 정의 3곳(53줄) | `_ErrorView(message: …)` → `ErrorState(message: …)` 인자·문자열 그대로. dev 화면의 raw `${snap.error}` 문자열도 그대로(카피 변경 아님) | **기계적** | `mentors_screen_scope_test` 문구 단언 통과 | 2 |
 | E3 | `_RetryView` → `ErrorState(onRetry:)` | `mentors_screen.dart:239-242`(호출) · `:428-454`(doc 주석 + 정의, 27줄 — 닫는 괄호가 `:454`) | `ErrorState(message: '찜한 멘토를 불러오지 못했어요.', onRetry: _loadFavorites)` — 기본 `outlined` 변형이 `OutlinedButton` + 간격 12를 그대로 재현 | **기계적** | `mentors_screen_scope_test`가 `find.text('다시 시도')` 탭 + 문구 exact — 라벨·문구 리터럴 유지 | 3 |
 | E4 | 인라인 오류 뷰 16곳 → `ErrorState(message:)` | `board_list_view.dart:110` · `my_activity_view.dart:77` · `shortform_feed_view.dart:94` · `mypage_screen.dart:212` · `mentor_iq_list_screen.dart:190` · `student_iq_list_screen.dart:142` · `iq_create_screen.dart:401` · `iq_detail_screen.dart:809` · `mentor_room_home_screen.dart:76` · `student_room_home_screen.dart:100` · `mentor_inbox_screen.dart:170` · `mentor_question_list_screen.dart:98` · `mentor_answer_screen.dart:542` · `chat_screen.dart:529` · `connection_notes_screen.dart:121` · `question_list_screen.dart:115` | 8~10줄 트리 → `return ErrorState(message: '<동일 문자열 식>');` + import. 문자열 식(`'\n'` 결합·`friendlyError`) 그대로 복사. **`mypage_screen:212`만 `return`이 아니라 대입**(`child = Center(` → `child = ErrorState(…)`), `detail` 계산 줄 유지. 주변 가드 조건(`snap.hasError || snap.data == null` 등)은 **손대지 않음**. 순감 ≈117줄 | **기계적** | 테스트 파일 문구 단언 통과 | 4 |
-| E5 | 알림 첫 로드 오류(`TextButton` + 간격 8) → `ErrorState(onRetry:, retryVariant: text)` | `notifications_screen.dart:418-430` | `text` 변형이 `SizedBox(s8)` + `TextButton`을 그대로 냄 | **기계적** | `notifications_screen_test:462-467` `textContaining` + `find.text('다시 시도')` 탭 — 통과 | 5 |
-| E6 | **옮기지 않는** 오류·경고 표시 (기록용) | `settings_section.dart:140-155, 171`(좌측 정렬 caption + TextButton / 알림 권한 안내) · `cash_section.dart:40-48` · `mypage_screen.dart:249-258` · `attachment_viewer_screen.dart:128-137`(secondary 색, 중앙 정렬 없음) · `board_detail_screen.dart:536, 691`(목록 안 caption / `_placeholder` 이미지 실패) · `shortform_detail_screen.dart:599`(목록 안 caption) · `shortform_detail_screen.dart:551-585`(영상 스크림) · `iq_detail_screen.dart:1491, 1511-1514, 1609-1612`(이미지 `errorBuilder` caption) · `shortform_compose_screen.dart:189-196`(`_Notice`) · `free_question_entry_section.dart:181-196`(`SecondaryButton` 재시도) · 폼 안 안내(`login_screen:124-133` · `iq_create:453-459, 504-519` · `iq_detail:1282-1285` · `account_delete:316-324`). 참고: `'불러오지 못했'` grep은 `lib/`에 **45줄** — 이 축이 다루는 21곳 외 24줄이 전부 이런 비중앙 패턴이라 **문구 grep으로 일괄 치환하면 안 된다** | 전면 중앙 패턴이 아니다. `ErrorState`로 바꾸면 정렬(좌→중앙)·패딩(4/0/10→24)·크기(12/13→14)·색(secondary→danger)·버튼 종류가 바뀐다 → **이 축에서 제외** | (제외) | `wallet_stale_test`·`settings_section_test`가 문구와 `widgetWithText(TextButton, '다시 시도')`를 단언 — 건드리면 깨짐 | — |
+| E5 | 알림 첫 로드 오류(`TextButton` + 간격 8) → `ErrorState(onRetry:, retryVariant: text)` | `notifications_screen.dart:419-433`(가드 `:418` 유지) | `text` 변형이 `SizedBox(s8)` + `TextButton`을 그대로 냄 | **기계적** | `notifications_screen_test:462-467` `textContaining` + `find.text('다시 시도')` 탭 — 통과 | 5 |
+| E6 | **옮기지 않는** 오류·경고 표시 (기록용) | `settings_section.dart:140-158, 169-172`(좌측 정렬 caption + TextButton / 알림 권한 안내) · `cash_section.dart:40-48` · `mypage_screen.dart:249-258` · `attachment_viewer_screen.dart:128-137`(secondary 색, 중앙 정렬 없음 — 패딩은 이미 24) · `board_detail_screen.dart:536, 691, 702`(목록 안 caption / `_placeholder` 이미지 실패 / `Image.network errorBuilder`) · `shortform_detail_screen.dart:599`(목록 안 caption) · `shortform_detail_screen.dart:551-585`(영상 스크림 `_mediaFallback`, 호출 `:531, 533, 536`) · `iq_detail_screen.dart:1491, 1511-1514, 1609-1612`(이미지 `errorBuilder` caption) · `shortform_compose_screen.dart:189-196`(`_Notice`) · `free_question_entry_section.dart:181-198`(`SecondaryButton` 재시도, caption `secondary` 색) · 폼 안 안내(`login_screen:124-133` · `iq_create:453-459, 504-519` · `iq_detail:1282-1285`(+ 짝 재시도 `TextButton('재시도')` `:1303-1307`) · `account_delete:316-324`). 참고: `'불러오지 못했'` grep은 `lib/`에 **42줄** — 이 축의 21곳 중 20줄(dev 3곳은 '불러오기 실패')을 빼면 22줄이 남고, 위 비중앙 뷰 외에 스낵바(`notifications:221, 244` · `attachment_viewer:69` · `iq_detail:713`)·데이터 계층 문자열(`notification_settings_repository:153` · `auth_service:120`)·상태 문자열(`shortform_compose:90` · `shortform_detail:531-536`)이 섞여 있어 **문구 grep으로 일괄 치환하면 안 된다** | 전면 중앙 패턴이 아니다. `ErrorState`로 바꾸면 정렬(좌→중앙)·패딩(4/0/10→24)·크기(12/13→14)·색(secondary→danger)·버튼 종류가 바뀐다 → **이 축에서 제외** | (제외) | `wallet_stale_test`(`:65-67, 104, 295` — 문구 exact + `descendant(CashSection, '다시 시도')` + `widgetWithText(TextButton, '다시 시도')` 1곳)·`settings_section_test:186-191`(`textContaining('불러오지 못했어요')` + `find.text('다시 시도')` 탭)·`shortform_detail_media_test:156-346`(`find.text('영상을 불러오지 못했어요.')` 5회)이 단언 — 건드리면 깨짐 | — |
 
 검토자 판정: E1~E6 전부 확인(E3 삭제 범위 27줄·E4 `mypage` 대입 정정). 누락 5곳은 E6 유지 목록에 편입. 골격 위반 0 — 단 "메시지 `Text` 1개" 불변식(`question_room_safety_test:198-199`)과 결정 #E-1/#E-2를 기계적 항목에 섞지 말라는 지적을 본문에 반영.
 
@@ -201,14 +201,14 @@ grep -rn 'BoxShadow(' lib --include=*.dart | grep -v shape_tokens.dart          
 - 재시도가 없는 19곳에 재시도를 **추가**하는 것(동작 변경). 아이콘·제목/본문 분리·`EmptyState`풍 원 추가(재설계).
 - 카피 통일('불러오지 못했습니다' vs '불러오지 못했어요', 주어 없는 '불러오지 못했어요.', dev의 raw 오류) — 7개 테스트가 문구를 단언하므로(§5-1) 바이트 그대로 둔다.
 - 같은 `Center > Padding(24) > Column` 골격이지만 오류가 아닌 화면(`blocked_screen`, `version_gate_screens`, `board_detail _goneBody`, 미사용 `EmptyScreen`) — 빈 상태·간격 축.
-- 스낵바 기반 실패 피드백(`friendlyError` 63회 중 44회가 `_snack`/`SnackBar`) — 별개 패턴.
+- 스낵바 기반 실패 피드백(`friendlyError` 63회 중 **42회**가 `_snack`/`SnackBar`/`_showError`; 나머지 21회가 렌더) — 별개 패턴.
 
 ### 5-5. 재현
 ```
 cd ssambership-app
 grep -rn "TextStyle(color: ColorTokens.danger)" lib --include=*.dart | grep -v "^lib/design/"   # 21
 grep -rn "class _ErrorView\|class _RetryView\|class _ErrorBox" lib                                  # 4
-grep -rln "불러오지 못했\|다시 시도" test | wc -l                                                      # 8 (문구 단언 파일)
+grep -rln "불러오지 못했\|다시 시도" test | wc -l    # 23 (스낵바 문구·fake 데이터 포함 — 21곳 문구를 실제로 단언하는 파일은 7: mentors_screen_scope · notifications_screen · wallet_stale · community_surface_refresh · question_list_actions · question_room_safety · anon_browse)
 ```
 
 ## 6. 입력창 공통 장식
