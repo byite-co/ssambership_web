@@ -119,6 +119,8 @@ const DIRECT_ACCESS_EXEMPT: Record<string, string> = {
   "lib/admin/accountStatusQueries.ts": "관리자 계정 상태 콘솔 조회(admin 클라이언트)",
   "lib/admin/accountStatusCore.ts": "관리자 서비스 롤 계정 상태 코어",
   "lib/admin/adminDashboardExtended.ts": "관리자 대시보드 집계(admin 클라이언트)",
+  "lib/admin/refundConsoleQueries.ts":
+    "관리자 환불 화면 조회(PR-3 — 서비스 롤 우선/세션 폴백 · 요청자·처리자·멘토 표시명 + 요청자 이름·이메일 검색 users 조인 · 이중 requireRole admin 가드 뒤, users_admin_select_all 로 읽힘)",
   "lib/admin/mentorActivityQueries.ts": "관리자 활동 이벤트 조회(admin 클라이언트 — 멘토 표시명)",
   "lib/community/communityAuthorLabels.ts":
     "알려진 열화(범위 밖): 타인 행은 RLS 0행 → 폴백 라벨. 학생 nickname 은 어떤 뷰에도 없어 마이그레이션 필요",

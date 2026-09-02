@@ -13,7 +13,7 @@
  *
  * level 별 요구는 `lib/admin/adminConfirmPolicy.ts` 가 결정한다. `immediate` 는 다이얼로그 없이 버튼 그대로.
  * 사유 프리셋(`reasonPresets`, PR-2 §7): 다이얼로그가 칩을 그리고 칩 클릭 = 그 사유로 즉시 확인 → 같은 폼으로 제출된다.
- * (PR-1: 신설 · PR-2: 멘토 승인 작업대의 승인·반려·재제출·등급 확정에 연결.)
+ * (PR-1: 신설 · PR-2: 멘토 승인 작업대의 승인·반려·재제출·등급 확정에 연결 · PR-3: 환불 승인(critical)·반려·일괄 처리(body 슬롯)에 연결.)
  */
 import { useEffect, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
@@ -46,6 +46,10 @@ type CommonProps = ButtonPassthrough & {
   reasonPlaceholder?: string;
   /** 대상·금액 재표시 행 */
   details?: AdminConfirmDetail[];
+  /** summary·details 아래에 그릴 추가 내용(PR-3 일괄 대상 목록). 폼 요소 금지 — AdminConfirmDialog 주석 참조 */
+  body?: ReactNode;
+  /** 있으면 확인을 잠그고 문구를 보인다(예: 일괄 대상 0건) */
+  confirmBlockedMessage?: string | null;
   /** 제출 중 트리거 버튼 문구(기본: children 그대로) */
   pendingLabel?: ReactNode;
   /** 사유 프리셋 — reasonRequired 와 함께 쓴다. 칩 클릭 = 그 사유로 즉시 확인(타이핑 없이 한 번 더 클릭으로 끝) */
@@ -78,6 +82,8 @@ export function ConfirmSubmitButton(props: ConfirmSubmitButtonProps) {
     reasonLabel,
     reasonPlaceholder,
     details,
+    body,
+    confirmBlockedMessage,
     pendingLabel,
     reasonPresets,
     customReasonLabel,
@@ -234,6 +240,8 @@ export function ConfirmSubmitButton(props: ConfirmSubmitButtonProps) {
         requirements={requirements}
         summary={summary}
         details={details}
+        body={body}
+        confirmBlockedMessage={confirmBlockedMessage}
         confirmLabel={confirmLabel}
         cancelLabel={cancelLabel}
         reasonLabel={reasonLabel}

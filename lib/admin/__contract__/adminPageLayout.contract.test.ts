@@ -7,7 +7,7 @@
 //      (sections/emptyState/loadingState/errorState/dataPoints/ctas/hideFooterPlaceholderCards) 를 받지 않는다
 //   ② "준비 중"·"로딩"·"오류"·"참고" 안내 카드를 렌더하는 경로가 없다
 //   ③ PageScaffold 를 import 하지 않고(서비스 화면 공용 — 손대지 않음), Server Component 다
-//   ④ PR-1 범위: 아직 어떤 관리자 화면도 AdminPageLayout 을 쓰지 않는다 · PageScaffold 사용 14화면은 그대로
+//   ④ 이관 범위 허용 목록(PR-2 멘토 승인 · PR-3 환불) · PageScaffold 사용 12화면은 그대로
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -77,16 +77,20 @@ function walk(dir: string, out: string[]) {
 }
 
 /**
- * PR-2 이관 범위: AdminPageLayout · AdminStatusPill 을 import 하는 파일은 멘토 승인 작업대 한 화면(+그 부품)뿐이다.
- * 다른 관리자 화면은 아직 이관하지 않았다(PR-3 이후). 새 화면을 이관할 때 이 허용 목록을 갱신한다.
+ * 이관 범위: AdminPageLayout · AdminStatusPill 을 import 하는 파일은 멘토 승인 작업대(PR-2)와 환불 화면(PR-3)뿐이다.
+ * 다른 관리자 화면은 아직 이관하지 않았다(PR-4 이후). 새 화면을 이관할 때 이 허용 목록을 갱신한다.
  */
 const PR2_LAYOUT_PILL_IMPORTERS = [
   "app/(admin)/admin/(console)/mentor-approval/page.tsx",
   "components/admin/MentorApprovalQueueList.tsx",
   "components/admin/MentorApprovalReviewPanel.tsx",
+  // PR-3 환불 관리
+  "app/(admin)/admin/(console)/refunds/page.tsx",
+  "app/(admin)/admin/(console)/refunds/[id]/page.tsx",
+  "components/admin/RefundQueueTable.tsx",
 ];
 
-test("PR-2 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자 파일은 멘토 승인 작업대뿐이다", () => {
+test("이관 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)뿐이다", () => {
   const files = [...walk(join(ROOT, "app", "(admin)"), []), ...walk(join(ROOT, "components", "admin"), [])];
   const importers = files
     .filter((f) => !/components\/admin\/(AdminPageLayout|AdminStatusPill)\.tsx$/.test(f))
@@ -96,8 +100,9 @@ test("PR-2 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자 �
   assert.deepEqual(importers, [...PR2_LAYOUT_PILL_IMPORTERS].sort());
 });
 
-test("PageScaffold 를 쓰는 관리자 화면 14곳은 그대로다(화면 이관 0)", () => {
+test("PageScaffold 를 쓰는 관리자 화면은 12곳이다(PR-3 에서 환불 목록·상세 2화면 이관, 나머지 그대로)", () => {
   const files = walk(join(ROOT, "app", "(admin)"), []);
-  const users = files.filter((f) => readFileSync(f, "utf8").includes("<PageScaffold")).map((f) => f.slice(ROOT.length + 1));
-  assert.equal(users.length, 14, users.join("\n"));
+  const users = files.filter((f) => readFileSync(f, "utf8").includes("<PageScaffold")).map((f) => f.slice(ROOT.length + 1).replace(/\\/g, "/"));
+  assert.equal(users.length, 12, users.join("\n"));
+  assert.ok(!users.some((f) => /\/refunds\//.test(f)), "환불 목록·상세는 PageScaffold 를 쓰지 않는다");
 });
