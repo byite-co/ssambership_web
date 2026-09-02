@@ -2,6 +2,8 @@ import Link from "next/link";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { AdminStatusPill } from "@/components/admin/AdminStatusPill";
 import { ContentReportActionButtons } from "@/components/admin/ContentReportActionButtons";
+import { ContentReportTargetUserPanel } from "@/components/admin/ContentReportTargetUserPanel";
+import { ContentReportUserActionButtons } from "@/components/admin/ContentReportUserActionButtons";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth/routeGuard";
@@ -10,6 +12,9 @@ import { loadAdminReportEvidence, type AdminReportEvidence } from "@/lib/admin/a
 import { loadAdminReportNotes } from "@/lib/admin/adminCaseNotes";
 import { normalizeModerationTargetType } from "@/lib/admin/communityModerationCore";
 import { CONTENT_REPORT_BASE_PATH, contentReportTargetLabel } from "@/lib/admin/contentReportConsole";
+import { contentReportUserActionsAvailable } from "@/lib/admin/contentReportSanctionConsole";
+import { loadContentReportTargetUser } from "@/lib/admin/contentReportTargetUserQueries";
+import { formatKoreanDate } from "@/lib/utils/formatDisplay";
 import { AdminCaseNotesPanel } from "@/components/admin/AdminCaseNotesPanel";
 import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
@@ -28,6 +33,12 @@ function fmtDate(v: unknown): string {
 function fieldStr(row: Record<string, unknown> | null, key: string): string | null {
   const v = row?.[key];
   return typeof v === "string" && v.trim().length > 0 ? v : null;
+}
+
+/** 정지 해제 예정일(7일·30일) 표기 — 서버에서 한 번 계산해 클라이언트 모달에 넘긴다(실제 값은 액션 실행 시각 기준). */
+function suspendUntilLabels(now = Date.now()): Record<"7d" | "30d", string> {
+  const at = (days: number) => formatKoreanDate(new Date(now + days * 86_400_000).toISOString());
+  return { "7d": at(7), "30d": at(30) };
 }
 
 function EvidenceSection({ evidence }: { evidence: AdminReportEvidence }) {
@@ -167,6 +178,12 @@ export default async function AdminReportDetailPage(props: Props) {
     ? await loadAdminReportEvidence(evidenceClient, fieldStr(row, "target_type"), fieldStr(row, "target_id"))
     : null;
 
+  // PR-6 §1: 신고당한 사용자 — 증거 조회가 준 작성자 id(AdminReportEvidence.authorId)로 계정·누적 경고·이전 신고·담당 학생 수를 모은다.
+  // 클라이언트는 증거 조회와 같은 것(service_role 우선 · 세션 폴백). 작성자를 모르면(미지원·삭제·오류) 블록은 안내만 보인다.
+  const authorId = evidence && "authorId" in evidence ? evidence.authorId : null;
+  const targetUser = authorId ? await loadContentReportTargetUser(evidenceClient, authorId, { excludeReportId: id }) : null;
+  const untilLabels = suspendUntilLabels();
+
   // D-AD-13: 신고 케이스 운영 메모 배선 — 분쟁에만 있던 메모 패널을 신고 상세에도 연결해
   // saveContentReportAdminNoteAction 의 도달 불가(DEAD)를 해소한다.
   const reportNotes = row ? await loadAdminReportNotes(supabase, id) : null;
@@ -236,6 +253,8 @@ export default async function AdminReportDetailPage(props: Props) {
           </section>
         ) : null}
 
+        {row ? <ContentReportTargetUserPanel user={targetUser} authorKnown={Boolean(authorId)} /> : null}
+
         {evidence ? (
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <p className="text-sm font-extrabold text-slate-900">신고 대상 콘텐츠</p>
@@ -253,6 +272,21 @@ export default async function AdminReportDetailPage(props: Props) {
             </p>
             <div className="mt-3">
               <ContentReportActionButtons reportId={id} targetKind={targetKind} targetId={fieldStr(row, "target_id")} targetLabel={contentReportTargetLabel(targetType)} />
+            </div>
+            <div className="mt-4 border-t border-slate-100 pt-4" data-content-report-user-actions-section>
+              <p className="text-xs font-extrabold text-slate-700">신고당한 사용자 조치</p>
+              <p className="mt-0.5 text-xs text-slate-500">
+                경고는 사유 프리셋이 필수이고, 계정 정지는 기간(7일 · 30일 · 영구)과 사유가 필요합니다. 두 조치는 계정 관리 화면의 액션을 그대로 쓰며 처리 후 그 화면으로 이동합니다.
+              </p>
+              <div className="mt-2">
+                {contentReportUserActionsAvailable(targetUser) && targetUser ? (
+                  <ContentReportUserActionButtons user={targetUser} untilLabels={untilLabels} />
+                ) : (
+                  <p className="text-xs font-semibold text-slate-500">
+                    {targetUser?.role === "admin" ? "관리자 계정에는 경고·정지를 할 수 없습니다." : "작성자를 알 수 없어 경고·정지 버튼을 표시하지 않습니다."}
+                  </p>
+                )}
+              </div>
             </div>
           </section>
         ) : null}
