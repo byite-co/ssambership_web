@@ -150,11 +150,100 @@ grep -rn 'BoxShadow(' lib --include=*.dart | grep -v shape_tokens.dart          
 
 ## 5. 오류 뷰 공통 위젯
 
-(작성 중)
+### 5-1. 실측 사실
+
+| 항목 | 값 |
+|---|---|
+| `const TextStyle(color: ColorTokens.danger)` 오류 문구 | **21곳 / 20파일** — 19곳은 `Center > Padding(EdgeInsets.all(24)) > Text(msg, textAlign: center, danger)` **동일 트리**, 2곳은 재시도 버튼 변형 |
+| 사설(private) 오류 클래스 | `_ErrorView`(`mentors_screen.dart:409-426`) · `_ErrorView`(`question_room_screen.dart:384-400`) · `_ErrorBox`(`s3_data_inspector.dart:125-142`, dev) — 세 개가 **빈 줄 하나·클래스명만 다른 같은 코드** · `_RetryView`(`mentors_screen.dart:429-453`, `OutlinedButton` 재시도) |
+| 재시도 변형 2종 | A `_RetryView`: `Column[Text, SizedBox(12), OutlinedButton('다시 시도')]` · B `notifications_screen.dart:418-430`: `Column[Text, SizedBox(8), TextButton('다시 시도')]` |
+| 텍스트 스타일 | 크기·행간 미지정 → Material `bodyMedium` 상속(14/w400/h1.43/ls0.25). **`AppType.body`로 바꾸면 행간 1.45·고정폭 숫자로 달라진다** — 공용 위젯은 `const TextStyle(color: danger)`를 그대로 품어야 픽셀 동일 |
+| `friendlyError()` | 오류 렌더 23회 중 19회가 `'…\n${friendlyError(e)}'` 한 문자열 |
+| 테스트 | 8개 테스트 파일이 이 상태를 **문구로**(`find.text`/`textContaining`) 찾고, `Center`/`Padding`/`Column` 타입으로 찾는 곳은 **0** — 메시지 `Text`가 정확히 1개, 라벨 '다시 시도'가 그대로면 안전 |
+
+### 5-2. 항목
+
+| # | 항목 | 위치 | 현재 → 제안 | 판정 | 테스트 영향 | 순서 |
+|---|---|---|---|---|---|---|
+| E1 | 공용 위젯 신설 `lib/design/widgets/error_state.dart` — `ErrorState` | 신규 파일 (`EmptyState`와 짝) | `ErrorState({required String message, VoidCallback? onRetry, String retryLabel = '다시 시도', ErrorRetryVariant retryVariant = outlined, EdgeInsets padding = EdgeInsets.all(AppSpacing.s24)})`. `onRetry == null`이면 **`Text` 하나만**(Column 없음), 있으면 `Column(min)[Text, SizedBox(s12 또는 s8), OutlinedButton 또는 TextButton]`. 메시지 스타일은 `const TextStyle(color: ColorTokens.danger)` 유지(`AppType.body` 금지). `test/widgets/error_state_test.dart`를 `empty_state_test.dart` 본떠 추가 | **기계적** | 없음(신규) | 1 |
+| E2 | 사설 클래스 3개 → `ErrorState`, 클래스 삭제 | 호출 `mentors_screen.dart:215` · `question_room_screen.dart:225` · `s3_data_inspector.dart:109, 262, 335` / 정의 3곳(53줄) | `_ErrorView(message: …)` → `ErrorState(message: …)` 인자·문자열 그대로. dev 화면의 raw `${snap.error}` 문자열도 그대로(카피 변경 아님) | **기계적** | `mentors_screen_scope_test` 문구 단언 통과 | 2 |
+| E3 | `_RetryView` → `ErrorState(onRetry:)` | `mentors_screen.dart:239`(호출) · `:428-453`(정의, 26줄) | `ErrorState(message: '찜한 멘토를 불러오지 못했어요.', onRetry: _loadFavorites)` — 기본 `outlined` 변형이 `OutlinedButton` + 간격 12를 그대로 재현 | **기계적** | `mentors_screen_scope_test`가 `find.text('다시 시도')` 탭 + 문구 exact — 라벨·문구 리터럴 유지 | 3 |
+| E4 | 인라인 오류 뷰 16곳 → `ErrorState(message:)` | `board_list_view.dart:110` · `my_activity_view.dart:77` · `shortform_feed_view.dart:94` · `mypage_screen.dart:212` · `mentor_iq_list_screen.dart:190` · `student_iq_list_screen.dart:142` · `iq_create_screen.dart:401` · `iq_detail_screen.dart:809` · `mentor_room_home_screen.dart:76` · `student_room_home_screen.dart:100` · `mentor_inbox_screen.dart:170` · `mentor_question_list_screen.dart:98` · `mentor_answer_screen.dart:542` · `chat_screen.dart:529` · `connection_notes_screen.dart:121` · `question_list_screen.dart:115` | 8줄 트리 → `return ErrorState(message: '<동일 문자열 식>');` + import. 문자열 식(`'\n'` 결합·`friendlyError`) 그대로 복사. `mypage`는 `detail` 계산 줄 유지. 주변 가드 조건(`snap.hasError || snap.data == null` 등)은 **손대지 않음**. 순감 ~112줄 | **기계적** | 6개 테스트 파일 문구 단언 통과 | 4 |
+| E5 | 알림 첫 로드 오류(`TextButton` + 간격 8) → `ErrorState(onRetry:, retryVariant: text)` | `notifications_screen.dart:418-430` | `text` 변형이 `SizedBox(s8)` + `TextButton`을 그대로 냄 | **기계적** | `notifications_screen_test:462-467` `textContaining` + `find.text('다시 시도')` 탭 — 통과 | 5 |
+| E6 | **옮기지 않는** 오류·경고 표시 (기록용) | `settings_section.dart:140-155` · `cash_section.dart:40-48` · `mypage_screen.dart:249-258`(좌측 정렬 caption + TextButton) · `attachment_viewer_screen.dart:128-137`(secondary 색, 중앙 정렬 없음) · `board_detail_screen.dart:536` · `shortform_detail_screen.dart:599`(목록 안 caption) · `shortform_detail_screen.dart:551-585`(영상 스크림) · `shortform_compose_screen.dart:189-196`(`_Notice`) · `free_question_entry_section.dart:181-196`(`SecondaryButton` 재시도) · 폼 안 안내(`login_screen:124-133` · `iq_create:453-459, 504-519` · `iq_detail:1282-1285` · `account_delete:316-324`) | 전면 중앙 패턴이 아니다. `ErrorState`로 바꾸면 정렬(좌→중앙)·패딩(4/0/10→24)·크기(12/13→14)·색(secondary→danger)·버튼 종류가 바뀐다 → **이 축에서 제외** | (제외) | `wallet_stale_test`·`settings_section_test`가 문구와 `widgetWithText(TextButton, '다시 시도')`를 단언 — 건드리면 깨짐 | — |
+
+### 5-3. 결정 필요
+- **#E-1 재시도 버튼 모양**: 두 변형(`OutlinedButton`+12 / `TextButton`+8)을 `retryVariant`로 **둘 다 유지**(픽셀 동일, 권장) vs 하나로 통일(한 화면이 눈에 띄게 바뀜).
+- **#E-2 메시지 스타일**: `const TextStyle(color: danger)` 유지(권장, 픽셀 동일) vs `AppType.body.copyWith(color: danger)`(행간 1.43→1.45, 고정폭 숫자) — §3 결정 #T-3과 같은 질문.
+- **#E-3 dev 화면** `s3_data_inspector`도 옮길지(기계적, 18줄 삭제) 아니면 dev는 손대지 않을지.
+- **#E-4 이름**: `ErrorState`(`EmptyState`와 짝, 권장) vs `ErrorView`(현재 사설 클래스명).
+
+### 5-4. 이 축에서 제외한 것
+- 재시도가 없는 19곳에 재시도를 **추가**하는 것(동작 변경). 아이콘·제목/본문 분리·`EmptyState`풍 원 추가(재설계).
+- 카피 통일('불러오지 못했습니다' vs '불러오지 못했어요', 주어 없는 '불러오지 못했어요.', dev의 raw 오류) — 8개 테스트가 문구를 단언하므로 바이트 그대로 둔다.
+- 같은 `Center > Padding(24) > Column` 골격이지만 오류가 아닌 화면(`blocked_screen`, `version_gate_screens`, `board_detail _goneBody`, 미사용 `EmptyScreen`) — 빈 상태·간격 축.
+- 스낵바 기반 실패 피드백(`friendlyError` 63회 중 44회가 `_snack`/`SnackBar`) — 별개 패턴.
+
+### 5-5. 재현
+```
+cd ssambership-app
+grep -rn "TextStyle(color: ColorTokens.danger)" lib --include=*.dart | grep -v "^lib/design/"   # 21
+grep -rn "class _ErrorView\|class _RetryView\|class _ErrorBox" lib                                  # 4
+grep -rln "불러오지 못했\|다시 시도" test | wc -l                                                      # 8 (문구 단언 파일)
+```
 
 ## 6. 입력창 공통 장식
 
-(작성 중)
+### 6-1. 실측 사실
+
+| 항목 | 값 |
+|---|---|
+| `InputDecoration(` 생성 (`lib/design/` 밖) | **17곳 / 14파일** → `TextField` 22곳(`TextFormField` 0) + `DropdownButtonFormField` 1 |
+| 사설 `_decoration()` 헬퍼 | **5개**(`profile_edit:131` · `new_question:205` · `free_question_compose:74` · `login:170` · `board_write:203`), 호출 11곳 |
+| 변형 5종 | **V1** 힌트만 + `filled`/`fillColor: elevated`/`OutlineInputBorder(inputRadius, BorderSide.none)`/`contentPadding 14·12` (헬퍼 3, 필드 6) · **V1L** 라벨(`labelText` + `labelStyle: AppType.caption`, **contentPadding 없음**) (헬퍼 2, 필드 4 + 드롭다운 1) · **V2** 댓글·채팅 바(V1 + `contentPadding 14·10`, 인라인 3) · **V3** 검색(V1 + `prefixIcon` + `contentPadding vertical 0`, 인라인 3) · **V4** Material 기본 `OutlineInputBorder()`(IQ 5곳, `isDense` 2) · **V5** `AppCard` 안 `InputBorder.none`(연결노트 1) |
+| 헬퍼 동일성 | `profile_edit` ≡ `new_question` 바이트 동일, `free_question`은 `const` 하나만 다름(런타임 동일). **`login`은 `profile_edit`와 다르다**(label+labelStyle, contentPadding 없음) — V1L |
+| `_inputBar()` | `board_detail:579-621` ≡ `shortform_detail:637-679` **43줄 바이트 동일**(diff 0) |
+| 테마 | `ThemeData.inputDecorationTheme` **없음**. focused/enabled/error border 변형 **0곳** — 단일 `border`가 전 상태에 쓰인다 |
+| 테스트 | `TextField`/`enterText`를 만지는 테스트 20파일, decoration 필드를 단언하는 곳 **0**. `chat_input_test:39, 58`은 TextField의 `dy`를 측정(패딩이 같으면 불변) |
+
+### 6-2. 항목
+
+| # | 항목 | 위치 | 현재 → 제안 | 판정 | 테스트 영향 | 순서 |
+|---|---|---|---|---|---|---|
+| I1 | `lib/design/input_decoration.dart` 신설(V1) + 힌트형 헬퍼 3개 삭제 | 정의 `profile_edit_screen.dart:131-142` · `new_question_screen.dart:205-216` · `free_question_compose_screen.dart:74-85` / 호출 `profile_edit:93, 103` · `new_question:142, 156` · `free_question:103, 113` | `class AppInputPadding { field = symmetric(h14, v12); bar = symmetric(h14, v10); search = symmetric(v0); }` + `InputDecoration appInputDecoration({String? hint, Widget? prefixIcon, EdgeInsets contentPadding = AppInputPadding.field})` = hint · filled · `ColorTokens.elevated` · `OutlineInputBorder(AppShape.inputRadius, BorderSide.none)` · contentPadding. **focused/enabled/error border를 추가하지 않는다**(오늘 없음). 6곳 `appInputDecoration(hint: '…')`. (§4 S8의 14/12/10 토큰과 같은 값 — 함께 도입) | **기계적** | `profile_grade_field_test` · `new_question_submit_test` · `free_question_entry_test` 통과 | 1 |
+| I2 | 라벨형 헬퍼 `appLabeledInputDecoration` (V1L) + 헬퍼 2개 삭제 | 정의 `login_screen.dart:170-178` · `board_write_screen.dart:203-214` / 호출 `login:112, 122` · `board_write:270(드롭다운), 286, 295` | `appLabeledInputDecoration({required String label, String? hint})` = `labelText` + `labelStyle: AppType.caption` + V1 채움/테두리, **contentPadding 없음**(Material 기본이 떠 있는 라벨 공간을 확보). I1 헬퍼에 14/12를 넘겨 합치면 필드가 줄고 라벨이 잘린다 → 별도 헬퍼 | **기계적** | `board_write_screen_test` · `board_post_create_rpc_test`. `login`은 위젯 테스트 없음 | 2 |
+| I3 | V2 댓글·채팅 바 → `appInputDecoration(hint, contentPadding: AppInputPadding.bar)` | `board_detail_screen.dart:598-607` · `shortform_detail_screen.dart:656-665` · `chat_input_bar.dart:106-115` | 세로 10 유지. `minLines/maxLines/textInputAction/onSubmitted/enabled`는 그대로 | **기계적** | 6파일; `chat_input_test` dy 측정 불변 | 3 |
+| I4 | V3 검색 3곳 → `appInputDecoration(hint, prefixIcon: Icon(search_rounded, muted), contentPadding: AppInputPadding.search)`; 선택적으로 `AppSearchField` | `mentors_screen.dart:144-154` · `mentor_inbox_screen.dart:141-150` · `question_room_screen.dart:193-203` (감싸는 `Padding(fromLTRB(screenH, 12, screenH, 8)) > TextField(style: body, onChanged)`도 3곳 동일) | 1단계 decoration 치환(기계적). 2단계 `lib/design/widgets/app_search_field.dart`(같은 서브트리, `onChanged` 콜백만 받음) — 호출부는 `(v) => setState(() => _query = v.trim())` 유지 | **기계적** | `mentors_screen_scope_test:142` `find.byType(TextField)` — 안쪽에 실제 `TextField`가 있어 그대로 매치 | 4 |
+| I5 | 바이트 동일 `_inputBar()` 2개 → `CommentInputBar` | `board_detail_screen.dart:579-621`(호출 `:518`) · `shortform_detail_screen.dart:637-679`(호출 `:485`) | `lib/features/community/ui/widgets/comment_input_bar.dart` `CommentInputBar({controller, busy, onSend})` — 같은 서브트리(`SafeArea > Container(8,8,8,8, surface, 상단 border) > Row[Expanded(TextField V2), IconButton(send_rounded, busy ? muted : accent)]`). `onSubmitted: (_) => onSend()`와 `busy` 게이팅(아이콘 색·`onPressed`) 둘 다 유지 | **기계적** | `board_detail_test` · `cache_invalidation_test` · `shortform_detail_test` | 5 |
+| I6 | (선택) 얇은 `AppTextField` 래퍼 — V1/V1L/V2/V3 16곳 | `login:103, 115` · `profile_edit:90, 100` · `new_question:139, 151` · `free_question:100, 108` · `board_write:283, 289` · `board_detail:591` · `shortform_detail:649` · `chat_input_bar:98` · `mentors_screen:141` · `mentor_inbox:138` · `question_room_screen:190` | 16곳 전부 `style: AppType.body`. 래퍼는 순수 pass-through(`controller, minLines, maxLines=1, keyboardType, textInputAction, onSubmitted, onChanged, obscureText, autofillHints, enabled, inputFormatters`). **V4·V5에는 적용 금지.** `build`가 실제 `TextField`를 반환하므로 `find.byType(TextField)`·`.at(n)` 순서 불변 | **기계적** (프롭 누락 시 동작 변경 — `autofillHints`·`obscureText` 주의) | 12파일 | 6 (I1~I4 뒤) |
+| I7 | V4 IQ 화면의 Material 기본 `OutlineInputBorder()` | `iq_create_screen.dart:469, 479, 489` · `iq_detail_screen.dart:1239, 1358` | 반경 4·1px 외곽선·채움 없음·`isDense`. V1로 바꾸면 반경 4→12, 외곽선 제거, `#F1F5F9` 채움, 패딩 변경 → **결정 #I-2**. 기계적 패스에서는 그대로 | **결정** | `iq_attachments_test:108-110` · `iq_annotate_flow_test:148-150`가 `widgetWithText(TextField, '제목')` 등 라벨 문자열로 찾음 — 라벨/힌트 문자열은 남겨야 함 | 7 |
+| I8 | V5 연결노트 카드 안 편집기 `InputBorder.none` | `connection_notes_screen.dart:179-181` | 의도된 "카드 안 편집기" 변형으로 **기록만**. (연결노트 개편안과 무관하게 이 축에서는 불변) | (제외) | — | 8 |
+
+### 6-3. 결정 필요
+- **#I-1 `ThemeData.inputDecorationTheme` 정의 여부**: 정의하면 V1 사이트가 `filled/fillColor/border`를 생략할 수 있지만 **전역**이라 V4 5곳·V5·드롭다운·Material 다이얼로그 입력까지 재도장된다 → 기계적 패스 밖. 
+- **#I-2 V4 IQ 5곳**을 Material 기본으로 둘지 V1/V1L로 스냅할지(I7).
+- **#I-3 V1L(라벨 + 기본 패딩) vs V1(힌트 + 14/12)** 두 모양 유지(제안) vs 하나로 수렴(떠 있는 라벨이 사라지거나 필드 높이 변화).
+- **#I-4 V2 세로 10 vs V1 12** 2px 차이 유지(제안) vs 통일.
+- **#I-5 포커스·오류 테두리** 추가 여부 — 오늘 0곳, 추가는 디자인 변경.
+- **#I-6 드롭다운 2종**(`board_write:268` 채움형 vs `new_question:182-199` 수제 Container) 통일 여부 — 픽셀·구조 변경.
+
+### 6-4. 이 축에서 제외한 것
+- `new_question_screen.dart:182-199` 과목 드롭다운(수제 Container + `DropdownButtonHideUnderline`) — `InputDecoration`이 아님.
+- IQ 화면 `TextField`의 `style:` 부재와 `AppTypography` — §3.
+- 필드 주변 패딩 리터럴(검색 래퍼 `fromLTRB(screenH, 12, screenH, 8)`, 댓글 바 `8,8,8,8`, 채팅 바 `6,6,6,8`·`16,14,16,16`) — §4.
+- `login_screen.dart:204-210` `_NoticeBanner`(입력이 아닌 배너), `chat_input_bar.dart:139-199` 첨부 미리보기.
+- 필드 위 별도 `Text(caption)` 라벨 패턴(profile_edit·new_question·free_question) vs decoration `labelText`(login·board_write·iq_create) — 두 라벨 방식의 수렴은 트리 변경.
+- 같은 파일들에 중복된 `_snack` 헬퍼 4개 — 피드백 축.
+
+### 6-5. 재현
+```
+cd ssambership-app
+grep -rn "InputDecoration(" lib --include=*.dart | grep -v "^lib/design/" | wc -l      # 17
+grep -rn "TextField(" lib --include=*.dart | grep -v "^lib/design/" | wc -l            # 22
+grep -rn "InputDecoration _decoration" lib                                              # 5
+grep -rn "inputDecorationTheme\|focusedBorder\|errorBorder\|enabledBorder" lib | wc -l  # 0
+diff <(sed -n '579,621p' lib/features/community/ui/board/board_detail_screen.dart) <(sed -n '637,679p' lib/features/community/ui/shortform/shortform_detail_screen.dart) && echo identical
+```
 
 ## 7. 로딩 표시 통일
 
