@@ -52,11 +52,15 @@ const DICTIONARY = {
     refunded: { label: "환불됨", tone: "neutral", risk: "high" },
   },
 
-  /** CHECK 없음 — 이 사전이 유일한 허용 목록(지시서 §3). 라벨은 멘토 승인 목록(M1·M2) 기준. */
+  /**
+   * CHECK 없음 — 이 사전이 유일한 허용 목록(지시서 §3). 라벨은 멘토 승인 목록(M1·M2) 기준.
+   * PR-2 정합(오너 확정): 재제출 요청 값은 코드가 실제로 쓰는 `under_review`(requestMentorDocumentsAction)다.
+   * 데이터 정본이 추정으로 적었던 `resubmit_required` 는 이 컬럼에 쓰는 코드가 없어(학교 인증·학적 변경 테이블 전용 값) 제거했다.
+   */
   "mentor_profiles.verification_status": {
     unsubmitted: { label: "미제출", tone: "neutral" },
     pending: { label: "승인 대기", tone: "warning" },
-    resubmit_required: { label: "재제출 요청", tone: "warning" },
+    under_review: { label: "재제출 요청", tone: "warning" },
     approved: { label: "승인 완료", tone: "success" },
     rejected: { label: "반려", tone: "danger", risk: "medium" },
   },
@@ -124,6 +128,31 @@ const DICTIONARY = {
     approved: { label: "승인 완료", tone: "success" },
     rejected: { label: "반려", tone: "danger" },
     superseded: { label: "대체됨", tone: "neutral" },
+  },
+
+  /**
+   * CHECK mentor_school_verifications_school_tier_check (baseline · 079 로 '건동홍' 추가) — 6값.
+   * 코드가 이미 한글 표기라 라벨 = 코드. 멘토 승인 작업대 ③ 학교 등급 드롭다운의 허용 목록(PR-2 §6).
+   */
+  "mentor_school_verifications.school_tier": {
+    서연고: { label: "서연고", tone: "info" },
+    서성한: { label: "서성한", tone: "info" },
+    중경외시: { label: "중경외시", tone: "info" },
+    건동홍: { label: "건동홍", tone: "info" },
+    그외: { label: "그외", tone: "neutral" },
+    미분류: { label: "미분류", tone: "neutral" },
+  },
+
+  /** CHECK mentor_school_verifications_verified_major_category_check (baseline 인라인) — 8값. 라벨 = 코드. */
+  "mentor_school_verifications.verified_major_category": {
+    메디컬: { label: "메디컬", tone: "neutral" },
+    교육: { label: "교육", tone: "neutral" },
+    인문: { label: "인문", tone: "neutral" },
+    사회상경: { label: "사회상경", tone: "neutral" },
+    자연: { label: "자연", tone: "neutral" },
+    공학: { label: "공학", tone: "neutral" },
+    예체능: { label: "예체능", tone: "neutral" },
+    기타: { label: "기타", tone: "neutral" },
   },
 
   /** CHECK users_status_allowed (security_identity_profile_lockdown) — 4값. 라벨은 users/page.tsx(M16). */

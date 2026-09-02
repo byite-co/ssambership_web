@@ -109,7 +109,7 @@ export async function approveMentorApplicationAction(formData: FormData) {
 export async function rejectMentorApplicationAction(formData: FormData) {
   const { user } = await requireRole("admin");
   const mentorUserId = textFromForm(formData.get("mentorUserId"));
-  const reason = textFromForm(formData.get("rejectionReason") ?? formData.get("note"));
+  const reason = textFromForm(formData.get("rejectionReason") ?? formData.get("reason") ?? formData.get("note"));
 
   if (!mentorUserId) {
     redirect(errUrl(safeActionMsg("신청을 식별할 수 없습니다.")));
@@ -141,7 +141,8 @@ export async function rejectMentorApplicationAction(formData: FormData) {
 export async function requestMentorDocumentsAction(formData: FormData) {
   const { user } = await requireRole("admin");
   const mentorUserId = textFromForm(formData.get("mentorUserId"));
-  const adminNote = textFromForm(formData.get("adminNote") ?? formData.get("note"));
+  // PR-2: 작업대의 사유 프리셋은 같은 필드(adminNote)로 실린다 — DB 쓰기는 그대로, 감사 로그에만 사유를 남긴다.
+  const adminNote = textFromForm(formData.get("adminNote") ?? formData.get("reason") ?? formData.get("note"));
 
   if (!mentorUserId) redirect(errUrl(safeActionMsg("신청을 식별할 수 없습니다.")));
 
@@ -158,7 +159,8 @@ export async function requestMentorDocumentsAction(formData: FormData) {
     actionType: "mentor_request_documents",
     targetType: "mentor_profile",
     targetId: mentorUserId,
-    detail: { note: adminNote },
+    // reject 액션과 같은 키(reason)로도 남겨 감사 로그 조회가 한 필드로 모이게 한다(기존 note 키 유지).
+    detail: { note: adminNote, reason: adminNote },
   });
 
   revalidatePath(PATH);
