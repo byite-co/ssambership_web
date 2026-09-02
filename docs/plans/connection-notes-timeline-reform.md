@@ -64,7 +64,7 @@
 
 제약을 추가한 마이그레이션 원문(`supabase/migrations/20260806033452_connection_notes_room_author_unique.sql`)의 주석: *"C16: 연결노트는 (방, 작성자)당 1장이 계약인데 DB 제약이 없어 앱이 중복 내성·자가치유 삭제(e9f1311)로 방어하고 있었다. 유일성 정본을 DB로 올린다(적용 시점 행 0건)."* — 즉 **앱의 "자가치유 삭제"가 먼저 있었고 제약이 나중에 올라갔다.** 제약을 지우면 앱의 삭제 로직이 다시 유일한 "정리자"가 되는데, 이것이 §5의 위험이다.
 
-RLS 관찰: 네 정책 모두 "행 단위 작성자 본인 + 방 당사자" 검사다. **(방, 작성자) 유일성을 전제로 한 정책은 없다** → 제약을 지워도 RLS는 그대로 유효하다.
+RLS 관찰: `cn_select`는 방 당사자만, 쓰기 정책 3개(`cn_insert`/`cn_update`/`cn_delete`)는 "행 단위 작성자 본인 + 방 당사자"를 검사한다. **(방, 작성자) 유일성을 전제로 한 정책은 없다** → 제약을 지워도 RLS는 그대로 유효하다. DB 함수·RPC·트리거 중 `connection_notes` 행을 읽거나 쓰는 것은 없다(`152`의 알림 카테고리 매핑에 `'connection_note%'` 접두사가 있으나 그 이벤트를 내는 곳이 없다).
 
 ### 2-2. 앱 (`635ae738`) — 단일 편집 구조
 
@@ -139,24 +139,28 @@ RLS 관찰: 네 정책 모두 "행 단위 작성자 본인 + 방 당사자" 검�
 |---|---|---|
 | A | 게이트: 제약 존재 여부 확인, 없으면 NOTICE 후 통과 | 멱등 |
 | B | `alter table public.connection_notes drop constraint if exists connection_notes_room_author_unique;` | unique index도 함께 제거됨 |
-| C | `create index if not exists idx_cn_room_created on public.connection_notes (mentor_student_room_id, created_at);` | 타임라인 정렬용. 기존 `idx_cn_msr`(updated_at desc)·`idx_cn_author`는 유지 |
+| C | `create index if not exists idx_cn_room_created on public.connection_notes (mentor_student_room_id, created_at, id);` | 타임라인 정렬용. **`id`를 동률 해소 키로 포함** — 같은 트랜잭션의 INSERT는 `created_at`(=`now()`, 트랜잭션 고정)이 같아 순서가 비결정적이다. 오름차순 btree 하나로 `ORDER BY created_at, id`와 `… DESC, id DESC`(역방향 스캔) 둘 다 받으므로 `DESC` 지정 불필요. 제약이 만든 unique index가 사라져도 `idx_cn_author`(048, 같은 컬럼 목록)가 남아 구앱의 (방, 작성자) 조회 경로는 유지된다. `idx_cn_msr`(`updated_at desc`)는 클라이언트가 `created_at` 정렬로 옮기면 dead가 되지만 **build 19 호환용으로 게이트 상향 전까지 유지** |
 | D | `comment on table public.connection_notes is '…누적 타임라인…';` | 계약 기록 |
 | E | 사후 확인 DO 블록(제약 부재·인덱스 존재) | 실패 시 예외 |
 | F-1 | (**결정 #2** 채택 시) `cn_update`를 "작성 후 15분 이내 본인 행"으로 재정의 | 정책 이름 불변(drop/create 같은 이름) |
 | F-2 | (**결정 #2** 권장안) `cn_delete` 정책 **제거** → authenticated 삭제 불가. 대안: 15분 창으로 재정의(잔여 위험 §5-3) | 정책 수 176→**175**(제거 시) |
-| F-3 | (**결정 #2** 채택 시) `created_at` 불변 트리거 `trg_cn_created_at_immutable` + 함수 `connection_notes_forbid_created_at_change()` — 창 안의 행을 `created_at = now()`로 갱신해 창을 무한 연장하는 우회 차단 | 함수 수 222→**223** |
+| F-3 | (**결정 #2** 채택 시) `created_at` 불변 트리거 `trg_cn_created_at_immutable` + 함수 `connection_notes_forbid_created_at_change()` — 창 안의 행을 `created_at = now()`로 갱신해 창을 무한 연장하는 우회 차단(`WITH CHECK`에 창을 넣어도 `now()`는 통과하므로 정책만으로는 못 막는다). **`created_at`만 고정할 것** — `author_id`는 FK `on delete set null`(048)이라 사용자 삭제 시 참조 무결성 동작이 UPDATE로 실행돼 BEFORE UPDATE 트리거를 탄다; `author_id`까지 고정하면 **회원 탈퇴가 깨진다** | 함수 수 222→**223** |
 
 **바꾸지 않는 것**: 컬럼 전부(잉크 2열 포함) · `cn_select`/`cn_insert` · 기존 트리거 `trg_cn_set_updated` · FK 2종 · 버킷.
 
 ### 4-2. 롤백
-(방, 작성자) 중복이 0건일 때만 가능하다.
+(방, 작성자) 중복이 0건일 때만 가능하다 — 타임라인이 한 번이라도 쌓이면 **사실상 되돌릴 수 없다**(pack은 forward-only, 189류 backfill에 `supabase/rollback/` 파일 규약도 없다). (R) 블록은 문서용이다.
 ```sql
 select mentor_student_room_id, author_id, count(*)
   from public.connection_notes group by 1, 2 having count(*) > 1;  -- 0행이어야 함
 alter table public.connection_notes
   add constraint connection_notes_room_author_unique unique (mentor_student_room_id, author_id);
 drop index if exists public.idx_cn_room_created;
--- F 채택 시: 085 원문(supabase/sql/085_connection_notes_author_rls.sql)으로 cn_update/cn_delete 재적용
+comment on table public.connection_notes is null;
+-- F 채택 시:
+drop trigger if exists trg_cn_created_at_immutable on public.connection_notes;
+drop function if exists public.connection_notes_forbid_created_at_change();
+-- cn_update 는 085:43-66 원문으로 재정의, cn_delete 는 085:67-78 원문으로 재생성(F-2가 제거했으므로)
 ```
 
 ### 4-3. 저장소 마이그레이션 절차 (이 저장소의 현행 규약)
@@ -166,18 +170,21 @@ drop index if exists public.idx_cn_room_created;
 | # | 파일 | 소유 | 비고 |
 |---|---|---|---|
 | 1 | `supabase/sql/190_connection_notes_timeline_drop_unique.sql` | 사람 | 가독용 정본. 189가 현재 마지막 번호 |
-| 2 | `supabase/baseline/post_ledger_backfills/2026MMDD100100_connection_notes_timeline_drop_unique.sql` | 사람 | pack 소스. version은 "적용 예정일 + `100100`" 패턴(같은 날 2본째는 `100200`) |
+| 2 | `supabase/baseline/post_ledger_backfills/2026MMDD100100_connection_notes_timeline_drop_unique.sql` | 사람 | pack 소스(**이 파일이 원본**, 1번은 바이트 동일 사본). version은 **작성(커밋)일** + `100100`(같은 날 2본째 `100200`) — 적용 예정일이 아니다(`20260831100100`은 8/31 커밋, 아직 부모 미적용). 검증기가 "pack 마지막 version = backfill 최대"를 요구하므로(`validate_native_migration_pack.py:138`) **`20260831100100`보다 커야** 하고 PR60(`20260804113000`)보다도 커야 한다. BOM 없음·LF·말미 개행 1개(189 선례; 085 등 구 파일은 BOM이 있다) |
 | 3 | `supabase/migrations/2026MMDD100100_…sql` | **생성기** | `python3 scripts/verify/baseline/build_native_migration_pack.py` 가 복사. 직접 편집 금지 |
-| 4 | `supabase/baseline/native_migration_pack_manifest.tsv` | 생성기 | 행 1개 추가(현재 102행 → 103) |
+| 4 | `supabase/baseline/native_migration_pack_manifest.tsv` | 생성기 | 행 1개 추가(현재 102행 → 103; `191`까지면 104) |
 | 5 | `docs/audit/sql_apply_manifest.md` | 사람 | 신규 SQL 등재 행 |
 | 6 | `docs/audit/db_expected_state.md:39` | 사람 | `connection_notes` 행에 "(방, 작성자) 유일성 없음(설계) · 타임라인 · (채택 시) 수정 15분 창·삭제 정책 없음" 추기 |
 | 7 | `CLAUDE.md` 핵심 테이블 표 | 사람 | `connection_notes` 행 정정(`status` 컬럼은 어떤 SQL에도 없다 → `author_id, author_role, body, ink_path, ink_thumb_path`) |
 | 8 | `contracts/snapshots/staging_contract.json` | 도구 | F(정책 재작성) 채택 시 적용 후 재추출 — `npm run contracts:verify`가 정책 md5를 대조한다 |
-| 9 | `scripts/verify/baseline/verify_local_stack_state.sh` | 사람 | F 채택 시 구조 카운트 기대치(functions 223 · policies 175) 갱신 |
+| 9 | `scripts/verify/baseline/verify_local_stack_state.sh:56-58, 112-117` | 사람 | 헤더 주석을 "104본 pack(생성기 103 + PR60 1)"으로, "103본→104본(연결노트 타임라인) 델타" 블록 추가 — **A~E만이어도 필요**(관례). F 채택 시 `:114` functions 223 · `:116` policies 175 |
+| 10 | `scripts/verify/connection_notes_timeline_verify.sql` | 사람 | 신규 검증 스크립트(§8-3) |
+| 11 | `docs/audit/db_permission_audit_queries.sql:232-249` (B5) | 사람 | F 채택 시 기대 정책 집합(3개, `cn_update`에 `created_at`, `cn_delete` 부재, 트리거 존재)으로 갱신 |
+| — | `supabase/sql/INDEX.md` · `docs/audit/apply_manifest_prod.md` | — | **손대지 않음**(059 이후 미관리 / 189 커밋도 미수정) |
 
-검증(로컬, PR 전): `validate_native_migration_pack.py` · `validate_replay_manifest.sh` PASS, 생성기 재실행 diff 0. CI `db-migration-pack-verify.yml`이 PG17 + Supabase CLI replay로 다시 검증한다. `verify_local_stack_state.sh`의 구조 카운트(tables 85 · functions 222 · policies 176 · buckets 13, `:112-117`)는 A~E만이면 **바뀌지 않는다**(제약·인덱스는 그 카운트에 없다). F를 채택하면 **functions 223(F-3 함수)** · **policies 175(F-2 제거 시)** 로 기대치를 함께 갱신해야 한다(선례: `ea146b5` "로컬 스택 구조 카운트 기대치 갱신"). `run_local_stack_emulation.sh`의 STRICT 축(constraints·indexes md5)은 `PR60_FORWARD`가 설정된 `[6]` 블록에서 PR #60 전후 지문만 대조한다(`:104-117`) — 일반 마이그레이션 추가에는 적용되지 않으므로 기대값 갱신은 없다.
+검증(로컬, PR 전): `validate_native_migration_pack.py` · `validate_replay_manifest.sh` PASS, 생성기 재실행 diff 0. CI `db-migration-pack-verify.yml`이 PG17 + Supabase CLI replay로 다시 검증한다. `verify_local_stack_state.sh`의 구조 카운트(tables 85 · functions 222 · policies 176 · buckets 13, `:112-117`)는 A~E만이면 **바뀌지 않는다**(제약·인덱스는 그 카운트에 없다). F를 채택하면 **functions 223(F-3 함수)** · **policies 175(F-2 제거 시)** 로 기대치를 함께 갱신해야 한다(선례: `ea146b5` "로컬 스택 구조 카운트 기대치 갱신"). `run_local_stack_emulation.sh`의 STRICT 축(constraints·indexes md5)은 `PR60_FORWARD`가 설정된 `[6]` 블록에서 PR #60 전후 지문만 대조한다(`:101-117`) — 일반 마이그레이션 추가에는 적용되지 않으므로 기대값 갱신은 없다. `parent_schema_fingerprint.sh`의 constraints·indexes 축은 바뀌지만 `db-apply-pending`은 그 diff를 증적으로만 남기고 강제하지 않는다(`:175`).
 
-적용: **`db-apply-pending.yml` workflow_dispatch**(dry-run → 승인 → apply, confirmation 문자열). MCP `apply_migration` 직접 적용은 저장소 규칙상 금지(적용하면 같은 세션에서 역수입까지 해야 한다 — `CLAUDE.md` "마이그레이션 hotfix 역수입 규칙").
+적용: **`db-apply-pending.yml` workflow_dispatch**(dry-run → 승인 → apply, confirmation 문자열). MCP `apply_migration` 직접 적용은 저장소 규칙상 금지(적용하면 같은 세션에서 역수입까지 해야 한다 — `CLAUDE.md` "마이그레이션 hotfix 역수입 규칙"). **중요한 성질**: 이 워크플로는 (로컬 pack) − (원장) 차집합 **전량**을 `supabase db push` 한 번으로 적용하고 사후에 원장 = pack 전체를 요구한다(`:130, 154, 169`). 따라서 **`190`만 적용하고 `191`을 main에 미리 넣어 둘 수 없다** — `191`은 ③ 시점에 머지해야 하고, `190`은 아직 미적용인 `189`와 함께 적용된다(§9). CLI `db push`는 원격 마지막 version보다 앞서는 로컬 파일을 `--include-all` 없이는 거부하므로(워크플로는 이 플래그를 넘기지 않는다) version 순서 규칙(위 2번)이 실제로 걸린다.
 
 ---
 
@@ -207,12 +214,14 @@ drop index if exists public.idx_cn_room_created;
 
 **게이트 상향은 "권장"이 아니라 "강제"여야 한다.** `recommend`는 배너만 얹고 앱 사용을 막지 않는다(`version_gate_shell.dart:47-57`). 게이트는 라우터 위에 있어 `forceUpdate` 상태에서는 저장 화면에 도달할 수 없다(`:7-12`).
 
-상향 방법(현행 인프라, 관리자 UI 없음): 신앱 build를 N(≥20)이라 할 때
+상향 방법(현행 인프라, 관리자 UI 없음): 신앱 build를 N(≥20)이라 할 때 — 선례 `20260806075353`처럼 `greatest()`로 멱등하게(값을 낮추지 않게), 자기 검증 포함(§12-2 `191` 초안)
 ```sql
 update public.mobile_app_version_policies
-   set min_supported_build = N, latest_build = greatest(latest_build, N),
+   set min_supported_build = greatest(min_supported_build, N),
+       latest_build         = greatest(latest_build, N),
        minimum_version_name = '<신앱 표시 버전>', updated_at = now()
- where platform in ('android', 'ios');
+ where platform in ('android', 'ios')
+   and (min_supported_build < N or latest_build < N);
 ```
 `162` 헤더가 "실제 최소 build 상향은 운영 절차로만"이라 못 박았고, 선례 `20260806075353`은 콘솔 UPDATE를 마이그레이션으로 역수입했다. 권장은 처음부터 **마이그레이션(`191`)으로 등재해 `db-apply-pending`으로 적용** — 재현 가능하고 역수입이 필요 없다.
 
@@ -312,7 +321,8 @@ update public.mobile_app_version_policies
 | `e2e/connection-note-guard.spec.ts` | 수정 | 시드 INSERT 전에 해당 방의 `connection_notes` 정리(`.delete().eq('mentor_student_room_id', roomId)`) · INSERT 오류 `null` 단언 · 제약 제거 후 케이스: 같은 학생이 2장 INSERT 모두 성공 + `created_at` 순 2행 조회 |
 
 ### 8-3. DB
-- 마이그레이션 자체 검증 블록(E)로 제약 부재·인덱스 존재.
+- 마이그레이션 자체 검증 블록(E): 제약 부재 · **다른 unique index도 없음** · `idx_cn_room_created` 컬럼 목록 · `idx_cn_author` 생존 · (F) 정책 수 3, `cn_update`에 `created_at`, `cn_delete` 부재, 트리거·함수 존재 — F 문장이 빠져도 통과하는 검증이면 의미가 없다.
+- 신규 `scripts/verify/connection_notes_timeline_verify.sql`(패턴 `s2_2_batch_d_verify.sql`: `begin` → 로컬 가드 → fixture → `set_config('request.jwt.claims', …)` + `set local role authenticated` → 검증 → `rollback`): 같은 (방, 작성자) INSERT 2회 성공 · `ORDER BY created_at, id` 결정적 · (F) 15분 지난 행 UPDATE 0행/창 안 1행 · DELETE 0행 · `set created_at = now()` → 예외 · **fixture 사용자 삭제 시 FK set-null이 트리거에 막히지 않음** · 구앱 시뮬레이션(최신 UPDATE + 나머지 DELETE) 후 과거 행 무손실.
 - (결정 #2) `scripts/verify/`에 정책 검증 추가: 본인 행이라도 `created_at < now() - 15min`이면 UPDATE/DELETE 0행. 스타일은 `s2_2_batch_d_verify.sql`(트랜잭션 내 fixture → 검증 → rollback).
 - 구클라이언트 시뮬레이션: 한 작성자 행 3건 시드(최신 1건은 15분 이내, 2건은 그 이전) → "최신 1건 UPDATE + 나머지 DELETE"를 authenticated 컨텍스트로 실행 → **UPDATE 1행(정정), DELETE 0행**(F-2 채택 시) 확인. `created_at = now()` UPDATE가 트리거로 거부되는지(F-3) 확인.
 
@@ -322,9 +332,9 @@ update public.mobile_app_version_policies
 
 | # | 단계 | 게이트(다음으로 넘어가는 조건) |
 |---|---|---|
-| ① | DB: `190` 적용(제약 제거 + 인덱스 + 결정 #2 시 정책) via `db-apply-pending` | 원장에 version 등재 · pg_constraint에서 제약 부재 확인 · 웹·앱 동작 변화 **없음**(웹 버튼 숨김·앱 UPDATE 그대로) |
+| ① | DB: `190` 머지 → `db-apply-pending` apply(미적용 `189`와 **함께** 전량 적용) | 원장에 version 등재 · pg_constraint에서 제약 부재 확인 · 웹·앱 동작 변화 **없음**(웹 버튼 숨김·앱 UPDATE 그대로). **`191`은 이 시점에 main에 있으면 안 된다**(같이 적용돼 전원 강제 업데이트) |
 | ② | 앱: `appendMyNote` + 타임라인 화면 빌드 → 스토어 심사·배포 | CI(analyze·test) 그린 · 스토어 게시 완료 · 결제 무관 기능이라 심사 리스크 낮음(인계 §5 권고 순서 ①단계에 해당) |
-| ③ | 버전 게이트: `mobile_app_version_policies.min_supported_build`를 ②의 build로 상향(**forceUpdate**, §5-2 SQL · 마이그레이션 `191` 권장) | 원장 등재 · `get_mobile_app_version_policy('ios'/'android')` 응답 확인 · 구앱(build 19) 콜드 스타트가 `ForceUpdateScreen`에서 멈추는 것을 테스트 기기로 확인 · 스토어 바이너리의 실제 `buildNumber`가 19인지 확인(§11) |
+| ③ | 버전 게이트: `191`을 **양 스토어 게시 완료 후** 머지 → `db-apply-pending` apply (`min_supported_build`를 ②의 build로, **forceUpdate**) | 적용 전 `mobile_app_version_policies` 현재값 읽어 `sql_apply_manifest` 행에 기록(롤백용) · 원장 등재 · `get_mobile_app_version_policy('ios'/'android')` 응답 확인 · 구앱(build 19) 콜드 스타트가 `ForceUpdateScreen`에서 멈추는 것을 테스트 기기로 확인 · 스토어 바이너리의 실제 `buildNumber`가 19인지 확인(§11) |
 | ④ | 웹: 패널 `canAdd` 개방 + 타임라인 정렬 + 카피 배포 | 결정 #2 채택 시 ③ 직후 가능. 미채택 시 ③ 후 **재시작 유예 48시간 이상**(게이트는 콜드 스타트에서만 평가) |
 | ⑤ | 문서: `db_expected_state.md`·`CLAUDE.md` 행 갱신, 앱 `APP_FEATURE_STATUS.md`, 계약 문서 | — |
 
@@ -365,127 +375,255 @@ update public.mobile_app_version_policies
 | 8 | 프로젝트의 PostgREST max-rows 설정값(기본 1000) — 결정 #4의 limit 근거 | Supabase 대시보드 API 설정 |
 | 9 | 웹 노트 모달이 서버 액션 리다이렉트 뒤 실제로 열린 채 남는지(React 클라이언트 상태 유지 여부) — 정적으로는 닫는 코드가 없다 | 브라우저 1회 |
 | 10 | 웹 액션이 `revalidatePath(room)`만 하는데 멘토 thread 상세 경로 갱신이 충분한지 — 페이지가 searchParams를 동적으로 읽어 문제없을 것으로 보이나 런타임 미확인 | 브라우저 1회 |
+| 11 | 부모 원장의 현재 최대 version — `verify_local_stack_state.sh:58` 주석은 "프로덕션 원장 102본, `20260831100100`(189) 미적용"이라 적혀 있다. 지금도 그런지 | `select max(version) from supabase_migrations.schema_migrations` |
+| 12 | `mobile_app_version_policies` 현재 행(양 플랫폼 존재 여부·`min_supported_build`·`latest_build`; `20260808080056` 주석에 android min=9 언급) — `191` 자기 검증이 "2행, min ≥ N"을 요구 | 읽기 전용 SELECT, 적용 전 |
+| 13 | Supabase CLI 2.111.0 `db push`의 out-of-order 로컬 version 거부(`--include-all`) 동작 — CLI 지식 기반, 저장소 증거는 `--db-url` 존재 검사뿐 | CLI 문서 |
 
 (초안 시점의 미확인 — outbound manifest·소형 뷰포트/계층 테스트·레거시 memo 도달 여부·로컬 스택 md5·버전 정책 원천·구앱 예외 처리 경로 — 는 코드 열람으로 해소해 §2·§4·§5·§8에 반영했다.)
 
 ---
 
-## 12. 부록 — 마이그레이션 SQL 초안 (`190_connection_notes_timeline_drop_unique.sql`)
+## 12. 부록 — 마이그레이션 SQL 초안
 
-> 파일로 만들지 않았다. 오너 승인 후 §4-3 절차로 등재한다. `2026MMDD`는 적용 예정일로 채운다. F 블록은 결정 #2 채택 시에만 포함한다.
+> 파일로 만들지 않았다. 오너 승인 후 §4-3 절차로 등재한다(원본은 `post_ledger_backfills/`, `supabase/sql/`은 바이트 동일 사본, `migrations/`는 생성기). `2026MMDD`는 **작성일**, `DD`는 190·191이 서로 다른 날이어야 한다(§4-3 2번). F 절과 E의 F 검사는 결정 #2(b′) 채택 시에만 포함하고, 미채택이면 F-1~F-3을 지우고 E의 정책 수 기대치를 4로, `cn_update` 창·`cn_delete` 부재·트리거·함수 ACL 검사를 제거한다. 초안은 이 저장소의 SQL 스타일(189)과 PostgreSQL 의미론 기준으로 검토를 거쳤으나, 이 환경에는 PostgreSQL이 없어 **실행은 하지 않았다** — 로컬 스택 재생(`db-migration-pack-verify`)이 첫 실행이다.
+
+### 12-1. `190_connection_notes_timeline_drop_unique.sql`
 
 ```sql
 -- =============================================================================
--- 190_connection_notes_timeline_drop_unique.sql  (2026-MM-DD)
+-- 190_connection_notes_timeline_drop_unique.sql  (2026-09-DD)
 --
--- Purpose: 연결노트를 "(방, 작성자)당 1장 편집" 에서 "방 단위 누적 타임라인(append)"
---   으로 전환한다. 유일성 제약 connection_notes_room_author_unique 를 제거하고
---   타임라인 정렬용 인덱스를 추가한다. 컬럼·FK·트리거·cn_select·cn_insert 는 불변.
+-- Purpose: 연결노트를 "(방, 작성자)당 1장 편집" 에서 "방 단위 누적 타임라인(append)" 으로
+--   전환한다. UNIQUE 제약 connection_notes_room_author_unique 를 제거하고(제약 소유
+--   unique index 도 함께 제거됨 — 같은 컬럼의 idx_cn_author(048) 가 남아 (방, 작성자)
+--   조회 경로는 유지), 타임라인 정렬 인덱스 idx_cn_room_created(방, created_at, id) 를
+--   추가한다. 컬럼(잉크 2열 포함)·FK 2종·trg_cn_set_updated·cn_select·cn_insert 는 불변.
+--   [F 절 — 오너 결정 #2 채택 시에만 포함] cn_update 를 "작성 후 15분 이내 본인 행" 으로
+--   재정의(F-1), cn_delete 정책 제거(F-2), created_at 불변 트리거(F-3).
 --
 -- Base: supabase/migrations/20260806033452_connection_notes_room_author_unique.sql
---   (원장 20260806033452 — 제약 추가 1문). 라이브 실측 2026-09-02: 행 0건.
+--   (원장 20260806033452 — 제약 추가 1문) · RLS 원문 supabase/sql/085_connection_notes_author_rls.sql.
+--   라이브 실측 2026-09-02: connection_notes 0행 · mentor_student_rooms 0행.
 --
 -- Apply: 저장소 표준 경로(db-apply-pending) — MCP apply_migration 직접 적용 금지.
 --   pack 등재: supabase/baseline/post_ledger_backfills/2026MMDD100100_connection_notes_timeline_drop_unique.sql
 --
--- Rollback: 말미 (R) 블록 — (방, 작성자) 중복 0건 전제로 제약 재생성.
+-- Rollback: 말미 (R) 블록 — (방, 작성자) 중복 0행 전제로 제약 재생성 + 인덱스 제거
+--   + [F] 085 원문 정책 2종 재생성 + 트리거·함수 제거. 데이터 무접촉.
 -- =============================================================================
 
 begin;
 
--- A. 사전 게이트 — 제약이 이미 없으면 통과(멱등). 있으면 진행.
+-- A. 사전 게이트 — 테이블 실재 · 제약이 있으면 모양(UNIQUE(room, author)) 확인, 없으면 NOTICE(멱등)
 DO $$
+DECLARE v_def text;
 BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM pg_constraint
-     WHERE conrelid = 'public.connection_notes'::regclass
-       AND conname  = 'connection_notes_room_author_unique'
-  ) THEN
+  IF to_regclass('public.connection_notes') IS NULL THEN
+    RAISE EXCEPTION '190_GATE: public.connection_notes not present';
+  END IF;
+  SELECT pg_get_constraintdef(c.oid) INTO v_def
+    FROM pg_constraint c
+   WHERE c.conrelid = 'public.connection_notes'::regclass
+     AND c.conname  = 'connection_notes_room_author_unique';
+  IF v_def IS NULL THEN
     RAISE NOTICE '190_GATE: connection_notes_room_author_unique already absent - nothing to drop';
+  ELSIF v_def <> 'UNIQUE (mentor_student_room_id, author_id)' THEN
+    RAISE EXCEPTION '190_GATE: constraint shape mismatch (%)', v_def;
   END IF;
 END $$;
 
--- B. 유일성 제약 제거 (제약이 만든 unique index 도 함께 사라진다)
+-- B. UNIQUE 제약 제거 — 제약이 소유한 unique index 도 함께 사라진다.
+--    (방, 작성자) 조회는 같은 컬럼의 idx_cn_author(048) 가 계속 담당한다.
 ALTER TABLE public.connection_notes
   DROP CONSTRAINT IF EXISTS connection_notes_room_author_unique;
 
--- C. 타임라인 정렬 인덱스 (방 단위 created_at 순). idx_cn_author · idx_cn_msr 는 유지.
+-- C. 타임라인 정렬 인덱스 — (방, created_at, id). id 는 같은 트랜잭션에서 생긴 동일
+--    created_at 의 결정적 타이브레이커. 오름차순 인덱스 하나로 asc/desc 정렬을 모두
+--    지원한다(역방향 스캔) — 클라이언트는 ORDER BY created_at, id 를 같은 방향으로 쓴다.
+--    idx_cn_msr(updated_at desc)·idx_cn_author 는 유지(구앱 build 19 가 updated_at 정렬 사용).
 CREATE INDEX IF NOT EXISTS idx_cn_room_created
-  ON public.connection_notes (mentor_student_room_id, created_at);
+  ON public.connection_notes (mentor_student_room_id, created_at, id);
 
--- D. 계약 주석
+-- D. 계약 주석 (단일 문자열 리터럴 — COMMENT 는 상수만 허용하며, 줄바꿈으로 분리된
+--    인접 리터럴 결합에 기대지 않는다)
 COMMENT ON TABLE public.connection_notes IS
-  '연결노트 — mentor_student_rooms 1방 = 누적 타임라인 1개. 한 작성자(author_id)가 여러 행을 append 한다. '
-  '(2026-09 개편: 구 (방,작성자) 유일 계약 폐기. 손글씨 ink_path/ink_thumb_path 는 예약 컬럼, 기능 없음)';
+  '연결노트 — mentor_student_rooms 1방 = 누적 타임라인 1개. 한 작성자(author_id)가 여러 행을 append 한다. 정렬 (created_at, id). 2026-09 개편(190): 구 (방,작성자) UNIQUE 계약 폐기. 손글씨 ink_path/ink_thumb_path 는 예약 컬럼, 기능 없음.';
 
--- F. (결정 #2 (b′) 채택 시) 수정 15분 창 + 삭제 불가 + created_at 불변.
---    구클라이언트(build 19)의 '최신 1건 UPDATE + 나머지 DELETE' 경로: UPDATE 는 창 안의 최신 내 노트 1건에만
---    닿고(= 정정), DELETE 는 정책 부재로 항상 0행(앱은 catch(_) 로 무음). 데이터 소실 경로가 사라진다.
--- F-1. cn_update — 작성 후 15분 이내 본인 행만 (이름 085 와 동일)
--- DROP POLICY IF EXISTS "cn_update" ON public.connection_notes;
--- CREATE POLICY "cn_update" ON public.connection_notes
---   FOR UPDATE TO authenticated
---   USING (
---     author_id = (SELECT auth.uid())
---     AND created_at > now() - interval '15 minutes'
---     AND EXISTS (SELECT 1 FROM public.mentor_student_rooms r
---                  WHERE r.id = connection_notes.mentor_student_room_id
---                    AND (SELECT auth.uid()) IN (r.student_id, r.mentor_id))
---   )
---   WITH CHECK (
---     author_id = (SELECT auth.uid())
---     AND EXISTS (SELECT 1 FROM public.mentor_student_rooms r
---                  WHERE r.id = mentor_student_room_id
---                    AND (SELECT auth.uid()) IN (r.student_id, r.mentor_id))
---   );
--- F-2. cn_delete 제거 — authenticated 삭제 불가 (append-only). 대안(잔여 위험 §5-3): 15분 창으로 재정의.
--- DROP POLICY IF EXISTS "cn_delete" ON public.connection_notes;
--- F-3. created_at 불변 트리거 — 창 안의 행을 created_at = now() 로 갱신해 창을 연장하는 우회 차단
--- CREATE OR REPLACE FUNCTION public.connection_notes_forbid_created_at_change()
--- RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $$
--- BEGIN
---   IF NEW.created_at IS DISTINCT FROM OLD.created_at THEN
---     RAISE EXCEPTION 'connection_notes.created_at is immutable' USING ERRCODE = 'check_violation';
---   END IF;
---   RETURN NEW;
--- END $$;
--- DROP TRIGGER IF EXISTS trg_cn_created_at_immutable ON public.connection_notes;
--- CREATE TRIGGER trg_cn_created_at_immutable
---   BEFORE UPDATE ON public.connection_notes
---   FOR EACH ROW EXECUTE FUNCTION public.connection_notes_forbid_created_at_change();
+-- F. [오너 결정 #2 채택 시에만 — 미채택이면 F-1~F-3 과 E 의 F 검사를 삭제]
+-- F-1. cn_update — 작성 후 15분 이내 본인 행만(정정 창). 같은 이름 재정의(정책 수 불변).
+--      USING 이 기존 행을, WITH CHECK 가 갱신 결과 행을 창으로 제한한다. now() 는 STABLE
+--      (트랜잭션 시작 시각) 이라 정책식에 허용된다. WITH CHECK 만으로는 created_at 을
+--      now() 로 밀어 창을 연장하는 우회를 못 막으므로 F-3 트리거가 필요하다.
+DROP POLICY IF EXISTS "cn_update" ON public.connection_notes;
+CREATE POLICY "cn_update" ON public.connection_notes
+  FOR UPDATE TO authenticated
+  USING (
+    author_id = (SELECT auth.uid())
+    AND created_at > now() - interval '15 minutes'
+    AND EXISTS (SELECT 1 FROM public.mentor_student_rooms r
+                 WHERE r.id = connection_notes.mentor_student_room_id
+                   AND (SELECT auth.uid()) IN (r.student_id, r.mentor_id))
+  )
+  WITH CHECK (
+    author_id = (SELECT auth.uid())
+    AND created_at > now() - interval '15 minutes'
+    AND EXISTS (SELECT 1 FROM public.mentor_student_rooms r
+                 WHERE r.id = mentor_student_room_id
+                   AND (SELECT auth.uid()) IN (r.student_id, r.mentor_id))
+  );
 
--- E. 사후 확인
+-- F-2. cn_delete 제거 — authenticated 의 DELETE 는 RLS 필터로 0행(오류 없음). service_role
+--      (계정 삭제 워커·e2e admin 클라이언트)은 RLS 우회라 영향 없다. 정책 수 176→175.
+DROP POLICY IF EXISTS "cn_delete" ON public.connection_notes;
+
+-- F-3. created_at 불변 트리거 — created_at 만 고정한다. author_id 는 고정하지 않는다:
+--      users 삭제 시 FK ON DELETE SET NULL(048) 이 BEFORE UPDATE 트리거를 발화시키므로
+--      author_id 를 고정하면 계정 삭제가 실패한다. 함수 수 222→223.
+CREATE OR REPLACE FUNCTION public.connection_notes_forbid_created_at_change()
+RETURNS trigger LANGUAGE plpgsql SET search_path = '' AS $fn$
+BEGIN
+  IF NEW.created_at IS DISTINCT FROM OLD.created_at THEN
+    RAISE EXCEPTION 'CONNECTION_NOTE_CREATED_AT_IMMUTABLE' USING ERRCODE = '42501';
+  END IF;
+  RETURN NEW;
+END $fn$;
+REVOKE ALL ON FUNCTION public.connection_notes_forbid_created_at_change() FROM PUBLIC, anon, authenticated;
+DROP TRIGGER IF EXISTS trg_cn_created_at_immutable ON public.connection_notes;
+CREATE TRIGGER trg_cn_created_at_immutable
+  BEFORE UPDATE ON public.connection_notes
+  FOR EACH ROW EXECUTE FUNCTION public.connection_notes_forbid_created_at_change();
+
+-- E. 적용 직후 자가 검증
 DO $$
+DECLARE v_n int;
 BEGIN
   IF EXISTS (SELECT 1 FROM pg_constraint
               WHERE conrelid = 'public.connection_notes'::regclass
                 AND conname  = 'connection_notes_room_author_unique') THEN
     RAISE EXCEPTION '190_VERIFY: connection_notes_room_author_unique still present';
   END IF;
+  SELECT count(*) INTO v_n FROM pg_indexes
+   WHERE schemaname = 'public' AND tablename = 'connection_notes'
+     AND indexdef LIKE 'CREATE UNIQUE INDEX%' AND indexname <> 'connection_notes_pkey';
+  IF v_n <> 0 THEN
+    RAISE EXCEPTION '190_VERIFY: unexpected unique index remains (%)', v_n;
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM pg_indexes
                   WHERE schemaname = 'public' AND tablename = 'connection_notes'
-                    AND indexname = 'idx_cn_room_created') THEN
-    RAISE EXCEPTION '190_VERIFY: idx_cn_room_created missing';
+                    AND indexname = 'idx_cn_room_created'
+                    AND indexdef LIKE '%(mentor_student_room_id, created_at, id)') THEN
+    RAISE EXCEPTION '190_VERIFY: idx_cn_room_created missing or wrong columns';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_indexes
+                  WHERE schemaname = 'public' AND tablename = 'connection_notes'
+                    AND indexname = 'idx_cn_author') THEN
+    RAISE EXCEPTION '190_VERIFY: idx_cn_author missing (room, author lookup path lost)';
+  END IF;
+  -- [F] 정책 3종(select/insert/update) · cn_update 창 · cn_delete 부재 · 트리거 실재 · 함수 ACL
+  SELECT count(*) INTO v_n FROM pg_policies
+   WHERE schemaname = 'public' AND tablename = 'connection_notes';
+  IF v_n <> 3 THEN
+    RAISE EXCEPTION '190_VERIFY: connection_notes policy count % (expected 3)', v_n;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies
+                  WHERE schemaname = 'public' AND tablename = 'connection_notes'
+                    AND policyname = 'cn_update' AND cmd = 'UPDATE'
+                    AND qual LIKE '%created_at%' AND with_check LIKE '%created_at%'
+                    AND qual LIKE '%author_id%' AND qual LIKE '%mentor_student_rooms%') THEN
+    RAISE EXCEPTION '190_VERIFY: cn_update window policy shape mismatch';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_policies
+              WHERE schemaname = 'public' AND tablename = 'connection_notes'
+                AND policyname = 'cn_delete') THEN
+    RAISE EXCEPTION '190_VERIFY: cn_delete still present';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_trigger t
+                  WHERE t.tgrelid = 'public.connection_notes'::regclass
+                    AND t.tgname = 'trg_cn_created_at_immutable' AND NOT t.tgisinternal) THEN
+    RAISE EXCEPTION '190_VERIFY: trg_cn_created_at_immutable missing';
+  END IF;
+  IF EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+              WHERE n.nspname = 'public' AND p.proname = 'connection_notes_forbid_created_at_change'
+                AND (has_function_privilege('anon', p.oid, 'EXECUTE')
+                     OR has_function_privilege('authenticated', p.oid, 'EXECUTE'))) THEN
+    RAISE EXCEPTION '190_VERIFY: trigger function still executable by anon/authenticated';
   END IF;
 END $$;
 
 commit;
 
--- (R) Rollback — 별도 실행. 아래 조회가 0행일 때만.
+-- (R) Rollback — 별도 실행(정식 pack 은 forward-only). 아래 조회가 0행일 때만.
 -- select mentor_student_room_id, author_id, count(*) from public.connection_notes
 --   group by 1, 2 having count(*) > 1;
 -- alter table public.connection_notes
 --   add constraint connection_notes_room_author_unique unique (mentor_student_room_id, author_id);
 -- drop index if exists public.idx_cn_room_created;
--- (F 채택 시) supabase/sql/085_connection_notes_author_rls.sql 의 cn_update/cn_delete 원문 재적용,
---   drop trigger if exists trg_cn_created_at_immutable on public.connection_notes;
---   drop function if exists public.connection_notes_forbid_created_at_change();
+-- comment on table public.connection_notes is null;
+-- [F] drop trigger if exists trg_cn_created_at_immutable on public.connection_notes;
+-- [F] drop function if exists public.connection_notes_forbid_created_at_change();
+-- [F] supabase/sql/085_connection_notes_author_rls.sql 의 cn_update(:43-63)·cn_delete(:67-78) 원문 재생성.
+```
+
+### 12-2. `191_mobile_app_version_policy_min_build_<N>.sql` (③ 시점에만 머지)
+
+```sql
+-- =============================================================================
+-- 191_mobile_app_version_policy_min_build_<N>.sql  (2026-MM-DD)
+--
+-- Purpose: 연결노트 타임라인 전환(190) 후속 — 구앱(build < N, upsertMyNote 의
+--   '최신 1건 UPDATE + 나머지 DELETE' 경로)을 강제 업데이트로 차단한다.
+--   mobile_app_version_policies.min_supported_build 를 N 으로 상향(앱은
+--   currentBuild < min_supported_build 면 GateForceUpdate — version_gate_decision.dart:38).
+--   latest_build 도 함께 N 이상으로 맞춰 CHECK mavp_latest_ge_min_chk(latest >= min) 를 지킨다.
+--
+-- Base: supabase/sql/162_mobile_app_version_policy.sql (테이블·RPC·seed) ·
+--   선례 supabase/migrations/20260806075353_mobile_version_policy_latest_build_16.sql (greatest 멱등 UPDATE).
+--
+-- Apply: db-apply-pending — ★ pending 전량이 함께 적용되므로 이 파일은 신앱 build N 이
+--   양 스토어에 게시된 뒤(§9 ③ 시점)에만 main 에 병합한다. 데이터만 변경(DDL 0).
+--   pack 등재: supabase/baseline/post_ledger_backfills/2026MMDD100100_mobile_app_version_policy_min_build_<N>.sql
+--
+-- Rollback: update public.mobile_app_version_policies set min_supported_build = <적용 전 값> …
+--   (적용 전 값은 apply 직전 select 로 기록해 둔다). 데이터만.
+-- =============================================================================
+
+begin;
+
+-- 멱등: 이미 N 이상이면 no-op. 낮추지 않는다(greatest). trg_mavp_set_updated 가 updated_at 을
+-- 채우지만 선례(20260806075353)와 같이 명시한다.
+update public.mobile_app_version_policies
+   set min_supported_build  = greatest(min_supported_build, N),
+       latest_build         = greatest(coalesce(latest_build, 0), N),
+       minimum_version_name = '<신앱 표시 버전, 예 1.0.1>',
+       updated_at           = now()
+ where platform in ('ios', 'android')
+   and (min_supported_build < N
+        or coalesce(latest_build, 0) < N
+        or minimum_version_name is distinct from '<신앱 표시 버전, 예 1.0.1>');
+
+-- 자가 검증 — 두 플랫폼 행이 존재하고 min_supported_build >= N. 행 부재는 게이트 무효
+-- (RPC 가 min=1 기본값을 돌려준다 — 162) 이므로 실패로 본다. 클린 재생에도 162 seed 2행이 있다.
+DO $$
+DECLARE v_n int;
+BEGIN
+  SELECT count(*) INTO v_n FROM public.mobile_app_version_policies
+   WHERE platform IN ('ios', 'android')
+     AND min_supported_build >= N
+     AND latest_build >= min_supported_build;
+  IF v_n <> 2 THEN
+    RAISE EXCEPTION '191_VERIFY: version policy rows with min_supported_build >= N: % (expected 2)', v_n;
+  END IF;
+END $$;
+
+commit;
 ```
 
 검증 조회(적용 후):
 ```sql
 select conname, pg_get_constraintdef(oid) from pg_constraint
  where conrelid = 'public.connection_notes'::regclass order by 1;
-select indexname from pg_indexes where schemaname = 'public' and tablename = 'connection_notes' order by 1;
-select policyname, cmd, qual from pg_policies where tablename = 'connection_notes' order by cmd;
+select indexname, indexdef from pg_indexes where schemaname = 'public' and tablename = 'connection_notes' order by 1;
+select policyname, cmd, qual, with_check from pg_policies where tablename = 'connection_notes' order by cmd;
+select tgname from pg_trigger where tgrelid = 'public.connection_notes'::regclass and not tgisinternal;
+select platform, min_supported_build, latest_build, minimum_version_name from public.mobile_app_version_policies;
 ```
