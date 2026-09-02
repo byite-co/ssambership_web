@@ -126,6 +126,31 @@ const DICTIONARY = {
     superseded: { label: "대체됨", tone: "neutral" },
   },
 
+  /**
+   * CHECK mentor_school_verifications_school_tier_check (baseline · 079 로 '건동홍' 추가) — 6값.
+   * 코드가 이미 한글 표기라 라벨 = 코드. 멘토 승인 작업대 ③ 학교 등급 드롭다운의 허용 목록(PR-2 §6).
+   */
+  "mentor_school_verifications.school_tier": {
+    서연고: { label: "서연고", tone: "info" },
+    서성한: { label: "서성한", tone: "info" },
+    중경외시: { label: "중경외시", tone: "info" },
+    건동홍: { label: "건동홍", tone: "info" },
+    그외: { label: "그외", tone: "neutral" },
+    미분류: { label: "미분류", tone: "neutral" },
+  },
+
+  /** CHECK mentor_school_verifications_verified_major_category_check (baseline 인라인) — 8값. 라벨 = 코드. */
+  "mentor_school_verifications.verified_major_category": {
+    메디컬: { label: "메디컬", tone: "neutral" },
+    교육: { label: "교육", tone: "neutral" },
+    인문: { label: "인문", tone: "neutral" },
+    사회상경: { label: "사회상경", tone: "neutral" },
+    자연: { label: "자연", tone: "neutral" },
+    공학: { label: "공학", tone: "neutral" },
+    예체능: { label: "예체능", tone: "neutral" },
+    기타: { label: "기타", tone: "neutral" },
+  },
+
   /** CHECK users_status_allowed (security_identity_profile_lockdown) — 4값. 라벨은 users/page.tsx(M16). */
   "users.status": {
     active: { label: "정상", tone: "success" },

@@ -12,7 +12,8 @@
  * 클라이언트 폼(예: DisputeEscrowSplitPanel)은 `onConfirm` 을 넘기면 폼 제출 대신 그 함수를 호출한다.
  *
  * level 별 요구는 `lib/admin/adminConfirmPolicy.ts` 가 결정한다. `immediate` 는 다이얼로그 없이 버튼 그대로.
- * (PR-1: 신설만 — 아직 어떤 액션에도 연결하지 않는다.)
+ * 사유 프리셋(`reasonPresets`, PR-2 §7): 다이얼로그가 칩을 그리고 칩 클릭 = 그 사유로 즉시 확인 → 같은 폼으로 제출된다.
+ * (PR-1: 신설 · PR-2: 멘토 승인 작업대의 승인·반려·재제출·등급 확정에 연결.)
  */
 import { useEffect, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
@@ -47,6 +48,10 @@ type CommonProps = ButtonPassthrough & {
   details?: AdminConfirmDetail[];
   /** 제출 중 트리거 버튼 문구(기본: children 그대로) */
   pendingLabel?: ReactNode;
+  /** 사유 프리셋 — reasonRequired 와 함께 쓴다. 칩 클릭 = 그 사유로 즉시 확인(타이핑 없이 한 번 더 클릭으로 끝) */
+  reasonPresets?: readonly string[];
+  /** 프리셋 모드에서 텍스트 필드를 여는 칩 문구(기본 "직접 입력") */
+  customReasonLabel?: string;
 };
 
 export type ConfirmSubmitButtonProps =
@@ -74,6 +79,8 @@ export function ConfirmSubmitButton(props: ConfirmSubmitButtonProps) {
     reasonPlaceholder,
     details,
     pendingLabel,
+    reasonPresets,
+    customReasonLabel,
     formAction,
     name,
     value,
@@ -88,6 +95,7 @@ export function ConfirmSubmitButton(props: ConfirmSubmitButtonProps) {
   const requirements = resolveAdminConfirmRequirements({ level, reasonRequired, confirmText, title: dialogTitle });
 
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const hiddenReasonRef = useRef<HTMLInputElement>(null);
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [submitting, setSubmitting] = useState(false);
@@ -150,8 +158,10 @@ export function ConfirmSubmitButton(props: ConfirmSubmitButtonProps) {
     buttonRef.current?.focus();
   };
 
-  const handleConfirm = async () => {
-    const trimmedReason = reason.trim();
+  const handleConfirm = async (presetReason?: string) => {
+    // 프리셋 칩 클릭은 사유 상태가 반영(re-render)되기 전에 제출되므로 인자로 받은 사유를 우선한다.
+    const trimmedReason = (presetReason ?? reason).trim();
+    if (presetReason !== undefined) setReason(presetReason);
     setError(null);
 
     if (onConfirm) {
@@ -173,6 +183,8 @@ export function ConfirmSubmitButton(props: ConfirmSubmitButtonProps) {
       setError("연결된 폼을 찾을 수 없습니다.");
       return;
     }
+    // hidden input 은 제어 컴포넌트라 상태 반영 전에는 옛 값이다 — 제출 직전에 DOM 값을 직접 맞춘다.
+    if (hiddenReasonRef.current) hiddenReasonRef.current.value = trimmedReason;
     setSubmitting(true);
     try {
       // submitter 를 넘겨 이 버튼의 formAction·name·value 가 그대로 적용되게 한다.
@@ -215,7 +227,7 @@ export function ConfirmSubmitButton(props: ConfirmSubmitButtonProps) {
         {pending && pendingLabel ? pendingLabel : children}
       </button>
       {requirements.reasonRequired && !onConfirm ? (
-        <input type="hidden" name={reasonFieldName} value={reason} form={form} />
+        <input type="hidden" name={reasonFieldName} value={reason} ref={hiddenReasonRef} form={form} />
       ) : null}
       <AdminConfirmDialog
         open={open}
@@ -228,10 +240,12 @@ export function ConfirmSubmitButton(props: ConfirmSubmitButtonProps) {
         reasonPlaceholder={reasonPlaceholder}
         reason={reason}
         onReasonChange={setReason}
+        reasonPresets={reasonPresets}
+        customReasonLabel={customReasonLabel}
         pending={pending}
         errorMessage={error}
         onCancel={closeAndRestoreFocus}
-        onConfirm={() => void handleConfirm()}
+        onConfirm={(presetReason) => void handleConfirm(presetReason)}
       />
     </>
   );

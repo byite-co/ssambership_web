@@ -650,61 +650,8 @@ export async function countAdminDisputesByStatus(
   return out;
 }
 
-/** mentor_profiles 페이지네이션 — 멘토 승인 화면. users join 검색을 위해 후처리(메모리). */
-export async function loadAdminMentorApprovalsListPaged(
-  supabase: SupabaseClient,
-  args: { search: string; status: string; page: number; pageSize: number }
-): Promise<AdminListPagedResult> {
-  const db = mentorProfilesAdminReadClient(supabase);
-  const TABLE = "mentor_profiles";
-  const from = Math.max(0, (args.page - 1) * args.pageSize);
-  const to = from + args.pageSize - 1;
-  const applyFilters = (q: PgRestQueryBuilder): PgRestQueryBuilder => {
-    let r = q;
-    if (args.status && args.status !== "all") r = r.eq("verification_status", args.status);
-    if (args.search) {
-      const s = args.search.replace(/[%_,]/g, " ").trim();
-      if (s) {
-        const orParts: string[] = [
-          `user_id.ilike.${s}%`,
-          `university_name.ilike.%${s}%`,
-          `department_name.ilike.%${s}%`,
-          `high_school_name.ilike.%${s}%`,
-          `intro_line.ilike.%${s}%`,
-        ];
-        r = r.or(orParts.join(","));
-      }
-    }
-    return r;
-  };
-  const paged = await runPagedListQuery({ client: db, table: TABLE, applyFilters, from, to });
-  return {
-    table: TABLE,
-    sourceNote: "최근 멘토 등록 순.",
-    rows: paged.rows,
-    error: paged.errorMsg,
-    keyHints: { status: "verification_status" },
-    totalCount: paged.count,
-  };
-}
-
-export async function countAdminMentorApprovalsByStatus(
-  supabase: SupabaseClient
-): Promise<Record<string, number>> {
-  const db = mentorProfilesAdminReadClient(supabase);
-  const out: Record<string, number> = {};
-  const statuses = ["pending", "submitted", "under_review", "approved", "rejected"];
-  const all = await db.from("mentor_profiles").select("*", { count: "exact", head: true });
-  out.all = headCountOrLoggedZero(all.count, all.error, "mentor_profiles all");
-  for (const s of statuses) {
-    const r = await db
-      .from("mentor_profiles")
-      .select("*", { count: "exact", head: true })
-      .eq("verification_status", s);
-    out[s] = headCountOrLoggedZero(r.count, r.error, `mentor_profiles.verification_status=${s}`);
-  }
-  return out;
-}
+// PR-2: loadAdminMentorApprovalsListPaged · countAdminMentorApprovalsByStatus 삭제 — 멘토 승인 화면의 목록·탭 집계 정본은
+// lib/admin/mentorApprovalWorkbenchQueries.ts(서버 검색 users 조인 · status 탭 · 대기 우선 페이징)로 이관했다. 다른 호출부 0건 실측.
 
 /** mentor_academic_record_change_requests 페이지네이션. */
 export async function loadAdminAcademicRecordChangesListPaged(

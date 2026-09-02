@@ -81,6 +81,16 @@ const FIXTURE: Record<
     constraint: { name: "mentor_school_verifications_status_check", file: BASELINE },
     inventory: true,
   },
+  "mentor_school_verifications.school_tier": {
+    values: ["서연고", "서성한", "중경외시", "건동홍", "그외", "미분류"],
+    constraint: { name: "mentor_school_verifications_school_tier_check", file: BASELINE },
+    inventory: true,
+  },
+  "mentor_school_verifications.verified_major_category": {
+    // create table 인라인 CHECK — 인벤토리로만 검증
+    values: ["메디컬", "교육", "인문", "사회상경", "자연", "공학", "예체능", "기타"],
+    inventory: true,
+  },
   "users.status": {
     values: ["active", "suspended", "banned", "deleted"],
     constraint: { name: "users_status_allowed", file: SQL_USERS_LOCKDOWN },
@@ -145,7 +155,7 @@ function checkValuesFromInventory(table: string, column: string): string[] | nul
 
 // ── ① 사전 == 픽스처 ───────────────────────────────────────────────────────────
 
-test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼)", () => {
+test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼 + PR-2 학교 등급·계열 2개)", () => {
   assert.deepEqual(sorted(ADMIN_STATUS_DICTIONARY_KEYS), sorted(Object.keys(FIXTURE)));
 });
 

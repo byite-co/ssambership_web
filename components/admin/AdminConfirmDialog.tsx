@@ -12,6 +12,10 @@
  *   → Enter 한 번으로는 실행되지 않는다.
  * - Esc·백드롭 클릭으로 닫힘(pending 중 제외) · 포커스 트랩 · aria-labelledby/describedby.
  *
+ * 사유 프리셋(PR-2 §7, 선택): `reasonPresets` 를 넘기면 사유 입력 자리에 칩을 그린다. **칩 클릭 = 그 사유로 즉시 확인**
+ * (타이핑 없이 한 번 더 클릭으로 끝난다). "직접 입력" 칩만 텍스트 필드를 연다. 프리셋 모드에서는 초기 포커스를
+ * 취소 버튼에 둔다 — 칩은 사실상 확인 버튼이므로 Enter 한 번으로 실행되면 안 된다.
+ *
  * 판정 로직은 `lib/admin/adminConfirmPolicy.ts`(순수)에 있고, 이 파일은 렌더만 담당한다.
  */
 import { createPortal } from "react-dom";
@@ -42,10 +46,15 @@ export type AdminConfirmDialogProps = {
   /** 사유 입력값(부모가 hidden input 으로 폼에 실어야 하므로 부모 상태) */
   reason: string;
   onReasonChange: (value: string) => void;
+  /** 사유 프리셋 — reasonRequired 일 때만 의미 있다. 칩 클릭은 `onConfirm(preset)` 으로 즉시 확인한다. */
+  reasonPresets?: readonly string[];
+  /** 프리셋 모드에서 텍스트 필드를 여는 칩 문구(기본 "직접 입력") */
+  customReasonLabel?: string;
   pending: boolean;
   errorMessage?: string | null;
   onCancel: () => void;
-  onConfirm: () => void;
+  /** presetReason 이 있으면 그 사유로 확인(칩 클릭). 없으면 부모 상태의 reason 으로 확인. */
+  onConfirm: (presetReason?: string) => void;
 };
 
 const CONFIRM_BUTTON_TONE: Record<AdminConfirmTone, string> = {
@@ -58,6 +67,12 @@ const TITLE_TONE: Record<AdminConfirmTone, string> = {
   danger: "text-red-700",
   warning: "text-amber-700",
   neutral: "text-slate-900",
+};
+
+const PRESET_CHIP_TONE: Record<AdminConfirmTone, string> = {
+  danger: "border-red-300 text-red-800 hover:bg-red-50",
+  warning: "border-amber-300 text-amber-900 hover:bg-amber-50",
+  neutral: "border-slate-300 text-slate-800 hover:bg-slate-50",
 };
 
 const FOCUSABLE_SELECTOR =
@@ -75,6 +90,8 @@ export function AdminConfirmDialog(props: AdminConfirmDialogProps) {
     reasonPlaceholder = "처리 사유를 입력해 주세요.",
     reason,
     onReasonChange,
+    reasonPresets,
+    customReasonLabel = "직접 입력",
     pending,
     errorMessage,
     onCancel,
@@ -92,17 +109,26 @@ export function AdminConfirmDialog(props: AdminConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
 
   const [typedConfirmText, setTypedConfirmText] = useState("");
+  const [customReasonOpen, setCustomReasonOpen] = useState(false);
 
-  // 열림 전이마다 재입력 필드를 비운다 — effect 가 아니라 렌더 중 상태 조정(React "adjusting state on prop change").
+  const presets: readonly string[] = requirements.reasonRequired && Array.isArray(reasonPresets) ? reasonPresets : [];
+  const hasPresets = presets.length > 0;
+  // 프리셋 모드: 칩이 곧 확인이다. 텍스트 필드·확인 버튼은 "직접 입력" 을 누른 뒤에만 나온다.
+  const presetsMode = hasPresets && !customReasonOpen;
+
+  // 열림 전이마다 재입력 필드·직접 입력 모드를 비운다 — effect 가 아니라 렌더 중 상태 조정(React "adjusting state on prop change").
   const [prevOpen, setPrevOpen] = useState(open);
   if (open !== prevOpen) {
     setPrevOpen(open);
-    if (open) setTypedConfirmText("");
+    if (open) {
+      setTypedConfirmText("");
+      setCustomReasonOpen(false);
+    }
   }
 
-  // 열릴 때 초기 포커스를 준다 — 확인 버튼에는 절대 두지 않는다.
+  // 열릴 때 초기 포커스를 준다 — 확인 버튼에는 절대 두지 않는다. 프리셋 모드에서는 칩도 확인이므로 취소 버튼으로.
   // (requirements 객체가 아니라 문자열 판정값에 의존해, 부모 재렌더마다 포커스가 튀지 않게 한다)
-  const initialFocus = adminConfirmInitialFocus(requirements);
+  const initialFocus = presetsMode ? "cancel" : adminConfirmInitialFocus(requirements);
   useEffect(() => {
     if (!open) return;
     const el =
@@ -195,10 +221,48 @@ export function AdminConfirmDialog(props: AdminConfirmDialogProps) {
           </dl>
         ) : null}
 
-        {requirements.reasonRequired ? (
+        {requirements.reasonRequired && hasPresets ? (
           <div className="mt-4">
-            <label htmlFor={reasonId} className="text-xs font-bold text-slate-700">
+            <p className="text-xs font-bold text-slate-700">
               {reasonLabel} <span className="text-red-600">(필수)</span>
+            </p>
+            <div className="mt-2 flex flex-wrap gap-2" role="group" aria-label={`${reasonLabel} 프리셋`}>
+              {presets.map((preset) => (
+                <button
+                  key={preset}
+                  type="button"
+                  disabled={pending}
+                  onClick={() => onConfirm(preset)}
+                  className={cn(
+                    "rounded-xl border bg-white px-3 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60",
+                    PRESET_CHIP_TONE[requirements.tone]
+                  )}
+                >
+                  {preset}
+                </button>
+              ))}
+              {!customReasonOpen ? (
+                <button
+                  type="button"
+                  disabled={pending}
+                  onClick={() => {
+                    setCustomReasonOpen(true);
+                    requestAnimationFrame(() => reasonRef.current?.focus());
+                  }}
+                  className="rounded-xl border border-dashed border-slate-300 bg-white px-3 py-2 text-sm font-bold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {customReasonLabel}
+                </button>
+              ) : null}
+            </div>
+            {presetsMode ? <p className="mt-2 text-[11px] text-slate-500">사유를 누르면 바로 처리됩니다.</p> : null}
+          </div>
+        ) : null}
+
+        {requirements.reasonRequired && !presetsMode ? (
+          <div className={hasPresets ? "mt-3" : "mt-4"}>
+            <label htmlFor={reasonId} className="text-xs font-bold text-slate-700">
+              {hasPresets ? customReasonLabel : reasonLabel} <span className="text-red-600">(필수)</span>
             </label>
             <textarea
               id={reasonId}
@@ -254,18 +318,24 @@ export function AdminConfirmDialog(props: AdminConfirmDialogProps) {
           >
             {cancelLabel}
           </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            disabled={!canConfirm}
-            aria-disabled={!canConfirm}
-            className={cn(
-              "flex-1 rounded-xl py-2.5 text-sm font-bold transition disabled:cursor-not-allowed",
-              CONFIRM_BUTTON_TONE[requirements.tone]
-            )}
-          >
-            {pending ? "처리 중…" : confirmLabel}
-          </button>
+          {!presetsMode ? (
+            <button
+              type="button"
+              onClick={() => onConfirm()}
+              disabled={!canConfirm}
+              aria-disabled={!canConfirm}
+              className={cn(
+                "flex-1 rounded-xl py-2.5 text-sm font-bold transition disabled:cursor-not-allowed",
+                CONFIRM_BUTTON_TONE[requirements.tone]
+              )}
+            >
+              {pending ? "처리 중…" : confirmLabel}
+            </button>
+          ) : pending ? (
+            <span className="flex flex-1 items-center justify-center rounded-xl bg-slate-100 py-2.5 text-sm font-bold text-slate-500">
+              처리 중…
+            </span>
+          ) : null}
         </div>
       </div>
     </div>,

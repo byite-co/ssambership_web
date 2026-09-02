@@ -76,13 +76,24 @@ function walk(dir: string, out: string[]) {
   return out;
 }
 
-test("PR-1 범위: 아직 어떤 관리자 화면도 AdminPageLayout/AdminStatusPill 을 import 하지 않는다(PR-2 부터 이관)", () => {
+/**
+ * PR-2 이관 범위: AdminPageLayout · AdminStatusPill 을 import 하는 파일은 멘토 승인 작업대 한 화면(+그 부품)뿐이다.
+ * 다른 관리자 화면은 아직 이관하지 않았다(PR-3 이후). 새 화면을 이관할 때 이 허용 목록을 갱신한다.
+ */
+const PR2_LAYOUT_PILL_IMPORTERS = [
+  "app/(admin)/admin/(console)/mentor-approval/page.tsx",
+  "components/admin/MentorApprovalQueueList.tsx",
+  "components/admin/MentorApprovalReviewPanel.tsx",
+];
+
+test("PR-2 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자 파일은 멘토 승인 작업대뿐이다", () => {
   const files = [...walk(join(ROOT, "app", "(admin)"), []), ...walk(join(ROOT, "components", "admin"), [])];
   const importers = files
     .filter((f) => !/components\/admin\/(AdminPageLayout|AdminStatusPill)\.tsx$/.test(f))
     .filter((f) => /components\/admin\/(AdminPageLayout|AdminStatusPill)"/.test(readFileSync(f, "utf8")))
-    .map((f) => f.slice(ROOT.length));
-  assert.deepEqual(importers, []);
+    .map((f) => f.slice(ROOT.length).replace(/\\/g, "/"))
+    .sort();
+  assert.deepEqual(importers, [...PR2_LAYOUT_PILL_IMPORTERS].sort());
 });
 
 test("PageScaffold 를 쓰는 관리자 화면 14곳은 그대로다(화면 이관 0)", () => {

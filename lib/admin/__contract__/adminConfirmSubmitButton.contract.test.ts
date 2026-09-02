@@ -184,8 +184,13 @@ test("ConfirmSubmitButton: 버튼 교체형 — formAction/name/value/form 보�
   assert.ok(src.includes("onConfirm?: (reason?: string) => Promise<void>"));
 });
 
-test("PR-1 범위: 아직 어떤 관리자 화면·액션도 ConfirmSubmitButton/AdminConfirmDialog 를 import 하지 않는다", () => {
-  // 화면 이관은 PR-2(멘토 승인)부터다. 이 tripwire 는 PR-2 에서 의도적으로 갱신한다.
+/**
+ * PR-2 이관 범위: ConfirmSubmitButton 을 쓰는 관리자 파일은 멘토 승인 작업대의 결정 영역·심사 패널뿐이다.
+ * AdminConfirmDialog 를 직접 import 하는 곳은 ConfirmSubmitButton 자신만이다(자체 모달 금지).
+ */
+const PR2_CONFIRM_IMPORTERS = ["components/admin/MentorApprovalDecisionBar.tsx", "components/admin/MentorApprovalReviewPanel.tsx"];
+
+test("PR-2 범위: ConfirmSubmitButton 을 import 하는 관리자 파일은 멘토 승인 작업대뿐이고, AdminConfirmDialog 직접 import 는 없다", () => {
   const files: string[] = [];
   const walk = (dir: string) => {
     for (const name of readdirSync(dir)) {
@@ -196,12 +201,29 @@ test("PR-1 범위: 아직 어떤 관리자 화면·액션도 ConfirmSubmitButton
   };
   walk(join(ROOT, "app", "(admin)"));
   walk(join(ROOT, "components", "admin"));
-  const importers = files.filter((f) => {
-    const rel = f.slice(ROOT.length);
-    if (/components\/admin\/(ConfirmSubmitButton|AdminConfirmDialog)\.tsx$/.test(rel)) return false;
-    const src = readFileSync(f, "utf8");
-    return /components\/admin\/(ConfirmSubmitButton|AdminConfirmDialog)"/.test(src);
-  });
-  // ConfirmSubmitButton 자신이 AdminConfirmDialog 를 import 하는 것만 허용
-  assert.deepEqual(importers.map((f) => f.slice(ROOT.length)), []);
+  const rel = (f: string) => f.slice(ROOT.length).replace(/\\/g, "/");
+  const confirmImporters = files
+    .filter((f) => !/components\/admin\/(ConfirmSubmitButton|AdminConfirmDialog)\.tsx$/.test(rel(f)))
+    .filter((f) => /components\/admin\/ConfirmSubmitButton"/.test(readFileSync(f, "utf8")))
+    .map(rel)
+    .sort();
+  assert.deepEqual(confirmImporters, [...PR2_CONFIRM_IMPORTERS].sort());
+  const dialogImporters = files
+    .filter((f) => !/components\/admin\/(ConfirmSubmitButton|AdminConfirmDialog)\.tsx$/.test(rel(f)))
+    .filter((f) => /components\/admin\/AdminConfirmDialog"/.test(readFileSync(f, "utf8")))
+    .map(rel);
+  assert.deepEqual(dialogImporters, [], "다이얼로그 직접 사용 금지 — ConfirmSubmitButton 경유");
+});
+
+test("사유 프리셋(PR-2): 칩 클릭은 onConfirm(preset) 으로 즉시 확인 · 프리셋 모드 초기 포커스는 취소 버튼 · 확인 버튼은 프리셋 모드에서 숨김", () => {
+  const src = read("components/admin/AdminConfirmDialog.tsx");
+  const code = stripComments(src);
+  assert.ok(src.includes("reasonPresets?: readonly string[];"), "reasonPresets prop");
+  assert.ok(src.includes("onConfirm: (presetReason?: string) => void;"), "onConfirm 이 프리셋 사유를 받는다");
+  assert.ok(code.includes("onClick={() => onConfirm(preset)}"), "칩 클릭 = 즉시 확인");
+  assert.ok(code.includes('presetsMode ? "cancel" : adminConfirmInitialFocus(requirements)'), "프리셋 모드 초기 포커스는 취소 버튼");
+  assert.ok(code.includes("{!presetsMode ? (") , "프리셋 모드에서는 확인 버튼을 그리지 않는다(칩이 확인)");
+  const button = read("components/admin/ConfirmSubmitButton.tsx");
+  assert.ok(button.includes("const handleConfirm = async (presetReason?: string) => {"), "ConfirmSubmitButton 이 프리셋 사유를 받는다");
+  assert.ok(button.includes("hiddenReasonRef.current.value = trimmedReason"), "제출 직전 hidden input 값을 프리셋으로 맞춘다");
 });

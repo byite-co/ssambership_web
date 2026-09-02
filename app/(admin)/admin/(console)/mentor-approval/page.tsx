@@ -1,160 +1,136 @@
-import { AdminMentorApprovalWorkspace } from "@/components/admin/AdminMentorApprovalWorkspace";
-import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
-import { AdminListPagination } from "@/components/admin/AdminListPagination";
+import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { MentorApprovalDocumentsPane } from "@/components/admin/MentorApprovalDocumentsPane";
+import { MentorApprovalQueueList } from "@/components/admin/MentorApprovalQueueList";
+import { MentorApprovalReviewPanel } from "@/components/admin/MentorApprovalReviewPanel";
+import { MentorApprovalShortcuts } from "@/components/admin/MentorApprovalShortcuts";
+import { MentorApprovalWorkbenchFrame } from "@/components/admin/MentorApprovalWorkbenchFrame";
 import { createClient } from "@/lib/supabase/server";
-import {
-  countAdminMentorApprovalsByStatus,
-  fetchAdminUsersDisplayByIds,
-  loadAdminMentorApprovalsListPaged,
-} from "@/lib/admin/adminQueries";
-import { mentorProfilesAdminReadClient } from "@/lib/admin/mentorProfilesAdminRead";
-import { parseAdminListParams } from "@/lib/admin/adminListParams";
-import {
-  fetchMentorSchoolVerificationProfilesByIds,
-  loadMentorSchoolVerificationReviewRows,
-} from "@/lib/admin/mentorSchoolVerificationReview";
-import {
-  findSchoolTierMappingForSchool,
-  loadSchoolClassificationCatalogs,
-  loadSchoolTierMappings,
-} from "@/lib/mentor/schoolClassificationCatalog";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
-import { resolveStudentIdImageSignedUrl } from "@/lib/storage/studentIdImageStorage";
+import { parseAdminListParams, type AdminListParams } from "@/lib/admin/adminListParams";
+import {
+  MENTOR_APPROVAL_DEFAULT_PAGE_SIZE,
+  MENTOR_APPROVAL_DEFAULT_TAB,
+  MENTOR_APPROVAL_SELECTED_PARAM,
+  buildMentorApprovalListUrl,
+  isMentorApprovalPendingTabStatus,
+  resolveMentorApprovalTab,
+} from "@/lib/admin/mentorApprovalQueue";
+import {
+  countMentorApprovalTabs,
+  countMentorDecisionsToday,
+  loadMentorApprovalDetail,
+  loadMentorApprovalQueue,
+} from "@/lib/admin/mentorApprovalWorkbenchQueries";
 
 type PageProps = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 
+/**
+ * 관리자 · 멘토 승인 — 작업대형 3분할(PR-2).
+ *
+ * 쿼리: `status`(탭) · `q`(검색) · `page` · `mentor`(선택 지원자). 구 `filter` 키는 쓰지 않는다.
+ * 목록·검색·탭은 전부 서버 조회다. 상세는 선택 1건만 조회한다.
+ * 결정(승인·반려·재제출) 후 서버 액션은 `?ok=…` 로 돌아오고 선택이 비므로 첫 대기 건이 자동 선택된다.
+ * (admin)/layout.tsx + (console)/layout.tsx 의 이중 requireRole("admin") 가드 아래에 있다.
+ */
 export default async function AdminMentorApprovalPage(props: PageProps) {
   const sp = (await props.searchParams) ?? {};
-  const filter = typeof sp.filter === "string" ? sp.filter : "all";
-  const errParam = sp.error;
-  const okParam = sp.ok;
-  const flashErr =
-    typeof errParam === "string" ? (toAdminDisplayError(errParam, "mentorApprovals") ?? "처리에 실패했습니다.") : null;
+  const rawParams = parseAdminListParams(sp, {
+    defaultPageSize: MENTOR_APPROVAL_DEFAULT_PAGE_SIZE,
+    defaultStatus: MENTOR_APPROVAL_DEFAULT_TAB,
+  });
+  const tab = resolveMentorApprovalTab(rawParams.status);
+  const selectedParam = typeof sp[MENTOR_APPROVAL_SELECTED_PARAM] === "string" ? String(sp[MENTOR_APPROVAL_SELECTED_PARAM]).trim() : "";
+  // 선택 지원자 키는 탭·검색·페이지 링크에 실리지 않게 목록 파라미터에서 뺀다.
+  const { [MENTOR_APPROVAL_SELECTED_PARAM]: _selectedExtra, ...extraWithoutSelected } = rawParams.extra;
+  const listParams: AdminListParams = { ...rawParams, status: tab, extra: extraWithoutSelected };
+
+  const okParam = typeof sp.ok === "string" ? sp.ok : null;
+  const errParam = typeof sp.error === "string" ? sp.error : null;
+  const flashErr = errParam ? (toAdminDisplayError(errParam, "mentorApprovals") ?? "처리에 실패했습니다.") : null;
   const flashOk =
     okParam === "approve"
-      ? "승인했습니다."
+      ? "승인했습니다. 다음 대기 건으로 이동했습니다."
       : okParam === "reject"
-        ? "반려했습니다."
+        ? "반려했습니다. 다음 대기 건으로 이동했습니다."
         : okParam === "documents"
-          ? "추가 서류를 요청했습니다."
-          : null;
-
-  const schoolFlashOk =
-    okParam === "school-approve"
-      ? "학교·전공 인증을 승인했습니다."
-      : okParam === "school-reject"
-        ? "학교·전공 인증을 반려했습니다."
-        : okParam === "school-resubmit"
-          ? "학교·전공 인증 재제출을 요청했습니다."
-          : null;
-  const flashOkMessage = schoolFlashOk ?? flashOk;
+          ? "재제출을 요청했습니다. 다음 대기 건으로 이동했습니다."
+          : okParam === "school-approve"
+            ? "학교 등급을 확정했습니다."
+            : okParam === "school-reject"
+              ? "학교·전공 인증을 반려했습니다."
+              : okParam === "school-resubmit"
+                ? "학교·전공 인증 재제출을 요청했습니다."
+                : null;
 
   const supabase = await createClient();
-  const params = parseAdminListParams(sp, { defaultPageSize: 25, defaultStatus: "pending" });
-  const [list, byStatus, schoolVerificationList, classificationCatalogs, schoolTierMappings] = await Promise.all([
-    loadAdminMentorApprovalsListPaged(supabase, params),
-    countAdminMentorApprovalsByStatus(supabase),
-    loadMentorSchoolVerificationReviewRows(supabase, 50),
-    loadSchoolClassificationCatalogs(supabase),
-    loadSchoolTierMappings(supabase),
+  const [queue, counts] = await Promise.all([
+    loadMentorApprovalQueue(supabase, { tab, search: listParams.search, page: listParams.page, pageSize: listParams.pageSize }),
+    countMentorApprovalTabs(supabase),
   ]);
-  const MENTOR_APPROVAL_BASE_PATH = "/admin/mentor-approval";
-  const statusTabs = [
-    { value: "pending", label: "대기", count: byStatus.pending ?? 0 },
-    { value: "submitted", label: "제출됨", count: byStatus.submitted ?? 0 },
-    { value: "under_review", label: "검토 중", count: byStatus.under_review ?? 0 },
-    { value: "approved", label: "승인", count: byStatus.approved ?? 0 },
-    { value: "rejected", label: "반려", count: byStatus.rejected ?? 0 },
-    { value: "all", label: "전체", count: byStatus.all ?? 0 },
-  ];
-  // [보안 주석] service_role로 RLS 우회
-  // 이 페이지는 (admin)/layout.tsx + (admin)/(console)/layout.tsx
-  // 이중 requireRole("admin") 가드로 보호됨.
-  // service_role 사용은 관리자 업무상 의도된 것임.
-  const readDb = mentorProfilesAdminReadClient(supabase);
-  const schoolVerificationMentorIds = schoolVerificationList.rows.map((r) => r.mentor_id).filter(Boolean);
-  const userIds = [
-    ...list.rows.map((r) => String((r as Record<string, unknown>).user_id ?? "").trim()).filter(Boolean),
-    ...schoolVerificationMentorIds,
-  ];
-  const userMap = await fetchAdminUsersDisplayByIds(readDb, userIds);
-  const userById: Record<string, { nickname: string | null; full_name: string | null; email: string | null }> = {};
-  userMap.forEach((v, k) => {
-    userById[k] = v;
-  });
-  const schoolVerificationProfileByMentorId = await fetchMentorSchoolVerificationProfilesByIds(
-    readDb,
-    schoolVerificationMentorIds
-  );
-  const schoolTierSuggestionByVerificationId: Record<
-    string,
-    { schoolName: string; schoolTierCode: string; schoolTierLabel: string; note: string | null }
-  > = {};
-  for (const row of schoolVerificationList.rows) {
-    const profile = schoolVerificationProfileByMentorId[row.mentor_id] ?? null;
-    const mapping = findSchoolTierMappingForSchool(
-      schoolTierMappings.rows,
-      row.verified_university_name || profile?.university_name
-    );
-    if (mapping) {
-      schoolTierSuggestionByVerificationId[row.id] = {
-        schoolName: mapping.school_name,
-        schoolTierCode: mapping.school_tier_code,
-        schoolTierLabel: classificationCatalogs.schoolTierLabels[mapping.school_tier_code] ?? mapping.school_tier_code,
-        note: mapping.note,
-      };
-    }
-  }
 
-  const studentIdImageSignedUrlByUserId: Record<string, string | null> = {};
-  // 저장값 유무를 함께 내려 "미제출"과 "signed URL 발급 실패"를 구분 표기한다.
-  const studentIdImageStoredByUserId: Record<string, boolean> = {};
-  for (const r of list.rows) {
-    const uid = String((r as Record<string, unknown>).user_id ?? "").trim();
-    if (!uid) continue;
-    const stored =
-      (typeof (r as Record<string, unknown>).student_id_image_url === "string" &&
-        (r as Record<string, unknown>).student_id_image_url) ||
-      null;
-    studentIdImageStoredByUserId[uid] = Boolean(stored && String(stored).trim());
-    studentIdImageSignedUrlByUserId[uid] = await resolveStudentIdImageSignedUrl(readDb, String(stored ?? ""));
-  }
-  const schoolVerificationSignedUrlById: Record<string, string | null> = {};
-  for (const r of schoolVerificationList.rows) {
-    schoolVerificationSignedUrlById[r.id] = await resolveStudentIdImageSignedUrl(readDb, r.document_storage_ref);
-  }
+  const selectedId = selectedParam || queue.rows[0]?.mentorUserId || null;
+  const needsTodayCount = queue.rows.length === 0 || counts.pending === 0;
+  const [detail, decisionsToday] = await Promise.all([
+    selectedId ? loadMentorApprovalDetail(supabase, selectedId) : Promise.resolve(null),
+    needsTodayCount ? countMentorDecisionsToday(supabase) : Promise.resolve(null),
+  ]);
+
+  const hrefFor = (id: string) =>
+    buildMentorApprovalListUrl(listParams, { page: listParams.page, extra: { [MENTOR_APPROVAL_SELECTED_PARAM]: id } });
+  const idx = queue.rows.findIndex((r) => r.mentorUserId === selectedId);
+  const prevHref = idx > 0 ? hrefFor(queue.rows[idx - 1].mentorUserId) : null;
+  const nextHref = idx >= 0 && idx < queue.rows.length - 1 ? hrefFor(queue.rows[idx + 1].mentorUserId) : null;
+  const nextPendingOnPage = queue.rows.slice(idx + 1).find((r) => isMentorApprovalPendingTabStatus(r.status)) ?? null;
+  const nextPendingHref = nextPendingOnPage
+    ? hrefFor(nextPendingOnPage.mentorUserId)
+    : counts.pending > 0
+      ? buildMentorApprovalListUrl(listParams, { status: MENTOR_APPROVAL_DEFAULT_TAB, search: "" })
+      : null;
+
+  const listSummary = `대기 ${counts.pending} / 전체 ${counts.all}`;
 
   return (
-    <div className="space-y-4">
-      {flashOkMessage ? <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">{flashOkMessage}</p> : null}
-      {flashErr ? <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">{flashErr}</p> : null}
-      <AdminListToolbar
-        basePath={MENTOR_APPROVAL_BASE_PATH}
-        params={params}
-        searchPlaceholder="멘토 ID/대학·학과/고교/소개로 검색"
-        statusTabs={statusTabs}
+    <AdminPageLayout
+      title="멘토 승인"
+      description="지원자 서류를 보고 신원·자격·학교 등급을 확인한 뒤 승인·반려·재제출을 결정합니다. 결정 후에는 다음 대기 건으로 이동합니다."
+    >
+      {flashOk ? (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900" role="status">
+          {flashOk}
+        </p>
+      ) : null}
+      {flashErr ? (
+        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900" role="alert">
+          처리 실패 — {flashErr} 대상은 그대로이니 다시 시도해 주세요.
+        </p>
+      ) : null}
+
+      <MentorApprovalWorkbenchFrame
+        listSummary={listSummary}
+        list={
+          <MentorApprovalQueueList
+            items={queue.rows}
+            params={listParams}
+            tab={tab}
+            counts={counts}
+            totalCount={queue.totalCount}
+            selectedId={selectedId}
+            error={queue.error}
+            identityError={queue.identityError}
+          />
+        }
+        viewer={
+          <MentorApprovalDocumentsPane
+            mentorUserId={detail?.mentorUserId ?? null}
+            mentorName={detail?.displayName ?? ""}
+            studentIdDocument={detail?.studentIdDocument ?? null}
+            schoolDocument={detail?.schoolDocument ?? null}
+          />
+        }
+        panel={<MentorApprovalReviewPanel detail={detail} flashError={flashErr} decisionsToday={decisionsToday} pendingCount={counts.pending} />}
       />
-      <AdminMentorApprovalWorkspace
-        rows={list.rows as Record<string, unknown>[]}
-        userById={userById}
-        studentIdImageSignedUrlByUserId={studentIdImageSignedUrlByUserId}
-        studentIdImageStoredByUserId={studentIdImageStoredByUserId}
-        schoolVerificationRows={schoolVerificationList.rows}
-        schoolVerificationLoadError={schoolVerificationList.error}
-        schoolVerificationProfileByMentorId={schoolVerificationProfileByMentorId}
-        schoolVerificationSignedUrlById={schoolVerificationSignedUrlById}
-        schoolTierOptions={classificationCatalogs.schoolTiers}
-        majorCategoryOptions={classificationCatalogs.majorCategories}
-        schoolTierSuggestionByVerificationId={schoolTierSuggestionByVerificationId}
-        statusFilter={filter}
-        statusColumn={list.keyHints.status ?? null}
-      />
-      <AdminListPagination
-        basePath={MENTOR_APPROVAL_BASE_PATH}
-        params={params}
-        totalCount={list.totalCount}
-        rowsOnPage={list.rows.length}
-      />
-    </div>
+
+      <MentorApprovalShortcuts prevHref={prevHref} nextHref={nextHref} nextPendingHref={nextPendingHref} canDecide={Boolean(detail?.decidable)} />
+    </AdminPageLayout>
   );
 }

@@ -97,7 +97,8 @@ const DIRECT_ACCESS_EXEMPT: Record<string, string> = {
   "lib/admin/adminUnifiedActivityLog.ts": "관리자 활동 로그 집계(관리자 클라이언트)",
   "lib/admin/mentorAcademicRecordChangeReview.ts": "관리자 학적 변경 심사 조회",
   "lib/admin/mentorAcademicRecordChangeReviewActions.ts": "관리자 학적 변경 심사 액션",
-  "lib/admin/mentorSchoolVerificationReview.ts": "관리자 재학 인증 심사 조회",
+  "lib/admin/mentorApprovalWorkbenchQueries.ts":
+    "관리자 멘토 승인 작업대 조회(PR-2 — readDb/서비스 롤 · 목록 검색 users 조인 · 상세 1건 · 이중 requireRole admin 가드 뒤)",
   "lib/reviews/reviewQueries.ts":
     "C1 ③-c: 과목 라벨은 뷰 우선 — 직접 읽기는 뷰 0행(미승인·삭제대기 멘토)의 본인 콘솔·관리자 폴백 전용(학생 세션은 종전대로 0행 무해). users 읽기는 후기 작성자명 — 학생 nickname 뷰 부재로 잔존(범위 밖, 타 학생은 '학*' 폴백)",
   "app/(mentor)/mentor/mypage/page.tsx": "본인 행 조회(user.id — 멘토 마이페이지 활동 상태 표시)",
