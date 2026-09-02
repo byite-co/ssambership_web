@@ -271,7 +271,9 @@ diff <(sed -n '579,621p' lib/features/community/ui/board/board_detail_screen.dar
 
 | 항목 | 값 |
 |---|---|
-| `CircularProgressIndicator` | **46줄 / 31파일**(dev 전용 `s3_data_inspector` 3줄 포함) |
+| `CircularProgressIndicator` | **46줄 / 31파일**(dev 전용 `s3_data_inspector` 3줄 포함). `Center(child: CPI…)` 형태는 33줄(게이트 화면 `color:` 포함) |
+| 스피너가 아닌 로딩 표시 (검토자 추가) | **정적 자리표시 idiom**: `board_post_card.dart:104, 117`(`_neutralBox()` — `elevated` 박스 + 이미지 아이콘) · `thumbnail_view.dart:36`(`_Placeholder`, `movie` 아이콘). `Image.network loadingBuilder` 5곳 중 3곳은 스피너(`board_detail:704`·`attachment_viewer:112`·`message_image_attachment:70`), 2곳은 정적 박스 — 같은 상황에 두 idiom |
+| 버튼 busy 상태 (검토자 추가) | `PrimaryButton` 라벨 교체 9곳 외에 **라벨 교체 없이 `onPressed: null`만** 하는 곳(`iq_detail:1380, 1190-1192` · `iq_create:521-524` · `question_list:167-169`)과 **`IconButton` 색만 회색으로** 바꾸는 댓글 전송 버튼 2곳(`board_detail:614` · `shortform_detail:672`, 코드 블록 동일) |
 | 분류 | (a) 전면 `const Center(child: CircularProgressIndicator())` **24** + 같은 Center를 `Padding`/`SizedBox`로 감싼 섹션 로더 **5** · (b) 인라인 `SizedBox(N, N, child: CPI(strokeWidth: 2))` **9**(크기 16×2 · 18×2 · 20×4 · 22×1) · (c) 목록 꼬리 페이징 **3** · (d) `Stack` 오버레이 **1** · 이미지 로더/`InteractiveViewer` 안 맨 스피너 **2** · 게이트 화면 브랜드 파랑(`color: ColorTokens.accent`) **2** |
 | `Skeleton`(`lib/design/widgets/skeleton.dart`) | 프로덕션 **0** · 테스트 **0** · dev 갤러리 3곳만. 단일 펄스 사각형이라 스피너 1:1 대체 불가(화면별 자리표시 구성이 필요) |
 | 버튼 진행 상태 | `PrimaryButton`/`SecondaryButton`에 `loading` 파라미터 **없음**. `PrimaryButton` 9곳이 `_busy ? '…중…' : label` 라벨 교체 + `onPressed: null`(문구 5종: 등록/수정/로그인/저장/처리 중). 텍스트형 로더 3곳 별도 |
@@ -292,8 +294,11 @@ diff <(sed -n '579,621p' lib/features/community/ui/board/board_detail_screen.dar
 | L7 | 린트: `skeleton.dart:44 withOpacity(t)` → `withValues(alpha: t)` | `lib/design/widgets/skeleton.dart:44` | 같은 0.35~0.70 펄스(`withOpacity`는 8bit 반올림, `withValues`는 float — 차이 ≤1/255, `theme.dart:61-62`가 이미 같은 trade). 프로덕션 소비자 0이어도 경고 없이 컴파일되게 | **기계적** | 없음 | 7 |
 | L8 | 전면 로더를 스피너 → `Skeleton`으로 재도장 | (L1 이후 `LoadingState` 한 곳) | **지금 하지 않는다.** L1/L2로 모든 (a)/(c) 사이트가 `LoadingState`를 거치게 되면 재도장은 파일 하나의 결정이 된다(`LoadingState({placeholder})` 또는 `LoadingState.list()`). 채택 시 24곳 중 어디를 스켈레톤으로 하고 어디를 스피너로 둘지(게이트·오버레이·댓글 섹션은 스피너 유지)도 골라야 한다 | **결정 #L-1** | `Skeleton`은 인스턴스마다 `AnimationController`(반복 애니메이션) — `pumpAndSettle`이 끝나지 않는 테스트가 생길 수 있어 화면별 검증 필요. `byType(CPI)` 단언 2건 갱신 | 8 |
 
+검토자 판정: L1~L8 전부 확인, 기계적 판정 동의. 누락 6곳(정적 자리표시 3 · busy 변형 3)은 7-1에 기록 — 이 축의 항목으로 올리려면 idiom 통일(정적 박스 ↔ 스피너)이 시각 변경이라 **결정 #L-7**로 둔다. L2의 named 생성자는 기본 패딩을 정확히 12 / vertical 16으로 두지 않으면 시각 변경이 된다는 지적 반영.
+
 ### 7-3. 결정 필요
 - **#L-1** 전면 로더 스피너 유지 vs 화면별 스켈레톤 설계 후 `LoadingState` 경유 재도장(L8, 시각 변경).
+- **#L-7** 이미지 로딩 idiom(정적 `elevated` 박스 2곳 vs 스피너 3곳) 통일 여부 — 어느 쪽으로든 시각 변경. `PrimaryButton` busy 처리(라벨 교체 9 / 비활성만 4 / `IconButton` 회색 2)의 통일은 #L-3과 함께.
 - **#L-2** 인라인 스피너 크기 16/18/20/22 그대로(`InlineSpinner(size:)`) vs 하나로 스냅(예: 버튼 슬롯 18·자리표시 20 — 16·22 사이트 2~4px 변화).
 - **#L-3** `PrimaryButton.loading` 렌더 (i)/(ii)/(iii) — (ii)/(iii)는 시각 변경 + 테스트 2줄 수정.
 - **#L-4** busy 문구 5종(등록/수정/로그인/저장/처리 중) 통일 여부 — 카피 변경.
@@ -431,6 +436,7 @@ grep -rn "byIcon(" test | grep -vE "_rounded" | wc -l                          #
 | L-2 | 인라인 스피너 크기 | 그대로 / 통일 | **그대로** |
 | L-3 · L-4 | `PrimaryButton.loading` · busy 문구 | (i)/(ii)/(iii) · 통일 | **보류** — 개편 트랙(시각·카피) |
 | L-5 · L-6 | 섹션 로더 named 생성자 · `color:` 노출 | — | **호출부 유지 · 노출** |
+| L-7 | 이미지 로딩 idiom(정적 박스 vs 스피너)·busy 변형 3종 통일 | 통일 / 그대로 | **그대로**(개편 트랙) |
 | D-1 | `Skeleton`·`SlideOverPanel` | 카탈로그 유지 / dev 이동 / 삭제 | **유지**(A) — 연결노트 개편이 쓸 수 있음 |
 | D-2 | 아이콘 계열 | 전량 `_rounded` / 혼용 11쌍만 / 그대로 | **11쌍만**(26곳 + 테스트) |
 | D-3 · D-4 · D-5 | `_ReadOnlyBadge` · `InitialAvatarLike` · `_EmptyQuestions` | 유지 / 스냅·확장 | **유지**(개명만) |
