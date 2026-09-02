@@ -21,7 +21,7 @@
 | 판정 | **기계적 35** (픽셀 동일, 승인만 받으면 진행) · **결정 31** (값이 바뀌거나 트리가 늘어나 §10에서 골라야 함) · **기록만 4** (바꾸지 않는 것을 명시) |
 | 검토 | 축 6개 전부 독립 검토자가 파일:줄·수치·"기계적" 판정을 반박 시도 — 항목 판정 뒤집힌 것 **2건**(I6 `AppTextField` → opt-in, D14(1) deprecation 승격 → 결정), 누락 편입 **38곳**, 줄 번호·수치 정정 **20여 건**. 결과가 각 절 말미 "검토자 판정"에 있다 |
 
-1. **"타이포 토큰 통일"은 기계적 스윕이 아니다.** 정본 `AppType`은 모든 스타일에 행간(`height` 1.25~1.45)과 고정폭 숫자를 넣지만 구 `AppTypography`와 인라인 `TextStyle`은 Material 기본(행간 1.43)을 상속한다. 그래서 구 토큰 28곳(IQ 4파일)의 치환은 **한 건도 픽셀 동일이 아니고**, 오너가 §3-3 매핑표를 승인해야 시작할 수 있다. 실제로 기계적으로 할 수 있는 것은 구 토큰 파일 삭제(T4) 하나다.
+1. **"타이포 토큰 통일"은 기계적 스윕이 아니다.** 정본 `AppType`은 모든 스타일에 행간(`height` 1.1~1.45 — `number` 1.1, 그 외 1.25~1.45)과 고정폭 숫자를 넣지만 구 `AppTypography`와 인라인 `TextStyle`은 Material 기본(행간 1.43)을 상속한다. 그래서 구 토큰 28곳(IQ 4파일)의 치환은 **한 건도 픽셀 동일이 아니고**, 오너가 §3-3 매핑표를 승인해야 시작할 수 있다. 실제로 기계적으로 할 수 있는 것은 구 토큰 파일 삭제(T4) 하나다.
 2. **기계적 물량은 간격과 공용 위젯 3종에 있다.** 스케일 위의 `EdgeInsets` 64곳·`SizedBox` 122곳(값 동일 토큰 치환), 오류 뷰 21곳 → `ErrorState` 1개, 입력창 17곳 → `appInputDecoration` 헬퍼 1개, 로딩 32+9곳 → `LoadingState`·`InlineSpinner`. 이 넷을 끝내면 화면마다 베낀 코드 약 300줄이 사라지고 픽셀은 하나도 안 움직인다.
 3. **결정 항목은 세 가지 질문으로 묶인다.** (i) 스케일 밖 값(반경 8/10/14/18 · 간격 2/6/10/14 · 입력 패딩 14/10/12 · FAB 여유 88/96 · 배너 그림자)에 **토큰을 신설**(픽셀 동일)할지 **가까운 값으로 스냅**(1~4px 이동)할지, (ii) 타이포 매핑표를 그대로 승인할지, (iii) 아이콘 계열(`_rounded` 48종 vs 비-rounded 40종 64회)을 통일할지. 나머지는 마이크로 위젯 4개의 거취다.
 4. **재발 방지는 린트가 아니라 grep이다.** `flutter_lints`에는 리터럴 `TextStyle`/`Colors`/미사용 public 위젯을 잡는 규칙이 없다. `deprecated_member_use`를 warning으로 승격하고(그래서 `withOpacity` 5곳이 CI를 통과해 살아남았다) CI에 grep 스텝을 두는 것이 정직한 가드다(D14).
@@ -53,10 +53,10 @@
 |---|---|
 | 정본 `AppType`(`lib/design/typography_tokens.dart`) 사용 | **216회 / 215줄 / 54파일** (`lib/design/` 밖; `settings_section.dart:209`가 한 줄에 2회) |
 | 구 `AppTypography`(`lib/design/tokens/typography.dart`) 사용 | **28곳 / 4파일** — 전부 개별질문(IQ): `iq_detail_screen` 15 · `iq_create_screen` 5(프로덕션 도달 불가 화면) · `iq_widgets` 5 · `mentor_iq_list_screen` 3. 토큰별 `caption` 21 · `body` 6 · `cardTitle` 1 · `titleLarge`/`title`/`sectionTitle`/`meta` **0** |
-| 두 체계의 구조적 차이 | `AppType`은 전 스타일에 **`height`(1.25~1.45)와 고정폭 숫자**를 넣고, `AppTypography`는 둘 다 없이 Material 3 기본(`bodyMedium` height 1.43 · letterSpacing 0.25)을 상속한다. 굵기도 다르다(w500/w700 vs w400/w600). `caption`은 색까지 다르다(`#475569` vs `#64748B`) |
+| 두 체계의 구조적 차이 | `AppType`은 전 스타일에 **`height`(1.1~1.45 — `number` 1.1, 그 외 1.25~1.45)와 고정폭 숫자**를 넣고, `AppTypography`는 둘 다 없이 Material 3 기본(`bodyMedium` height 1.43 · letterSpacing 0.25)을 상속한다. 굵기도 다르다(w500/w700 vs w400/w600). `caption`은 색까지 다르다(`#475569` vs `#64748B`) |
 | **결론** | **`AppTypography → AppType` 치환은 한 건도 픽셀 동일이 아니다.** 이 축은 기계적 스윕이 아니라 **매핑표 승인(결정 #T-1)** 이다 |
 | 인라인 `TextStyle(` (토큰 `copyWith` 제외, `lib/design/` 밖) | **32곳 / 24파일** — 오류 문구 `const TextStyle(color: ColorTokens.danger)` 크기 없음 **21** · danger+13px 3(dead 화면) · secondary 색만 2 · `Colors.white/white70` 2 · 크기 리터럴 3(12.5 / 12 / 12+w700) · 굵기만 w800 1 |
-| Pretendard 등록 굵기 | 400/500/600/700 4종(`pubspec.yaml`). **w800은 등록 밖** — `lib/design` 안에도 5곳(`typography.dart:13`, `quota_text.dart:27`, `chip_scroll.dart:74`, `initial_avatar.dart:45`, `primary_button.dart:47`) + 테스트 `board_filter_chip_test.dart:15`가 w800을 단언 |
+| Pretendard 등록 굵기 | 400/500/600/700 4종(`pubspec.yaml`). **w800은 등록 밖** — `lib/design` 안에도 5곳(`typography.dart:13`, `quota_text.dart:27`, `chip_scroll.dart:74`, `initial_avatar.dart:45`, `primary_button.dart:47`) + 테스트 `board_filter_chip_test.dart:30, 37`이 w800을 단언(`:14-15` 헬퍼 `weightOf`가 `Text.style.fontWeight`를 읽는다) |
 | 스타일 없는 `Text()` | 대략 130곳 이상(`Text(` 409줄 vs `style:` 277줄) — M3 기본 14/w400/h1.43. 전수 조사 안 함, 이 목록 범위 밖 |
 
 ### 3-2. 항목
@@ -65,19 +65,19 @@
 
 | # | 항목 | 위치 | 현재 → 제안 | 판정 | 달라지는 것 | 테스트 영향 | 순서 |
 |---|---|---|---|---|---|---|---|
-| T1 | `AppTypography.caption` → `AppType.caption` | 21곳 / 4파일 (`iq_detail_screen.dart:973, 986, 1185, 1204, 1216, 1279, 1284, 1328, 1340, 1345, 1350, 1492, 1513` · `iq_widgets.dart:99, 103, 159` · `mentor_iq_list_screen.dart:232, 244, 258` · `iq_create_screen.dart:445, 564`) | 12/w500/`#475569` → 12/w400/`#64748B`/h1.4/tnum. `:1284`는 `.copyWith(color: danger)` 유지. 4파일 모두 `typography_tokens.dart` import 추가 | **결정** | 굵기 w500→w400, 색 더 옅게(대비 7.58→4.76, 12px AA 유지), 행간 17.16→16.8px, 숫자 고정폭 | IQ 테스트 7파일이 이 화면을 렌더하지만 전부 `find.text` — 스타일 단언 없음 | 1 |
-| T2 | `AppTypography.body` → `AppType.body` (또는 카드 제목 2곳은 `cardTitle`) | 6곳 (`iq_create_screen.dart:435, 439, 447` · `iq_detail_screen.dart:1549` · `iq_widgets.dart:83, 147`) | 14/w500 → 14/w400/h1.45. `iq_widgets:83/147`은 `IqQuestionCard`/`IqOpenQuestionCard` **제목** — 값 기준 `body`(가벼워짐) vs 역할 기준 `cardTitle`(15/w600) **결정 #T-2** | **결정** | w500→w400 또는 14→15/w600 | 6파일, 스타일 단언 없음 | 2 |
-| T3 | `AppTypography.cardTitle` → `AppType.cardTitle` | 1곳 (`iq_detail_screen.dart:980`, 상세 헤더 제목) | 15/w700 → 15/w600/h1.3 | **결정** | Bold→SemiBold, 행간 21.45→19.5px(1줄 ellipsis라 재배치 없음) | 4파일, 스타일 단언 없음 | 3 |
-| T4 | 구 import 4곳 교체 후 `lib/design/tokens/typography.dart` 삭제 | `mentor_iq_list_screen.dart:5` · `iq_create_screen.dart:8` · `iq_detail_screen.dart:13` · `iq_widgets.dart:4` | T1~T3 완료 후 `git rm`. 다른 참조 0건(`lib/`·`test/`·docs·scripts) | **기계적** | 없음 | 없음(컴파일만) | 4 |
-| T5 | 오류 문구 `const TextStyle(color: ColorTokens.danger)` (크기 없음) | 21곳 / 20파일 — `mentors_screen.dart:421, 445` · `board_list_view.dart:115` · `my_activity_view.dart:82` · `shortform_feed_view.dart:99` · `s3_data_inspector.dart:137`(dev) · `notifications_screen.dart:427` · `mypage_screen.dart:217` · `mentor_iq_list_screen.dart:195` · `iq_create_screen.dart:407` · `iq_detail_screen.dart:815` · `student_iq_list_screen.dart:147` · `mentor_room_home_screen.dart:81` · `student_room_home_screen.dart:105` · `mentor_inbox_screen.dart:176` · `mentor_question_list_screen.dart:103` · `mentor_answer_screen.dart:547` · `chat_screen.dart:534` · `connection_notes_screen.dart:126` · `question_list_screen.dart:121` · `question_room_screen.dart:395` | 현재 렌더 = M3 `bodyMedium` 상속 14/w400/danger/h1.43/ls0.25. 제안 `AppType.body.copyWith(color: ColorTokens.danger)`. **대안**: 이미 토큰 색만 쓰므로 "승인된 형태"로 선언하고 두기(**결정 #T-3**). 19곳은 `Center > Padding(24) > Text` 동일 골격이라 §5 공용 오류 뷰가 들어오면 이 줄들이 함께 사라진다 | **결정**(서브픽셀) | 행간 1.43→1.45(+0.28px/줄), 숫자 고정폭. 크기·굵기·색 동일 | 20개 테스트 파일이 문구로 찾음(`find.text`) — 스타일 무관 | 5 (§5와 함께) |
+| T1 | `AppTypography.caption` → `AppType.caption` | 21곳 / 4파일 (`iq_detail_screen.dart:973, 986, 1185, 1204, 1216, 1279, 1284, 1328, 1340, 1345, 1350, 1492, 1513` · `iq_widgets.dart:99, 103, 159` · `mentor_iq_list_screen.dart:232, 244, 258` · `iq_create_screen.dart:445, 564`) | 12/w500/`#475569` → 12/w400/`#64748B`/h1.4/tnum. `:1284`는 `.copyWith(color: danger)` 유지. 4파일 모두 `typography_tokens.dart` import 추가 | **결정** | 굵기 w500→w400, 색 더 옅게(대비 7.58→4.76, 12px AA 유지), 행간 17.16→16.8px, 숫자 고정폭 | IQ 화면을 렌더하는 테스트 17파일(`IqDetailScreen(` 14 · `IqCreateScreen(` 3 · `MentorIqListScreen(` 2 · `IqQuestionCard`/`IqOpenQuestionCard(` 1, 중복 제외) — 전부 `find.text`/`byType`, 스타일 단언 없음 | 1 |
+| T2 | `AppTypography.body` → `AppType.body` (또는 카드 제목 2곳은 `cardTitle`) | 6곳 (`iq_create_screen.dart:435, 439, 447` · `iq_detail_screen.dart:1549` · `iq_widgets.dart:83, 147`) | 14/w500 → 14/w400/h1.45. `iq_widgets:83/147`은 `IqQuestionCard`/`IqOpenQuestionCard` **제목** — 값 기준 `body`(가벼워짐) vs 역할 기준 `cardTitle`(15/w600) **결정 #T-2** | **결정** | w500→w400 또는 14→15/w600 | 렌더 테스트 최대 17파일(T1과 같은 집합; `iq_widgets:83/147`은 `iq_requirement_display_test`가 직접 렌더), 스타일 단언 없음 | 2 |
+| T3 | `AppTypography.cardTitle` → `AppType.cardTitle` | 1곳 (`iq_detail_screen.dart:980`, 상세 헤더 제목) | 15/w700 → 15/w600/h1.3 | **결정** | Bold→SemiBold, 행간 21.45→19.5px(1줄 ellipsis라 재배치 없음) | `IqDetailScreen`을 렌더하는 14파일, 스타일 단언 없음 | 3 |
+| T4 | 구 import 4곳 교체 후 `lib/design/tokens/typography.dart` 삭제 | `mentor_iq_list_screen.dart:5` · `iq_create_screen.dart:8` · `iq_detail_screen.dart:13` · `iq_widgets.dart:4` | T1~T3 완료 후 `git rm`. 다른 참조 0건(`lib/`·`test/`·`docs/`; 앱 저장소에 `scripts/`는 없다) | **기계적** | 없음 | 없음(컴파일만) | 4 |
+| T5 | 오류 문구 `const TextStyle(color: ColorTokens.danger)` (크기 없음) | 21곳 / 20파일 — `mentors_screen.dart:421, 445` · `board_list_view.dart:115` · `my_activity_view.dart:82` · `shortform_feed_view.dart:99` · `s3_data_inspector.dart:137`(dev) · `notifications_screen.dart:427` · `mypage_screen.dart:217` · `mentor_iq_list_screen.dart:195` · `iq_create_screen.dart:407` · `iq_detail_screen.dart:815` · `student_iq_list_screen.dart:147` · `mentor_room_home_screen.dart:81` · `student_room_home_screen.dart:105` · `mentor_inbox_screen.dart:176` · `mentor_question_list_screen.dart:103` · `mentor_answer_screen.dart:547` · `chat_screen.dart:534` · `connection_notes_screen.dart:126` · `question_list_screen.dart:121` · `question_room_screen.dart:395` | 현재 렌더 = M3 `bodyMedium` 상속 14/w400/danger/h1.43/ls0.25. 제안 `AppType.body.copyWith(color: ColorTokens.danger)`. **대안**: 이미 토큰 색만 쓰므로 "승인된 형태"로 선언하고 두기(**결정 #T-3**). 19곳은 `Center > Padding(24) > Text` 동일 골격이라 §5 공용 오류 뷰가 들어오면 이 줄들이 함께 사라진다 | **결정**(서브픽셀) | 행간 1.43→1.45(+0.28px/줄), 숫자 고정폭. 크기·굵기·색 동일 | 이 21개 문구를 찾는 테스트 7파일(§5-1 집계; `불러오지 못했` 문자열 자체는 10파일에 등장) — 전부 `find.text`/`textContaining`, 스타일 무관 | 5 (§5와 함께) |
 | T6 | danger + `fontSize: 13` | 3곳 `iq_create_screen.dart:457, 509, 517` (프로덕션 도달 불가 화면) | 13px은 어느 체계에도 없음 → `caption`(12) 또는 `body`(14) `.copyWith(color: danger)` **결정 #T-4** | **결정** | 13→12 또는 14 | 없음(dead 화면, 테스트 4파일은 렌더만) | 11 |
-| T7 | secondary 색만 | 2곳 `login_screen.dart:152` · `attachment_viewer_screen.dart:135` | `AppType.body.copyWith(color: ColorTokens.secondary)` (14 유지) | **결정**(서브픽셀) | 행간 1.43→1.45 | `attachment_viewer_test.dart` 문구 단언 없음 | 6 |
+| T7 | secondary 색만 | 2곳 `login_screen.dart:152` · `attachment_viewer_screen.dart:135` | `AppType.body.copyWith(color: ColorTokens.secondary)` (14 유지) | **결정**(서브픽셀) | 행간 1.43→1.45 | `attachment_viewer_test.dart:54`는 '주석 달기'만 단언 — 해당 문구('이미지를 불러오지 못했어요.') 단언 없음. `login_screen`은 렌더 테스트 자체가 없다 | 6 |
 | T8 | 크기 12.5 | 1곳 `message_file_attachment.dart:48` | `AppType.caption.copyWith(color: ColorTokens.primary)` (12) | **결정** | 12.5→12, 행간 17.9→16.8px — 긴 파일명 ellipsis 지점 변동 가능 | 없음 | 7 |
 | T9 | PDF 페이지 선택 순번 배지 12/w700/white | 1곳 `pdf_page_select_screen.dart:224-228` (22px 원) | `AppType.caption.copyWith(color: Colors.white, fontWeight: w700)` 또는 정당한 리터럴로 두기. `CountBadge`로 바꾸면 안 됨(형태·패딩 다름 = 구조 변경) | **결정** | 행간 1.43→1.4(원 안 세로 정렬 ~0.36px) | `pdf_scan_flow_test.dart`는 `find.text('1')`류 — 스타일 무관 | 9 |
 | T10 | PDF 페이지 번호 `TextStyle(fontSize: 12)` | 1곳 `pdf_page_select_screen.dart:236` | `AppType.caption.copyWith(color: ColorTokens.primary)`(진한 색 유지) vs `AppType.caption`(회색으로) **결정 #T-5** | **결정** | 행간 또는 색 | 〃 | 8 |
 | T11 | 굵기만 w800 + `AppAccent` | 1곳 `question_list_screen.dart:316-318` (26px 단계 원) | `AppType.body.copyWith(color: accent, fontWeight: w700)` — 번들이 실제로 그릴 수 있는 굵기를 선언. `InitialAvatar`로 교체 금지(크기·배경 다름) | **결정** | 선언 w800→w700(렌더 글리프는 Bold 700으로 동일할 것으로 예상, 런타임 미확인), 행간 +0.28px | 3파일, 단계 숫자 스타일 단언 없음 | 10 |
 | T12 | 검은 첨부 뷰어 위 `Colors.white`/`white70` | 2곳 `iq_detail_screen.dart:1599, 1611` | 타이포 토큰 해당 없음. on-dark 텍스트 색 토큰이 없으므로 §8 색 항목으로 이관, 이 축에서는 그대로 | **보류** | — | 3파일, 스타일 무관 | 12 |
-| T13 | 토큰 위에 **리터럴 굵기·행간을 덧씌우는** `copyWith` (검토자가 추가 발견) | `conversation_bubble.dart:143, 152`(`height: ConversationMetrics.bodyHeight` = **1.35** — 어느 토큰에도 없는 행간, 말풍선 전부) · `login_screen.dart:128`(caption + **w600**) · `mentor_inbox_screen.dart:287`(caption + w600) · `cash_section.dart:96`(body + **w700**) · (`lib/design/theme.dart:73` 하단 탭 라벨 12/w600, height 없음 — 디자인 계층 내부) | 3-1의 "인라인 32곳"에는 잡히지 않는 같은 부류. 12/w600 "강조 캡션"이 2곳, 14/w700 "강조 본문"이 1곳, 1.35 행간이 말풍선 계열 — `AppType.captionStrong`(12/w600)·`bodyStrong`(14/w700) 토큰 신설 vs 리터럴 승인 **결정 #T-7**. 말풍선 1.35는 `ConversationMetrics`가 이미 상수로 관리하고 테스트가 단언하므로 그대로 | **결정** | (토큰 신설 시) 픽셀 동일 | `conversation_bubble_test` | 13 |
+| T13 | 토큰 위에 **리터럴 굵기·행간을 덧씌우는** `copyWith` (검토자가 추가 발견) | `conversation_bubble.dart:143, 152`(`height: ConversationMetrics.bodyHeight` = **1.35** — 어느 토큰에도 없는 행간, 말풍선 전부) · `login_screen.dart:128`(caption + **w600**) · `mentor_inbox_screen.dart:287`(caption + w600) · `cash_section.dart:96`(body + **w700**) · (`lib/design/theme.dart:74-76` 하단 탭 라벨 12/w600, height 없음 — 디자인 계층 내부) | 3-1의 "인라인 32곳"에는 잡히지 않는 같은 부류. 12/w600 "강조 캡션"이 2곳, 14/w700 "강조 본문"이 1곳, 1.35 행간이 말풍선 계열 — `AppType.captionStrong`(12/w600)·`bodyStrong`(14/w700) 토큰 신설 vs 리터럴 승인 **결정 #T-7**. 말풍선 1.35는 `ConversationMetrics.bodyHeight`(`conversation_bubble.dart:46`) 상수가 관리하므로 그대로 — 단 `conversation_bubble_test`는 `tailRadius`·`maxWidthFactor`만 단언하고 `bodyHeight`는 단언하지 않는다 | **결정** | (토큰 신설 시) 픽셀 동일 | `conversation_bubble_test`(`bodyHeight` 단언 없음) | 13 |
 
 ### 3-3. 매핑표 (결정 #T-1 — 오너 승인 필요)
 
@@ -117,7 +117,7 @@ grep -rln "tokens/typography.dart" lib test                                     
 | `EdgeInsets.all(24)` | **27곳 / 24파일** — 20곳은 `Center > Padding(24) > Text(danger)` 오류 뷰(§5), 6곳 Column형 전면 상태 화면, 1곳 빈 목록 패딩 |
 | 레거시 shim `lib/design/tokens/dimens.dart` | importer **3**(`app_badge`·`primary_button`·`secondary_button`). `AppRadius` 3회 사용, `AppSpace` **0회** |
 | `BoxShadow` 리터럴 | **1곳** `version_gate_screens.dart:163-168`(권장 업데이트 배너: `0x1A0F172A`, blur 12, y4 — `cardShadow`보다 진하고 넓음) |
-| 스타일 단언 테스트 | `test/shared/conversation_bubble_test.dart:96-107`가 `ConversationMetrics.tailRadius`만 단언 — 아래 어떤 항목도 건드리지 않음 |
+| 스타일 단언 테스트 | `test/shared/conversation_bubble_test.dart:96-119`가 `ConversationMetrics.tailRadius`·`maxWidthFactor`만 단언 — 아래 어떤 항목도 건드리지 않음 |
 
 ### 4-2. 항목
 
@@ -147,7 +147,7 @@ grep -rln "tokens/typography.dart" lib test                                     
 - 자식이 있는 `SizedBox` 치수 상자 14곳(스피너 16~22, 아바타 48, 썸네일 160, 빈 상태 120/240/360) — 간격이 아니라 **크기**. 스피너 크기 토큰은 §7에서 다룬다.
 - `Icon(size:)`·`Container(width/height:)`·`Border(width:)` 리터럴 — 새 토큰 군(아이콘·아바타 크기)이 필요한 별개 결정. (`Wrap` 간격·`Divider` 높이는 간격 부류라 S18·S19로 편입했다.)
 - `lib/design/` 내부의 컴포넌트 고유 치수 20줄(`status_pill`·`count_badge`·`app_badge`·`chip_scroll`·`empty_state`…) — 디자인 계층 소유.
-- `ConversationMetrics`(말풍선 14/10·간격 10·꼬리 4)는 이미 상수화돼 있고 테스트가 단언 — 변경 없음.
+- `ConversationMetrics`(말풍선 14/10·간격 10·꼬리 4)는 이미 상수화돼 있다(테스트는 `tailRadius`·`maxWidthFactor`만 단언) — 변경 없음.
 - dev 전용 라우트(`lib/features/dev`: `EdgeInsets` 8곳 · `SizedBox` 26곳)를 기계적 패스에 포함할지는 **결정 #S-12**.
 
 검토자 판정: S1~S17 중 **확인 12 · 정정 5**(S4 `AppCard` `onTap` 부재 · S6 누락 6곳 · S8 `login:205`는 배너 패딩 · S11 `question_list:131`은 FAB 아님 · S13 14 간격의 성격 · S16 줄 번호). 누락 13곳은 S18·S19로 편입. 골격 위반 지적 2건 — S14의 "기계적"은 임시 `s24` 치환에만 해당(위젯 통합은 §5 결정), S11 통일은 여전히 시각 변경 — 둘 다 본문에 반영.
@@ -199,7 +199,7 @@ grep -rn 'BoxShadow(' lib --include=*.dart | grep -v shape_tokens.dart          
 
 ### 5-4. 이 축에서 제외한 것
 - 재시도가 없는 19곳에 재시도를 **추가**하는 것(동작 변경). 아이콘·제목/본문 분리·`EmptyState`풍 원 추가(재설계).
-- 카피 통일('불러오지 못했습니다' vs '불러오지 못했어요', 주어 없는 '불러오지 못했어요.', dev의 raw 오류) — 8개 테스트가 문구를 단언하므로 바이트 그대로 둔다.
+- 카피 통일('불러오지 못했습니다' vs '불러오지 못했어요', 주어 없는 '불러오지 못했어요.', dev의 raw 오류) — 7개 테스트가 문구를 단언하므로(§5-1) 바이트 그대로 둔다.
 - 같은 `Center > Padding(24) > Column` 골격이지만 오류가 아닌 화면(`blocked_screen`, `version_gate_screens`, `board_detail _goneBody`, 미사용 `EmptyScreen`) — 빈 상태·간격 축.
 - 스낵바 기반 실패 피드백(`friendlyError` 63회 중 44회가 `_snack`/`SnackBar`) — 별개 패턴.
 
@@ -455,7 +455,7 @@ grep -rn "byIcon(" test | grep -vE "_rounded" | wc -l                          #
 | 겹 | 무엇을 | 어떻게 |
 |---|---|---|
 | 1 | 컴파일·정적 | `flutter analyze` 에러·경고 0 (CI 게이트, info는 비차단 — `.github/workflows/flutter-ci.yml:59-69`). shim·구 토큰 파일 삭제 후 dangling import가 없는지 여기서 잡힌다 |
-| 2 | 위젯 테스트 전량 | `flutter test` 565개. 이 목록의 항목들은 문구(`find.text`)로 찾는 테스트만 스치고 스타일을 단언하는 테스트는 `board_filter_chip_test`(w800)·`conversation_bubble_test`(tailRadius) 2개뿐 — 둘 다 이 목록이 건드리지 않는 값이다. 공용 위젯으로 감싸는 항목(§5~§7)은 감싼 안쪽에 같은 타입(`Text`·`TextField`·`CircularProgressIndicator`)이 남으므로 `find.byType`도 그대로 통과한다 |
+| 2 | 위젯 테스트 전량 | `flutter test` 565개. 이 목록의 항목들은 문구(`find.text`)로 찾는 테스트만 스치고 스타일을 단언하는 테스트는 `board_filter_chip_test`(w800)·`conversation_bubble_test`(tailRadius·maxWidthFactor) 2개뿐 — 둘 다 이 목록이 건드리지 않는 값이다. 공용 위젯으로 감싸는 항목(§5~§7)은 감싼 안쪽에 같은 타입(`Text`·`TextField`·`CircularProgressIndicator`)이 남으므로 `find.byType`도 그대로 통과한다 |
 | 3 | 잔존 리터럴 0건 | §3-4·§4-4의 grep을 기계적 항목 완료 후 다시 돌려 **기대 수치가 0(또는 결정으로 남긴 예외 수)** 인지 확인. 이 grep 묶음을 `scripts/` 또는 CI 스텝으로 고정하면 재발을 막는다(§8 린트 항목) |
 | 4 | 눈으로 | 결정 항목(값이 바뀌는 것)만 실기기·시뮬레이터에서 전후 스크린샷 대조. 기계적 항목은 1~3으로 충분하다 |
 
@@ -468,7 +468,7 @@ grep -rn "byIcon(" test | grep -vE "_rounded" | wc -l                          #
 | `SizedBox` 스페이서 → `Gap` 또는 Flutter 3.27 `Column/Row(spacing:)` | 위젯 트리 변경 |
 | 스타일 없는 `Text()` 약 130곳 → `AppType.body` | 행간 1.43→1.45가 전 화면에 걸림 — 별도 결정 |
 | 로더 깜빡임 가드 정렬(`&& !snap.hasData` 2곳 vs `connectionState != done` 20곳) | 스피너가 보이는 **시점**이 바뀜(동작) |
-| 오류 뷰에 재시도 추가 · 아이콘/제목 추가 · 카피 통일('불러오지 못했습니다' vs '…못했어요') | 동작·디자인·문구 변경. 8개 테스트가 문구 단언 |
+| 오류 뷰에 재시도 추가 · 아이콘/제목 추가 · 카피 통일('불러오지 못했습니다' vs '…못했어요') | 동작·디자인·문구 변경. 7개 테스트가 문구 단언(§5-1) |
 | `iq_create_screen.dart` 삭제(프로덕션 도달 불가, `iq_create_boundary_test`가 진입 0을 계약) | 기능 그래프 결정. 지우면 T6·D4의 사이트 여럿이 함께 사라지므로 **먼저 결정하면 목록이 줄어든다** |
 | `_EmptyQuestions`의 `ListView` → `EmptyState`의 `Center` | 소형 뷰포트 스크롤 동작 변경 |
 | 필드 라벨 두 방식(위 `Text(caption)` vs `labelText`) 수렴 · 드롭다운 2종 통일 | 트리·픽셀 변경 |
