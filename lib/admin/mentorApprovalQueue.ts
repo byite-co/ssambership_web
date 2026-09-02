@@ -18,7 +18,7 @@ export const MENTOR_APPROVAL_BASE_PATH = "/admin/mentor-approval";
 export const MENTOR_APPROVAL_SELECTED_PARAM = "mentor";
 export const MENTOR_APPROVAL_DEFAULT_PAGE_SIZE = 25;
 
-export const MENTOR_APPROVAL_TAB_VALUES = ["pending", "approved", "rejected", "resubmit_required", "all"] as const;
+export const MENTOR_APPROVAL_TAB_VALUES = ["pending", "approved", "rejected", "under_review", "all"] as const;
 export type MentorApprovalTab = (typeof MENTOR_APPROVAL_TAB_VALUES)[number];
 export const MENTOR_APPROVAL_DEFAULT_TAB: MentorApprovalTab = "pending";
 
@@ -26,12 +26,12 @@ export const MENTOR_APPROVAL_TABS: readonly { value: MentorApprovalTab; label: s
   { value: "pending", label: "대기" },
   { value: "approved", label: "승인" },
   { value: "rejected", label: "반려" },
-  { value: "resubmit_required", label: "재제출" },
+  { value: "under_review", label: "재제출" },
   { value: "all", label: "전체" },
 ];
 
-/** 재제출 탭 — `requestMentorDocumentsAction` 이 쓰는 `under_review` + 사전 값 `resubmit_required`. */
-export const MENTOR_APPROVAL_RESUBMIT_STATUSES: readonly string[] = ["under_review", "resubmit_required"];
+/** 재제출 탭 — `requestMentorDocumentsAction` 이 쓰는 값 `under_review`(상태 사전과 동일. 오너 확정: 코드가 쓰는 값이 정답). */
+export const MENTOR_APPROVAL_RESUBMIT_STATUSES: readonly string[] = ["under_review"];
 
 /** 대기 탭 — 액션 `.in(...)` 집합에서 재제출 탭으로 보낸 값을 뺀 나머지. */
 export const MENTOR_APPROVAL_PENDING_TAB_STATUSES: readonly string[] = MENTOR_PENDING_STATUS_VALUES_FOR_IN.filter(
@@ -57,7 +57,7 @@ export function mentorApprovalTabStatuses(tab: MentorApprovalTab): readonly stri
       return ["approved"];
     case "rejected":
       return ["rejected"];
-    case "resubmit_required":
+    case "under_review":
       return MENTOR_APPROVAL_RESUBMIT_STATUSES;
     case "all":
     default:

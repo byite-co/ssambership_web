@@ -49,8 +49,8 @@ const FIXTURE: Record<
     inventory: true,
   },
   "mentor_profiles.verification_status": {
-    // CHECK 없음 — 지시서 §3 확정 허용 목록
-    values: ["pending", "approved", "rejected", "resubmit_required", "unsubmitted"],
+    // CHECK 없음 — 지시서 §3 허용 목록. PR-2 정합: 재제출 값은 코드가 쓰는 under_review(resubmit_required 는 이 컬럼 미사용 → 제거)
+    values: ["pending", "approved", "rejected", "under_review", "unsubmitted"],
     inventory: false,
   },
   "disputes.status": {
@@ -191,9 +191,16 @@ test("mentor_profiles.verification_status: DB 에 CHECK 가 없다 → 사전이
     "pending",
     "approved",
     "rejected",
-    "resubmit_required",
+    "under_review",
     "unsubmitted",
   ]));
+});
+
+test("mentor_profiles.verification_status: 재제출 요청 값은 코드가 실제로 쓰는 under_review 다(requestMentorDocumentsAction) — resubmit_required 는 이 컬럼에 쓰는 코드가 없어 미등재", () => {
+  const actions = read("lib/admin/mentorApprovalActions.ts");
+  assert.ok(actions.includes('{ [STATUS_COLUMN]: "under_review" }'), "재제출 액션이 쓰는 값");
+  assert.equal(resolveAdminStatus("mentor_profiles", "verification_status", "under_review").label, "재제출 요청");
+  assert.equal(resolveAdminStatus("mentor_profiles", "verification_status", "resubmit_required").known, false);
 });
 
 // ── ③ 정규화 규칙 ─────────────────────────────────────────────────────────────
@@ -265,9 +272,9 @@ test("resolveAdminStatus: 대소문자·양끝 공백만 다른 값은 등재 �
   assert.equal(resolveAdminStatus("refunds", "status", "Succeeded").tone, "success");
 });
 
-test("mentor_profiles.verification_status: 레거시 동의어(submitted·under_review·verified·declined 등)는 등재되지 않았다 → neutral 폴백", () => {
-  // 지시서 §3 의 허용 목록 5값만 사전에 둔다. 코드(mentorApprovalConstants.ts)가 아직 관용하는 동의어는 PR 설명의 충돌 목록에 적는다.
-  for (const legacy of ["submitted", "under_review", "awaiting", "review", "new", "verified", "active", "declined", "suspended", "inactive"]) {
+test("mentor_profiles.verification_status: 레거시 동의어(submitted·verified·declined 등)와 타 테이블 값(resubmit_required)은 등재되지 않았다 → neutral 폴백", () => {
+  // 허용 목록 5값만 사전에 둔다. 코드(mentorApprovalConstants.ts)가 아직 관용하는 동의어는 PR 설명의 충돌 목록에 적는다.
+  for (const legacy of ["submitted", "resubmit_required", "awaiting", "review", "new", "verified", "active", "declined", "suspended", "inactive"]) {
     const r = resolveAdminStatus("mentor_profiles", "verification_status", legacy);
     assert.equal(r.known, false, legacy);
     assert.equal(r.tone, "neutral", legacy);

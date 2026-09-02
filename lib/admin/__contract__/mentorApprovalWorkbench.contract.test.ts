@@ -105,7 +105,7 @@ function spFrom(url: string): Record<string, string | string[] | undefined> {
 // ── §11 탭: status 키 하나 · 클라이언트 필터 없음 ─────────────────────────────
 
 test("탭은 대기·승인·반려·재제출·전체 5개, 기본 탭은 대기", () => {
-  assert.deepEqual([...MENTOR_APPROVAL_TAB_VALUES], ["pending", "approved", "rejected", "resubmit_required", "all"]);
+  assert.deepEqual([...MENTOR_APPROVAL_TAB_VALUES], ["pending", "approved", "rejected", "under_review", "all"]);
   assert.deepEqual(
     MENTOR_APPROVAL_TABS.map((t) => t.label),
     ["대기", "승인", "반려", "재제출", "전체"]
@@ -128,19 +128,16 @@ test("쿼리 키는 status 하나 — 구 filter 키는 탭에 영향이 없다(
 
 test("탭 필터는 서버 집합이며 서로 겹치지 않는다 — 대기 탭 + 재제출 탭 = 액션 .in(...) 집합(H1)", () => {
   const pending = mentorApprovalTabStatuses("pending")!;
-  const resubmit = mentorApprovalTabStatuses("resubmit_required")!;
+  const resubmit = mentorApprovalTabStatuses("under_review")!;
   assert.deepEqual([...pending].sort(), [...MENTOR_APPROVAL_PENDING_TAB_STATUSES].sort());
-  assert.deepEqual([...resubmit].sort(), [...MENTOR_APPROVAL_RESUBMIT_STATUSES].sort());
-  assert.ok(resubmit.includes("under_review"), "requestMentorDocumentsAction 이 쓰는 under_review 는 재제출 탭");
-  assert.ok(resubmit.includes("resubmit_required"));
+  assert.deepEqual([...resubmit], ["under_review"], "재제출 탭 = requestMentorDocumentsAction 이 쓰는 값 하나(오너 확정)");
+  assert.ok(!resubmit.includes("resubmit_required"), "resubmit_required 는 학교 인증·학적 변경 테이블 값 — 이 컬럼 미사용");
   for (const s of pending) assert.ok(!resubmit.includes(s), `${s} 가 두 탭에 겹친다`);
-  // 대기 탭 ∪ (재제출 탭 ∩ 액션 집합) == 승인·반려 액션의 .in 조건 — 액션 집합의 어떤 값도 탭에서 빠지지 않는다.
-  const actionSet = [...MENTOR_PENDING_STATUS_VALUES_FOR_IN].sort();
-  const covered = [...pending, ...resubmit.filter((s) => actionSet.includes(s))].sort();
-  assert.deepEqual(covered, actionSet, "액션 .in 집합은 대기·재제출 탭이 전부 덮는다");
-  // 사전 값 resubmit_required 는 기존 액션의 .in 집합 밖이다(액션 DB 조건은 이 PR 이 바꾸지 않는다) —
-  // 재제출 탭에는 보이되 결정 버튼은 잠긴다("이미 처리됨" 배너). PR-2b 후속: 사전 값 ↔ 액션 집합 정합.
-  assert.equal(isMentorApprovalDecidable("resubmit_required"), false);
+  // 대기 탭 ∪ 재제출 탭 == 승인·반려 액션의 .in 조건 — 정확히 같다(H1).
+  assert.deepEqual([...pending, ...resubmit].sort(), [...MENTOR_PENDING_STATUS_VALUES_FOR_IN].sort(), "대기 ∪ 재제출 == 액션 .in 집합");
+  // 사전 값도 같은 값이다 — 재제출 탭 행은 사전 라벨 '재제출 요청' 으로 그려지고 결정 가능하다.
+  assert.equal(adminStatusAllowedValues("mentor_profiles", "verification_status").includes("under_review"), true);
+  assert.equal(isMentorApprovalDecidable("under_review"), true);
   assert.deepEqual(mentorApprovalTabStatuses("approved"), ["approved"]);
   assert.deepEqual(mentorApprovalTabStatuses("rejected"), ["rejected"]);
   assert.equal(mentorApprovalTabStatuses("all"), null);
