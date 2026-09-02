@@ -8,6 +8,7 @@
  *     .fee_rate default 0.05 · refresh_subscription_settlement_items / record_custom_order_dispute_split 본문.
  */
 import { minorCentsToCash, subscriptionSettlementStatus } from "../mentor/subscriptionSettlementItemsCore.ts";
+import { parseSettlementFeeRate, SETTLEMENT_FEE_RATE_UNSET_LABEL, settlementFeeRateLabel } from "../payout/settlementFeeRate.ts";
 import { formatKoreanDate } from "../utils/formatDisplay.ts";
 
 type Row = Record<string, unknown>;
@@ -47,22 +48,11 @@ export type AdminSettlementListItem = {
   orderMetaLine: string | null;
 };
 
-export const ADMIN_SETTLEMENT_FEE_RATE_UNSET_LABEL = "요율 미설정";
-
-/** DB fee_rate → 분수(0.15). 없거나 숫자가 아니면 null — 추측값(0.3/0.15/0) 금지. */
-export function parseSettlementFeeRate(raw: unknown): number | null {
-  if (raw === null || raw === undefined) return null;
-  if (typeof raw === "string" && raw.trim() === "") return null;
-  const n = typeof raw === "number" ? raw : Number(raw);
-  return Number.isFinite(n) ? n : null;
-}
-
+// 요율 파싱·라벨은 공용 순수 모듈(lib/payout/settlementFeeRate.ts) 한 곳 — 관리자·멘토·분쟁 화면이 같은 규칙을 쓴다.
+export { parseSettlementFeeRate };
+export const ADMIN_SETTLEMENT_FEE_RATE_UNSET_LABEL = SETTLEMENT_FEE_RATE_UNSET_LABEL;
 /** 요율 표시 라벨 — null 은 '요율 미설정', 숫자는 백분율("15%"). */
-export function adminSettlementFeeRateLabel(feeRate: number | null): string {
-  if (feeRate == null) return ADMIN_SETTLEMENT_FEE_RATE_UNSET_LABEL;
-  const pct = Number((feeRate * 100).toFixed(2));
-  return `${pct}%`;
-}
+export const adminSettlementFeeRateLabel = settlementFeeRateLabel;
 
 /** 요율 없는 행은 보조 메타 줄에 '요율 미설정' 을 덧붙여 기존 툴팁 경로로 표면화한다(레이아웃 불변). */
 export function withFeeRateUnsetMarker(meta: string | null, feeRate: number | null): string | null {

@@ -1,53 +1,18 @@
 /**
  * 멘토 정산 UI 표시 헬퍼 — 클라이언트·서버 공용 (server-only import 없음)
  */
-import {
-  calcPayoutWithholding,
-  CUSTOM_REQUEST_PLATFORM_FEE_LABEL,
-  INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL,
-  MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
-  MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE,
-  MENTOR_SUBSCRIPTION_PLATFORM_SHARE,
-  SUBSCRIPTION_PLATFORM_FEE_LABEL,
-} from "@/lib/mentor/mentorPayoutsConstants";
+import { calcPayoutWithholding } from "@/lib/mentor/mentorPayoutsConstants";
 import { isAccruingPayoutStatus } from "@/lib/mentor/payoutLineStatus";
 import { kstDateString, kstYearMonth, nextYearMonth } from "@/lib/mentor/mentorSettlementSchema";
 import type {
   MentorPayoutDetailLine,
   MentorPayoutScheduleInfo,
   MentorPayoutSettlementTableRow,
-  PayoutLineType,
   PayoutUiStatus,
 } from "@/lib/mentor/mentorPayoutsTypes";
 
-export function platformFeeLabelForType(type: PayoutLineType): string {
-  if (type === "subscription") return SUBSCRIPTION_PLATFORM_FEE_LABEL;
-  if (type === "individual_question") return INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL;
-  return CUSTOM_REQUEST_PLATFORM_FEE_LABEL;
-}
-
-export function platformFeeRateForType(type: PayoutLineType): number {
-  if (type === "subscription") return MENTOR_SUBSCRIPTION_PLATFORM_SHARE;
-  if (type === "individual_question") return MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE;
-  return MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE;
-}
-
-/** DB fee_rate가 잘못 저장된 경우(예: 0.1) 유형별 잠금값으로 보정 */
-export function resolvePlatformFeeRate(type: PayoutLineType, raw: unknown): number {
-  const expected = platformFeeRateForType(type);
-  const n = typeof raw === "number" ? raw : Number(raw);
-  if (!Number.isFinite(n)) return expected;
-  const asFraction = n > 0 && n <= 1 ? n : n / 100;
-  if (Math.abs(asFraction - expected) < 0.02) return expected;
-  if (type === "subscription" && asFraction <= 0.11) return MENTOR_SUBSCRIPTION_PLATFORM_SHARE;
-  if (type === "custom_request" && asFraction <= 0.11) return MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE;
-  if (type === "individual_question" && asFraction <= 0.11) return MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE;
-  return expected;
-}
-
-export function formatPlatformFeeRateLabel(type: PayoutLineType, _raw?: unknown): string {
-  return platformFeeLabelForType(type);
-}
+// PR-1b V-3: 구 resolvePlatformFeeRate / platformFeeRateForType / formatPlatformFeeRateLabel / platformFeeLabelForType 삭제 —
+// DB fee_rate 를 TS 잠금값으로 "보정"하던 사문 코드(호출자 0). 요율 표시는 lib/payout/settlementFeeRate.ts(DB 값 그대로)로만.
 
 const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
 

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import {
   ADMIN_SETTLEMENT_FEE_RATE_UNSET_LABEL,
@@ -143,4 +143,65 @@ test("가드: 정산 파서·관리자 조회에 feeRate 폴백 리터럴(0.3 / 
   }
   const items = readFileSync(join(ROOT, "lib/admin/adminSettlementItems.ts"), "utf8");
   assert.ok(items.includes("parseSettlementFeeRate(r.fee_rate)"), "파서가 공용 요율 파서를 쓰지 않음");
+});
+
+// ── 소스 스캔: TS 수수료 사본·보정 헬퍼가 코드베이스에 되돌아오지 않는지 (V-2 · V-3 · V-4) ──
+const SCAN_DIRS = ["app", "lib", "components"];
+const EXT = new Set([".ts", ".tsx"]);
+
+function* walk(dir: string): Generator<string> {
+  for (const entry of readdirSync(dir)) {
+    if (entry === "node_modules" || entry === "__contract__" || entry.startsWith(".")) continue;
+    const p = join(dir, entry);
+    const st = statSync(p);
+    if (st.isDirectory()) yield* walk(p);
+    else if (EXT.has(p.slice(p.lastIndexOf(".")))) yield p;
+  }
+}
+
+function stripComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " "))
+    .replace(/\/\/[^\n]*/g, (m) => " ".repeat(m.length));
+}
+
+const FEE_COPY_BANNED: Array<{ label: string; re: RegExp }> = [
+  {
+    label: "삭제된 TS 수수료 사본·보정 헬퍼(V-3 · V-4)",
+    re: /\b(CUSTOM_ORDER_PLATFORM_FEE_RATE|resolvePlatformFeeRate|platformFeeRateForType|formatPlatformFeeRateLabel|platformFeeLabelForType)\b/,
+  },
+  {
+    label: "맞춤의뢰 수수료 휴리스틱 재계산(V-2)",
+    re: /\/\s*payment\s*<\s*0\.15|Math\.floor\(\s*payment\s*\*\s*MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE\s*\)/,
+  },
+  { label: "화면에 TS 요율을 prop 으로 전달(V-4)", re: /platformFeeRate\s*=\s*\{/ },
+];
+
+test("가드: TS 수수료 사본·보정 헬퍼·휴리스틱이 app/lib/components 에 없다 — 요율 정본은 DB 행", () => {
+  const offenders: string[] = [];
+  for (const dir of SCAN_DIRS) {
+    for (const file of walk(join(ROOT, dir))) {
+      const src = stripComments(readFileSync(file, "utf8"));
+      for (const { label, re } of FEE_COPY_BANNED) {
+        const m = re.exec(src);
+        if (!m) continue;
+        const line = src.slice(0, m.index).split("\n").length;
+        offenders.push(`  ${file.slice(ROOT.length + 1)}:${line} [${label}] ${m[0]}`);
+      }
+    }
+  }
+  assert.deepEqual(offenders, [], "TS 수수료 사본 발견 — DB 행 fee_rate(lib/payout/settlementFeeRate.ts)로 바꾸라:\n" + offenders.join("\n"));
+});
+
+test("가드: 분쟁 예치 분배 미리보기 요율은 DB 정산 행에서만 온다(V-4)", () => {
+  const page = stripComments(readFileSync(join(ROOT, "app/(admin)/admin/(console)/disputes/[id]/page.tsx"), "utf8"));
+  assert.ok(!/orderSettlementAmounts|mentorPayoutsConstants|payoutComputation/.test(page), "분쟁 상세가 TS 수수료 상수 모듈을 import 한다");
+  const queries = stripComments(readFileSync(join(ROOT, "lib/admin/adminDisputeEscrowSplitQueries.ts"), "utf8"));
+  assert.ok(queries.includes("parseSettlementFeeRate(settlementLoad.row.fee_rate)"), "패널 상태 로더가 정산 행 fee_rate 를 읽지 않음");
+  const panel = stripComments(readFileSync(join(ROOT, "components/disputes/DisputeEscrowSplitPanel.tsx"), "utf8"));
+  assert.ok(panel.includes("props.form.feeRate"), "패널이 form.feeRate(DB) 대신 다른 요율을 쓴다");
+  assert.ok(panel.includes("SETTLEMENT_FEE_RATE_UNSET_LABEL"), "요율 없는 행의 '요율 미설정' 표시가 없다");
+  assert.ok(!/0\.05|0\.15/.test(panel), "패널에 요율 리터럴이 있다");
+  const types = stripComments(readFileSync(join(ROOT, "lib/admin/adminDisputeEscrowSplitTypes.ts"), "utf8"));
+  assert.ok(/feeRate:\s*number \| null/.test(types), "분배 폼 props 에 feeRate: number | null 이 없다");
 });

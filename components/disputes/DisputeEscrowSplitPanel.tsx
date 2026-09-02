@@ -8,6 +8,7 @@ import type {
   AdminDisputeEscrowSplitPanelState,
 } from "@/lib/admin/adminDisputeEscrowSplitTypes";
 import { formatCashKrw } from "@/lib/utils/formatDisplay";
+import { SETTLEMENT_FEE_RATE_UNSET_LABEL, settlementFeeRateLabel } from "@/lib/payout/settlementFeeRate";
 
 function clampWon(n: number, max: number): number {
   if (!Number.isFinite(n)) return 0;
@@ -17,29 +18,24 @@ function clampWon(n: number, max: number): number {
   return v;
 }
 
-function mentorNetFromGrossWon(grossWon: number, platformFeeRate: number): number {
+/** 미리보기 산식은 RPC record_custom_order_dispute_split 과 동일(floor(gross×요율)) — 요율은 DB 정산 행 값만 쓴다. */
+function mentorNetFromGrossWon(grossWon: number, feeRate: number): number {
   const g = Math.max(0, Math.floor(grossWon));
-  const fee = Math.floor(g * platformFeeRate);
+  const fee = Math.floor(g * feeRate);
   return g - fee;
 }
 
-function feePercentLabel(platformFeeRate: number): string {
-  const pct = Math.round(platformFeeRate * 100);
-  return `${pct}%`;
-}
-
-function DisputeEscrowSplitForm(props: {
-  form: AdminDisputeEscrowSplitFormProps;
-  platformFeeRate: number;
-}) {
+function DisputeEscrowSplitForm(props: { form: AdminDisputeEscrowSplitFormProps }) {
   const hold = props.form.holdGrossWon;
+  // PR-1b V-4: 요율은 DB 정산 행(form.feeRate)에서만 온다. 없으면 예상액을 계산하지 않고 '요율 미설정' 을 보인다.
+  const feeRate = props.form.feeRate;
   const [mentorGross, setMentorGross] = useState(0);
   const [studentRefund, setStudentRefund] = useState(hold);
   const [lastEdited, setLastEdited] = useState<"mentor" | "student">("mentor");
 
   const mentorNet = useMemo(
-    () => mentorNetFromGrossWon(mentorGross, props.platformFeeRate),
-    [mentorGross, props.platformFeeRate]
+    () => (feeRate == null ? null : mentorNetFromGrossWon(mentorGross, feeRate)),
+    [mentorGross, feeRate]
   );
   const sumOk = mentorGross + studentRefund === hold;
 
@@ -110,8 +106,17 @@ function DisputeEscrowSplitForm(props: {
       <div className="rounded-xl border border-amber-100 bg-white/80 p-3 text-xs text-amber-950">
         <p>
           <span className="font-extrabold">멘토 실수령 예상:</span>{" "}
-          {formatCashKrw(mentorNet, { unit: "원" })} (플랫폼 수수료 {feePercentLabel(props.platformFeeRate)} 공제, gross{" "}
-          {formatCashKrw(mentorGross, { unit: "원" })} 기준)
+          {mentorNet == null ? (
+            <>
+              <span className="font-bold text-red-700">{SETTLEMENT_FEE_RATE_UNSET_LABEL}</span> — 정산 행에 수수료율이 없어
+              예상액을 계산하지 않습니다. 실제 분배는 RPC가 DB 요율로 집행합니다.
+            </>
+          ) : (
+            <>
+              {formatCashKrw(mentorNet, { unit: "원" })} (플랫폼 수수료 {settlementFeeRateLabel(feeRate)} 공제, gross{" "}
+              {formatCashKrw(mentorGross, { unit: "원" })} 기준)
+            </>
+          )}
         </p>
         <p className="mt-1">
           <span className="font-extrabold">합계:</span> {formatCashKrw(mentorGross + studentRefund, { unit: "원" })} / 예치금{" "}
@@ -143,10 +148,7 @@ function DisputeEscrowSplitForm(props: {
   );
 }
 
-export function DisputeEscrowSplitPanel(props: {
-  panelState: AdminDisputeEscrowSplitPanelState;
-  platformFeeRate: number;
-}) {
+export function DisputeEscrowSplitPanel(props: { panelState: AdminDisputeEscrowSplitPanelState }) {
   const st = props.panelState;
 
   if (st.kind === "unavailable") {
@@ -230,7 +232,7 @@ export function DisputeEscrowSplitPanel(props: {
         </div>
       </dl>
 
-      <DisputeEscrowSplitForm form={f} platformFeeRate={props.platformFeeRate} />
+      <DisputeEscrowSplitForm form={f} />
     </section>
   );
 }

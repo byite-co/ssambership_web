@@ -48,7 +48,6 @@ export function DisputeAdminPageBody(props: {
   disputeId: string;
   adminNotes: AdminCaseNotesResult;
   escrowSplitPanelState: AdminDisputeEscrowSplitPanelState;
-  platformFeeRate: number;
 }) {
   const d = props.bundle.dispute.row;
   const stRaw = statusBadgeText(d, ["status", "state", "phase", "resolution", "outcome"]);
@@ -77,7 +76,7 @@ export function DisputeAdminPageBody(props: {
         </div>
       </section>
 
-      <DisputeEscrowSplitPanel panelState={props.escrowSplitPanelState} platformFeeRate={props.platformFeeRate} />
+      <DisputeEscrowSplitPanel panelState={props.escrowSplitPanelState} />
 
       <section className="rounded-2xl border border-amber-800/30 bg-amber-950/5 p-4">
         <h2 className="text-sm font-extrabold text-amber-950">금전·환불·정산 안내</h2>

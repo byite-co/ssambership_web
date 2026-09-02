@@ -12,10 +12,16 @@ import {
 import {
   calcPayoutWithholding,
   DEFAULT_MASKED_BANK_DISPLAY,
-  MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
   MENTOR_CUSTOM_REQUEST_SHARE,
   MENTOR_INDIVIDUAL_QUESTION_SHARE,
 } from "@/lib/mentor/mentorPayoutsConstants";
+import {
+  customRequestCompletedOrderLine,
+  customRequestSettlementLine,
+  intWon,
+  orderGrossWon,
+  pickTs,
+} from "@/lib/mentor/mentorPayoutLinesCore";
 import {
   buildPayoutScheduleInfo,
   detailLineToSettlementRow,
@@ -72,32 +78,6 @@ function inYm(iso: string, ym: string): boolean {
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return false;
   return ymKey(d) === ym;
-}
-
-function pickTs(row: Row): string {
-  for (const k of ["created_at", "paid_at", "updated_at", "completed_at"]) {
-    const v = row[k];
-    if (typeof v === "string" && v) return v;
-  }
-  return new Date().toISOString();
-}
-
-function intWon(v: unknown): number {
-  if (typeof v === "number" && Number.isFinite(v)) return Math.trunc(v);
-  if (typeof v === "string") {
-    const n = Number(v.replace(/,/g, ""));
-    return Number.isFinite(n) ? Math.trunc(n) : 0;
-  }
-  return 0;
-}
-
-function orderGrossWon(order: Row | null): number {
-  if (!order) return 0;
-  for (const k of ["agreed_price", "final_price", "paid_amount", "amount", "price", "total_amount"]) {
-    const n = intWon(order[k]);
-    if (n > 0) return n;
-  }
-  return 0;
 }
 
 function maskBankDisplay(bank: string | null, account: string | null): string {
@@ -163,29 +143,11 @@ async function loadSubscriptionLines(client: SupabaseClient, mentorId: string): 
 }
 async function loadCustomRequestLines(client: SupabaseClient, mentorId: string): Promise<MentorPayoutDetailLine[]> {
   const settlement = await loadMentorSettlementItemsForPayouts(client, mentorId);
-  const fromSettlement: MentorPayoutDetailLine[] = settlement.lines.map(({ settlement: s, order }) => {
-    const gross = intWon(s.gross_amount) || orderGrossWon(order);
-    const payment = gross > 0 ? gross : intWon(s.mentor_amount) + intWon(s.platform_fee_amount);
-    const expectedFee = Math.floor(payment * MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE);
-    const feeRaw = intWon(s.platform_fee_amount);
-    const fee =
-      feeRaw > 0 && payment > 0 && feeRaw / payment < 0.15 ? expectedFee : feeRaw || expectedFee;
-    const net = intWon(s.mentor_amount) || payment - fee;
-    const st = String(s.status ?? "").toLowerCase();
-    const status =
-      st === "paid" ? "지급완료" : st === "on_hold" ? "보류" : st === "payable" ? "지급가능" : "정산예정";
-    const oid = String(s.custom_request_order_id ?? "");
-    return withPayoutWithholding({
-      id: `cr-${String(s.id ?? oid)}`,
-      type: "custom_request" as const,
-      date: pickTs(s),
-      description: oid ? `맞춤의뢰 주문 · ${oid.slice(0, 8)}` : "맞춤의뢰 주문",
-      paymentAmount: payment,
-      feeAmount: fee,
-      netAmount: net,
-      status,
-    });
-  });
+  // PR-1b V-2: 결제액·수수료·멘토 몫은 정산 행(DB) 그대로 — TS 상수 재계산·"15% 미만이면 5%" 휴리스틱 보정 없음.
+  // 요율 없는 행은 '요율 미설정' 으로 표시하고 계산하지 않는다(lib/mentor/mentorPayoutLinesCore.ts).
+  const fromSettlement: MentorPayoutDetailLine[] = settlement.lines.map(({ settlement: s }) =>
+    withPayoutWithholding(customRequestSettlementLine(s))
+  );
 
   const seenOrder = new Set(
     settlement.lines
@@ -213,22 +175,9 @@ async function loadCustomRequestLines(client: SupabaseClient, mentorId: string):
   for (const o of orders as Row[]) {
     const oid = String(o.id ?? "");
     if (!oid || seenOrder.has(oid)) continue;
-    const payment = orderGrossWon(o);
-    if (payment <= 0) continue;
-    const net = Math.floor(payment * MENTOR_CUSTOM_REQUEST_SHARE);
-    const fee = payment - net;
-    extra.push(
-      withPayoutWithholding({
-        id: `cro-${oid}`,
-        type: "custom_request",
-        date: pickTs(o),
-        description: `맞춤의뢰 완료 · ${oid.slice(0, 8)}`,
-        paymentAmount: payment,
-        feeAmount: fee,
-        netAmount: net,
-        status: "정산예정",
-      })
-    );
+    // 정산 행이 없는 완료 주문: gross(주문 행)만 표시, 수수료·멘토 몫은 정본이 없어 계산하지 않는다('요율 미설정').
+    const draft = customRequestCompletedOrderLine(o);
+    if (draft) extra.push(withPayoutWithholding(draft));
   }
 
   return [...fromSettlement, ...extra];

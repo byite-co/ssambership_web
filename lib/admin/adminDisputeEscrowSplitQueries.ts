@@ -4,6 +4,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { AdminDisputeEscrowSplitPanelState } from "@/lib/admin/adminDisputeEscrowSplitTypes";
 import { pickGrossAmountWonWithSource } from "@/lib/customRequest/orderSettlementAmounts";
 import { loadCustomOrderSettlementItemByOrderId } from "@/lib/customRequest/orderSettlementService";
+import { parseSettlementFeeRate } from "@/lib/payout/settlementFeeRate";
 
 type Row = Record<string, unknown>;
 
@@ -187,6 +188,8 @@ export async function loadAdminDisputeEscrowSplitPanelState(
       paymentStatus,
       settlementStatus,
       agreedPriceWon,
+      // PR-1b V-4: 미리보기 요율은 DB 정산 행 그대로(없으면 null → '요율 미설정'). 실제 분배 RPC 도 DB 요율로 집행한다.
+      feeRate: settlementLoad.row ? parseSettlementFeeRate(settlementLoad.row.fee_rate) : null,
     },
   };
 }

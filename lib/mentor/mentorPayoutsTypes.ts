@@ -15,6 +15,11 @@ export type MentorPayoutDetailLine = {
   /** W-01: 실지급(예정)액 = netAmount − withholdingAmount */
   payoutAmount: number;
   status: string;
+  /**
+   * PR-1b: DB 정산 행의 요율(fee_rate, 분수). 행에 요율이 없으면 null('요율 미설정' — 금액을 요율로 재계산하지
+   * 않는다). 소스가 요율을 노출하지 않는 라인(개별질문 등)은 undefined.
+   */
+  feeRate?: number | null;
 };
 
 export type MentorPayoutMonthlyCard = {
