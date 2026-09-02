@@ -2,14 +2,14 @@
  * 환불 목록 상단(PR-3 §1) — 검색(요청자 이름·이메일) · 상태 탭(`status` 하나) · `대기 N / 전체 M`. Server Component.
  *
  * 검색·탭·페이지는 전부 URL(서버) 기준이다. 클라이언트 필터 없음. 쿼리 키는 `q` · `status` · `page` 만.
- * PR-2 의 `MentorApprovalQueueList` 상단과 같은 구조 — PR-4 `AdminDataTable` 추출 입력.
+ * 상태 탭과 `대기 N / 전체 M` 은 공용 `AdminDataTable`(PR-4) 조각을 쓴다. 검색 form 은 이 화면 고유다(페이지 폭 배치).
  */
 import Link from "next/link";
+import { AdminDataTable } from "@/components/admin/AdminDataTable";
 import type { AdminListParams } from "@/lib/admin/adminListParams";
 import { splitAdminListBasePath } from "@/lib/admin/adminListParams";
 import { REFUND_BASE_PATH, REFUND_DEFAULT_TAB, REFUND_TABS, buildRefundListUrl, type RefundTab } from "@/lib/admin/refundConsole";
 import type { RefundTabCounts } from "@/lib/admin/refundConsoleQueries";
-import { cn } from "@/lib/utils/cn";
 
 type Props = {
   params: AdminListParams;
@@ -45,31 +45,10 @@ export function RefundQueueToolbar({ params, tab, counts, totalCount }: Props) {
             </Link>
           ) : null}
         </form>
-        <p className="text-xs font-bold text-slate-600" aria-live="polite" data-refund-counts>
-          대기 <span className="tabular-nums text-slate-900">{counts.pending}</span> / 전체{" "}
-          <span className="tabular-nums text-slate-900">{counts.all}</span>
-        </p>
+        <AdminDataTable.Counts counts={counts} />
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <nav className="flex flex-wrap gap-1" aria-label="상태 탭">
-          {REFUND_TABS.map((t) => {
-            const active = t.value === tab;
-            return (
-              <Link
-                key={t.value}
-                href={buildRefundListUrl(params, { status: t.value })}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "rounded-lg border px-2.5 py-1 text-[11px] font-extrabold transition",
-                  active ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                )}
-              >
-                {t.label}
-                <span className={cn("ml-1 tabular-nums", active ? "text-blue-100" : "text-slate-400")}>{counts[t.value]}</span>
-              </Link>
-            );
-          })}
-        </nav>
+        <AdminDataTable.Tabs basePath={REFUND_BASE_PATH} params={params} tabs={REFUND_TABS} activeTab={tab} counts={counts} />
         {params.search ? (
           <p className="text-[11px] font-semibold text-slate-500">
             &lsquo;{params.search}&rsquo; 검색 결과 <span className="tabular-nums text-slate-800">{totalCount}</span>건

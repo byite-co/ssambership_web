@@ -14,7 +14,8 @@
  *
  * node --test 계약 테스트가 직접 import 하므로 React·`@/` import 를 두지 않는다.
  */
-import { buildAdminListUrl, type AdminListParams } from "./adminListParams.ts";
+import type { AdminListParams } from "./adminListParams.ts";
+import { ADMIN_LIST_SEARCH_USER_ID_LIMIT, buildAdminDataTableUrl } from "./adminDataTable.ts";
 import { ADMIN_CONFIRM_REASON_MIN_LENGTH } from "./adminConfirmPolicy.ts";
 import {
   refundBracketLabelKo,
@@ -57,17 +58,11 @@ export function refundTabStatus(tab: RefundTab): string | null {
 }
 
 /**
- * 이 화면의 목록 링크 빌더 — 공용 `buildAdminListUrl` 은 `status=all` 을 "필터 없음" 으로 보고 지운다.
- * 기본 탭이 대기라서 전체 탭 링크가 status 를 잃으면 재파싱 시 대기 탭으로 튄다(PR-2 와 같은 처리).
+ * 이 화면의 목록 링크 빌더 — 공용 정본 `buildAdminDataTableUrl`(PR-4) 에 이 화면의 경로를 묶은 것.
+ * 기본 탭이 대기라서 전체 탭 링크가 `status=all` 을 잃으면 재파싱 시 대기 탭으로 튄다(PR-2 와 같은 처리).
  */
 export function buildRefundListUrl(params: AdminListParams, overrides: Partial<AdminListParams> = {}): string {
-  const url = buildAdminListUrl(REFUND_BASE_PATH, params, overrides);
-  const status = overrides.status !== undefined ? overrides.status : params.status;
-  if (status !== "all") return url;
-  const [path, qs = ""] = url.split("?");
-  const usp = new URLSearchParams(qs);
-  usp.set("status", "all");
-  return `${path}?${usp.toString()}`;
+  return buildAdminDataTableUrl(REFUND_BASE_PATH, params, overrides);
 }
 
 /** 상세 경로 */
@@ -501,18 +496,17 @@ export function formatRefundBulkResultLine(state: NonNullable<RefundBulkResultSt
 
 // ── 목록 검색 — 요청자 이름·이메일(users) ─────────────────────────────────────
 
-export const REFUND_SEARCH_TERM_MAX_LENGTH = 80;
-export const REFUND_SEARCH_USER_ID_LIMIT = 100;
-
-export function normalizeRefundSearchTerm(raw: string | null | undefined): string {
-  const s = typeof raw === "string" ? raw : "";
-  return s.replace(/[%_,()]/g, " ").replace(/\s+/g, " ").trim().slice(0, REFUND_SEARCH_TERM_MAX_LENGTH);
-}
-
-/** users 에서 이름·닉네임·이메일 부분일치 — PostgREST `.or()` 인자 */
-export function buildRefundUserSearchOr(term: string): string {
-  return [`full_name.ilike.%${term}%`, `nickname.ilike.%${term}%`, `email.ilike.%${term}%`].join(",");
-}
+/**
+ * 검색어 정규화 · users 이름·닉네임·이메일 `or()` 인자 · 상한 · 하단 진행 표시 구간 — 공용 정본 `adminDataTable.ts`(PR-4) 를
+ * 화면 이름으로 다시 내보낸다(계약 테스트·조회 모듈이 이 이름을 쓴다).
+ */
+export {
+  ADMIN_LIST_SEARCH_TERM_MAX_LENGTH as REFUND_SEARCH_TERM_MAX_LENGTH,
+  ADMIN_LIST_SEARCH_USER_ID_LIMIT as REFUND_SEARCH_USER_ID_LIMIT,
+  normalizeAdminListSearchTerm as normalizeRefundSearchTerm,
+  buildAdminUsersSearchOr as buildRefundUserSearchOr,
+  adminListProgressRange as refundQueueProgressRange,
+} from "./adminDataTable.ts";
 
 /**
  * refunds 에서의 검색 조건 — users 검색으로 얻은 user_id 집합 + 사유 부분일치 (+ UUID 앞부분이면 환불 ID).
@@ -520,7 +514,7 @@ export function buildRefundUserSearchOr(term: string): string {
  */
 export function buildRefundSearchOr(term: string, userIds: readonly string[]): string {
   const parts = [`reason.ilike.%${term}%`];
-  const ids = userIds.filter((id) => /^[0-9a-fA-F-]{36}$/.test(id)).slice(0, REFUND_SEARCH_USER_ID_LIMIT);
+  const ids = userIds.filter((id) => /^[0-9a-fA-F-]{36}$/.test(id)).slice(0, ADMIN_LIST_SEARCH_USER_ID_LIMIT);
   if (ids.length) parts.push(`user_id.in.(${ids.join(",")})`);
   if (/^[0-9a-fA-F-]{4,36}$/.test(term)) parts.push(`id.ilike.${term}%`);
   return parts.join(",");
@@ -540,13 +534,6 @@ export const REFUND_EMPTY_STATE = {
     "카드 결제 건은 PG사에서 수동으로 취소해야 합니다",
   ],
 } as const;
-
-/** 목록 하단 진행 표시 `N / 전체` 의 구간 — 표시용 1-based (PR-2 와 같은 규칙, PR-4 추출 대상) */
-export function refundQueueProgressRange(page: number, pageSize: number, rowsOnPage: number, totalCount: number): { first: number; last: number } {
-  if (totalCount <= 0 || rowsOnPage <= 0) return { first: 0, last: 0 };
-  const first = (Math.max(1, page) - 1) * Math.max(1, pageSize) + 1;
-  return { first, last: first + rowsOnPage - 1 };
-}
 
 /** 상세 제목 `김OO · 84,900원 환불 요청` */
 export function buildRefundDetailTitle(requesterName: string, amountWon: number | null): string {

@@ -2,7 +2,7 @@ import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
-import { splitPendingFirstRange } from "@/lib/admin/mentorApprovalQueue";
+import { splitPendingFirstRange } from "@/lib/admin/adminDataTable";
 import {
   REFUND_KIND_LABELS,
   REFUND_TAB_VALUES,
@@ -35,12 +35,12 @@ import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
  * 관리자 · 환불 화면(PR-3) 서버 조회 정본.
  *
  * - 목록: 서버 검색(요청자 이름·이메일 → users → `user_id.in`, 사유 부분일치) + 서버 탭(`status` 하나) + 페이징.
- *   대기 탭·전체 탭 모두 **대기 건이 항상 위, 오래된 것부터**(전체 탭은 대기/나머지 두 range 를 이어 붙인다 — PR-2 와 같은 산술).
+ *   대기 탭·전체 탭 모두 **대기 건이 항상 위, 오래된 것부터**(전체 탭은 대기/나머지 두 range 를 이어 붙인다 — 공용 정본 `adminDataTable.ts` 의 `splitPendingFirstRange`).
  * - 금액은 `refunds.amount_cents` 저장값 하나만 쓴다(RPC 실지급액과 동일 출처).
  * - 환불 기준은 학생 화면 함수 `computeProratedRefundEstimate` 를 **요청 시점(`created_at`)** 을 now 로 넣어 그대로 호출한다.
  *   입력 우선순위(구독 current_period → 청구 이벤트 period, usageStarted 판정)도 학생 액션과 같다.
  * - `cash_ledger`·`payments`·`subscriptions`·`subscription_billing_events`·질문방은 RLS 가 본인/당사자 한정이라 서비스 롤로 읽는다.
- *   키가 없으면 세션 클라이언트로 폴백한다(`mentorProfilesAdminReadClient` 와 같은 규칙 — PR-4 공용화 대상).
+ *   키가 없으면 세션 클라이언트로 폴백한다(`mentorProfilesAdminReadClient` 와 같은 규칙 — 이름이 mentor_profiles 에 묶여 있어 공용화는 후속 서버 헬퍼 PR).
  */
 
 type Row = Record<string, unknown>;

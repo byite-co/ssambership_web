@@ -3,9 +3,11 @@
  *
  * - 검색·탭·페이지는 전부 URL(서버) 기준이다. 클라이언트 필터 없음. 쿼리 키는 `q` · `status` · `page` 만.
  * - 선택 행은 `mentor` 키로 싣되, 탭·검색·페이지 링크에는 싣지 않는다(params.extra 에서 제거된 채 넘어온다).
- * - 상단 `대기 N / 전체 M` · 하단 `첫–끝 / 필터 후 건수`.
+ * - 상단 `대기 N / 전체 M` · 상태 탭 · 하단 `첫–끝 / 필터 후 건수` 는 공용 `AdminDataTable`(PR-4) 조각을 쓴다.
+ *   검색 form 과 지원자 카드(행)는 이 화면 고유다(300px 사이드바에 맞춘 배치).
  */
 import Link from "next/link";
+import { AdminDataTable } from "@/components/admin/AdminDataTable";
 import { AdminStatusPill } from "@/components/admin/AdminStatusPill";
 import { StatusBadge } from "@/components/design-system/StatusBadge";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -15,7 +17,6 @@ import {
   MENTOR_APPROVAL_SELECTED_PARAM,
   MENTOR_APPROVAL_TABS,
   buildMentorApprovalListUrl,
-  queueProgressRange,
   type MentorApprovalTab,
 } from "@/lib/admin/mentorApprovalQueue";
 import { identityListBadgeLabel, identityReviewTone } from "@/lib/admin/mentorIdentityReview";
@@ -41,20 +42,13 @@ export function MentorApprovalQueueList(props: Props) {
   const { path: actionPath } = splitAdminListBasePath(MENTOR_APPROVAL_BASE_PATH);
   const rowHref = (id: string) =>
     buildMentorApprovalListUrl(params, { page: params.page, extra: { [MENTOR_APPROVAL_SELECTED_PARAM]: id } });
-  const totalPages = Math.max(1, Math.ceil(totalCount / Math.max(1, params.pageSize)));
-  const hasPrev = params.page > 1;
-  const hasNext = params.page < totalPages;
-  const progress = queueProgressRange(params.page, params.pageSize, items.length, totalCount);
 
   return (
     <div className="flex h-full min-h-0 flex-col rounded-2xl border border-slate-200 bg-white">
       <div className="space-y-2 border-b border-slate-100 px-3 py-3">
         <div className="flex items-baseline justify-between gap-2">
           <h2 className="text-sm font-black text-slate-900">지원자</h2>
-          <p className="text-xs font-bold text-slate-600" aria-live="polite">
-            대기 <span className="tabular-nums text-slate-900">{counts.pending}</span> / 전체{" "}
-            <span className="tabular-nums text-slate-900">{counts.all}</span>
-          </p>
+          <AdminDataTable.Counts counts={counts} />
         </div>
         <form action={actionPath} method="GET" className="flex items-center gap-1.5" role="search">
           <input
@@ -81,25 +75,7 @@ export function MentorApprovalQueueList(props: Props) {
             </Link>
           </p>
         ) : null}
-        <nav className="flex flex-wrap gap-1" aria-label="상태 탭">
-          {MENTOR_APPROVAL_TABS.map((t) => {
-            const active = t.value === tab;
-            return (
-              <Link
-                key={t.value}
-                href={buildMentorApprovalListUrl(params, { status: t.value })}
-                aria-current={active ? "page" : undefined}
-                className={cn(
-                  "rounded-lg border px-2 py-1 text-[11px] font-extrabold transition",
-                  active ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                )}
-              >
-                {t.label}
-                <span className={cn("ml-1 tabular-nums", active ? "text-blue-100" : "text-slate-400")}>{counts[t.value]}</span>
-              </Link>
-            );
-          })}
-        </nav>
+        <AdminDataTable.Tabs basePath={MENTOR_APPROVAL_BASE_PATH} params={params} tabs={MENTOR_APPROVAL_TABS} activeTab={tab} counts={counts} />
       </div>
 
       {error ? (
@@ -154,33 +130,13 @@ export function MentorApprovalQueueList(props: Props) {
         })}
       </ol>
 
-      <div className="flex items-center justify-between gap-2 border-t border-slate-100 px-3 py-2">
-        <p className="text-[11px] font-semibold tabular-nums text-slate-600">
-          {progress.first}–{progress.last} / 전체 {totalCount}
-        </p>
-        <div className="flex items-center gap-1">
-          <Link
-            href={hasPrev ? buildMentorApprovalListUrl(params, { page: params.page - 1 }) : "#"}
-            aria-disabled={!hasPrev}
-            className={cn(
-              "rounded-lg border px-2 py-1 text-[11px] font-extrabold",
-              hasPrev ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50" : "pointer-events-none border-slate-100 text-slate-300"
-            )}
-          >
-            ← 이전
-          </Link>
-          <Link
-            href={hasNext ? buildMentorApprovalListUrl(params, { page: params.page + 1 }) : "#"}
-            aria-disabled={!hasNext}
-            className={cn(
-              "rounded-lg border px-2 py-1 text-[11px] font-extrabold",
-              hasNext ? "border-slate-200 bg-white text-slate-700 hover:bg-slate-50" : "pointer-events-none border-slate-100 text-slate-300"
-            )}
-          >
-            다음 →
-          </Link>
-        </div>
-      </div>
+      <AdminDataTable.Pagination
+        className="border-t border-slate-100 px-3 py-2"
+        basePath={MENTOR_APPROVAL_BASE_PATH}
+        params={params}
+        totalCount={totalCount}
+        rowsOnPage={items.length}
+      />
     </div>
   );
 }
