@@ -4,7 +4,7 @@
  * - 두 조치 모두 **계정 관리 화면(`/admin/users`)의 기존 서버 액션을 그대로 재사용**한다(새 액션 없음):
  *   경고 = `issueUserWarningAction`(`userId` · `warnReason` · `severity`) → RPC `admin_issue_user_warning`
  *   정지 = `setUserStatusAction`(`userId` · `nextStatus` · `durationDays` · `reason`) → `users` 행 갱신.
- *   두 액션은 처리 후 `/admin/users?ok=…`(실패 시 `?error=`)로 이동한다 — 신고 상세로 돌아오지 않는다(기존 동작, 보고).
+ *   두 액션은 `returnTo`(PR-6 2번째 커밋 · 오너 승인)를 받아 신고 상세(`/admin/reports/<id>`)로 돌아온다 — 결과·실패는 신고 상세 상단 플래시.
  * - 등급: 경고 = stateChange + 사유 프리셋 필수 · 계정 정지 = critical(기간 7일·30일·영구 선택 + 사유 필수).
  * - 정지 기간 → 계정 상태는 분쟁 제재와 같은 표(`accountSanctionPolicy.ACCOUNT_SANCTION_TO_STATUS`).
  *
@@ -14,6 +14,8 @@ import {
   ACCOUNT_SANCTION_CODES,
   ACCOUNT_SANCTION_LABELS,
   ACCOUNT_SANCTION_TO_STATUS,
+  ACCOUNT_STATUS_RETURN_TO_FIELD,
+  ACCOUNT_WARNING_AUTO_SUSPEND_DAYS,
   accountRoleLabel,
   buildAccountSanctionSummary,
   buildAccountWarningSummary,
@@ -29,6 +31,12 @@ export const CONTENT_REPORT_WARN_SEVERITY_DEFAULT = "normal";
 export const CONTENT_REPORT_SUSPEND_STATUS_FIELD = "nextStatus";
 export const CONTENT_REPORT_SUSPEND_DURATION_FIELD = "durationDays";
 export const CONTENT_REPORT_SUSPEND_REASON_FIELD = "reason";
+export const CONTENT_REPORT_RETURN_TO_FIELD = ACCOUNT_STATUS_RETURN_TO_FIELD;
+
+/** 두 액션에 실어 보내는 복귀 경로 — 액션 쪽 `resolveAccountStatusReturnPath` 허용 목록(`/admin/reports/<uuid>`)과 같은 형식 */
+export function contentReportUserActionReturnPath(reportId: string): string {
+  return `/admin/reports/${encodeURIComponent(reportId)}`;
+}
 
 // ── 경고 ─────────────────────────────────────────────────────────────────────
 
@@ -61,8 +69,28 @@ export const CONTENT_REPORT_USER_ACTIONS: Readonly<
   suspend: { level: "critical", label: "계정 정지", dialogTitle: "계정 정지 — 실행 전 확인", confirmLabel: "정지 실행", pendingLabel: "정지 중…" },
 };
 
-/** 두 액션의 실제 redirect 목적지 — 확인 모달에 미리 알린다 */
-export const CONTENT_REPORT_USER_ACTION_REDIRECT_NOTE = "처리 후 계정 관리 화면으로 이동합니다(계정 관리 액션 재사용 — 결과 안내도 그 화면에 표시).";
+/** 확인 모달 마지막 줄 — 결과가 어디에 보이는지 */
+export const CONTENT_REPORT_USER_ACTION_RESULT_NOTE = "처리 결과는 이 신고 상세 상단에 표시됩니다.";
+
+/**
+ * 신고 상세 `?ok=` — 경고·정지 액션의 redirect 키(`warned:N` · `warned_suspended:N` · 계정 상태값)와 운영 메모 액션의 `note`.
+ * 계정 관리 화면(`users/page.tsx`)과 같은 문장. 모르는 값은 null(표시 안 함).
+ */
+export function contentReportDetailFlashOkMessage(ok: string | null | undefined): string | null {
+  const s = String(ok ?? "").trim();
+  if (!s) return null;
+  if (s === "note") return "운영 메모를 저장했습니다.";
+  const count = (prefix: string) => {
+    const n = s.slice(prefix.length);
+    return /^\d+$/.test(n) ? ` (누적 ${n}회)` : "";
+  };
+  if (s.startsWith("warned_suspended:")) return `경고가 누적되어 계정을 ${ACCOUNT_WARNING_AUTO_SUSPEND_DAYS}일 자동 정지했습니다.${count("warned_suspended:")}`;
+  if (s.startsWith("warned:")) return `경고를 기록했습니다.${count("warned:")}`;
+  if (s === "suspended") return "계정을 일시 정지했습니다.";
+  if (s === "banned") return "계정을 영구 차단했습니다.";
+  if (s === "active") return "계정을 정상으로 되돌렸습니다.";
+  return null;
+}
 
 // ── 신고당한 사용자 블록 ─────────────────────────────────────────────────────
 

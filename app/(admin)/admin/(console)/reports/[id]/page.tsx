@@ -12,7 +12,7 @@ import { loadAdminReportEvidence, type AdminReportEvidence } from "@/lib/admin/a
 import { loadAdminReportNotes } from "@/lib/admin/adminCaseNotes";
 import { normalizeModerationTargetType } from "@/lib/admin/communityModerationCore";
 import { CONTENT_REPORT_BASE_PATH, contentReportTargetLabel } from "@/lib/admin/contentReportConsole";
-import { contentReportUserActionsAvailable } from "@/lib/admin/contentReportSanctionConsole";
+import { contentReportDetailFlashOkMessage, contentReportUserActionsAvailable } from "@/lib/admin/contentReportSanctionConsole";
 import { loadContentReportTargetUser } from "@/lib/admin/contentReportTargetUserQueries";
 import { formatKoreanDate } from "@/lib/utils/formatDisplay";
 import { AdminCaseNotesPanel } from "@/components/admin/AdminCaseNotesPanel";
@@ -21,7 +21,13 @@ import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 const TABLE = "content_reports" as const;
 const ACTION_LINK = "rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50";
 
-type Props = { params: Promise<{ id: string }> };
+type Props = { params: Promise<{ id: string }>; searchParams?: Promise<Record<string, string | string[] | undefined>> };
+
+function pick(value: string | string[] | undefined): string {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0].trim();
+  return "";
+}
 
 function fmtDate(v: unknown): string {
   if (v == null) return "—";
@@ -162,6 +168,11 @@ function EvidenceSection({ evidence }: { evidence: AdminReportEvidence }) {
 export default async function AdminReportDetailPage(props: Props) {
   await requireRole("admin");
   const { id } = await props.params;
+  // PR-6: 경고·정지(returnTo)·운영 메모 액션이 이 화면으로 돌아오며 붙이는 결과 통지.
+  const sp = (await props.searchParams) ?? {};
+  const flashOk = contentReportDetailFlashOkMessage(pick(sp.ok));
+  const flashErrRaw = pick(sp.error) || null;
+  const flashErr = flashErrRaw ? (toAdminDisplayError(flashErrRaw, "reports") ?? "처리에 실패했습니다. 잠시 후 다시 시도해 주세요.") : null;
   const supabase = await createClient();
   const { data, error } = await supabase.from(TABLE).select("*").eq("id", id).maybeSingle();
   const row = data as Record<string, unknown> | null;
@@ -209,6 +220,16 @@ export default async function AdminReportDetailPage(props: Props) {
       }
     >
       <div className="space-y-4">
+        {flashOk ? (
+          <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">
+            {flashOk}
+          </p>
+        ) : null}
+        {flashErr ? (
+          <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">
+            처리 실패 — {flashErr} 이 화면에서 같은 버튼으로 다시 시도할 수 있습니다.
+          </p>
+        ) : null}
         {loadErr ? <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">{loadErr}</p> : null}
         {!row && !loadErr ? <p className="text-sm text-slate-600">해당 id의 신고를 찾지 못했습니다.</p> : null}
 
@@ -276,11 +297,11 @@ export default async function AdminReportDetailPage(props: Props) {
             <div className="mt-4 border-t border-slate-100 pt-4" data-content-report-user-actions-section>
               <p className="text-xs font-extrabold text-slate-700">신고당한 사용자 조치</p>
               <p className="mt-0.5 text-xs text-slate-500">
-                경고는 사유 프리셋이 필수이고, 계정 정지는 기간(7일 · 30일 · 영구)과 사유가 필요합니다. 두 조치는 계정 관리 화면의 액션을 그대로 쓰며 처리 후 그 화면으로 이동합니다.
+                경고는 사유 프리셋이 필수이고, 계정 정지는 기간(7일 · 30일 · 영구)과 사유가 필요합니다. 두 조치는 계정 관리 화면의 액션을 그대로 쓰며 처리 후 이 신고로 돌아옵니다.
               </p>
               <div className="mt-2">
                 {contentReportUserActionsAvailable(targetUser) && targetUser ? (
-                  <ContentReportUserActionButtons user={targetUser} untilLabels={untilLabels} />
+                  <ContentReportUserActionButtons reportId={id} user={targetUser} untilLabels={untilLabels} />
                 ) : (
                   <p className="text-xs font-semibold text-slate-500">
                     {targetUser?.role === "admin" ? "관리자 계정에는 경고·정지를 할 수 없습니다." : "작성자를 알 수 없어 경고·정지 버튼을 표시하지 않습니다."}

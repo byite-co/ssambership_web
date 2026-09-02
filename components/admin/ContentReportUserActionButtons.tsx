@@ -9,13 +9,14 @@
  * | 계정 정지 | critical(기간 선택 + 사유 필수) | setUserStatusAction — `userId` · `nextStatus` · `durationDays` · `reason` |
  *
  * 정지 기간(7일·30일·영구)은 모달 안 라디오로 고른다 — 고르기 전에는 확인이 잠기고, 고르면 hidden `nextStatus`·`durationDays` 가 따라간다.
- * 두 액션은 처리 후 `/admin/users` 로 이동한다(기존 동작) — summary 마지막 줄에 미리 알린다.
+ * 두 액션에 `returnTo`(신고 상세 경로)를 실어 처리 후 이 신고로 돌아온다(PR-6 2번째 커밋) — 결과는 신고 상세 상단 플래시.
  */
 import { useState } from "react";
 import { ConfirmSubmitButton } from "@/components/admin/ConfirmSubmitButton";
 import { issueUserWarningAction, setUserStatusAction } from "@/lib/admin/accountStatusActions";
 import {
   CONTENT_REPORT_CUSTOM_REASON_LABEL,
+  CONTENT_REPORT_RETURN_TO_FIELD,
   CONTENT_REPORT_SUSPEND_BLOCKED_MESSAGE,
   CONTENT_REPORT_SUSPEND_CODES,
   CONTENT_REPORT_SUSPEND_CODE_LABELS,
@@ -23,7 +24,7 @@ import {
   CONTENT_REPORT_SUSPEND_REASON_FIELD,
   CONTENT_REPORT_SUSPEND_STATUS_FIELD,
   CONTENT_REPORT_USER_ACTIONS,
-  CONTENT_REPORT_USER_ACTION_REDIRECT_NOTE,
+  CONTENT_REPORT_USER_ACTION_RESULT_NOTE,
   CONTENT_REPORT_USER_ID_FIELD,
   CONTENT_REPORT_WARNING_PRESETS,
   CONTENT_REPORT_WARN_REASON_FIELD,
@@ -32,12 +33,15 @@ import {
   buildContentReportSuspendSummary,
   buildContentReportWarningSummary,
   contentReportSuspendFields,
+  contentReportUserActionReturnPath,
   type ContentReportSuspendCode,
   type ContentReportTargetUser,
 } from "@/lib/admin/contentReportSanctionConsole";
 import { cn } from "@/lib/utils/cn";
 
 type Props = {
+  /** 처리 후 돌아올 신고 */
+  reportId: string;
   user: ContentReportTargetUser;
   /** 7일·30일 정지 해제 예정일 표기(서버에서 계산) */
   untilLabels: Record<"7d" | "30d", string>;
@@ -46,21 +50,23 @@ type Props = {
 const BUTTON = "inline-flex h-9 items-center justify-center rounded-lg px-3 text-xs font-bold transition disabled:cursor-not-allowed disabled:opacity-60";
 const RADIO = "flex cursor-pointer items-center gap-2 rounded-lg border px-3 py-2 text-sm font-bold";
 
-export function ContentReportUserActionButtons({ user, untilLabels }: Props) {
+export function ContentReportUserActionButtons({ reportId, user, untilLabels }: Props) {
   const [code, setCode] = useState<ContentReportSuspendCode | null>(null);
+  const returnTo = contentReportUserActionReturnPath(reportId);
   const fields = code ? contentReportSuspendFields(code) : { nextStatus: "", durationDays: "" };
   const suspendSummary = code
-    ? `${buildContentReportSuspendSummary(user, code, code === "permanent" ? null : untilLabels[code])}\n${CONTENT_REPORT_USER_ACTION_REDIRECT_NOTE}`
-    : `정지 기간을 고르면 ${user.name} ${user.roleLabel} 계정에 미치는 실제 영향을 여기에 표시합니다.\n${CONTENT_REPORT_USER_ACTION_REDIRECT_NOTE}`;
+    ? `${buildContentReportSuspendSummary(user, code, code === "permanent" ? null : untilLabels[code])}\n${CONTENT_REPORT_USER_ACTION_RESULT_NOTE}`
+    : `정지 기간을 고르면 ${user.name} ${user.roleLabel} 계정에 미치는 실제 영향을 여기에 표시합니다.\n${CONTENT_REPORT_USER_ACTION_RESULT_NOTE}`;
 
   return (
     <div className="flex flex-wrap gap-2" data-content-report-user-actions={user.id}>
       <form action={issueUserWarningAction} className="inline" data-content-report-user-form="warn">
         <input type="hidden" name={CONTENT_REPORT_USER_ID_FIELD} value={user.id} />
         <input type="hidden" name={CONTENT_REPORT_WARN_SEVERITY_FIELD} value={CONTENT_REPORT_WARN_SEVERITY_DEFAULT} />
+        <input type="hidden" name={CONTENT_REPORT_RETURN_TO_FIELD} value={returnTo} />
         <ConfirmSubmitButton
           level="stateChange"
-          summary={`${buildContentReportWarningSummary(user)}\n${CONTENT_REPORT_USER_ACTION_REDIRECT_NOTE}`}
+          summary={`${buildContentReportWarningSummary(user)}\n${CONTENT_REPORT_USER_ACTION_RESULT_NOTE}`}
           details={[
             { label: "대상", value: `${user.name} (${user.roleLabel})` },
             { label: "누적 경고", value: user.activeWarningCount == null ? "확인 불가" : `${user.activeWarningCount}회` },
@@ -82,6 +88,7 @@ export function ContentReportUserActionButtons({ user, untilLabels }: Props) {
         <input type="hidden" name={CONTENT_REPORT_USER_ID_FIELD} value={user.id} />
         <input type="hidden" name={CONTENT_REPORT_SUSPEND_STATUS_FIELD} value={fields.nextStatus} />
         <input type="hidden" name={CONTENT_REPORT_SUSPEND_DURATION_FIELD} value={fields.durationDays} />
+        <input type="hidden" name={CONTENT_REPORT_RETURN_TO_FIELD} value={returnTo} />
         <ConfirmSubmitButton
           level="critical"
           summary={suspendSummary}

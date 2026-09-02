@@ -28,6 +28,8 @@ export async function bulkUpdateDisputesAction(formData: FormData) {
   const path = "/admin/disputes";
   const ids = idsFromForm(formData);
   const nextStatus = text(formData, "bulkStatus").toLowerCase();
+  // PR-6: 확인 모달의 사유(선택 `reason`)를 감사 로그 detail 에 남긴다 — 전체 건에 같은 값.
+  const reason = text(formData, "reason");
   if (!ids.length) redirect(backUrl(path, "error", "선택된 항목이 없습니다."));
   if (!["under_review", "resolved", "dismissed"].includes(nextStatus)) {
     redirect(backUrl(path, "error", "허용되지 않은 일괄 처리입니다."));
@@ -58,7 +60,7 @@ export async function bulkUpdateDisputesAction(formData: FormData) {
     adminId: user.id,
     actionType: "dispute_bulk_status",
     targetType: "dispute",
-    detail: { nextStatus, requested: ids.length, applied: n },
+    detail: { nextStatus, requested: ids.length, applied: n, reason: reason || null },
   });
   revalidatePath(path);
   redirect(backUrl(path, "ok", `${n}건을 일괄 처리했습니다(${nextStatus}).`));

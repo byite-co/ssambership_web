@@ -65,17 +65,21 @@ const DICTIONARY = {
     rejected: { label: "반려", tone: "danger", risk: "medium" },
   },
 
-  /** CHECK disputes_status_check (SQL 120) — 9값. 라벨은 disputeLabels.ts(M4) + 부재분(on_hold·sanction_*) 신설. */
+  /**
+   * CHECK disputes_status_check (SQL 120) — 9값.
+   * PR-6 후속(오너 확정): 라벨을 분쟁 화면 탭 표기와 통일 — 접수·진행→열림 · 에스컬레이션→상위 이관 · 종결→기각 · 7일/30일 정지→제재 7일/30일 ·
+   * 영구 차단→영구 제재. 분쟁 탭은 이 사전 라벨을 그대로 파생한다. (활동 로그 전용 `disputeLabels.ts`·`adminOperationalLabels.ts` 는 구 표기 — 별도 정리)
+   */
   "disputes.status": {
-    open: { label: "접수·진행", tone: "warning" },
+    open: { label: "열림", tone: "warning" },
     under_review: { label: "검토 중", tone: "info" },
-    escalated: { label: "에스컬레이션", tone: "warning" },
+    escalated: { label: "상위 이관", tone: "warning" },
     on_hold: { label: "보류", tone: "warning" },
     resolved: { label: "해결", tone: "success" },
-    dismissed: { label: "종결", tone: "neutral" },
-    sanction_7d: { label: "7일 정지", tone: "danger", risk: "medium" },
-    sanction_30d: { label: "30일 정지", tone: "danger", risk: "medium" },
-    sanction_permanent: { label: "영구 차단", tone: "danger", risk: "high" },
+    dismissed: { label: "기각", tone: "neutral" },
+    sanction_7d: { label: "제재 7일", tone: "danger", risk: "medium" },
+    sanction_30d: { label: "제재 30일", tone: "danger", risk: "medium" },
+    sanction_permanent: { label: "영구 제재", tone: "danger", risk: "high" },
   },
 
   /** CHECK subscriptions_status_check (SQL 064) — 7값. 라벨은 subscriptionDisplay.ts 의 사용자 표기와 정합. */

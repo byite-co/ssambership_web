@@ -8,7 +8,7 @@
  * - 확인 모달은 학생 몫·멘토 몫(gross)·수수료·멘토 실수령·예치금을 재표시한다. 분할은 세 숫자(학생 몫 + 멘토 실수령 + 수수료 = 학생 몫 + gross)가
  *   예치금과 같아야 확인이 열린다(`confirmBlockedMessage`). 분배 비율은 슬라이더가 아니라 **금액 직접 입력**이다.
  * - 미리보기 요율은 DB 정산 행(`form.feeRate`)만 쓴다(PR-1b V-4). 없으면 '요율 미설정' 을 보이고 실수령을 계산하지 않는다(RPC 가 DB 요율로 집행).
- * - 액션이 사유를 읽지 않으므로 사유 입력을 요구하지 않고(`reasonRequired={false}`) 그 사실을 summary 에 적는다 — 근거는 케이스 노트에.
+ * - 사유(`reason`)는 critical 기본대로 필수 — 액션이 읽어 `admin_action_logs.detail.reason` 에 남기고 서버에서도 최소 길이를 검사한다(PR-6 2번째 커밋).
  */
 import { useMemo, useState } from "react";
 import { ConfirmSubmitButton } from "@/components/admin/ConfirmSubmitButton";
@@ -17,7 +17,8 @@ import type { AdminDisputeEscrowSplitFormProps, AdminDisputeEscrowSplitPanelStat
 import {
   DISPUTE_ACTIONS,
   DISPUTE_ID_FIELD,
-  DISPUTE_NO_REASON_STORED_NOTE,
+  DISPUTE_REASON_FIELD,
+  DISPUTE_REASON_LOGGED_NOTE,
   DISPUTE_SPLIT_MENTOR_GROSS_FIELD,
   DISPUTE_SPLIT_ORDER_ID_FIELD,
   DISPUTE_SPLIT_STUDENT_REFUND_FIELD,
@@ -57,7 +58,7 @@ function DisputeEscrowSplitForm(props: { form: AdminDisputeEscrowSplitFormProps 
   const refundPreview = useMemo(() => buildDisputeSplitPreview({ holdWon: hold, studentWon: hold, mentorGrossWon: 0, feeRate }), [hold, feeRate]);
   const payoutPreview = useMemo(() => buildDisputeSplitPreview({ holdWon: hold, studentWon: 0, mentorGrossWon: hold, feeRate }), [hold, feeRate]);
   const splitBlocked = disputeSplitBlockedMessage(preview);
-  const noReason = `\n${DISPUTE_NO_REASON_STORED_NOTE}`;
+  const noReason = `\n${DISPUTE_REASON_LOGGED_NOTE}`;
 
   const hidden = (
     <>
@@ -94,7 +95,9 @@ function DisputeEscrowSplitForm(props: { form: AdminDisputeEscrowSplitFormProps 
           <input type="hidden" name={DISPUTE_SPLIT_STUDENT_REFUND_FIELD} value={String(hold)} />
           <ConfirmSubmitButton
             level="critical"
-            reasonRequired={false}
+            reasonFieldName={DISPUTE_REASON_FIELD}
+            reasonLabel="환불 사유"
+            reasonPlaceholder="예: 납품물이 요청서 범위를 벗어남 — 학생 전액 환불"
             summary={buildDisputeRefundStudentSummary(refundPreview, props.studentName) + noReason}
             details={buildDisputeSplitDetails(refundPreview)}
             dialogTitle={DISPUTE_ACTIONS.refund_student.dialogTitle}
@@ -111,7 +114,9 @@ function DisputeEscrowSplitForm(props: { form: AdminDisputeEscrowSplitFormProps 
           <input type="hidden" name={DISPUTE_SPLIT_STUDENT_REFUND_FIELD} value="0" />
           <ConfirmSubmitButton
             level="critical"
-            reasonRequired={false}
+            reasonFieldName={DISPUTE_REASON_FIELD}
+            reasonLabel="지급 사유"
+            reasonPlaceholder="예: 요청서 범위 내 납품 확인 — 멘토 지급"
             summary={buildDisputePayoutMentorSummary(payoutPreview, props.mentorName) + noReason}
             details={buildDisputeSplitDetails(payoutPreview)}
             dialogTitle={DISPUTE_ACTIONS.payout_mentor.dialogTitle}
@@ -181,7 +186,9 @@ function DisputeEscrowSplitForm(props: { form: AdminDisputeEscrowSplitFormProps 
         </dl>
         <ConfirmSubmitButton
           level="critical"
-          reasonRequired={false}
+          reasonFieldName={DISPUTE_REASON_FIELD}
+          reasonLabel="분할 사유"
+          reasonPlaceholder="예: 일부 납품 인정 — 학생 30,000 · 멘토 25,000"
           summary={buildDisputeSplitSummary(preview, { studentName: props.studentName, mentorName: props.mentorName }) + noReason}
           details={buildDisputeSplitDetails(preview)}
           confirmBlockedMessage={splitBlocked}

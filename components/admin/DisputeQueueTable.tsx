@@ -5,8 +5,8 @@
  *
  * - 컬럼: 주문 · 학생 · 멘토 · 유형 · 접수일 · 경과 · 상태. 주문 칸의 링크가 분쟁 상세로 간다.
  * - 체크박스는 일괄 게이트 안(open·검토 중·에스컬레이션·기간 제재) 행에만 있다. 선택하면 하단 바가 나타난다.
- * - 일괄 액션은 기존 `bulkUpdateDisputesAction`(상태 변경만 — 자금 이동 없음, 사유 미저장)이다. **`critical` + 대상 목록 모달**(환불 일괄과 같은 형태)로
- *   감싸되, 액션이 사유를 읽지 않으므로 사유 입력을 요구하지 않고(`reasonRequired={false}`) 그 사실을 summary 에 적는다.
+ * - 일괄 액션은 기존 `bulkUpdateDisputesAction`(상태 변경만 — 자금 이동 없음)이다. **`critical` + 대상 목록 모달**(환불 일괄과 같은 형태)로 감싸고,
+ *   사유(`reason`, 전체 적용)는 액션이 읽어 `admin_action_logs.detail.reason` 에 남긴다(PR-6 2번째 커밋).
  *   자금이 걸린 일괄 처리는 없다(지시서 §2-2 — 자금 분배는 상세에서 건별로만).
  */
 import Link from "next/link";
@@ -21,6 +21,7 @@ import {
   DISPUTE_BULK_STATUSES,
   DISPUTE_BULK_STATUS_FIELD,
   DISPUTE_BULK_STATUS_LABELS,
+  DISPUTE_REASON_FIELD,
   buildDisputeBulkSummary,
   disputeBulkConfirmLabel,
   disputeDetailPath,
@@ -169,7 +170,9 @@ export function DisputeQueueTable({ items }: Props) {
               <ConfirmSubmitButton
                 key={next}
                 level="critical"
-                reasonRequired={false}
+                reasonFieldName={DISPUTE_REASON_FIELD}
+                reasonLabel="사유 (전체 적용)"
+                reasonPlaceholder="선택한 모든 건의 감사 로그에 같은 사유가 남습니다."
                 name={DISPUTE_BULK_STATUS_FIELD}
                 value={next}
                 summary={buildDisputeBulkSummary(next, selectedItems.length)}

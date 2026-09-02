@@ -23,13 +23,21 @@ import {
   DISPUTE_BULK_FROM,
   DISPUTE_BULK_STATUSES,
   DISPUTE_CLOSE_FROM,
+  DISPUTE_CUSTOM_REASON_LABEL,
   DISPUTE_DEFAULT_PAGE_SIZE,
+  DISPUTE_DISMISS_REASON_PRESETS,
   DISPUTE_DEFAULT_TAB,
   DISPUTE_ELAPSED_DANGER_HOURS,
   DISPUTE_ELAPSED_WARNING_HOURS,
   DISPUTE_EMPTY_STATE,
   DISPUTE_FUNDS_FROM,
   DISPUTE_FUND_ACTION_KEYS,
+  DISPUTE_FUNDS_REASON_REQUIRED_MESSAGE,
+  DISPUTE_NO_REASON_STORED_NOTE,
+  DISPUTE_NOTE_STORED_NOTE,
+  DISPUTE_REASON_FIELD,
+  DISPUTE_REASON_LOGGED_NOTE,
+  DISPUTE_RESOLVE_REASON_PRESETS,
   DISPUTE_REVIEW_FROM,
   DISPUTE_SANCTION_CODES,
   DISPUTE_SANCTION_FROM,
@@ -63,6 +71,7 @@ import {
   disputeMentorNetFromGrossWon,
   disputeOrderEventLabel,
   disputeResolveRoute,
+  isDisputeReasonValid,
   disputeSanctionStatus,
   disputeShortRef,
   disputeSplitBlockedMessage,
@@ -125,6 +134,9 @@ test("상태 9종 = 상태 사전 disputes.status(CHECK 120) · 제재 3종 · �
     else assert.equal(t.label, resolveAdminStatus("disputes", "status", t.value).label, `${t.value}: 탭 라벨 = 사전 라벨`);
   }
   assert.ok(stripComments(read(CONSOLE)).includes('resolveAdminStatus("disputes", "status", value).label'), "탭 라벨은 사전에서 파생(하드코딩 없음)");
+  // PR-6 2번째 커밋(오너 확정) — 사전 라벨 = 분쟁 화면 표기
+  assert.deepEqual(DISPUTE_TABS.map((t) => t.label), ["열림", "검토 중", "보류", "상위 이관", "해결", "기각", "제재", "전체"]);
+  assert.deepEqual([...DISPUTE_SANCTION_STATUSES].map((s) => resolveAdminStatus("disputes", "status", s).label), ["제재 7일", "제재 30일", "영구 제재"]);
   assert.equal(resolveDisputeTab("sanction"), "sanction");
   assert.equal(resolveDisputeTab("sanction_7d"), "open", "개별 제재 상태값은 탭이 아니다 → 기본 탭");
   assert.equal(resolveDisputeTab(""), "open");
@@ -319,29 +331,45 @@ test("제재 summary: 계정 정지 실제 영향 문장(공용) + 분쟁 상태
   assert.ok(s.startsWith("수학하는하늘 멘토 계정을 7일 정지합니다. 2026.09.10까지 정지되며 그 뒤 자동 해제됩니다."), s);
   assert.ok(s.includes(ACCOUNT_SUSPENDED_BLOCKED_SENTENCE) && s.includes(ACCOUNT_SUSPENDED_NOT_BLOCKED_SENTENCE));
   assert.ok(s.includes("담당 학생 4명의 질문방이 영향받습니다"));
-  assert.ok(s.includes("분쟁 상태는 '7일 정지'가 됩니다"));
+  assert.ok(s.includes("분쟁 상태가 '제재 7일'(으)로 바뀝니다"));
   const st = buildDisputeSanctionSummary({ targetName: "김OO", target: "student", code: "permanent", untilLabel: null, mentorRoomCount: 9 });
   assert.ok(st.includes("영구 차단합니다") && !st.includes("담당 학생"), "학생은 담당 학생 문장 없음");
-  assert.ok(st.includes("'영구 차단'"));
+  assert.ok(st.includes("'영구 제재'(으)로 바뀝니다"));
   const noRooms = buildDisputeSanctionSummary({ targetName: "m", target: "mentor", code: "30d", untilLabel: "x", mentorRoomCount: null });
   assert.ok(!noRooms.includes("담당 학생"), "데이터 없으면 생략");
 });
 
-test("상태 summary 는 예치금 불변·사유 미저장 사실을 적는다(dismiss·resolve 액션은 reason 을 읽지 않는다 — 소스 대조) · 일괄 summary", () => {
+test("사유(2번째 커밋): 기각·해결·분배·일괄 액션이 선택적 reason 을 읽어 감사 로그 detail 에 남긴다 · 분배는 서버에서도 필수 · 검토·보류는 사유 없음 · summary 가 그 사실을 적는다", () => {
   const actions = stripComments(read(DISPUTE_ACTIONS_SRC));
-  assert.ok(!actions.includes('formData.get("reason")'), "검토·해결·기각·분배 액션은 reason 필드를 읽지 않는다");
+  assert.equal((actions.match(/const reason = textFromForm\(formData\.get\("reason"\)\);/g) ?? []).length, 3, "resolve · dismiss · split 이 reason 을 읽는다");
+  assert.equal((actions.match(/detail: \{ reason: reason \|\| null \},/g) ?? []).length, 2, "resolve · dismiss 는 detail.reason 에만(선택)");
+  assert.ok(actions.includes("if (!isDisputeReasonValid(reason)) redirect(errUrlDetail(disputeId, safeMsg(DISPUTE_FUNDS_REASON_REQUIRED_MESSAGE)));"), "분배(자금)는 서버에서도 사유 필수");
+  assert.ok(/detail: \{\s*orderId,\s*reason,/.test(actions), "분배 detail 에 reason");
+  const reviewBody = actions.slice(actions.indexOf("export async function setDisputeUnderReviewAction"), actions.indexOf("export async function resolveDisputeAction"));
+  assert.ok(!reviewBody.includes('formData.get("reason")'), "검토 시작은 사유를 받지 않는다(변경 없음)");
   assert.equal((actions.match(/formData\.get\("adminNote"\)/g) ?? []).length, 1, "adminNote 를 읽는 곳은 케이스 노트 액션 하나뿐");
-  assert.ok(actions.indexOf('formData.get("adminNote")') > actions.indexOf("export async function saveDisputeAdminNoteAction"), "그 하나는 saveDisputeAdminNoteAction");
-  assert.ok(!stripComments(read(BULK_SRC)).includes('"reason"'), "일괄 액션도 사유를 읽지 않는다");
-  for (const a of ["review", "hold", "dismiss", "resolve"] as const) {
-    const s = buildDisputeStatusSummary(a, a === "resolve" ? "resolve_action" : null);
-    assert.ok(s.includes("예치금은 이동하지 않습니다") && s.includes("사유를 저장하지 않습니다"), a);
+  const bulk = stripComments(read(BULK_SRC));
+  assert.ok(bulk.includes('const reason = text(formData, "reason");') && bulk.includes("reason: reason || null }"), "일괄 액션도 reason → detail");
+  assert.equal(DISPUTE_REASON_FIELD, "reason");
+  assert.ok(isDisputeReasonValid("근거 부족") && !isDisputeReasonValid("x") && !isDisputeReasonValid("  ") && !isDisputeReasonValid(null));
+  assert.equal(DISPUTE_FUNDS_REASON_REQUIRED_MESSAGE, "예치금 조치 사유를 입력해 주세요.");
+  assert.deepEqual([...DISPUTE_DISMISS_REASON_PRESETS], ["근거 부족", "중복 접수", "당사자 취하"]);
+  assert.deepEqual([...DISPUTE_RESOLVE_REASON_PRESETS], ["예치금 처리 완료", "당사자 합의", "제재로 종결"]);
+  assert.equal(DISPUTE_CUSTOM_REASON_LABEL, "직접 입력");
+  for (const a of ["review", "hold"] as const) {
+    const s = buildDisputeStatusSummary(a);
+    assert.ok(s.includes("예치금은 이동하지 않습니다") && s.includes(DISPUTE_NO_REASON_STORED_NOTE), a);
   }
-  assert.ok(buildDisputeStatusSummary("resolve", "sanction_complete").includes("보류 상태에서는 제재 액션의 완료 코드로만"));
+  for (const a of ["dismiss", "resolve"] as const) {
+    const s = buildDisputeStatusSummary(a, "resolve_action");
+    assert.ok(s.includes("예치금은 이동하지 않습니다") && s.includes(DISPUTE_REASON_LOGGED_NOTE) && !s.includes("저장하지 않습니다"), a);
+  }
+  const complete = buildDisputeStatusSummary("resolve", "sanction_complete");
+  assert.ok(complete.includes("보류 상태에서는 제재 액션의 완료 코드로만") && complete.includes(DISPUTE_NOTE_STORED_NOTE));
   assert.deepEqual([...DISPUTE_BULK_STATUSES], ["under_review", "resolved"]);
   assert.ok(read(BULK_SRC).includes('["under_review", "resolved", "dismissed"].includes(nextStatus)'), "액션 허용 값 ⊇ UI 2종");
   const b = buildDisputeBulkSummary("resolved", 3);
-  assert.ok(b.startsWith("선택한 3건을 '해결'로 종결합니다.") && b.includes("예치금은 이동하지 않습니다") && b.includes("사유를 저장하지 않습니다"));
+  assert.ok(b.startsWith("선택한 3건을 '해결'로 종결합니다.") && b.includes("예치금은 이동하지 않습니다") && b.includes(DISPUTE_REASON_LOGGED_NOTE) && b.includes("전체에 같은 값"));
   assert.ok(buildDisputeBulkSummary("under_review", 2).startsWith("선택한 2건을 '검토 중'으로 바꿉니다."));
   assert.ok(buildDisputeBulkSummary("resolved", 0).includes("선택된 건이 없습니다"));
   assert.equal(disputeBulkConfirmLabel("under_review", 2), "2건 검토 중으로");
@@ -414,7 +442,7 @@ test("표 부품: 일괄 = 기존 bulkUpdateDisputesAction(상태 변경만) · 
   assert.ok(src.startsWith('"use client"'));
   assert.ok(src.includes("action={bulkUpdateDisputesAction}"));
   assert.equal((src.match(/<ConfirmSubmitButton\b/g) ?? []).length, 1, "일괄 버튼 하나를 상태 2종에 map");
-  assert.ok(src.includes('level="critical"') && src.includes("reasonRequired={false}"));
+  assert.ok(src.includes('level="critical"') && !src.includes("reasonRequired={false}") && src.includes("reasonFieldName={DISPUTE_REASON_FIELD}"), "일괄은 critical 기본대로 사유 필수 · reason 필드");
   assert.ok(src.includes("name={DISPUTE_BULK_STATUS_FIELD}") && src.includes("name={DISPUTE_BULK_IDS_FIELD}"));
   assert.ok(src.includes("body={checklist}") && src.includes("DisputeBulkChecklist"), "대상 목록 모달");
   assert.ok(src.includes("confirmBlockedMessage={selectedItems.length === 0 ? DISPUTE_BULK_BLOCKED_MESSAGE : null}"));
@@ -446,7 +474,12 @@ test("다음 조치 부품: 기존 액션 4개만 import · stateChange 5(검토
   assert.equal((src.match(/action=\{applyDisputeSanctionAction\}/g) ?? []).length, 3, "보류 · 보류 건 해결(complete) · 제재");
   assert.ok(src.includes("value={DISPUTE_HOLD_CODE}") && src.includes("value={DISPUTE_COMPLETE_CODE}"));
   assert.ok(src.includes('has("resolve") && resolveRoute === "sanction_complete"'), "보류 건 해결은 제재 액션 complete 로");
-  assert.ok(src.includes("name={DISPUTE_SANCTION_FIELD}") && src.includes("name={DISPUTE_SANCTION_TARGET_FIELD}") && src.includes("reasonFieldName={DISPUTE_SANCTION_NOTE_FIELD}"));
+  assert.ok(src.includes("name={DISPUTE_SANCTION_FIELD}") && src.includes("name={DISPUTE_SANCTION_TARGET_FIELD}"));
+  assert.equal((src.match(/reasonFieldName=\{DISPUTE_SANCTION_NOTE_FIELD\}/g) ?? []).length, 2, "제재 · 보류 건 완료(complete)는 note 로");
+  assert.equal((src.match(/reasonFieldName=\{DISPUTE_REASON_FIELD\}/g) ?? []).length, 2, "기각 · 해결은 reason 으로");
+  assert.equal((src.match(/reasonPresets=\{DISPUTE_DISMISS_REASON_PRESETS\}/g) ?? []).length, 1);
+  assert.equal((src.match(/reasonPresets=\{DISPUTE_RESOLVE_REASON_PRESETS\}/g) ?? []).length, 2, "해결 2경로 모두 프리셋");
+  assert.ok(!src.includes("reasonRequired={false}"));
   assert.ok(src.includes("confirmBlockedMessage={sanctionReady ? null : DISPUTE_SANCTION_BLOCKED_MESSAGE}"));
   assert.equal((src.match(/type="radio"/g) ?? []).length, 2, "대상 라디오 · 기간 라디오(map)");
   assert.ok(src.includes("<DisputeEscrowSplitPanel"), "자금 3종은 패널 부품");
@@ -463,6 +496,9 @@ test("자금 부품: 같은 액션 3폼(환불·지급 hidden 고정 금액 · �
   assert.ok(src.includes('<input type="hidden" name={DISPUTE_SPLIT_MENTOR_GROSS_FIELD} value="0" />') && src.includes('<input type="hidden" name={DISPUTE_SPLIT_STUDENT_REFUND_FIELD} value={String(hold)} />'), "전액 환불 = (0, hold)");
   assert.ok(src.includes('<input type="hidden" name={DISPUTE_SPLIT_MENTOR_GROSS_FIELD} value={String(hold)} />') && src.includes('<input type="hidden" name={DISPUTE_SPLIT_STUDENT_REFUND_FIELD} value="0" />'), "멘토 지급 = (hold, 0)");
   assert.ok(src.includes("confirmBlockedMessage={splitBlocked}") && src.includes("disputeSplitBlockedMessage(preview)"));
+  assert.ok(!src.includes("reasonRequired={false}"), "자금 3종은 critical 기본대로 사유 필수");
+  assert.equal((src.match(/reasonFieldName=\{DISPUTE_REASON_FIELD\}/g) ?? []).length, 3, "사유는 액션이 읽는 reason 필드로");
+  assert.ok(src.includes("DISPUTE_REASON_LOGGED_NOTE"), "감사 로그 안내");
   assert.equal((src.match(/type="number"/g) ?? []).length, 2, "학생 몫·멘토 몫 금액 직접 입력");
   assert.ok(!src.includes('type="range"'), "슬라이더 없음");
   assert.ok(src.includes("props.form.feeRate") && src.includes("SETTLEMENT_FEE_RATE_UNSET_LABEL") && !/0\.05|0\.15/.test(src));

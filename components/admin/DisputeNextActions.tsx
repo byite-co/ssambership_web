@@ -8,8 +8,8 @@
  * |----------------------|-------------|-----------------------------------------------------------|
  * | 검토 시작            | stateChange | setDisputeUnderReviewAction                               |
  * | 보류                 | stateChange | applyDisputeSanctionAction(sanction=hold)                 |
- * | 기각                 | stateChange | dismissDisputeAction                                      |
- * | 해결(종결)           | stateChange | resolveDisputeAction · 보류 건은 applyDisputeSanctionAction(complete) |
+ * | 기각                 | stateChange + 사유 프리셋 | dismissDisputeAction(`reason` → 감사 로그)              |
+ * | 해결(종결)           | stateChange + 사유 프리셋 | resolveDisputeAction(`reason` → 감사 로그) · 보류 건은 applyDisputeSanctionAction(complete, `note`) |
  * | 환불 · 분할 · 지급   | critical    | applyCustomOrderDisputeSplitAdminAction(DisputeEscrowSplitPanel) |
  * | 제재(7일·30일·영구)  | critical    | applyDisputeSanctionAction(sanction=7d|30d|permanent, target, note) |
  *
@@ -25,9 +25,13 @@ import type { AdminDisputeEscrowSplitPanelState } from "@/lib/admin/adminDispute
 import {
   DISPUTE_ACTIONS,
   DISPUTE_COMPLETE_CODE,
+  DISPUTE_CUSTOM_REASON_LABEL,
+  DISPUTE_DISMISS_REASON_PRESETS,
   DISPUTE_FUND_ACTION_KEYS,
   DISPUTE_HOLD_CODE,
   DISPUTE_ID_FIELD,
+  DISPUTE_REASON_FIELD,
+  DISPUTE_RESOLVE_REASON_PRESETS,
   DISPUTE_SANCTION_BLOCKED_MESSAGE,
   DISPUTE_SANCTION_CODES,
   DISPUTE_SANCTION_CODE_LABELS,
@@ -147,6 +151,11 @@ export function DisputeNextActions(props: Props) {
                   dialogTitle={DISPUTE_ACTIONS.dismiss.dialogTitle}
                   confirmLabel={DISPUTE_ACTIONS.dismiss.confirmLabel}
                   pendingLabel={DISPUTE_ACTIONS.dismiss.pendingLabel}
+                  reasonRequired
+                  reasonFieldName={DISPUTE_REASON_FIELD}
+                  reasonLabel="기각 사유"
+                  reasonPresets={DISPUTE_DISMISS_REASON_PRESETS}
+                  customReasonLabel={DISPUTE_CUSTOM_REASON_LABEL}
                   className={`${BUTTON} bg-slate-600 hover:bg-slate-700`}
                 >
                   {DISPUTE_ACTIONS.dismiss.label}
@@ -162,6 +171,11 @@ export function DisputeNextActions(props: Props) {
                   dialogTitle={DISPUTE_ACTIONS.resolve.dialogTitle}
                   confirmLabel={DISPUTE_ACTIONS.resolve.confirmLabel}
                   pendingLabel={DISPUTE_ACTIONS.resolve.pendingLabel}
+                  reasonRequired
+                  reasonFieldName={DISPUTE_REASON_FIELD}
+                  reasonLabel="해결 사유"
+                  reasonPresets={DISPUTE_RESOLVE_REASON_PRESETS}
+                  customReasonLabel={DISPUTE_CUSTOM_REASON_LABEL}
                   className={`${BUTTON} bg-emerald-700 hover:bg-emerald-800`}
                 >
                   {DISPUTE_ACTIONS.resolve.label}
@@ -178,6 +192,11 @@ export function DisputeNextActions(props: Props) {
                   dialogTitle={DISPUTE_ACTIONS.resolve.dialogTitle}
                   confirmLabel={DISPUTE_ACTIONS.resolve.confirmLabel}
                   pendingLabel={DISPUTE_ACTIONS.resolve.pendingLabel}
+                  reasonRequired
+                  reasonFieldName={DISPUTE_SANCTION_NOTE_FIELD}
+                  reasonLabel="해결 사유"
+                  reasonPresets={DISPUTE_RESOLVE_REASON_PRESETS}
+                  customReasonLabel={DISPUTE_CUSTOM_REASON_LABEL}
                   className={`${BUTTON} bg-emerald-700 hover:bg-emerald-800`}
                 >
                   {DISPUTE_ACTIONS.resolve.label}

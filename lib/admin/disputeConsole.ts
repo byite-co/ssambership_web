@@ -11,12 +11,15 @@
  *   자금 조치 3종은 모두 같은 RPC 한 경로(`applyCustomOrderDisputeSplitAdminAction`)이며 금액만 다르다 — 전액 환불 = (멘토 0, 학생 예치금) ·
  *   멘토 지급 = (멘토 예치금, 학생 0). 분할 미리보기 산식은 RPC 와 같은 floor(gross × 요율)이고 요율은 DB 정산 행 값만 쓴다(PR-1b V-4).
  * - 서버 액션이 읽는 필드명(`disputeId` · `sanction` · `target` · `note` · `orderId` · `mentorGrossWon` · `studentRefundWon` · `ids` · `bulkStatus`)은 바꾸지 않는다.
+ *   사유(PR-6 2번째 커밋 · 오너 승인): 기각·해결·분배·일괄 액션이 선택적 `reason` 을 읽어 `admin_action_logs.detail` 에 남긴다(액션 파일 최소 수정).
+ *   분배(자금)는 서버에서도 사유 필수. 제재·보류·보류 건 완료는 기존 `note`(admin_note·케이스 노트·감사 로그).
  *
  * node --test 계약 테스트가 직접 import 하므로 React·`@/` import 를 두지 않는다.
  */
 import type { AdminListParams } from "./adminListParams.ts";
 import { ADMIN_LIST_SEARCH_USER_ID_LIMIT, buildAdminDataTableUrl } from "./adminDataTable.ts";
 import { resolveAdminStatus } from "./adminStatusDictionary.ts";
+import { ADMIN_CONFIRM_REASON_MIN_LENGTH } from "./adminConfirmPolicy.ts";
 import { settlementFeeRateLabel } from "../payout/settlementFeeRate.ts";
 import {
   ACCOUNT_SANCTION_CODES,
@@ -266,6 +269,17 @@ export const DISPUTE_SPLIT_MENTOR_GROSS_FIELD = "mentorGrossWon";
 export const DISPUTE_SPLIT_STUDENT_REFUND_FIELD = "studentRefundWon";
 export const DISPUTE_BULK_IDS_FIELD = "ids";
 export const DISPUTE_BULK_STATUS_FIELD = "bulkStatus";
+/** 기각·해결·분배·일괄 액션이 읽는 사유 필드 — `admin_action_logs.detail.reason` 에 남는다. 제재·보류·보류 건 완료는 `note`. */
+export const DISPUTE_REASON_FIELD = "reason";
+export const DISPUTE_CUSTOM_REASON_LABEL = "직접 입력";
+export const DISPUTE_DISMISS_REASON_PRESETS: readonly string[] = ["근거 부족", "중복 접수", "당사자 취하"];
+export const DISPUTE_RESOLVE_REASON_PRESETS: readonly string[] = ["예치금 처리 완료", "당사자 합의", "제재로 종결"];
+export const DISPUTE_FUNDS_REASON_REQUIRED_MESSAGE = "예치금 조치 사유를 입력해 주세요.";
+
+/** 다이얼로그와 같은 기준(trim 후 최소 길이) — 분배(자금) 액션이 서버에서 한 번 더 검사한다(확인 모달을 우회한 제출 차단). */
+export function isDisputeReasonValid(reason: string | null | undefined): boolean {
+  return typeof reason === "string" && reason.trim().length >= ADMIN_CONFIRM_REASON_MIN_LENGTH;
+}
 
 /** `applyDisputeSanctionAction` 의 코드 — 계정 반영 3종 + 보류·완료 */
 export const DISPUTE_SANCTION_CODES = ACCOUNT_SANCTION_CODES;
@@ -298,8 +312,12 @@ function won(n: number): string {
   return `${Math.round(n).toLocaleString("ko-KR")}원`;
 }
 
-/** 사유를 저장하지 않는 기존 액션에 붙이는 안내 — 확인 절차는 두되 없는 저장을 약속하지 않는다. */
-export const DISPUTE_NO_REASON_STORED_NOTE = "이 조치는 사유를 저장하지 않습니다(기존 액션). 근거는 케이스 노트에 남겨 주세요.";
+/** 사유를 받지 않는 조치(검토 시작·보류)에 붙이는 안내 — 없는 저장을 약속하지 않는다. */
+export const DISPUTE_NO_REASON_STORED_NOTE = "이 조치는 사유를 받지 않습니다. 근거가 필요하면 케이스 노트에 남겨 주세요.";
+/** 사유를 감사 로그에만 남기는 조치(기각·해결·자금·일괄)에 붙이는 안내 — PR-2·3 과 같은 처리. */
+export const DISPUTE_REASON_LOGGED_NOTE = "사유는 감사 로그(admin_action_logs)에 남습니다.";
+/** 보류 건 해결(제재 액션 complete)의 사유는 note 로 들어가 세 곳에 남는다. */
+export const DISPUTE_NOTE_STORED_NOTE = "사유는 운영 메모·케이스 노트·감사 로그에 남습니다.";
 export const DISPUTE_FUNDS_NOT_MOVED_NOTE = "예치금은 이동하지 않습니다.";
 
 export function buildDisputeStatusSummary(action: "review" | "hold" | "dismiss" | "resolve", route?: DisputeResolveRoute | null): string {
@@ -309,12 +327,12 @@ export function buildDisputeStatusSummary(action: "review" | "hold" | "dismiss" 
     case "hold":
       return `이 분쟁을 '보류'로 표시합니다. 보류 상태에서는 해결(종결)과 제재만 가능합니다(재검토 전이는 코드에 없음). ${DISPUTE_FUNDS_NOT_MOVED_NOTE}\n${DISPUTE_NO_REASON_STORED_NOTE}`;
     case "dismiss":
-      return `이 분쟁을 기각합니다(종결). ${DISPUTE_FUNDS_NOT_MOVED_NOTE} 맞춤의뢰 예치금이 걸린 건은 먼저 환불·분할·지급으로 처리하세요.\n${DISPUTE_NO_REASON_STORED_NOTE}`;
+      return `이 분쟁을 기각합니다(종결). ${DISPUTE_FUNDS_NOT_MOVED_NOTE} 맞춤의뢰 예치금이 걸린 건은 먼저 환불·분할·지급으로 처리하세요.\n${DISPUTE_REASON_LOGGED_NOTE}`;
     case "resolve":
     default:
       return route === "sanction_complete"
-        ? `보류 중인 분쟁을 '해결'로 종결합니다. 보류 상태에서는 제재 액션의 완료 코드로만 해결되며 해결 시각·처리자는 기록되지 않습니다(기존 동작). ${DISPUTE_FUNDS_NOT_MOVED_NOTE}\n${DISPUTE_NO_REASON_STORED_NOTE}`
-        : `이 분쟁을 '해결'로 종결합니다. ${DISPUTE_FUNDS_NOT_MOVED_NOTE} 맞춤의뢰 예치금이 걸린 건은 먼저 환불·분할·지급으로 처리하세요.\n${DISPUTE_NO_REASON_STORED_NOTE}`;
+        ? `보류 중인 분쟁을 '해결'로 종결합니다. 보류 상태에서는 제재 액션의 완료 코드로만 해결되며 해결 시각·처리자는 기록되지 않습니다(기존 동작). ${DISPUTE_FUNDS_NOT_MOVED_NOTE}\n${DISPUTE_NOTE_STORED_NOTE}`
+        : `이 분쟁을 '해결'로 종결합니다. ${DISPUTE_FUNDS_NOT_MOVED_NOTE} 맞춤의뢰 예치금이 걸린 건은 먼저 환불·분할·지급으로 처리하세요.\n${DISPUTE_REASON_LOGGED_NOTE}`;
   }
 }
 
@@ -336,7 +354,7 @@ export function buildDisputeSanctionSummary(input: DisputeSanctionSummaryInput):
     mentorRoomCount: input.mentorRoomCount,
     isMentor: input.target === "mentor",
   });
-  return `${account}\n분쟁 상태는 '${disputeStatusLabel(disputeSanctionStatus(input.code))}'가 됩니다. 사유는 계정 상태 사유·케이스 노트·감사 로그에 남습니다.`;
+  return `${account}\n분쟁 상태가 '${disputeStatusLabel(disputeSanctionStatus(input.code))}'(으)로 바뀝니다. 사유는 계정 상태 사유·케이스 노트·감사 로그에 남습니다.`;
 }
 
 export const DISPUTE_SANCTION_BLOCKED_MESSAGE = "제재 대상과 기간을 모두 선택해 주세요.";
@@ -468,7 +486,7 @@ export function buildDisputeBulkSummary(nextStatus: DisputeBulkStatus, count: nu
     nextStatus === "resolved"
       ? `${DISPUTE_FUNDS_NOT_MOVED_NOTE} 맞춤의뢰 예치금이 걸린 건은 상세에서 환불·분할·지급으로 처리하세요.`
       : DISPUTE_FUNDS_NOT_MOVED_NOTE;
-  return [head, tail, DISPUTE_NO_REASON_STORED_NOTE].join("\n");
+  return [head, tail, `${DISPUTE_REASON_LOGGED_NOTE} 사유는 전체에 같은 값으로 적용됩니다.`].join("\n");
 }
 
 export function disputeBulkConfirmLabel(nextStatus: DisputeBulkStatus, count: number): string {
@@ -578,9 +596,9 @@ export const DISPUTE_ACTION_LOG_LABELS: Readonly<Record<string, string>> = {
   dispute_custom_order_split: "예치금 분배",
   dispute_hold: "보류",
   dispute_complete: "해결(보류 건 완료)",
-  dispute_7d: "제재 · 7일 정지",
-  dispute_30d: "제재 · 30일 정지",
-  dispute_permanent: "제재 · 영구 차단",
+  dispute_7d: `제재 · ${disputeStatusLabel("sanction_7d")}`,
+  dispute_30d: `제재 · ${disputeStatusLabel("sanction_30d")}`,
+  dispute_permanent: `제재 · ${disputeStatusLabel("sanction_permanent")}`,
   dispute_bulk_status: "일괄 상태 변경",
 };
 

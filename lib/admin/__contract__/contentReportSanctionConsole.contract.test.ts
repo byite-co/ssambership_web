@@ -19,6 +19,8 @@ import {
   ACCOUNT_SANCTION_CODES,
   ACCOUNT_SANCTION_LABELS,
   ACCOUNT_SANCTION_TO_STATUS,
+  ACCOUNT_STATUS_ACTIONS_DEFAULT_PATH,
+  ACCOUNT_STATUS_RETURN_TO_FIELD,
   ACCOUNT_SUSPENDED_BLOCKED_SENTENCE,
   ACCOUNT_SUSPENDED_NOT_BLOCKED_SENTENCE,
   ACCOUNT_WARNING_AUTO_SUSPEND_DAYS,
@@ -28,16 +30,18 @@ import {
   buildAccountWarningSummary,
   isAccountSanctionCode,
   mentorSanctionImpactSentence,
+  resolveAccountStatusReturnPath,
 } from "../accountSanctionPolicy.ts";
 import {
   CONTENT_REPORT_CUSTOM_REASON_LABEL,
+  CONTENT_REPORT_RETURN_TO_FIELD,
   CONTENT_REPORT_SUSPEND_BLOCKED_MESSAGE,
   CONTENT_REPORT_SUSPEND_CODES,
   CONTENT_REPORT_SUSPEND_DURATION_FIELD,
   CONTENT_REPORT_SUSPEND_REASON_FIELD,
   CONTENT_REPORT_SUSPEND_STATUS_FIELD,
   CONTENT_REPORT_USER_ACTIONS,
-  CONTENT_REPORT_USER_ACTION_REDIRECT_NOTE,
+  CONTENT_REPORT_USER_ACTION_RESULT_NOTE,
   CONTENT_REPORT_USER_ID_FIELD,
   CONTENT_REPORT_WARNING_PRESETS,
   CONTENT_REPORT_WARN_REASON_FIELD,
@@ -45,7 +49,9 @@ import {
   CONTENT_REPORT_WARN_SEVERITY_FIELD,
   buildContentReportSuspendSummary,
   buildContentReportWarningSummary,
+  contentReportDetailFlashOkMessage,
   contentReportSuspendFields,
+  contentReportUserActionReturnPath,
   contentReportUserActionsAvailable,
   type ContentReportTargetUser,
 } from "../contentReportSanctionConsole.ts";
@@ -94,7 +100,7 @@ const user = (over: Partial<ContentReportTargetUser> = {}): ContentReportTargetU
 
 // ── ① 기존 액션 재사용 — 필드명·허용 값·redirect 소스 대조 ──────────────────
 
-test("필드명 = accountStatusActions 가 읽는 이름(userId · warnReason · severity · nextStatus · durationDays · reason) · 허용 상태 · redirect 는 /admin/users(기존 동작 — 보고)", () => {
+test("필드명 = accountStatusActions 가 읽는 이름(userId · warnReason · severity · nextStatus · durationDays · reason · returnTo) · 허용 상태 · 복귀는 returnTo 허용 목록(기본 /admin/users)", () => {
   const a = stripComments(read(ACCOUNT_ACTIONS));
   assert.equal(CONTENT_REPORT_USER_ID_FIELD, "userId");
   assert.equal(CONTENT_REPORT_WARN_REASON_FIELD, "warnReason");
@@ -104,10 +110,39 @@ test("필드명 = accountStatusActions 가 읽는 이름(userId · warnReason ·
   assert.equal(CONTENT_REPORT_SUSPEND_REASON_FIELD, "reason");
   for (const f of ["userId", "warnReason", "severity", "nextStatus", "durationDays", "reason"]) assert.ok(a.includes(`formData.get("${f}")`), f);
   assert.ok(a.includes('const ALLOWED_STATUS = new Set(["active", "suspended", "banned"]);'));
-  assert.ok(a.includes('const PATH = "/admin/users";') && a.includes("redirect(okUrl(") && !a.includes("returnTo"), "두 액션은 계정 관리 화면으로 돌아간다(신고 상세로 안 옴)");
+  assert.ok(a.includes('const PATH = "/admin/users";') && a.includes('import { resolveAccountStatusReturnPath } from "@/lib/admin/accountSanctionPolicy";'));
+  assert.equal((a.match(/const returnTo = resolveAccountStatusReturnPath\(textFromForm\(formData\.get\("returnTo"\)\)\);/g) ?? []).length, 2, "두 액션 모두 returnTo 를 허용 목록으로 해석");
+  assert.ok(!/\b(errUrl|okUrl)\([^)]*\)(?!\s*,)/.test(a.replace(/\b(errUrl|okUrl)\([\s\S]*?, returnTo\)/g, "")), "errUrl/okUrl 호출은 전부 returnTo 를 싣는다");
+  assert.ok(a.includes("if (returnTo !== PATH) revalidatePath(returnTo);"), "복귀 화면 재검증");
   assert.ok(a.includes('session.rpc("admin_issue_user_warning"'), "경고 = RPC 한 경로");
-  assert.ok(CONTENT_REPORT_USER_ACTION_REDIRECT_NOTE.includes("계정 관리 화면으로 이동"));
+  assert.equal(ACCOUNT_STATUS_RETURN_TO_FIELD, "returnTo");
+  assert.equal(CONTENT_REPORT_RETURN_TO_FIELD, "returnTo");
+  assert.equal(ACCOUNT_STATUS_ACTIONS_DEFAULT_PATH, "/admin/users");
+  const uuid = "11111111-1111-4111-8111-111111111111";
+  assert.equal(resolveAccountStatusReturnPath(""), "/admin/users");
+  assert.equal(resolveAccountStatusReturnPath("/admin/users"), "/admin/users");
+  assert.equal(resolveAccountStatusReturnPath(`/admin/reports/${uuid}`), `/admin/reports/${uuid}`);
+  assert.equal(resolveAccountStatusReturnPath(contentReportUserActionReturnPath(uuid)), `/admin/reports/${uuid}`, "부품이 싣는 경로 = 허용 형식");
+  for (const bad of ["https://evil.example/admin/reports/x", "//evil.example", "/admin/reports/not-a-uuid", "/admin/reports/../users", "/admin/refunds", `/admin/reports/${uuid}?x=1`, "%E0%A4%A"]) {
+    assert.equal(resolveAccountStatusReturnPath(bad), "/admin/users", bad);
+  }
+  assert.equal(CONTENT_REPORT_USER_ACTION_RESULT_NOTE, "처리 결과는 이 신고 상세 상단에 표시됩니다.");
   assert.ok(read(WARNING_RPC_SQL).includes(`if v_severity not in ('normal','severe')`) && CONTENT_REPORT_WARN_SEVERITY_DEFAULT === "normal");
+});
+
+test("신고 상세 플래시: 두 액션의 redirect 키(warned:N · warned_suspended:N · 계정 상태값)와 운영 메모 note 를 문장으로 · 모르는 값은 표시 안 함", () => {
+  assert.equal(contentReportDetailFlashOkMessage("warned:2"), "경고를 기록했습니다. (누적 2회)");
+  assert.equal(contentReportDetailFlashOkMessage("warned_suspended:3"), "경고가 누적되어 계정을 7일 자동 정지했습니다. (누적 3회)");
+  assert.equal(contentReportDetailFlashOkMessage("warned:abc"), "경고를 기록했습니다.", "횟수가 숫자가 아니면 생략");
+  assert.equal(contentReportDetailFlashOkMessage("suspended"), "계정을 일시 정지했습니다.");
+  assert.equal(contentReportDetailFlashOkMessage("banned"), "계정을 영구 차단했습니다.");
+  assert.equal(contentReportDetailFlashOkMessage("active"), "계정을 정상으로 되돌렸습니다.");
+  assert.equal(contentReportDetailFlashOkMessage("note"), "운영 메모를 저장했습니다.");
+  assert.equal(contentReportDetailFlashOkMessage("<script>"), null);
+  assert.equal(contentReportDetailFlashOkMessage(""), null);
+  const a = read(ACCOUNT_ACTIONS);
+  assert.ok(a.includes("`warned_suspended:${warnings}`") && a.includes("`warned:${warnings}`") && a.includes("okUrl(nextStatus, returnTo)"), "액션 redirect 키와 같은 형식");
+  assert.ok(read("lib/admin/adminReportActions.ts").includes("?ok=note"), "운영 메모 액션의 note 키");
 });
 
 // ── ② 프리셋 · 기간 · 등급 ───────────────────────────────────────────────────
@@ -226,13 +261,17 @@ test("조치 부품: 기존 액션 2개만(accountStatusActions) · 경고 state
   assert.ok(src.includes("name={CONTENT_REPORT_SUSPEND_STATUS_FIELD} value={fields.nextStatus}") && src.includes("name={CONTENT_REPORT_SUSPEND_DURATION_FIELD} value={fields.durationDays}"));
   assert.ok(src.includes("CONTENT_REPORT_SUSPEND_CODES.map") && src.includes('type="radio"'), "기간 라디오");
   assert.ok(src.includes("name={CONTENT_REPORT_WARN_SEVERITY_FIELD} value={CONTENT_REPORT_WARN_SEVERITY_DEFAULT}"));
+  assert.equal((src.match(/name=\{CONTENT_REPORT_RETURN_TO_FIELD\} value=\{returnTo\}/g) ?? []).length, 2, "두 폼 모두 returnTo(신고 상세)");
+  assert.ok(src.includes("const returnTo = contentReportUserActionReturnPath(reportId);"));
+  assert.ok(!src.includes("REDIRECT_NOTE") && src.includes("CONTENT_REPORT_USER_ACTION_RESULT_NOTE"));
   assert.ok(!src.includes("AdminConfirmDialog") && !/alert\(/.test(src) && !/style=\{/.test(src));
 });
 
 test("신고 상세: 신고당한 사용자 블록(이름·역할·가입일·누적 경고·계정 상태·이전 신고) + 조치 부품 배선 · 기존 조치 6종 부품은 그대로", () => {
   const page = stripComments(read(DETAIL_PAGE));
   assert.ok(page.includes("<ContentReportTargetUserPanel user={targetUser} authorKnown={Boolean(authorId)} />"));
-  assert.ok(page.includes("<ContentReportUserActionButtons user={targetUser} untilLabels={untilLabels} />"));
+  assert.ok(page.includes("<ContentReportUserActionButtons reportId={id} user={targetUser} untilLabels={untilLabels} />"));
+  assert.ok(page.includes("contentReportDetailFlashOkMessage(pick(sp.ok))") && page.includes('toAdminDisplayError(flashErrRaw, "reports")') && page.includes("처리 실패 —"), "복귀 후 결과·실패 플래시");
   assert.ok(page.includes("loadContentReportTargetUser(evidenceClient, authorId, { excludeReportId: id })"), "증거 조회와 같은 클라이언트로 작성자 조회");
   assert.ok(page.includes("<ContentReportActionButtons reportId={id} targetKind={targetKind}"), "기존 6종 그대로");
   const panel = stripComments(read(TARGET_PANEL));

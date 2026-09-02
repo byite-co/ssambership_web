@@ -16,6 +16,30 @@
  */
 
 export const ACCOUNT_SANCTION_CODES = ["7d", "30d", "permanent"] as const;
+
+/** 경고·정지 액션(`accountStatusActions`)의 기본 복귀 경로 — 계정 관리 화면 */
+export const ACCOUNT_STATUS_ACTIONS_DEFAULT_PATH = "/admin/users";
+export const ACCOUNT_STATUS_RETURN_TO_FIELD = "returnTo";
+const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+
+/**
+ * 경고·정지 액션이 돌아갈 경로(PR-6 2번째 커밋 · PR-3 `resolveRefundReturnPath` 와 같은 방식) — 계정 관리(기본) 또는 신고 상세
+ * `/admin/reports/<uuid>` 만 허용한다(open redirect 방지). 그 외 값은 계정 관리로.
+ */
+export function resolveAccountStatusReturnPath(raw: string | null | undefined): string {
+  const s = typeof raw === "string" ? raw.trim() : "";
+  if (!s || s === ACCOUNT_STATUS_ACTIONS_DEFAULT_PATH) return ACCOUNT_STATUS_ACTIONS_DEFAULT_PATH;
+  const m = /^\/admin\/reports\/([^/?#]+)$/.exec(s);
+  if (m) {
+    try {
+      const id = decodeURIComponent(m[1]);
+      if (UUID_PATTERN.test(id)) return `/admin/reports/${id}`;
+    } catch {
+      /* 잘못된 인코딩 → 기본 경로 */
+    }
+  }
+  return ACCOUNT_STATUS_ACTIONS_DEFAULT_PATH;
+}
 export type AccountSanctionCode = (typeof ACCOUNT_SANCTION_CODES)[number];
 
 export function isAccountSanctionCode(value: string | null | undefined): value is AccountSanctionCode {
