@@ -5,7 +5,7 @@
 | **문서 종류** | 정돈 작업 목록 (오너 승인용 · 코드 미착수) |
 | **작성일** | 2026-09-02 (KST) |
 | **저장 위치** | `docs/plans/app-skeleton-cleanup-checklist.md` |
-| **대상** | Flutter 앱 `byite-co/ssambership-app` `master @ 635ae738` (`lib/` 228파일 · `test/` 175파일) |
+| **대상** | Flutter 앱 `byite-co/ssambership-app` `master @ 635ae738` (`lib/` .dart 228파일 + `core/push/HANDOFF.md` 1 · `test/` 175파일) |
 | **근거** | 코드 정적 열람(grep/sed)만. Flutter SDK 없는 환경이라 `flutter analyze/test` **미실행**. 앱 구조정본(2026-09-02)의 §4~§5를 출발점으로 삼되, 모든 수치·위치는 이 문서 작성 시 다시 셌다 |
 | **작업 성격** | 조사·목록화만. **앱 코드는 한 줄도 수정하지 않았다** |
 
@@ -18,13 +18,13 @@
 | | 값 |
 |---|---|
 | 항목 수 | **70** (타이포 13 · 반경/간격 19 · 오류 뷰 6 · 입력창 8 · 로딩 8 · 잔재 16) |
-| 판정 | **기계적 35** (픽셀 동일, 승인만 받으면 진행) · **결정 31** (값이 바뀌거나 트리가 늘어나 §10에서 골라야 함) · **기록만 4** (바꾸지 않는 것을 명시) |
-| 검토 | 축 6개 전부 독립 검토자가 파일:줄·수치·"기계적" 판정을 반박 시도 — 항목 판정 뒤집힌 것 **2건**(I6 `AppTextField` → opt-in, D14(1) deprecation 승격 → 결정), 누락 편입 **38곳**, 줄 번호·수치 정정 **20여 건**. 결과가 각 절 말미 "검토자 판정"에 있다 |
+| 판정 | **기계적 32 + 혼합 3**(S18·S19·D14 — 한 행에 기계적 부분과 결정 부분이 같이 있음; 기계적 부분은 픽셀 동일, 승인만 받으면 진행) · **결정 30** (값이 바뀌거나 트리가 늘어나 §10에서 골라야 함) · **기록만 4**(E6·I8·L5·D7 — 바꾸지 않는 것을 명시) · **보류 1**(T12 — §8 D10 표식으로 이관). D15는 S15와 같은 항목이라 고유 항목은 **69**(행 수 70) |
+| 검토 | 축 6개 전부 독립 검토자가 파일:줄·수치·"기계적" 판정을 반박 시도 — 항목 판정 뒤집힌 것 **2건**(I6 `AppTextField` → opt-in, D14(1) deprecation 승격 → 결정), 누락 편입 **37곳**(§3 6 · §4 13 · §5 5 · §7 6 · §8 7; §6은 행 안 정정만), 줄 번호·수치 정정 다수(2차 검증 커밋 "검토자 정정" 참조). 결과가 §3·§4·§5·§7·§8 말미 "검토자 판정"에 있고 §6은 I1·I6 행 안에 적었다 |
 
 1. **"타이포 토큰 통일"은 기계적 스윕이 아니다.** 정본 `AppType`은 모든 스타일에 행간(`height` 1.1~1.45 — `number` 1.1, 그 외 1.25~1.45)과 고정폭 숫자를 넣지만 구 `AppTypography`와 인라인 `TextStyle`은 Material 기본(행간 1.43)을 상속한다. 그래서 구 토큰 28곳(IQ 4파일)의 치환은 **한 건도 픽셀 동일이 아니고**, 오너가 §3-3 매핑표를 승인해야 시작할 수 있다. 실제로 기계적으로 할 수 있는 것은 구 토큰 파일 삭제(T4) 하나다.
-2. **기계적 물량은 간격과 공용 위젯 3종에 있다.** 스케일 위의 `EdgeInsets` 64곳·`SizedBox` 122곳(값 동일 토큰 치환), 오류 뷰 21곳 → `ErrorState` 1개, 입력창 17곳 중 11곳(V1~V3) → `appInputDecoration`/`appLabeledInputDecoration` 헬퍼 2개, 로딩 32+9곳 → `LoadingState`·`InlineSpinner`. 이 넷을 끝내면 화면마다 베낀 코드 약 300줄이 사라지고 픽셀은 하나도 안 움직인다.
-3. **결정 항목은 세 가지 질문으로 묶인다.** (i) 스케일 밖 값(반경 8/10/14/18 · 간격 2/6/10/14 · 입력 패딩 14/10/12 · FAB 여유 88/96 · 배너 그림자)에 **토큰을 신설**(픽셀 동일)할지 **가까운 값으로 스냅**(1~4px 이동)할지, (ii) 타이포 매핑표를 그대로 승인할지, (iii) 아이콘 계열(`_rounded` 48종 vs 비-rounded 40종 64회)을 통일할지. 나머지는 마이크로 위젯 4개의 거취다.
-4. **재발 방지는 린트가 아니라 grep이다.** `flutter_lints`에는 리터럴 `TextStyle`/`Colors`/미사용 public 위젯을 잡는 규칙이 없다. `deprecated_member_use`를 warning으로 승격하고(그래서 `withOpacity` 5곳이 CI를 통과해 살아남았다) CI에 grep 스텝을 두는 것이 정직한 가드다(D14).
+2. **기계적 물량은 간격과 공용 위젯 3종(`ErrorState`·`LoadingState`·`InlineSpinner`)·입력 헬퍼 2개·`CommentInputBar`에 있다.** 스케일 위의 `EdgeInsets` 64곳·`SizedBox` 122곳(값 동일 토큰 치환), 오류 뷰 21곳 → `ErrorState` 1개, 입력창 17곳 중 11곳(V1~V3) → `appInputDecoration`/`appLabeledInputDecoration` 헬퍼 2개, 로딩 32+9곳 → `LoadingState`·`InlineSpinner`. 이 넷을 끝내면 화면마다 베낀 코드 약 300줄이 사라지고 픽셀은 하나도 안 움직인다.
+3. **결정 항목은 세 가지 질문으로 묶인다.** (i) 스케일 밖 값(반경 8/10/14/18 · 간격 2/3/6/10/14/18/28 · 입력 패딩 14/10/12 · FAB 여유 88/96 · 배너 그림자)에 **토큰을 신설**(픽셀 동일)할지 **가까운 값으로 스냅**(1~4px 이동)할지, (ii) 타이포 매핑표를 그대로 승인할지, (iii) 아이콘 계열(`_rounded` 48종 vs 비-rounded 40종 64회)을 통일할지. 나머지는 공용 위젯의 API 모양(E-1·E-3·E-4 · I-1~I-7 · L-1~L-7)과 잔재 처리(D-1·D-6·D-7·D-8), 마이크로 위젯 3개(D-3·D-4·D-5)의 거취다.
+4. **재발 방지는 린트가 아니라 grep이다.** `flutter_lints`에는 리터럴 `TextStyle`/`Colors`/미사용 public 위젯을 잡는 규칙이 없다. `deprecated_member_use`는 analyzer가 info로만 보고해 CI 게이트(`flutter-ci.yml:66`, `error|warning`만 실패)를 통과한다 — 그래서 `withOpacity` 5곳이 살아남았다. warning 승격은 `report_sheet.dart`의 `RadioListTile` deprecation 때문에 지금 켜면 즉시 실패하므로 결정 #D-8이고, 지금 바로 둘 수 있는 가드는 CI grep 스텝(D14(2))이다.
 5. **구조정본과 다른 실측**: `withOpacity` 1곳 → **5곳**, 반경 리터럴 14곳 → `lib/design/` 밖 **13곳**(+`quota_bar` 1), `AppType` 61파일 → `lib/design/` 밖 **54파일**, 오류 뷰는 "약 20파일"이 아니라 **정확히 21곳/20파일**이고 그중 19곳이 같은 위젯 트리(`Center > Padding(24) > Text`; 줄바꿈·후행 콤마는 다르므로 바이트 동일은 아니다).
 
 ---
@@ -76,7 +76,7 @@
 | T9 | PDF 페이지 선택 순번 배지 12/w700/white | 1곳 `pdf_page_select_screen.dart:224-228` (22px 원) | `AppType.caption.copyWith(color: Colors.white, fontWeight: w700)` 또는 정당한 리터럴로 두기. `CountBadge`로 바꾸면 안 됨(형태·패딩 다름 = 구조 변경) | **결정** | 행간 1.43→1.4(원 안 세로 정렬 ~0.36px) | `pdf_scan_flow_test.dart`는 `find.text('1')`류 — 스타일 무관 | 9 |
 | T10 | PDF 페이지 번호 `TextStyle(fontSize: 12)` | 1곳 `pdf_page_select_screen.dart:236` | `AppType.caption.copyWith(color: ColorTokens.primary)`(진한 색 유지) vs `AppType.caption`(회색으로) **결정 #T-5** | **결정** | 행간 또는 색 | 〃 | 8 |
 | T11 | 굵기만 w800 + `AppAccent` | 1곳 `question_list_screen.dart:316-318` (26px 단계 원) | `AppType.body.copyWith(color: accent, fontWeight: w700)` — 번들이 실제로 그릴 수 있는 굵기를 선언. `InitialAvatar`로 교체 금지(크기·배경 다름) | **결정** | 선언 w800→w700(렌더 글리프는 Bold 700으로 동일할 것으로 예상, 런타임 미확인), 행간 +0.28px | 3파일, 단계 숫자 스타일 단언 없음 | 10 |
-| T12 | 검은 첨부 뷰어 위 `Colors.white`/`white70` | 2곳 `iq_detail_screen.dart:1599, 1611` | 타이포 토큰 해당 없음. on-dark 텍스트 색 토큰이 없으므로 §8 색 항목으로 이관, 이 축에서는 그대로 | **보류** | — | 3파일, 스타일 무관 | 12 |
+| T12 | 검은 첨부 뷰어 위 `Colors.white`/`white70` | 2곳 `iq_detail_screen.dart:1599, 1611` | 타이포 토큰 해당 없음. on-dark 텍스트 색 토큰이 없으므로 §8 D10(`design-allow` 줄 단위 표식)으로 이관, 이 축에서는 그대로 | **보류** | — | 3파일, 스타일 무관 | 12 |
 | T13 | 토큰 위에 **리터럴 굵기·행간을 덧씌우는** `copyWith` (검토자가 추가 발견) | `conversation_bubble.dart:143, 152`(`height: ConversationMetrics.bodyHeight` = **1.35** — 어느 토큰에도 없는 행간, 말풍선 전부) · `login_screen.dart:128`(caption + **w600**) · `mentor_inbox_screen.dart:287`(caption + w600) · `cash_section.dart:96`(body + **w700**) · (`lib/design/theme.dart:74-76` 하단 탭 라벨 12/w600, height 없음 — 디자인 계층 내부) | 3-1의 "인라인 32곳"에는 잡히지 않는 같은 부류. 12/w600 "강조 캡션"이 2곳, 14/w700 "강조 본문"이 1곳, 1.35 행간이 말풍선 계열 — `AppType.captionStrong`(12/w600)·`bodyStrong`(14/w700) 토큰 신설 vs 리터럴 승인 **결정 #T-7**. 말풍선 1.35는 `ConversationMetrics.bodyHeight`(`conversation_bubble.dart:46`) 상수가 관리하므로 그대로 — 단 `conversation_bubble_test`는 `tailRadius`·`maxWidthFactor`만 단언하고 `bodyHeight`는 단언하지 않는다 | **결정** | (토큰 신설 시) 픽셀 동일 | `conversation_bubble_test`(`bodyHeight` 단언 없음) | 13 |
 
 ### 3-3. 매핑표 (결정 #T-1 — 오너 승인 필요)
@@ -389,19 +389,19 @@ grep -rn "byIcon(" test | grep -vE "_rounded" | wc -l                          #
 
 ## 9. 실행 순서 제안
 
-원칙: **PR 하나 = 한 축의 기계적 항목** → 오너 답을 받은 결정 항목은 별도 PR. 기계적 PR은 순서를 바꿔도 되지만 아래 순서가 충돌이 가장 적다(뒤 PR이 앞 PR의 토큰·위젯을 쓴다).
+원칙: **PR 하나 = 한 축의 기계적 항목** → 오너 답을 받은 결정 항목은 별도 PR. 기계적 PR은 순서를 바꿔도 되지만 아래 순서가 충돌이 가장 적다(뒤 PR이 앞 PR의 토큰·위젯을 쓴다). 단 ①·③·④·⑤는 §10의 권장안(S-6 토큰 · S-11 `floatingShadow` 신설 · E-1 둘 다 · E-3 포함 · E-4 `ErrorState` · L-6 `color:` 노출 · D-7 줄 단위 표식)이 채택된 전제로 적었다 — 이 7개 답이 다르면 해당 PR의 형태가 바뀌므로 §10 답을 먼저 받는다.
 
 | PR | 내용 | 항목 | 효과 | 선행 |
 |---|---|---|---|---|
-| ① 삭제·주석·린트 | dead 위젯·shim 삭제, 주석 정정, deprecation 스왑, 값 동일 토큰 2개 신설, 허용 표식, CI grep 가드 | D1 · D16 · D3 · D12 · D15(=S15) · S16 · L7 · D11(=S17(a)) · D10 · D14(2)(2의 미참조 위젯 검사는 D6 개명(PR⑥) 뒤에 켠다 — `InitialAvatarLike`가 걸린다; 3은 D4 뒤, 1은 결정 #D-8 뒤) · T4는 **제외**(T1~T3 결정 뒤) | 파일 3개 삭제, 픽셀 0 | 로컬 `flutter analyze`로 deprecation 목록 확인(`report_sheet` 포함) |
-| ② 간격·반경 기계적 | 스케일 위 `EdgeInsets`·`SizedBox` 토큰 치환, 값 동일 반경 치환 | S6 · S12 · S1 (S14는 ③ 뒤로) | 186곳 리터럴 → 토큰, 픽셀 0 | ① (shim 삭제 후) |
-| ③ 오류 뷰 | `ErrorState` 신설 + 21곳 이관 | E1 → E2 · E3 · E4 · E5 | 사설 클래스 4개·인라인 16곳 소멸(~190줄), T5의 21곳도 함께 사라짐 | ② (S24 토큰 사용) |
+| ① 삭제·주석·린트 | dead 위젯·shim 삭제, 주석 정정, deprecation 스왑, 값 동일 토큰 2개 신설, 허용 표식, CI grep 가드 | D1 · D16 · D3 · D12 · D15(=S15) · S16 · L7 · D11(=S17(a)) · D10 · D14(2)(2의 미참조 위젯 검사는 D6 개명(PR⑥) **및 결정 #D-1** 뒤에 켠다 — `InitialAvatarLike`가 걸리고, #D-1을 (A) 유지로 고르면 `Skeleton`·`QuotaText`(갤러리 밖 참조 0)를 허용 목록(`// design-allow: gallery-only`)에 넣어야 통과한다; 3은 D4 뒤, 1은 결정 #D-8 뒤) · T4는 **제외**(T1~T3 결정 뒤) | 파일 3개 삭제, 픽셀 0 | 로컬 `flutter analyze`로 deprecation 목록 확인(`report_sheet` 포함) |
+| ② 간격·반경 기계적 | 스케일 위 `EdgeInsets`·`SizedBox` 토큰 치환, 값 동일 반경 치환 | S6 · S12 · S1 · S18(스케일 안 `Wrap` 5곳) · S19(`Divider` 12·16) (S14는 ③이 흡수) | 189곳(64+122+3) + `Wrap`·`Divider` 간격 리터럴 → 토큰, 픽셀 0 | ① (shim 삭제 후) |
+| ③ 오류 뷰 | `ErrorState` 신설 + 21곳 이관 | E1 → E2 · E3 · E4 · E5 (+ S14: `EdgeInsets.all(24)` 27곳 중 21곳을 흡수, 나머지 6곳은 §4 S14) | 사설 클래스 4개·인라인 16곳 소멸(≈200줄 = 클래스 80 + 인라인 117, E5 별도 15), T5의 21곳도 함께 사라짐 | ② (S24 토큰 사용) |
 | ④ 입력창 | `appInputDecoration`/`appLabeledInputDecoration` + `AppInputPadding` 토큰(=S8(a)) + `CommentInputBar` | I1 → I2 · I3 · I4 · I5 (I6은 결정 #I-7 뒤) | 헬퍼 5개·`_inputBar` 2개 소멸 | ② |
 | ⑤ 로딩 | `LoadingState`·`InlineSpinner` | L1 → L2 · L3 · L4 | 32+9곳 통과점 확보(L8 재도장은 결정 뒤) | — |
 | ⑥ 마이크로 | `BrandMark`, `_StepNumber` 개명 | D9 · D6(개명) | — | — |
 | ⑦~ 결정 배치 | 오너 답을 받은 항목만, 축별로 | §10 | 값이 바뀌므로 §11-4 스크린샷 대조 | 각 답변 |
 
-②~⑤는 서로 독립이라 병렬 가능. 전체 기계적 물량은 6 PR, 합쳐서 대략 **+700/−1,100줄** 규모(공용 위젯 4파일 신설 vs 중복 제거).
+②~⑤는 서로 독립이라 병렬 가능. 전체 기계적 물량은 6 PR, 합쳐서 대략 **+700/−1,100줄** 규모(신규 파일 6개 — `error_state`·`input_decoration`·`loading_state`·`inline_spinner`·`comment_input_bar`·`brand_mark` — vs 중복 제거; 줄 수는 추정).
 
 ## 10. 오너 결정 필요 항목
 
@@ -420,7 +420,7 @@ grep -rn "byIcon(" test | grep -vE "_rounded" | wc -l                          #
 | S-2 | 반경 10 (3곳) | `thumbSm=10` 신설 / 12로 스냅 | **12로 스냅** — 3곳, +2px, 단계 수 줄임(눈 확인) |
 | S-3 | `AppCard` 위 `InkWell` 반경 14 | 20으로 맞춤(리플만) / 유지 | **20** |
 | S-4 | 시트 상단 18 | `sheet=18` 신설 / 20 | **신설** — 다른 시트(28)와의 통일은 별개 |
-| S-5 · S-7 · S13 | 스케일 밖 간격 2/3/6/10/14 | `s2/s6/s10/s14` 신설 / 값별 스냅 / 리터럴 예외 | **신설**(주석 "미세 조정 스텝") — 49+곳 스냅은 전 화면 리듬 변경 |
+| S-5 · S-7 (S7·S9·S13·S18·S19) | 스케일 밖 간격 2/3/6/10/14/18/28 (3은 토큰 없이 유지) | `s2/s6/s10/s14` 신설 / 값별 스냅 / 리터럴 예외 | **신설**(주석 "미세 조정 스텝") — 스냅이면 S7 17 · S9 20 · S13 77 · S18 6 · S19 3 ≈ 120곳의 리듬 변경 |
 | S-6 | 입력 패딩 14/12·14/10 | `AppInputPadding` 토큰(④와 함께) / 16·12 스냅 | **토큰** |
 | S-8 | `EntranceCard` 18 | 16(기본) / 18 유지 | **16** — 카드 1개, 눈 확인 |
 | S-9 | 목록 끝 여유 88(FAB)/96(고정 바) | 두 토큰(다른 이름) / 하나로 | **두 토큰** — 의미가 다르다 |
@@ -455,7 +455,7 @@ grep -rn "byIcon(" test | grep -vE "_rounded" | wc -l                          #
 | 겹 | 무엇을 | 어떻게 |
 |---|---|---|
 | 1 | 컴파일·정적 | `flutter analyze` 에러·경고 0 (CI 게이트, info는 비차단 — `.github/workflows/flutter-ci.yml:59-69`). shim·구 토큰 파일 삭제 후 dangling import가 없는지 여기서 잡힌다 |
-| 2 | 위젯 테스트 전량 | `flutter test` 565개. 이 목록의 항목들은 문구(`find.text`)로 찾는 테스트만 스치고 스타일을 단언하는 테스트는 `board_filter_chip_test`(w800)·`conversation_bubble_test`(tailRadius·maxWidthFactor) 2개뿐 — 둘 다 이 목록이 건드리지 않는 값이다. 공용 위젯으로 감싸는 항목(§5~§7)은 감싼 안쪽에 같은 타입(`Text`·`TextField`·`CircularProgressIndicator`)이 남으므로 `find.byType`도 그대로 통과한다 |
+| 2 | 위젯 테스트 전량 | `flutter test` 전량(위젯 테스트 565 + 단위 테스트 905 ≈ 1,470건). 이 목록의 항목들은 문구(`find.text`)로 찾는 테스트만 스치고, 굵기·반경을 단언하는 테스트는 `board_filter_chip_test`(w800)·`conversation_bubble_test`(tailRadius·maxWidthFactor) 2개뿐이며, 색을 단언하는 테스트 12파일(`status_tone_color_test`·`action_button_color_test`·`theme_neutral_surface_test`·`role_accent_test` 등)은 이 목록의 기계적 항목이 바꾸지 않는 토큰 색만 본다(T1의 caption 색 변경은 결정 항목). 공용 위젯으로 감싸는 항목(§5~§7)은 감싼 안쪽에 같은 타입(`Text`·`TextField`·`CircularProgressIndicator`)이 남으므로 `find.byType`도 그대로 통과한다 |
 | 3 | 잔존 리터럴 0건 | §3-4·§4-4의 grep을 기계적 항목 완료 후 다시 돌려 **기대 수치가 0(또는 결정으로 남긴 예외 수)** 인지 확인. 이 grep 묶음을 `scripts/` 또는 CI 스텝으로 고정하면 재발을 막는다(§8 린트 항목) |
 | 4 | 눈으로 | 결정 항목(값이 바뀌는 것)만 실기기·시뮬레이터에서 전후 스크린샷 대조. 기계적 항목은 1~3으로 충분하다 |
 
@@ -467,7 +467,7 @@ grep -rn "byIcon(" test | grep -vE "_rounded" | wc -l                          #
 |---|---|
 | `SizedBox` 스페이서 → `Gap` 또는 Flutter 3.27 `Column/Row(spacing:)` | 위젯 트리 변경 |
 | 스타일 없는 `Text()` 약 130곳 → `AppType.body` | 행간 1.43→1.45가 전 화면에 걸림 — 별도 결정 |
-| 로더 깜빡임 가드 정렬(`&& !snap.hasData` 2곳 vs `connectionState != done` 20곳) | 스피너가 보이는 **시점**이 바뀜(동작) |
+| 로더 깜빡임 가드 정렬(`&& !snap.hasData` 2곳 vs `connectionState != done`만 보는 22곳 — 전면 로더 외 인라인·섹션 로더 포함) | 스피너가 보이는 **시점**이 바뀜(동작) |
 | 오류 뷰에 재시도 추가 · 아이콘/제목 추가 · 카피 통일('불러오지 못했습니다' vs '…못했어요') | 동작·디자인·문구 변경. 7개 테스트가 문구 단언(§5-1) |
 | `iq_create_screen.dart` 삭제(프로덕션 도달 불가, `iq_create_boundary_test`가 진입 0을 계약) | 기능 그래프 결정. 지우면 T6·D4의 사이트 여럿이 함께 사라지므로 **먼저 결정하면 목록이 줄어든다** |
 | `_EmptyQuestions`의 `ListView` → `EmptyState`의 `Center` | 소형 뷰포트 스크롤 동작 변경 |
