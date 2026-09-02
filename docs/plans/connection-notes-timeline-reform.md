@@ -18,7 +18,7 @@
 
 1. **DB 변경은 작다.** 제약 제거 1문(`alter table public.connection_notes drop constraint connection_notes_room_author_unique`)으로 누적 구조가 열리고, 정렬 인덱스 1개와 (권장안) 정책 제거 2문이 따른다. 컬럼·기존 트리거·데이터는 손대지 않는다. 라이브 행이 **0건**(방도 0건)이라 데이터 정리는 필요 없고, 지금이 가장 싼 시점이라는 인계 문서의 판단은 실측으로 확인됐다.
 2. **진짜 위험은 DB가 아니라 이미 배포된 앱이다.** 스토어 앱(1.0.0+19)의 저장 함수 `upsertMyNote`는 "내 노트 중 최신 1건을 UPDATE하고 **나머지 내 노트를 전부 DELETE**"한다. 제약을 지우고 타임라인에 내 노트가 여러 장 쌓인 뒤 구버전 앱에서 저장을 한 번 누르면, 그 사용자의 과거 노트가 사라진다. 이 경로는 코드로 확인했다(§5).
-3. 따라서 순서가 곧 안전장치다. **① 제약 제거(무해) → ② 앱 신버전 배포 → ③ 강제 업데이트 게이트 상향 → ④ 웹·앱 UI에서 여러 장 허용.** ④를 ③ 앞에 두면 위험이 열린다. 단 게이트는 **콜드 스타트에서만** 평가되므로(§5-2) 순서만으로는 구멍이 남고, 서버가 스스로 막는 방어(§5-3: **authenticated의 UPDATE·DELETE 정책을 제거한 엄격한 append-only** — 트리거·함수 없이 `drop policy` 2문)를 함께 넣는 것을 권장한다 — 오너 결정 #2. 초안의 "수정 15분 창"은 구앱이 저장 순간에 UPDATE 대상을 다시 고르기 때문에 다른 기기에서 남긴 노트를 덮어쓰는 창이 남아(§5-3 표) 권장에서 내렸다.
+3. 따라서 순서가 곧 안전장치다. **① 제약 제거(무해) → ② 앱 신버전 배포 → ③ 강제 업데이트 게이트 상향 → ④ 웹·앱 UI에서 여러 장 허용.** ④를 ③ 앞에 두면 위험이 열린다(정확히는 ②부터 — 신앱이 append하는 순간 같은 계정의 구앱 병용 창이 열린다, §5-2 표). 단 게이트는 **콜드 스타트에서만** 평가되므로(§5-2) 순서만으로는 구멍이 남고, 서버가 스스로 막는 방어(§5-3: **authenticated의 UPDATE·DELETE 정책을 제거한 엄격한 append-only** — 트리거·함수 없이 `drop policy` 2문)를 함께 넣는 것을 권장한다 — 오너 결정 #2. 초안의 "수정 15분 창"은 구앱이 저장 순간에 UPDATE 대상을 다시 고르기 때문에 다른 기기에서 남긴 노트를 덮어쓰는 창이 남아(§5-3 표) 권장에서 내렸다.
 4. 웹 쓰기 경로는 **이미 append(INSERT)** 다. 웹이 1장으로 보이는 이유는 패널의 "내 노트 추가" 버튼을 숨기는 UI 조건 한 줄 때문이다. 앱은 UPDATE 구조라 저장 함수를 바꿔야 한다.
 5. 손글씨(`ink_path`·`ink_thumb_path`·버킷 `connection-note-ink`)는 컬럼·버킷·경로 규약만 남아 있고 저장·표시 코드가 0건이다. 이번 개편에서 건드리지 않는다(컬럼 유지, 기능 없음).
 
@@ -151,7 +151,7 @@ RLS 관찰: `cn_select`는 방 당사자만, 쓰기 정책 3개(`cn_insert`/`cn_
 **바꾸지 않는 것**: 컬럼 전부(잉크 2열 포함) · `cn_select`/`cn_insert` · 기존 트리거 `trg_cn_set_updated` · FK 2종 · 버킷.
 
 ### 4-2. 롤백
-(방, 작성자) 중복이 0건일 때만 가능하다 — 타임라인이 한 번이라도 쌓이면 **사실상 되돌릴 수 없다**(pack은 forward-only, 189류 backfill에 `supabase/rollback/` 파일 규약도 없다). (R) 블록은 문서용이다.
+(방, 작성자) 중복이 0건일 때만 가능하다 — 타임라인이 한 번이라도 쌓이면 **사실상 되돌릴 수 없다**(pack은 forward-only). 저장소에는 `supabase/rollback/<version>_<name>_rollback.sql` 규약(25본, 최신 `20260808032000_mavp_store_url_platform_host_chk_rollback.sql`)과 `sql_apply_manifest.md`의 rollback_file 열 표(`:278`)가 있으나 **187·189류 post_ledger_backfill에는 rollback 파일을 두지 않았다**. (R) 블록은 문서용이며, 원하면 같은 규약으로 `supabase/rollback/2026MMDD100100_connection_notes_timeline_drop_unique_rollback.sql`을 둘 수 있다.
 ```sql
 select mentor_student_room_id, author_id, count(*)
   from public.connection_notes group by 1, 2 having count(*) > 1;  -- 0행이어야 함
@@ -159,7 +159,7 @@ alter table public.connection_notes
   add constraint connection_notes_room_author_unique unique (mentor_student_room_id, author_id);
 drop index if exists public.idx_cn_room_created;
 comment on table public.connection_notes is null;
--- F(권장안 c): cn_update 는 085:43-66, cn_delete 는 085:67-78 원문으로 재생성
+-- F(권장안 c): cn_update 는 085:43-63, cn_delete 는 085:67-78 원문으로 재생성
 -- 대안 (b′) 였다면 그 전에:
 -- drop trigger if exists trg_cn_created_at_immutable on public.connection_notes;
 -- drop function if exists public.connection_notes_forbid_created_at_change();
@@ -172,21 +172,21 @@ comment on table public.connection_notes is null;
 | # | 파일 | 소유 | 비고 |
 |---|---|---|---|
 | 1 | `supabase/sql/190_connection_notes_timeline_drop_unique.sql` | 사람 | 가독용 정본. 189가 현재 마지막 번호 |
-| 2 | `supabase/baseline/post_ledger_backfills/2026MMDD100100_connection_notes_timeline_drop_unique.sql` | 사람 | pack 소스(**이 파일이 원본**, 1번은 바이트 동일 사본). version은 **작성(커밋)일** + `100100`(같은 날 2본째 `100200`) — 적용 예정일이 아니다(`20260831100100`은 8/31 커밋, **2026-09-02 라이브 원장에 이미 등재 — 원장 103본 = 로컬 pack 103본**). 검증기가 "pack 마지막 version = backfill 최대"를 요구하므로(`validate_native_migration_pack.py:138`) **`20260831100100`보다 커야** 하고 PR60(`20260804113000`)보다도 커야 한다. BOM 없음·LF·말미 개행 1개(189 선례; 085 등 구 파일은 BOM이 있다) |
+| 2 | `supabase/baseline/post_ledger_backfills/2026MMDD100100_connection_notes_timeline_drop_unique.sql` | 사람 | pack 소스(**이 파일이 원본**, 1번은 바이트 동일 사본). version은 **작성(커밋)일** + `100100`(같은 날 2본째 `100200`) — 적용 예정일이 아니다(`20260831100100`은 8/31 커밋, **2026-09-02 라이브 원장에 이미 등재 — 원장 103본 = 로컬 pack 103본**). 검증기는 "pack 마지막 version = backfill 최대"(`validate_native_migration_pack.py:138-140`)와 "backfill 전부 PR60(`20260804113000`) 이후"(`:133`)만 본다 — `20260831100100`보다 작은 version도 검증기 자체는 통과한다. **`20260831100100`보다 커야 하는 실제 이유**는 라이브 원장의 최대 version이 이미 `20260831100100`이라 그보다 앞서는 로컬 파일을 CLI `db push`가 `--include-all` 없이 거부하기 때문이다(§11 #13). BOM 없음·LF·말미 개행 1개(189 선례; 085 등 구 파일은 BOM이 있다) |
 | 3 | `supabase/migrations/2026MMDD100100_…sql` | **생성기** | `python3 scripts/verify/baseline/build_native_migration_pack.py` 가 복사. 직접 편집 금지 |
 | 4 | `supabase/baseline/native_migration_pack_manifest.tsv` | 생성기 | 행 1개 추가(현재 102행 → 103; `191`까지면 104) |
-| 5 | `docs/audit/sql_apply_manifest.md` | 사람 | 신규 SQL 등재 행 |
+| 5 | `docs/audit/sql_apply_manifest.md` | 사람 | 신규 SQL 등재 행 + **189 행(`:265`)의 "미적용 · 원격 미적용" 판정을 "적용(원장 `20260831100100`)"으로 정정**(라이브 원장에 이미 등재) |
 | 6 | `docs/audit/db_expected_state.md:39` | 사람 | `connection_notes` 행에 "(방, 작성자) 유일성 없음(설계) · 타임라인 · (권장안) authenticated UPDATE·DELETE 정책 없음(append-only)" 추기 |
 | 7 | `CLAUDE.md` 핵심 테이블 표 | 사람 | `connection_notes` 행 정정(`status` 컬럼은 어떤 SQL에도 없다 → `author_id, author_role, body, ink_path, ink_thumb_path`, append-only 명시) · `:40` "room 단위"에 "작성자당 여러 장, 수정·삭제 없음" |
-| 8 | `contracts/snapshots/staging_contract.json` | 도구 | F(정책 제거) 적용 후 재추출(`cn_update`·`cn_delete` md5 행이 사라진다) — `npm run contracts:verify`가 정책 md5를 대조한다(CI에 없고 수동) |
-| 9 | `scripts/verify/baseline/verify_local_stack_state.sh:56-58, 112-117` | 사람 | 헤더 주석을 "104본 pack(생성기 103 + PR60 1)"으로, "103본→104본(연결노트 타임라인) 델타" 블록 추가, `:58` 주석("프로덕션 원장 102본, 20260831100100 미적용")은 구식이라 함께 정정 (같은 표기가 `docs/audit/sql_apply_manifest.md`의 189 행에도 있다) — **A~E만이어도 필요**(관례). F 권장안 (c)면 `:116` policies **174**(functions 222 불변); 대안 (b′)면 `:114` functions 223 · `:116` policies 175 |
+| 8 | `contracts/snapshots/staging_contract.json` | 도구 | **A~E만이어도 재추출 필요** — 스냅샷에 적용 원장 목록(`migrations` 섹션 `:4254`, 예 `connection_notes_room_author_unique` `:4520`)이 들어 있어 190 등재만으로 diff가 난다. F(정책 제거)면 `cn_update`·`cn_delete` md5 행(`:430-437, 455-462`)도 사라진다 — `npm run contracts:verify`(CI에 없고 수동; `verify_remote_contract.mjs:77-88`은 소스 존재만 검사해 hard fail은 아니다) |
+| 9 | `scripts/verify/baseline/verify_local_stack_state.sh:56-58, 112-117` | 사람 | 헤더 주석 `:56`을 "104본 pack(생성기 103 + PR60 1)"으로, `:58`의 "(프로덕션 원장은 102본 — 20260831100100 미적용 상태다.)"를 "(프로덕션 원장은 103본 — 20260831100100 적용, 190 미적용)"으로 정정하고 "103본→104본(연결노트 타임라인) 델타" 블록 추가 — **A~E만이어도 필요**. 구조 카운트는 관례가 아니라 CI `db-migration-pack-verify.yml:148`이 이 스크립트를 돌려 `count_check … || bad`로 hard-fail한다. F 권장안 (c)면 `:116` policies **174**(functions 222 불변); 대안 (b′)면 `:114` functions 223 · `:116` policies 175 |
 | 10 | `scripts/verify/connection_notes_timeline_verify.sql` | 사람 | 신규 검증 스크립트(§8-3) |
 | 11 | `docs/audit/db_permission_audit_queries.sql:232-249` (B5) | 사람 | F 권장안 (c)면 기대 정책 집합 {`cn_select`, `cn_insert`}(UPDATE/DELETE 행 0)로, (b′)면 3개(`cn_update`에 `created_at`) + 트리거 존재로 갱신 |
-| — | `supabase/sql/INDEX.md` · `docs/audit/apply_manifest_prod.md` | — | **손대지 않음**(059 이후 미관리 / 189 커밋도 미수정) |
+| — | `supabase/sql/INDEX.md` · `docs/audit/apply_manifest_prod.md` | — | **손대지 않음**(INDEX.md는 001–059 인벤토리만 관리하고 187 커밋 `8ebe231`이 "미반영 31본 주의" 1줄만 추가, 189 커밋은 미수정 — 190·191로 그 수가 늘어나는 것을 안다 / apply_manifest_prod.md는 `4ba9c00` 이후 미수정) |
 
-검증(로컬, PR 전): `validate_native_migration_pack.py` · `validate_replay_manifest.sh` PASS, 생성기 재실행 diff 0. CI `db-migration-pack-verify.yml`이 PG17 + Supabase CLI replay로 다시 검증한다. `verify_local_stack_state.sh`의 구조 카운트(tables 85 · functions 222 · policies 176 · buckets 13, `:112-117`)는 A~E만이면 **바뀌지 않는다**(제약·인덱스는 그 카운트에 없다). F 권장안 (c)(정책 2개 제거)면 **policies 174**(functions 222 불변), 대안 (b′)면 **functions 223 · policies 175** 로 기대치를 함께 갱신해야 한다(선례: `ea146b5` "로컬 스택 구조 카운트 기대치 갱신"). `run_local_stack_emulation.sh`의 STRICT 축(constraints·indexes md5)은 `PR60_FORWARD`가 설정된 `[6]` 블록에서 PR #60 전후 지문만 대조한다(`:101-117`) — 일반 마이그레이션 추가에는 적용되지 않으므로 기대값 갱신은 없다. `parent_schema_fingerprint.sh`의 constraints·indexes 축은 바뀌지만 `db-apply-pending`은 그 diff를 증적으로만 남기고 강제하지 않는다(`:175`).
+검증(로컬, PR 전): `validate_native_migration_pack.py` · `validate_replay_manifest.sh` PASS, 생성기 재실행 diff 0. CI `db-migration-pack-verify.yml`이 PG17 + Supabase CLI replay로 다시 검증한다. `verify_local_stack_state.sh`의 구조 카운트(tables 85 · functions 222 · policies 176 · buckets 13, `:112-117`)는 A~E만이면 **바뀌지 않는다**(제약·인덱스는 그 카운트에 없다). F 권장안 (c)(정책 2개 제거)면 **policies 174**(functions 222 불변), 대안 (b′)면 **functions 223 · policies 175** 로 기대치를 함께 갱신해야 한다(선례: `ea146b5` "로컬 스택 구조 카운트 기대치 갱신"). `run_local_stack_emulation.sh`의 STRICT 축(constraints·indexes md5)은 `PR60_FORWARD`가 설정된 `[6]` 블록에서 PR #60 전후 지문만 대조한다(`:101-117`) — 일반 마이그레이션 추가에는 적용되지 않으므로 기대값 갱신은 없다. `parent_schema_fingerprint.sh`의 constraints·indexes 축은 바뀌지만 `db-apply-pending`은 그 diff를 증적으로만 남기고 강제하지 않는다(`:177-179`, `diff -u … || true`).
 
-적용: **`db-apply-pending.yml` workflow_dispatch**(dry-run → 승인 → apply, confirmation 문자열). MCP `apply_migration` 직접 적용은 저장소 규칙상 금지(적용하면 같은 세션에서 역수입까지 해야 한다 — `CLAUDE.md` "마이그레이션 hotfix 역수입 규칙"). **중요한 성질**: 이 워크플로는 (로컬 pack) − (원장) 차집합 **전량**을 `supabase db push` 한 번으로 적용하고 사후에 원장 = pack 전체를 요구한다(`:130, 154, 169`). 따라서 **`190`만 적용하고 `191`을 main에 미리 넣어 둘 수 없다** — `191`은 ③ 시점에 머지해야 하고, `190`은 아직 미적용인 `189`와 함께 적용된다(§9). CLI `db push`는 원격 마지막 version보다 앞서는 로컬 파일을 `--include-all` 없이는 거부하므로(워크플로는 이 플래그를 넘기지 않는다) version 순서 규칙(위 2번)이 실제로 걸린다.
+적용: **`db-apply-pending.yml` workflow_dispatch**(dry-run → 승인 → apply, confirmation 문자열). apply 워크플로는 dry-run 전에 `validate_native_migration_pack.py`를 먼저 돌린다(`:83`, FAIL이면 차단). MCP `apply_migration` 직접 적용은 저장소 규칙상 비상 hotfix에 한하며, 적용한 세션에서 `post_ledger_backfills/` 역수입·생성기 재실행까지 끝내야 한다(안 하면 remote_only 가드 `:125-127`가 DB 적용 경로 전체를 잠근다 — `CLAUDE.md` "마이그레이션 hotfix 역수입 규칙"). 이 개편은 처음부터 pack 경로로 간다. **중요한 성질**: 이 워크플로는 (로컬 pack) − (원장) 차집합 **전량**을 `supabase db push` 한 번으로 적용하고 사후에 원장 = pack 전체를 요구한다(`:130, 154, 169`). 따라서 **`190`만 적용하고 `191`을 main에 미리 넣어 둘 수 없다** — `191`은 ③ 시점에 머지해야 하고, `190`은 2026-09-02 현재 단독 pending으로 적용된다(189는 이미 원장에 있다, §9 ①). CLI `db push`는 원격 마지막 version보다 앞서는 로컬 파일을 `--include-all` 없이는 거부하므로(워크플로는 이 플래그를 넘기지 않는다) version 순서 규칙(위 2번)이 실제로 걸린다.
 
 ---
 
@@ -210,11 +210,11 @@ comment on table public.connection_notes is null;
 | 단계 | 여러 장이 생길 수 있나 | 구앱이 남아 있나 | 안전 |
 |---|---|---|---|
 | 제약만 제거 | ✗ (웹 UI 버튼 숨김 · 앱은 UPDATE) | ○ | **안전** |
-| + 앱 신버전 배포 | ✗ (신앱만 append, 아직 웹 UI 그대로) | ○ | 안전. 단 신앱으로 2장 남긴 사용자가 **구앱으로 되돌아가면** 위험 — 같은 계정이 구·신 두 기기를 쓰는 경우 |
-| + 강제 업데이트 게이트 상향 | ✗ | **✗** | 안전 |
+| + 앱 신버전 배포 | **○** (신앱이 append — 같은 계정이 신앱으로 2장 이상 남길 수 있다; 웹 UI는 아직 버튼 숨김) | ○ | **조건부 안전.** 신앱으로 2장 남긴 사용자가 **구앱(다른 기기)으로 되돌아가 저장**하면 §5-1 경로가 열린다 — 권장안 (c) 없이는 이 창이 ③까지 남는다 |
+| + 강제 업데이트 게이트 상향 | ○ (신앱 append) | **✗** | 안전 |
 | + 웹·앱 UI 여러 장 허용 | ○ | ✗ | 안전 |
 
-**게이트 상향은 "권장"이 아니라 "강제"여야 한다.** `recommend`는 배너만 얹고 앱 사용을 막지 않는다(`version_gate_shell.dart:47-57`). 게이트는 라우터 위에 있어 `forceUpdate` 상태에서는 저장 화면에 도달할 수 없다(`:7-12`).
+**게이트 상향은 "권장"이 아니라 "강제"여야 한다.** `recommend`는 배너만 얹고 앱 사용을 막지 않는다(`version_gate_shell.dart:47-58`). 게이트는 라우터 위에 있어 `forceUpdate` 상태에서는 저장 화면에 도달할 수 없다(`:7-12`).
 
 상향 방법(현행 인프라, 관리자 UI 없음): 신앱 build를 N(≥20)이라 할 때 — 선례 `20260806075353`처럼 `greatest()`로 멱등하게(값을 낮추지 않게), 자기 검증 포함(§12-2 `191` 초안)
 ```sql
@@ -227,9 +227,9 @@ update public.mobile_app_version_policies
 ```
 `162` 헤더가 "실제 최소 build 상향은 운영 절차로만"이라 못 박았고, 선례 `20260806075353`은 콘솔 UPDATE를 마이그레이션으로 역수입했다. 권장은 처음부터 **마이그레이션(`191`)으로 등재해 `db-apply-pending`으로 적용** — 재현 가능하고 역수입이 필요 없다.
 
-**게이트의 구멍(코드 확인).** 게이트는 `main.dart:55`에서 앱 시작 시 **한 번만** 평가되고 복귀(resume) 시 재검사가 없다. 따라서 (a) 상향 시점에 이미 떠 있는 구앱 세션은 **프로세스를 재시작할 때까지** 계속 저장할 수 있다. (b) 오프라인 콜드 스타트는 직전 통과 build의 캐시로 통과한다(`version_gate_controller.dart:90-95`) — 이후 연결이 돌아오면 저장 가능. (c) 빌드 번호를 못 읽으면 통과(`version_gate_decision.dart:37`), (d) 웹 타깃은 게이트가 아예 없다(`gate_platform.dart:11`). 그러므로 "③ 완료"는 **"모든 구앱이 온라인에서 한 번 재시작한 뒤"** 로 읽어야 하고, 이 구멍을 메우는 것이 §5-3이다.
+**게이트의 구멍(코드 확인).** 게이트는 `main.dart:55`에서 앱 시작 시 **한 번만** 평가되고 복귀(resume) 시 재검사가 없다. 따라서 (a) 상향 시점에 이미 떠 있는 구앱 세션은 **프로세스를 재시작할 때까지** 계속 저장할 수 있다. (b) 오프라인 콜드 스타트는 직전 통과 build의 캐시로 통과한다(`version_gate_controller.dart:90-95`) — 이후 연결이 돌아오면 저장 가능. 단 온라인에서 한 번 `forceUpdate` 판정을 받으면 캐시가 지워져(`:104-108` G1 `_passCache.clear()`) 그 뒤 오프라인 재시작은 재시도 화면에 막힌다 — 구멍은 "상향 이후 한 번도 온라인 콜드 스타트를 하지 않은 기기"에 한정된다. (c) 빌드 번호를 못 읽으면 통과(`version_gate_decision.dart:37`), (d) 웹 타깃은 게이트가 아예 없다(`gate_platform.dart:11`). 그러므로 "③ 완료"는 **"모든 구앱이 온라인에서 한 번 재시작한 뒤"** 로 읽어야 하고, 이 구멍을 메우는 것이 §5-3이다.
 
-**게이트 화면의 스토어 버튼(라이브 확인, 2026-09-02).** `mobile_app_version_policies` 현재 행: android `min_supported_build 9 · latest_build 16`, ios `1 · 16`, `minimum_version_name` '1.0.0', **`store_url`·`message` 두 행 모두 NULL**(§11 #12 해소). 앱의 `ForceUpdateScreen`은 '스토어에서 업데이트' 버튼을 항상 그리지만, 누르면 `validatedStoreUri(storeUrl)`가 NULL/빈 값에 `null`을 돌려주어 스토어를 열지 않고 스낵바 '스토어를 열 수 없어요. 스토어에서 직접 업데이트해 주세요.'만 띄운다(`version_gate_screens.dart:19-37`, `store_url_policy.dart:21-29`). 즉 **지금 값 그대로 `191`을 적용하면 구앱 사용자는 업데이트 화면에 갇히고 앱 안에서 스토어로 가는 길이 없다.** `191`이 두 플랫폼의 `store_url`과 `message`를 함께 채워야 한다(§12-2에 반영). 값의 형식은 DB CHECK가 강제한다 — `mavp_store_url_chk`(https) + `mavp_store_url_platform_chk`(`20260808080056`: android는 `play.google.com`, ios는 `apps.apple.com`/`itunes.apple.com`)라 틀린 값은 마이그레이션이 실패한다. Play URL은 `applicationId`(`android/app/build.gradle.kts:43` `com.ssambership.edu`)로 정해지고, App Store URL은 숫자 앱 id가 필요하다(§11 #14, 오너).
+**게이트 화면의 스토어 버튼(라이브 확인, 2026-09-02).** `mobile_app_version_policies` 현재 행: android `min_supported_build 9 · latest_build 16`, ios `1 · 16`, `minimum_version_name` '1.0.0', **`store_url`·`message` 두 행 모두 NULL**(§11 #12 해소; 앱은 `VersionPolicy.fromJson`이 null을 ''로 받아 기본 문구를 쓴다 — `version_policy.dart:46, 58`). 앱의 `ForceUpdateScreen`은 '스토어에서 업데이트' 버튼을 항상 그리지만, 누르면 `validatedStoreUri(storeUrl)`가 NULL/빈 값에 `null`을 돌려주어 스토어를 열지 않고 스낵바 '스토어를 열 수 없어요. 스토어에서 직접 업데이트해 주세요.'만 띄운다(`version_gate_screens.dart:19-37`, `store_url_policy.dart:20-27`). `RecommendUpdateBanner`(`:137-`)도 같은 `_openStore`를 쓰므로 `latest_build`만 올리는 권장 배너의 버튼도 같은 스낵바만 띄운다. 즉 **지금 값 그대로 `191`을 적용하면 구앱 사용자는 업데이트 화면에 갇히고 앱 안에서 스토어로 가는 길이 없다.** `191`이 두 플랫폼의 `store_url`과 `message`를 함께 채워야 한다(§12-2에 반영). 값의 형식은 DB CHECK가 강제한다 — `mavp_store_url_chk`(https + host가 `play.google.com`/`apps.apple.com`/`itunes.apple.com` 중 하나) + `mavp_store_url_platform_chk`(`20260808080056`: platform↔host 일치 — android는 `play.google.com`, ios는 `apps.apple.com`/`itunes.apple.com`)라 틀린 값은 마이그레이션이 실패한다. Play URL은 `applicationId`(`android/app/build.gradle.kts:43` `com.ssambership.edu`)로 정해지고, App Store URL은 숫자 앱 id가 필요하다(§11 #14, 오너).
 
 ### 5-3. 방어 2 — 서버 정책 (권장 · **결정 #2**)
 
@@ -261,13 +261,13 @@ update public.mobile_app_version_policies
 
 | 파일 | 변경 | 골격 |
 |---|---|---|
-| `data/question_room_write_repository.dart` | `upsertMyNote` → **`appendMyNote(roomId, body)`**: INSERT 블록(`:237-247`)만 남기고 SELECT-existing(`:202-207`)·UPDATE(`:210-218`)·DELETE(`:221-233`) 경로 삭제. `_currentAuthorRoleCode` 유지. 문서 주석(`:185-193`, "UNIQUE 없음" 근거) 교체. 클라이언트 사전 검사: trim 후 빈 본문 거부(현행 `_save` `:83-84`) + 2,000자 초과 거부(`.characters.length`, 결정 #3 — DB CHECK가 없으므로 앱·웹 액션이 각자 막는다) | — |
-| `data/question_room_read_repository.dart` | `notes(roomId)` 정렬을 `updated_at desc` → **`created_at desc, id desc` + `.limit(200)`**(최신 우선 유지, 결정 #4). doc 주석 `:256`("최근 수정순") → "최근 작성순". 미리보기 2종은 그대로 동작. 화면이 `.reversed`로 뒤집는다. 페이징(결정 #4)을 채택하면 `recentMessages`/`messagesBefore`·`MessageCursor(createdAt:, id:)`·`messageCursorBeforeFilter`를 그대로 미러링 | — |
+| `data/question_room_write_repository.dart` | `upsertMyNote` → **`appendMyNote(roomId, body)`**: INSERT 블록(`:237-247`)만 남기고 SELECT-existing(`:202-207`)·UPDATE(`:209-218`)·DELETE(`:221-233`) 경로 삭제. `_currentAuthorRoleCode` 유지. 문서 주석(`:185-193`, "UNIQUE 없음" 근거) 교체. 클라이언트 사전 검사: trim 후 빈 본문 거부(현행 `_save` `:83-84`) + 2,000자 초과 거부(`.characters.length`, 결정 #3 — DB CHECK가 없으므로 앱·웹 액션이 각자 막는다) | — |
+| `data/question_room_read_repository.dart` | `notes(roomId)` 정렬을 `updated_at desc` → **`created_at desc, id desc` + `.limit(200)`**(최신 우선 유지, 결정 #4). doc 주석 `:256`("최근 수정순") → "최근 작성순". 소비자는 `ConnectionNotesScreen` + 방 홈 미리보기 2종 + dev `s3_data_inspector.dart:325`(표시 전용) — 미리보기 2종은 그대로 동작. 화면이 `.reversed`로 뒤집는다. 페이징(결정 #4)을 채택하면 `recentMessages`/`messagesBefore`·`MessageCursor(createdAt:, id:)`·`messageCursorBeforeFilter`를 그대로 미러링 | — |
 | `ui/connection_notes_screen.dart` | '상대 노트'/'내 노트' 2섹션 → **한 타임라인**(학생·멘토 카드 혼합, 기존 `_NoteCard` + `AppBadge` 작성자 배지 그대로, 내 카드는 `mine` 플래그로 톤만) + 하단 **작성 카드**(기존 `AppCard` + `TextField` + `PrimaryButton`, 라벨 '내 노트 저장' → **'노트 남기기'**, 힌트 문구 교체). 저장 성공 시 **`_editor.clear()`를 명시 호출**한 뒤 `_reload()` — `_seeded`를 지우는 것만으로는 편집기가 비지 않는다(`:140-144`). `mine`/`others` 분리·`_seeded` 삭제. 카드 시각을 `updatedAt`(`:217`) → **`createdAt`**. 빈 상태 `EmptyState` 유지 — 단 본문 '질문하고 답변을 확인하면 노트가 쌓여요'(`:159`)는 구 모델(질문·답변에서 노트가 생긴다) 설명이라 '첫 노트를 남겨 보세요'류로 교체(**카피 결정 #5**). 생성자 seam(`notesLoader`·`onSaveNote`·`currentUserId`) 유지 — 테스트가 의존 | `Scaffold`·`AppBar('연결노트')`·`ListView` 유지 |
-| `ui/mentor_room_home_screen.dart` | **변경 없음** — 조회가 최신 우선을 유지하므로 `break`-on-first(`:50-55`)가 그대로 "최신 멘토 노트" | 카드 유지 |
+| `ui/mentor_room_home_screen.dart` | **코드 변경 없음** — 조회가 최신 우선을 유지하므로 `break`-on-first(`:50-55`)가 그대로 "최신 멘토 노트". 단 `:53` 주석 "notes 는 최근 수정순" → "최근 작성순"(주석만) | 카드 유지 |
 | `ui/mentor/student_room_home_screen.dart` | **변경 없음** — `??=`(`:58-65`)가 그대로 "최신" | 카드 유지 |
 | `shared/labels/question_room_labels.dart` | 변경 없음('학생'/'멘토'/'작성자 미상') | — |
-| `data/models/connection_note.dart` | 필드 변경 없음. 주석 `:3` "작성자별 행이 따로 쌓인다" → "방 타임라인, 작성자당 여러 행" (주석만) | — |
+| `data/models/connection_note.dart` | 필드 변경 없음. 주석 `:4` "한 방에 작성자별 행이 따로 쌓인다" → "방 타임라인, 작성자당 여러 행" (주석만) | — |
 | `lib/core/ink/ink_storage_paths.dart` | **삭제 금지**(§2-2 테스트 행). 경로 규약이 `{roomId}/{authorId}/ink.json` 작성자당 1파일이라 여러 장 노트와 호환되지 않는다 — 손글씨를 되살릴 때 노트 id 기준으로 바꿔야 한다는 메모만 남긴다 | — |
 | `docs/APP_FEATURE_STATUS.md:142` | "`upsertMyNote` 실쿼리" 설명을 `appendMyNote`·타임라인으로 갱신 | — |
 | (선택) 본문 길이 | `TextField(maxLength: 2000)` — **결정 #3** | — |
@@ -282,28 +282,28 @@ update public.mobile_app_version_policies
 ## 7. 웹 변경 (골격 유지)
 
 ### 7-1. `components/qna/ConnectionNotesPanel.tsx`
-- `canAdd`에서 `&& opts.cards.length === 0` 제거(`:151`), 주석(`:149-150`)의 unique 언급 삭제. **단 "서버 가드가 최종이니 항상 보이게"는 부족하다** — 페이지가 모든 액션 오류를 "요청을 처리할 수 없습니다"로 세탁하므로(§2-3 오류 매핑) 구독 만료 사용자가 버튼을 누르면 이유 없는 실패만 본다. → **결정 #9**: (권장) 페이지에서 `assertConnectionNoteWriteAllowed`(또는 `subscriptionContext`)로 **`canWrite`를 서버 계산해 패널에 넘기고**, 불가 시 버튼을 비활성 + 힌트("구독이 만료돼 읽기만 가능해요")로 표시. 페이지 오류 매핑 자체의 수정(액션 문구 허용 목록 또는 `code=` 파라미터)은 별도 PR.
+- `canAdd`에서 `&& opts.cards.length === 0` 제거(`:151`), 주석(`:149-150`)의 unique 언급 삭제. **단 "서버 가드가 최종이니 항상 보이게"는 부족하다** — 페이지가 모든 액션 오류를 "요청을 처리할 수 없습니다"로 세탁하므로(§2-3 오류 매핑) 구독 만료 사용자가 버튼을 누르면 이유 없는 실패만 본다. → **결정 #9**: (권장) 페이지에서 `assertConnectionNoteWriteAllowed`(또는 `subscriptionContext`)로 **`canWrite`를 서버 계산해 패널에 넘기고**, 불가 시 버튼을 비활성 + 힌트로 표시 — 힌트 문구는 가드가 이미 돌려주는 역할별 `userMessage`(`connectionNoteSubscriptionGuard.ts:77-80`)를 그대로 넘겨 카피 정본을 하나로 둔다. 학생 목록 화면의 제로상태용 빈 '연결 노트' 레일(`QuestionRoomStudentDesignWorkspace.tsx:425-432`, 280px)은 패널 인스턴스가 아니므로 손대지 않는다. 페이지 오류 매핑 자체의 수정(액션 문구 허용 목록 또는 `code=` 파라미터)은 별도 PR.
 - 2열('학생의 노트'/'멘토의 노트') 유지 여부는 **결정 #1**. 권장은 **한 타임라인**: `columns` 상수(`:277`)의 `NoteColumn` 2개를 `created_at` 정렬 병합 카드 한 `<section>`으로 바꾸고(기존 `NoteItem`·좌측 색 띠·작성자 라벨 재사용), 추가 버튼 1개와 총 장수를 그 섹션 헤더에 둔다(≈60줄). `<aside>` 420px 레일(`:345`)·헤더(함께한 기간·함께한 질문)·모바일 토글(`:326`)·모달 인스턴스는 그대로.
 - 카드 목록 구성(정렬·`side` 판정·`editable`)을 **순수 헬퍼 `lib/qna/connectionNoteTimeline.ts`** 로 뽑아낸다 — 이 저장소의 contract 러너가 `lib/**`만 훑고 TSX를 렌더할 수 없어(§8-2) 헬퍼로 빼야 테스트가 된다.
 - 정렬: 조회는 `created_at desc, id desc` + `limit 200`, 패널이 뒤집어 위→아래. 카드 id 폴백 ``${aid}-${body.slice(0, 8)}``(`:238`)은 같은 작성자의 여러 장에서 충돌 가능 → `id` 없는 행은 건너뛴다(PK라 실제로는 항상 있음).
 - 날짜 라벨: `updated_at ?? created_at`(`:242`) → **`created_at`**. '수정됨' 표시는 두지 않는다 — `trg_cn_set_updated`는 FK `on delete set null`(048)이 실행하는 UPDATE에도 발화해 탈퇴한 작성자의 행이 `updated_at ≠ created_at`이 되므로 마커가 오작동한다((b′)를 골라도 `author_id IS NULL` 행은 제외해야 한다).
 - 접근성·헤더: 단일 섹션에 `aria-label`, 비활성 추가 버튼에 `aria-disabled` + `aria-describedby`(힌트 문장). 헤더 문장 '함께 남긴 노트 N개' / 0장 '아직 남긴 노트가 없어요'(카피 결정 #5).
 - 모달 상태: 저장 성공(`actionFeedback.kind === 'note' && ok`) 시 **닫고 초기화**하거나 패널을 `formRevision`에 key(두 워크스페이스가 이미 `rev`를 들고 채팅 form에 쓴다 — `QuestionRoomStudentDesignWorkspace.tsx:180, 790` · `QuestionRoomMentorDesignWorkspace.tsx:175, 452`; 리다이렉트마다 `t`가 바뀌므로 `key={`notes-${rev}`}` 한 줄로 모달이 닫힌 채 재마운트된다) — 1장 시절엔 방당 한 번이라 묻혔지만 타임라인에서는 매번 반복된다. 저장 실패 시 `draftNoteBody`를 패널 → 모달 `defaultBody`로 **연결**(결정 #10, 지금은 dead). 구체안: 두 워크스페이스의 `<ConnectionNotesPanel>` 인스턴스(`QuestionRoomStudentDesignWorkspace.tsx:970, 985` · `QuestionRoomMentorDesignWorkspace.tsx:318` `notesPanelProps` → `:328, 331, 337`)에 `key={`notes-${rev}`}` + 패널의 모달 열림 초기값 `useState(props.draftNoteBody !== undefined)` + `defaultBody={props.draftNoteBody}`.
-- 수정·삭제: **결정 #2 권장안 (c)** 채택 시 `NoteItem`의 인라인 수정 form(`:61`)·삭제 form(`:114`)·`window.confirm`(`:116`, 코드베이스 유일의 native confirm)·`Pencil`/`Trash2` import(`:4`)·`editable` 필드(`:42, 245`)를 제거한다 — 남기면 RLS 0행에도 '노트를 수정했습니다.'/'삭제했습니다.'로 리다이렉트하는 거짓 성공이 된다(§7-3). (b′) 채택 시 `editable`(`:245`)에 `isWithinNoteEditWindow(created_at, now)`(15분, 헬퍼 공유)를 추가하고 삭제 UI만 제거. (b) 채택 시에는 삭제도 창 조건이고, 확인 UI는 `window.confirm` 대신 카드 안 2단계 인라인 확인('삭제' → '정말 삭제/취소', ≈10줄)을 권장 — `AppToast`는 타이머 토스트라 확인 용도가 아니다.
+- 수정·삭제: **결정 #2 권장안 (c)** 채택 시 `NoteItem`의 인라인 수정 form(`:61`)·삭제 form(`:114`)·`window.confirm`(`:116`, 코드베이스 유일의 native confirm)·`Pencil`/`Trash2` import(`:4`)·`FormSubmitButton` import(`:6`)·`deleteConnectionNoteAction`/`updateConnectionNoteAction` import(`:7-10`)·`editable` 필드(`:42, 245`)·`editingId` 상태(`:211`)와 `onStartEdit`/`onCancelEdit` prop 배선(`:143-145, 186-187, 286-288, 298-300`)을 함께 제거한다(남기면 lint 미사용 경고) — 남기면 RLS 0행에도 '노트를 수정했습니다.'/'삭제했습니다.'로 리다이렉트하는 거짓 성공이 된다(§7-3). (b′) 채택 시 `editable`(`:245`)에 `isWithinNoteEditWindow(created_at, now)`(15분, 헬퍼 공유)를 추가하고 삭제 UI만 제거. (b) 채택 시에는 삭제도 창 조건이고, 확인 UI는 `window.confirm` 대신 카드 안 2단계 인라인 확인('삭제' → '정말 삭제/취소', ≈10줄)을 권장 — `AppToast`는 타이머 토스트라 확인 용도가 아니다.
 - 카운트 배지: 총 장수.
 
 ### 7-2. `components/qna/QuestionRoomNewNoteModal.tsx`
 - 제목 '새 노트 작성' → '노트 남기기'(**카피 결정 #5**). placeholder를 이미 넘어오는 `actor` prop으로 역할별 분기: 학생 *"이번 주 공부에서 막힌 점, 다음 목표를 남겨 주세요."* / 멘토 *"학생에게 남길 피드백·다음 주 계획을 적어 주세요."* (초안, 오너 확정). hidden `actor` input(`:63`)은 소비자가 없으니 제거.
-- 성공 문구 `"connection note를 저장했습니다."`(`questionRoomActions.ts:553`) → *"연결노트를 저장했습니다."* (리다이렉트 계약 테스트는 이 문자열을 샘플 값으로만 쓴다).
+- 성공 문구 `"connection note를 저장했습니다."`(`questionRoomActions.ts:553`) → *"연결노트를 저장했습니다."* 와 함께 `questionRoomMutations.ts:50` "connection note 내용을 입력하세요." → "노트 내용을 입력해 주세요.", `:100` "connection note를 저장할 수 없습니다." → "연결노트를 저장할 수 없습니다." 도 바꾼다(`lib/domain/coreFlows.ts:8`의 도메인 리터럴은 UI 카피가 아니라 유지). 리다이렉트 계약 테스트(`:74`)는 이 문자열을 샘플 값으로만 쓴다.
 - `defaultBody`를 초안 복원에 실제로 사용(결정 #10). 결정 #3 (b) 채택 시 `maxLength={2000}`은 필수 — 단 form POST로 우회되므로 서버 액션의 길이 검사가 정본(§7-3).
 
 ### 7-3. 조회·액션·문서
 - `lib/qna/questionRoomQueries.ts` `fetchConnectionNotesForRoom`(`:176-188`): `.order("created_at", { ascending: false }).order("id", { ascending: false }).limit(200)`. 패널이 뒤집는다.
-- `lib/qna/questionRoomActions.ts`: INSERT(`saveConnectionNoteAction` `:489-556`)·가드·리다이렉트 계약은 그대로. 결정 #3 (b)면 여기에 `content.length > 2000` 검사(초과 시 '노트는 2,000자까지 남길 수 있어요.' + `dNote` 초안 보존 리다이렉트)를 넣는다 — textarea `maxLength`는 form POST로 우회된다. **결정 #2 권장안 (c)면 `updateConnectionNoteAction`(`:559-608`)·`deleteConnectionNoteAction`(`:611-655`)을 삭제** — 정책이 없어 항상 0행인데 `:601-607`/`:648`은 영향 행을 보지 않아 '노트를 수정했습니다.'/'삭제했습니다.'로 리다이렉트한다(거짓 성공). ①(190 적용)과 ④(웹 배포) 사이에는 이 거짓 성공이 실제로 노출되므로 ④를 ① 직후로 당기거나 두 액션 제거만 먼저 배포한다. (b′)면 `updateConnectionNoteAction`은 사전 조회(`:589-593`)에서 `created_at`도 읽어 창 밖이면 명시 오류로 거절하고 UPDATE에 `.select("id")`를 붙여 **0행이면 실패 처리**, 삭제 액션은 제거. (b)면 삭제도 같은 처리.
-- `?dNote=` 초안 보존: 지금은 dead 경로(§2-3). **결정 #10** — (권장) `draftNoteBody`·`actionFeedback`을 두 디자인 워크스페이스에서 패널로 넘겨 모달 `defaultBody`에 연결 / (대안) `dNote` 배관 전체와 `questionRoomRedirect.contract.test.ts:151-163`의 `dNote` 단언 제거.
-- 레거시 `initialNoteText`/`studentNoteText`/`mentorNoteText`와 `QuestionRoomWorkspace.tsx:269-270` 이하 구형 렌더: 실사용 도달 경로가 없다(§2-3). 이번 개편의 필수 범위는 아니며, 상세 4개 페이지의 `extractNoteText(bundle.notes.rows[0])` 계산과 함께 **별도 정리 PR에서 삭제**를 권고한다. 남겨 두면 "첫 1건"이 정렬 변경 후 "가장 오래된 1건"이 되어 의미가 어긋난다.
+- `lib/qna/questionRoomActions.ts`: INSERT(`saveConnectionNoteAction` `:489-556`)·가드·리다이렉트 계약은 그대로. 결정 #3 (b)면 여기에 grapheme 단위 길이 검사(`new Intl.Segmenter('ko', { granularity: 'grapheme' })`로 세거나 최소 `[...content].length` 코드포인트 — JS `content.length`는 UTF-16 코드 유닛이라 이모지·결합 문자에서 앱의 `.characters.length`와 어긋난다)(초과 시 '노트는 2,000자까지 남길 수 있어요.' + `dNote` 초안 보존 리다이렉트)를 넣는다 — textarea `maxLength`는 form POST로 우회된다. **결정 #2 권장안 (c)면 `updateConnectionNoteAction`(`:559-608`)·`deleteConnectionNoteAction`(`:611-655`)을 삭제** — 정책이 없어 항상 0행인데 `:601-607`/`:648`은 영향 행을 보지 않아 '노트를 수정했습니다.'/'삭제했습니다.'로 리다이렉트한다(거짓 성공). ①(190 적용)과 ④(웹 배포) 사이에는 이 거짓 성공이 실제로 노출되므로 ④를 ① 직후로 당기거나 두 액션 제거만 먼저 배포한다. (b′)면 `updateConnectionNoteAction`은 사전 조회(`:589-593`)에서 `created_at`도 읽어 창 밖이면 명시 오류로 거절하고 UPDATE에 `.select("id")`를 붙여 **0행이면 실패 처리**, 삭제 액션은 제거. (b)면 삭제도 같은 처리.
+- `?dNote=` 초안 보존: 지금은 dead 경로(§2-3). **결정 #10** — (권장) `draftNoteBody`·`actionFeedback`을 두 디자인 워크스페이스에서 패널로 넘겨 모달 `defaultBody`에 연결 / (대안) `dNote` 배관 전체와 `questionRoomRedirect.contract.test.ts:150-162`(`dNote` 단언 `:160`)의 `dNote` 단언 제거.
+- 레거시 `initialNoteText`/`studentNoteText`/`mentorNoteText`와 `QuestionRoomWorkspace.tsx:269-270` 이하 구형 렌더: 실사용 도달 경로가 없다(§2-3). 이번 개편의 필수 범위는 아니며, 상세 4개 페이지의 `extractNoteText(bundle.notes.rows[0])` 계산과 함께 **별도 정리 PR에서 삭제**를 권고한다. 남겨 두어도 `rows[0]`/`find`는 여전히 최신 1건(기준만 `updated_at`→`created_at`)이라 의미가 뒤집히지는 않는다. 삭제 권고 근거는 도달 불가 코드(`:207`/`:238` 조기 반환)라는 점과, 작성자별 "첫 1건"이 타임라인에서는 N장 중 1장만 보여 주는 반쪽 표현이 된다는 점이다.
 - `CLAUDE.md` 핵심 테이블 표 `connection_notes` 행 정정(`status` → `author_id, author_role, body, ink_path, ink_thumb_path`, append-only 명시; `:40` "room 단위"에 "작성자당 여러 장" 추가) · `docs/audit/db_expected_state.md:39`에 "유일 제약 없음(설계) · (권장안) UPDATE·DELETE 정책 없음" 추기 · 정책을 다시 쓰면 `contracts/snapshots/staging_contract.json` 재추출 · `docs/architecture/purpose-report/04-subscription-qna.md`의 "연결노트 패널" 절은 감사 스냅샷이므로 그대로 둔다.
-- 별도 정리 PR(개편 필수 아님): `QuestionRoomWorkspace.tsx:152-163, 269-560`의 구형 렌더와 memo, 4개 페이지의 `initialNoteText` 계산·prop(`:111`). 같은 PR에 `MentorQuestionRoomDashboard.tsx:37-45, 276`의 `extractNoteText`(room 행에서 노트 키를 찾아 항상 폴백)와 `QuestionRoomWorkspace.tsx:553`의 hidden `actor`(액션이 `formData.get("actor")`를 읽지 않음)도 넣는다.
+- 별도 정리 PR(개편 필수 아님): `QuestionRoomWorkspace.tsx:152-163, 269-560`의 구형 렌더와 memo, 4개 페이지의 `initialNoteText` 계산·prop(`:111`). 같은 PR에 `MentorQuestionRoomDashboard.tsx:37-46, 276`의 `extractNoteText`(room 행에서 노트 키를 찾아 항상 폴백)와 `QuestionRoomWorkspace.tsx:553`의 hidden `actor`(액션이 `formData.get("actor")`를 읽지 않음)도 넣는다.
 
 ---
 
@@ -316,9 +316,10 @@ update public.mobile_app_version_policies
 | `test/screens/connection_notes_boundary_test.dart` | **수정** | 라벨 리터럴 `'내 노트 저장'`(`:46, 52, 70`)·스낵바 `'노트를 저장했어요.'`(`:55`)가 하드코딩 — 라벨을 바꾸면 반드시 손봐야 한다. 빈/공백 차단·trim·10k자·이모지 케이스 유지 · (결정 #3) 상한 초과 입력 차단 추가 |
 | `test/widgets/note_author_badge_test.dart` · `test/labels/question_room_labels_test.dart` | 유지 | 배지 구성·라벨 불변 |
 | 신규 `test/screens/connection_notes_timeline_test.dart` | 추가 | 같은 작성자(`currentUserId`) 노트 3장이 **모두** 렌더(구 `mine.first` 시드 회귀 방지), 상대 노트와 `createdAt` 순으로 섞임, 편집기는 비어서 시작 |
-| 신규 `test/data/connection_note_append_wire_test.dart` | 추가 | 쓰기 레포에는 클라이언트 주입 seam이 없어(`:49-55` 전역 `SupabaseInit`) 스텁으로 INSERT/UPDATE를 관찰할 수 없다 → `test/data/message_paging_postgrest_wire_test.dart:14-27`의 `MockClient` 패턴을 미러링: `POST /rest/v1/connection_notes` 정확히 1회(body 키 `mentor_student_room_id, author_id, author_role, body`, `Prefer: return=representation`), `PATCH`/`DELETE` 0회 |
+| 신규 `test/data/connection_note_append_wire_test.dart` | 추가 | 쓰기 레포에는 클라이언트 주입 seam이 없어(`:49-55` 전역 `SupabaseInit`) 스텁으로 INSERT/UPDATE를 관찰할 수 없다 → `test/data/message_paging_postgrest_wire_test.dart:19-28`의 `MockClient` 패턴(`setUp`에서 `SupabaseClient(..., httpClient: mock)`)을 미러링: `POST /rest/v1/connection_notes` 1회(body 키 `mentor_student_room_id, author_id, author_role, body`, `Prefer: return=representation`)를 **미러링한 체인**으로 검증 — 이 테스트는 레포 코드를 실행하지 않으므로 "PATCH/DELETE 0회"의 실제 잠금은 아래 `outbound_api_manifest_test` 정적 가드가 담당한다 |
 | `test/contracts/outbound_api_manifest_test.dart` | 추가(가드) | 테이블·RPC·버킷 집합은 불변. `:298-311`(`from('users')`는 SELECT 전용) 패턴을 본떠 **"`from('connection_notes')` 체인에 `.update(`·`.delete(` 금지"** 가드를 추가 — append-only를 정적으로 잠근다. append를 RPC로 바꾸면 `kExpectedRpcNames`에 추가 |
 | `test/contracts/outbound_api_manifest_test.dart` | 유지 | 테이블·RPC·버킷 리터럴 집합만 고정(`:91` `connection_notes`, `:133` `connection-note-ink`). 작업 종류는 고정하지 않으므로 append 전환으로 바뀌지 않는다 |
+| `test/ink/ink_storage_paths_test.dart` | 유지 | `InkStoragePaths.bucket`(`:8`)과 작성자당 1파일 경로 `room-1/author-9/ink.json`(`:16`)을 고정 — §6 `ink_storage_paths.dart` 행의 "삭제 금지" 근거 |
 | `test/screens/small_viewport_states_test.dart` | 유지 | 320×568 로딩·빈·에러 3상태 overflow 없음 — 타임라인+하단 작성 카드 레이아웃이 그대로 통과해야 한다 |
 | `test/shared/conversation_ui_layering_test.dart` | 유지 | `lib/shared/conversation_ui`에 `ConnectionNote`를 들이지 않는다(외관 계층 → 노트 화면 방향만 허용) |
 
@@ -326,16 +327,16 @@ update public.mobile_app_version_policies
 | 파일 | 조치 | 내용 |
 |---|---|---|
 | `lib/qna/__contract__/connectionNoteFreeRoom.contract.test.ts` | 유지 | 가드 계약 불변(가드는 노트 행을 읽지 않는다) |
-| `lib/qna/__contract__/questionRoomRedirect.contract.test.ts` | 유지 | `kind=note` 계약 불변. 결정 #10에서 `dNote` 배관을 제거하면 `:151-163` 단언도 제거 |
+| `lib/qna/__contract__/questionRoomRedirect.contract.test.ts` | 유지 | `kind=note` 계약 불변. 결정 #10에서 `dNote` 배관을 제거하면 `:150-162`(테스트 'draft/error 쿼리 손실 없음', `dNote` 단언 `:160`)도 제거 |
 | `lib/qna/__contract__/mentorRoomDetailWiring.contract.test.ts` · `lib/account/__contract__/accountDeletionBucketCoverage.contract.test.ts` | 유지 | 패널·조회 변경과 무관 / 계정 삭제 커버리지는 `author_id` 조인이라 행 수 무관 |
 | 신규 `lib/qna/connectionNoteTimeline.ts` + `__contract__/connectionNoteTimeline.contract.test.ts` | 추가 | 패널에서 뽑아낸 순수 헬퍼: 같은 작성자 N행이 모두 카드가 됨 · `created_at`(동률 `id`) 정렬 · `side` 판정(방 id → `author_role` 폴백) · `editable`은 권장안 (c)면 필드 자체를 없애고, (b′)면 `본인 && 15분 이내` · desc+limit 조회를 뒤집는 형태 · `id`가 문자열이 아닌 행은 건너뜀. **`components/` 아래 컨트랙트 테스트는 불가** — 러너가 `lib/**/__contract__/*.contract.test.ts`만 훑고(`package.json:10`) TSX를 렌더할 수 없다. **주의**: `tsconfig.json`의 `exclude`가 `**/__contract__/**`를 제외하므로 컨트랙트 테스트는 CI `tsc`의 타입 검사를 받지 않고 `node --experimental-strip-types`로만 실행된다(e2e 스펙과 비대칭) |
-| 신규 `lib/qna/__contract__/connectionNotesPanelWiring.contract.test.ts` | 추가 | 소스 텍스트 회귀(패턴: `mentorRoomDetailWiring`): 패널에 `cards.length === 0` 조건·unique 주석이 없을 것 · 조회가 `created_at` + 명시 limit일 것 · 모달이 학생 전용 placeholder를 멘토에게 쓰지 않을 것 |
+| 신규 `lib/qna/__contract__/connectionNotesPanelWiring.contract.test.ts` | 추가 | 소스 텍스트 회귀(패턴: `mentorRoomDetailWiring`): 패널에 `cards.length === 0` 조건·unique 주석이 없을 것 · 조회가 `created_at` + 명시 limit일 것 · 모달이 학생 전용 placeholder를 멘토에게 쓰지 않을 것 · (레거시 정리 후) `saveConnectionNoteAction` 호출처가 모달 1곳뿐일 것(`QuestionRoomWorkspace.tsx:538`의 도달 불가 폼 회귀 방지) |
 | 신규 `lib/qna/__contract__/connectionNoteEditWindow.contract.test.ts` | 추가(결정 #2 **(b′)** 채택 시에만) | `isWithinNoteEditWindow` 경계(14:59 허용 · 15:00 거부 · 잘못된 `created_at` 거부) — 패널 `editable`과 액션 사전 검사가 같은 함수를 써서 클라이언트·서버가 어긋나지 않게 |
 | `e2e/connection-note-guard.spec.ts` | 수정 | 시드 INSERT 전에 해당 방의 `connection_notes` 정리(`.delete().eq('mentor_student_room_id', roomId)`) · INSERT 오류 `null` 단언 · 제약 제거 후 케이스: 같은 학생이 2장 INSERT 모두 성공 + `created_at` 순 2행 조회 |
 
 ### 8-3. DB
 - 마이그레이션 자체 검증 블록(E): 제약 부재 · **다른 unique index도 없음** · `idx_cn_room_created` 컬럼 목록 · `idx_cn_author` 생존 · (F 권장안) `pg_policies`가 정확히 {`cn_select` SELECT, `cn_insert` INSERT} 2행이고 `cmd IN ('UPDATE','DELETE')` 행 0 · RLS 활성 · `trg_cn_set_updated` 잔존 — (b′)면 3행 + `cn_update`에 `created_at` + 트리거·함수 ACL. F 문장이 빠져도 통과하는 검증이면 의미가 없다.
-- 신규 `scripts/verify/connection_notes_timeline_verify.sql`(패턴 `s2_2_batch_d_verify.sql`: `begin` → 로컬 가드 → fixture → `set_config('request.jwt.claims', …)` + `set local role authenticated` → 검증 → `rollback`): 같은 (방, 작성자) INSERT 2회 성공 · `ORDER BY created_at, id` 결정적 · (F 권장안) 본인 행이라도 UPDATE 0행 · DELETE 0행 · 구앱 시뮬레이션(최신 UPDATE + 나머지 DELETE) 후 **행 수뿐 아니라 각 행의 `body`·`updated_at`이 시드 값과 동일**(카운트만 세면 덮어쓰기를 놓친다) · **fixture 사용자 삭제 시 FK set-null 성공**(행은 남고 `author_id IS NULL`; 정책 제거와 무관함을 확인) · (b′)면 창 안 1행/창 밖 0행 · `set created_at = now()` → 예외 · FK set-null이 트리거에 막히지 않음.
+- 신규 `scripts/verify/connection_notes_timeline_verify.sql`(패턴 `s2_2_batch_d_verify.sql`: `begin` → 로컬 가드 → fixture → `set_config('request.jwt.claims', …)` + `set local role authenticated` → 검증 → `rollback`): 같은 (방, 작성자) INSERT 2회 성공 · `ORDER BY created_at, id` 결정적 · (F 권장안) 본인 행이라도 UPDATE 0행 · DELETE 0행 · 구앱 시뮬레이션(최신 UPDATE + 나머지 DELETE) 후 **행 수뿐 아니라 각 행의 `body`·`updated_at`이 시드 값과 동일**(카운트만 세면 덮어쓰기를 놓친다) · **fixture 사용자 삭제 시 FK set-null 성공**(행은 남고 `author_id IS NULL`; 정책 제거와 무관함을 확인) · 전제 확인: authenticated에 테이블 DML grant(SELECT/INSERT/UPDATE/DELETE)가 남아 있어야 "정책 없음 → 0행"이지 42501이 아니다(라이브 `role_table_grants` 확인 — grant를 회수하면 구앱은 `catch (_)`가 아닌 오류 경로로 간다) · (b′)면 창 안 1행/창 밖 0행 · `set created_at = now()` → 예외 · FK set-null이 트리거에 막히지 않음.
 - 구클라이언트 시뮬레이션(권장안 (c)): 한 작성자 행 3건 시드 → "`updated_at` 최신 1건 UPDATE + 나머지 DELETE"를 authenticated 컨텍스트(`set_config('request.jwt.claims', …)` + `set local role authenticated`, 패턴 `s2_2_batch_d_verify.sql:210-213`)로 실행 → **UPDATE 0행 · DELETE 0행 · 3행의 본문·`updated_at` 불변**. (b′)면 최신 1건이 15분 이내일 때 UPDATE 1행(정정)·DELETE 0행, `created_at = now()` UPDATE는 트리거로 거부.
 
 ---
@@ -345,7 +346,7 @@ update public.mobile_app_version_policies
 | # | 단계 | 게이트(다음으로 넘어가는 조건) |
 |---|---|---|
 | ① | DB: `190` 머지 → `db-apply-pending` apply(2026-09-02 현재 pending은 `190` 1본뿐 — `189`는 이미 적용됨; 그 사이 다른 backfill이 쌓이면 함께 전량 적용된다) | 원장에 version 등재 · pg_constraint에서 제약 부재 확인 · (권장안) `pg_policies`가 `cn_select`/`cn_insert` 2행 · 웹 동작 변화 없음(버튼 숨김 그대로) · 구앱은 내 노트가 이미 있는 방에서 '저장'이 실패 스낵바로 끝난다(라이브 0행이라 실제 영향 0) · 웹의 기존 수정·삭제 버튼은 0행에 거짓 성공을 띄우므로 ④를 바로 잇는다(§7-3). **`191`은 이 시점에 main에 있으면 안 된다**(같이 적용돼 전원 강제 업데이트) |
-| ② | 앱: `appendMyNote` + 타임라인 화면 빌드 → 스토어 심사·배포 | CI(analyze·test) 그린 · 스토어 게시 완료 · 결제 무관 기능이라 심사 리스크 낮음(인계 §5 권고 순서 ①단계에 해당) |
+| ② | 앱: `appendMyNote` + 타임라인 화면 빌드 → 스토어 심사·배포 | CI(analyze·test) 그린 · 스토어 게시 완료 · 결제 무관 기능이라 심사 리스크 낮음(2026-09-02 세션 인계 문서 — 저장소 외 첨부 — §5 권고 순서 ①단계에 해당) |
 | ③ | 버전 게이트: `191`을 **양 스토어 게시 완료 후** 머지 → `db-apply-pending` apply (`min_supported_build`를 ②의 build로, **forceUpdate**) | 적용 전 `mobile_app_version_policies` 현재값 읽어 `sql_apply_manifest` 행에 기록(롤백용) · 원장 등재 · `get_mobile_app_version_policy('ios'/'android')` 응답 확인 · 구앱(build 19) 콜드 스타트가 `ForceUpdateScreen`에서 멈추는 것을 테스트 기기로 확인 · 스토어 바이너리의 실제 `buildNumber`가 19인지 확인(§11) · **`store_url`·`message`를 두 플랫폼 행에 채운 채 적용**(현재 둘 다 비어 있어 게이트 화면의 스토어 버튼이 스낵바만 띄운다 — §5-2 · §11 #14) |
 | ④ | 웹: 패널 `canAdd` 개방 + 타임라인 정렬 + 카피 배포 | 결정 #2 권장안 (c) 채택 시 **① 직후 어느 때나**(DB가 구앱을 무해화하므로 ②·③과 무관; 거짓 성공 버튼 제거를 위해 오히려 ① 직후가 좋다). (b′)면 ① 직후 가능하나 15분 창 덮어쓰기가 남는다. (a)면 ③ 후 **재시작 유예 48시간 이상**(게이트는 콜드 스타트에서만 평가) |
 | ⑤ | 문서: `db_expected_state.md`·`CLAUDE.md` 행 갱신, 앱 `APP_FEATURE_STATUS.md`, 계약 문서 | — |
@@ -372,8 +373,8 @@ update public.mobile_app_version_policies
 | 10 | `dNote` 초안 보존 | (a) 워크스페이스 → 패널 → 모달 `defaultBody`로 연결 · (b) `dNote` 배관·계약 단언 제거 | **(a)** — 타임라인에서는 저장 시도가 잦아져 실패 시 글 소실이 체감된다 |
 | 11 | 타임라인 표시 순서 | (a) 오래된 것 위·최신 아래(조회 `desc`를 화면에서 뒤집음, 작성 카드는 하단 그대로) · (b) 최신 위(뉴스피드형, 작성 카드를 `ListView` 첫 자식으로) | **(a)** — 골격 유지(작성 카드 자리 불변; 방 홈 미리보기 2종 무변경은 두 안 모두) + 답글이 원 노트 **아래**에 읽힌다. (b)는 화면 구조 변경이고 답글이 원 노트 위에 놓인다 |
 | 12 | 탈퇴 사용자 노트 잔존 | (a) 현행 — 행은 남고 `author_id NULL`, 상대는 계속 열람(계정 삭제 워커는 잉크 경로만 정리, `lib/account/accountDeletionBucketCoverage.ts:106-111`) · (b) 탈퇴 시 본문 마스킹/삭제(워커 확장) | **(a)** 1차 — 상대의 학습 기록 보존. 개인정보 정책과 맞춰 후속 |
-| 13 | 표기 통일 | 웹 '연결 노트'(`ConnectionNotesPanel.tsx:256, 326` · 워크스페이스 주석) vs 앱·`CLAUDE.md` '연결노트' | **'연결노트'**(CLAUDE.md 통일 문구)로 통일 — 성공 문구의 영문 'connection note'도 제거 |
-| 14 | 노트 신고·검수 | 신고 대상 `targetType`에 노트 없음(community_post/comment·mentor_profile·dispute 등만), 관리자 콘솔에 노트 화면 없음 — append-only면 작성자도 못 지운다 | 1차 범위 밖으로 기록. 물량이 생기기 전 `content_reports` 대상 추가 여부 결정 |
+| 13 | 표기 통일 | 웹 '연결 노트'(`ConnectionNotesPanel.tsx:256, 326` · `QuestionRoomStudentDesignWorkspace.tsx:430` 제로상태 레일 제목 · 주석 `StudentDesignWorkspace:425, 984`·`MentorDesignWorkspace:292`·`questionRoomActions.ts:558, 610`) vs 앱·`CLAUDE.md` '연결노트' | **'연결노트'**(CLAUDE.md 통일 문구)로 통일 — 성공 문구의 영문 'connection note'도 제거 |
+| 14 | 노트 신고·검수 | 신고 대상 `targetType`에 노트 없음 — 코드 리터럴은 `community_post`·`board_comment`·`community_comment`·`shortform_post`·`mentor_profile`·`dispute`·`user` 등이고 DB는 `content_reports_target_type_nonempty`(비어 있지 않음)만 검사해 **열거 CHECK가 없다**(노트 대상 추가는 DDL 없이 코드만으로 가능). 관리자 콘솔에 노트 화면 없음 — append-only면 작성자도 못 지운다 | 1차 범위 밖으로 기록. 물량이 생기기 전 `content_reports` 대상 추가 여부 결정 |
 | 15 | 중복 제출 완화 | (a) 없음(앱 `_saving`·웹 pending 버튼만) · (b) 웹 액션에 30초 내 같은 본문 dedupe | **(a)** — append-only에서 중복 행은 노이즈일 뿐 손실이 아니다 |
 
 ---
@@ -384,7 +385,7 @@ update public.mobile_app_version_policies
 |---|---|---|
 | 1 | 앱 `1.0.0+19`(코드 `635ae738`)가 실제 스토어 배포본과 같은지 — §5의 위험 분석은 이 코드 기준 | 스토어 콘솔 · `mobile_app_version_policies.latest_build` 값 대조 |
 | 2 | 클라우드 초기화 일정과 ①의 선후 | 오너 |
-| 3 | 스토어 바이너리의 `PackageInfo.buildNumber`가 실제로 19인지(CI가 `--build-number`를 따로 넘기면 다를 수 있다) — ③의 `min_supported_build` 값이 이에 걸린다 | 스토어 콘솔 · CI 워크플로 |
+| 3 | 스토어 바이너리의 `PackageInfo.buildNumber`가 실제로 19인지 — CI 두 워크플로(`flutter-ci.yml:90`, `android-signed-release-candidate.yml:287`)는 `--build-number` 없이 빌드하고 RC 워크플로가 build-number 덮어쓰기를 명시 금지(`:281`)하므로 **CI 산출물은 19**. 남는 미확인은 스토어에 올라간 바이너리가 CI 산출물인지(수동 빌드 여부)뿐 — ③의 `min_supported_build` 값이 이에 걸린다 | 스토어 콘솔 |
 | 4 | Flutter 웹 타깃(`web/` 디렉터리 존재, `kIsWeb` 분기)이 어딘가 배포돼 있는지 — 배포돼 있으면 게이트가 아예 없다 | 오너 |
 | 5 | `.select().single()` 0행 시 PostgREST 오류 코드(예상 `PGRST116`) — 라이브러리 소스 미확인. 앱의 `catch` 경로는 코드로 확인됨(§5-3). **권장안 (c)에서는 안전과 무관** — DELETE는 정책 부재로 항상 0행이라 예외 여부는 스낵바 종류만 바꾼다 | 실기기 1회 |
 | 6 | 웹 `window.confirm` 삭제 확인 — 결정 #2 (c)·(b′) 채택 시 삭제 UI 자체가 사라져 무관. (b) 채택 시 `AppToast`/모달로 바꿀지 | 관리자 콘솔 확인 모달 공통화 트랙과 함께 결정 |
@@ -393,7 +394,7 @@ update public.mobile_app_version_policies
 | 9 | 웹 노트 모달이 서버 액션 리다이렉트 뒤 실제로 열린 채 남는지(React 클라이언트 상태 유지 여부) — 정적으로는 닫는 코드가 없다 | 브라우저 1회 |
 | 10 | 웹 액션이 `revalidatePath(room)`만 하는데 멘토 thread 상세 경로 갱신이 충분한지 — 페이지가 searchParams를 동적으로 읽어 문제없을 것으로 보이나 런타임 미확인 | 브라우저 1회 |
 | 11 | ~~부모 원장의 현재 최대 version~~ — **해소(2026-09-02 라이브 SELECT)**: `max(version) = 20260831100100`, 103본(= 로컬 pack). `verify_local_stack_state.sh:58` 주석("원장 102본, 189 미적용")은 구식 → 개편 PR에서 정정(§4-3 #9) | — |
-| 12 | ~~`mobile_app_version_policies` 현재 행~~ — **해소(2026-09-02 라이브 SELECT)**: android `min 9 · latest 16`, ios `min 1 · latest 16`, `minimum_version_name` '1.0.0', **`store_url` NULL(양쪽) · `message` NULL(양쪽)**, `updated_at 2026-08-06 03:39 UTC`. `191` 자가 검증 "2행, min ≥ N"은 충족 가능하나 `store_url`·`message`가 비어 있어 §5-2의 스토어 버튼 문제가 있다 | 적용 직전 다시 SELECT해 `sql_apply_manifest` 행에 기록 |
+| 12 | ~~`mobile_app_version_policies` 현재 행~~ — **해소(2026-09-02 라이브 SELECT)**: android `min 9 · latest 16`, ios `min 1 · latest 16`, `minimum_version_name` '1.0.0', **`store_url` NULL(양쪽) · `message` NULL(양쪽)**, `updated_at 2026-08-06 03:39 UTC`. `191` 자가 검증은 "2행 · min ≥ N · latest ≥ min · `store_url` NOT NULL · `message` 비어 있지 않음"(§12-2)이라 현재 값 그대로면 UPDATE의 `coalesce`가 채운 값으로 통과하고, ios `store_url` 자리표시자를 실제 URL로 바꾸지 않으면 CHECK에서 실패한다(스토어 버튼 문제의 방어가 191 안에 있다) | 적용 직전 다시 SELECT해 `sql_apply_manifest` 행에 기록 |
 | 13 | Supabase CLI 2.111.0 `db push`의 out-of-order 로컬 version 거부(`--include-all`) 동작 — CLI 지식 기반, 저장소 증거는 `--db-url` 존재 검사뿐 | CLI 문서 |
 | 14 | 양 스토어의 앱 상세 URL — `191`의 `store_url` 값. Play는 `https://play.google.com/store/apps/details?id=com.ssambership.edu`(`applicationId`로 확정), App Store는 `https://apps.apple.com/kr/app/id<숫자 id>` 형식이라 **숫자 앱 id를 오너가 준다**(bundle id `com.ssambership.app`, `ios/Runner.xcodeproj/project.pbxproj:389`). 강제 업데이트 안내 문구(`message`)도 함께 | 오너 · 스토어 콘솔 |
 | 15 | 노트 알림 후속 — `connection_note_created`류 이벤트 발행 지점(DB 트리거 vs 서버 액션/앱) 미결정. `152`의 그룹 매핑은 재사용 가능 | 후속 설계 |
@@ -404,7 +405,7 @@ update public.mobile_app_version_policies
 
 ## 12. 부록 — 마이그레이션 SQL 초안
 
-> 파일로 만들지 않았다. 오너 승인 후 §4-3 절차로 등재한다(원본은 `post_ledger_backfills/`, `supabase/sql/`은 바이트 동일 사본, `migrations/`는 생성기). `2026MMDD`는 **작성일**, `DD`는 190·191이 서로 다른 날이어야 한다(§4-3 2번). F 절과 E의 F 검사는 결정 #2(b′) 채택 시에만 포함하고, 미채택이면 F-1~F-3을 지우고 E의 정책 수 기대치를 4로, `cn_update` 창·`cn_delete` 부재·트리거·함수 ACL 검사를 제거한다. 초안은 이 저장소의 SQL 스타일(189)과 PostgreSQL 의미론 기준으로 검토를 거쳤으나, 이 환경에는 PostgreSQL이 없어 **실행은 하지 않았다** — 로컬 스택 재생(`db-migration-pack-verify`)이 첫 실행이다.
+> 파일로 만들지 않았다. 오너 승인 후 §4-3 절차로 등재한다(원본은 `post_ledger_backfills/`, `supabase/sql/`은 바이트 동일 사본, `migrations/`는 생성기). `2026MMDD`는 **작성(커밋)일**이고 190·191은 어차피 다른 시점(①·③)에 머지되므로 날짜가 다르다 — 같은 날 2본이 되면 §4-3 2번대로 뒤 파일을 `…100200`으로 한다(191 헤더의 `2026MMDD100100` 표기도 그 경우 `100200`). F 절(F-1·F-2)과 E의 [F] 검사(정책 수 2 · UPDATE/DELETE 행 0 · `cn_select`/`cn_insert` 2행)는 결정 #2 **권장안 (c)** 채택 시 포함한다. (a) 현행 유지면 F-1·F-2와 E의 [F] 검사 3개를 지우고 정책 수 기대치를 4로 둔다. (b′) 채택이면 F-1·F-2를 말미 `[ALT-b′]` 블록(F-1 재정의·F-2 제거·F-3 트리거)으로, E의 [F] 검사를 그 블록 말미 검사(정책 3행 · `cn_update` 창 · `cn_delete` 부재 · 트리거 실재 · 함수 ACL)로 바꾼다. 초안은 이 저장소의 SQL 스타일(189)과 PostgreSQL 의미론 기준으로 검토를 거쳤으나, 이 환경에는 PostgreSQL이 없어 **실행은 하지 않았다** — 로컬 스택 재생(`db-migration-pack-verify`)이 첫 실행이다.
 
 ### 12-1. `190_connection_notes_timeline_drop_unique.sql`
 
@@ -594,7 +595,8 @@ CREATE TRIGGER trg_cn_created_at_immutable
   BEFORE UPDATE ON public.connection_notes
   FOR EACH ROW EXECUTE FUNCTION public.connection_notes_forbid_created_at_change();
 
--- ▼ E 자가 검증 DO 블록 안에서 권장안의 [F] 검사 4개를 아래 검사로 교체한다.
+-- ▼ E 자가 검증 DO 블록 안에서 권장안의 [F] 검사 3개(정책 수 2 · UPDATE/DELETE 부재 · cn_select/cn_insert)를 아래 검사로 교체한다.
+--   RLS 활성(relrowsecurity)·trg_cn_set_updated 잔존 검사는 그대로 둔다.
   -- [ALT-b′] 정책 3종(select/insert/update) · cn_update 창 · cn_delete 부재 · 트리거 실재 · 함수 ACL
   SELECT count(*) INTO v_n FROM pg_policies
    WHERE schemaname = 'public' AND tablename = 'connection_notes';
@@ -659,9 +661,9 @@ update public.mobile_app_version_policies
    set min_supported_build  = greatest(min_supported_build, N),
        latest_build         = greatest(coalesce(latest_build, 0), N),
        minimum_version_name = '<신앱 표시 버전, 예 1.0.1>',
-       -- 스토어 버튼 활성화. 이미 값이 있으면 유지(멱등). 형식은 CHECK mavp_store_url_chk(https) +
-       -- mavp_store_url_platform_chk(20260808080056: android=play.google.com, ios=apps.apple.com/itunes.apple.com)
-       -- 가 강제하므로 틀린 값은 여기서 실패한다.
+       -- 스토어 버튼 활성화. 이미 값이 있으면 유지(멱등). 형식은 CHECK mavp_store_url_chk(https + host 허용목록
+       -- play.google.com/apps.apple.com/itunes.apple.com) + mavp_store_url_platform_chk(20260808080056: platform↔host
+       -- 일치 — android=play.google.com, ios=apps.apple.com/itunes.apple.com) 가 강제하므로 틀린 값은 여기서 실패한다.
        store_url            = coalesce(store_url, case platform
                                 when 'android' then 'https://play.google.com/store/apps/details?id=com.ssambership.edu'
                                 when 'ios'     then '<App Store 상세 URL, 예 https://apps.apple.com/kr/app/id123456789>'
