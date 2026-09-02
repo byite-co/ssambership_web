@@ -97,13 +97,16 @@ const DICTIONARY = {
     canceled: { label: "취소", tone: "neutral" },
   },
 
-  /** CHECK content_reports_status_allowed (SQL 120) — 7값. 라벨은 contentReportLabels.ts(M8) + hidden·removed 신설. */
+  /**
+   * CHECK content_reports_status_allowed (SQL 120) — 7값.
+   * PR-5 후속(오너 확정): 라벨을 콘텐츠 검수 화면 탭 표기와 통일 — 접수→대기 · 거절→반려 · 종결→기각. 탭은 이 사전 라벨을 그대로 쓴다.
+   */
   "content_reports.status": {
-    pending: { label: "접수", tone: "warning" },
+    pending: { label: "대기", tone: "warning" },
     reviewing: { label: "검토 중", tone: "info" },
     resolved: { label: "해결", tone: "success" },
-    rejected: { label: "거절", tone: "neutral" },
-    dismissed: { label: "종결", tone: "neutral" },
+    rejected: { label: "반려", tone: "neutral" },
+    dismissed: { label: "기각", tone: "neutral" },
     hidden: { label: "숨김 처리", tone: "warning" },
     removed: { label: "삭제 처리", tone: "danger", risk: "high" },
   },
@@ -119,6 +122,34 @@ const DICTIONARY = {
     expired: { label: "기간 만료", tone: "neutral" },
     refunded: { label: "환불 완료", tone: "neutral", risk: "high" },
     canceled: { label: "취소", tone: "neutral" },
+  },
+
+  /**
+   * CHECK 인라인(baseline 089 `status in (...)`) — 4값. 학적 변경 요청 화면(PR-5)의 탭 값과 1:1.
+   * 재제출 값은 mentor_school_verifications 와 같은 `resubmit_required`(mentor_profiles 의 under_review 와 다르다).
+   */
+  "mentor_academic_record_change_requests.status": {
+    pending: { label: "대기", tone: "warning" },
+    approved: { label: "승인", tone: "success" },
+    rejected: { label: "반려", tone: "danger", risk: "medium" },
+    resubmit_required: { label: "재제출 요청", tone: "warning" },
+  },
+
+  /**
+   * CHECK 없음(컬럼 `status`·`state`·`order_status`·`stage` 4종 동의어 — 데이터 정본 §8-3 정리 전) — **코드가 쓰는 값 8종만** 등재한다.
+   * 집합은 관리자 집계(`countAdminCustomRequestOrdersByStatus`)·맞춤의뢰 주문 화면 탭과 같고, 라벨은 그 탭 표기 그대로.
+   * 레거시 동의어(canceled·accepted·done·finished·closed·in_progress·submitted 등 — `orderLifecycleConstants.ts` 관용)는
+   * 등재하지 않는다 → neutral 폴백. 기능이 열리고 정본 컬럼이 정해지면 그때 재검토한다.
+   */
+  "custom_request_orders.status": {
+    pending: { label: "대기", tone: "warning" },
+    open: { label: "작업 중", tone: "info" },
+    delivered: { label: "납품 대기", tone: "warning" },
+    revision_requested: { label: "수정 요청", tone: "warning" },
+    completed: { label: "완료", tone: "success" },
+    disputed: { label: "분쟁", tone: "danger", risk: "medium" },
+    cancelled: { label: "취소", tone: "neutral" },
+    refunded: { label: "환불", tone: "neutral", risk: "high" },
   },
 
   /** CHECK mentor_school_verifications_status_check (SQL 174) — 5값. 라벨은 AdminMentorApprovalWorkspace(M2). */

@@ -1,107 +1,85 @@
-import { AdminAcademicRecordChangeWorkspace } from "@/components/admin/AdminAcademicRecordChangeWorkspace";
-import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
-import { AdminListPagination } from "@/components/admin/AdminListPagination";
+import { AcademicRecordChangeQueueList } from "@/components/admin/AcademicRecordChangeQueueList";
+import { AcademicRecordChangeReviewPanel } from "@/components/admin/AcademicRecordChangeReviewPanel";
+import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createClient } from "@/lib/supabase/server";
+import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
+import { parseAdminListParams, type AdminListParams } from "@/lib/admin/adminListParams";
 import {
-  countAdminAcademicRecordChangesByStatus,
-  fetchAdminUsersDisplayByIds,
-  loadAdminAcademicRecordChangesListPaged,
-} from "@/lib/admin/adminQueries";
-import { mentorProfilesAdminReadClient } from "@/lib/admin/mentorProfilesAdminRead";
-import { fetchAcademicRecordChangeProfilesByIds } from "@/lib/admin/mentorAcademicRecordChangeReview";
-import type { MentorAcademicRecordChangeRow } from "@/lib/mentor/mentorAcademicRecordChange";
-import { resolveStudentIdImageSignedUrl } from "@/lib/storage/studentIdImageStorage";
-import { parseAdminListParams } from "@/lib/admin/adminListParams";
+  ACADEMIC_RECORD_CHANGE_DEFAULT_PAGE_SIZE,
+  ACADEMIC_RECORD_CHANGE_DEFAULT_TAB,
+  ACADEMIC_RECORD_CHANGE_SELECTED_PARAM,
+  academicRecordChangeFlashOkMessage,
+  resolveAcademicRecordChangeTab,
+} from "@/lib/admin/academicRecordChangeConsole";
+import { countAcademicRecordChangeTabs, loadAcademicRecordChangeDetail, loadAcademicRecordChangeQueue } from "@/lib/admin/academicRecordChangeQueries";
 
 type PageProps = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 
+function pick(value: string | string[] | undefined): string {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0].trim();
+  return "";
+}
+
+/**
+ * 관리자 · 학적 변경 요청(PR-5 §2) — 멘토 승인 작업대의 축소판. `AdminPageLayout` + `AdminDataTable` 위에 있다.
+ *
+ * 쿼리: `status`(탭 — CHECK 4종 + all) · `q`(멘토 이름·이메일·대학) · `page` · `request`(선택 요청). 목록·검색·탭은 전부 서버 조회고,
+ * 심사 패널은 선택 1건만 조회한다(서류 서명 URL 도 1건만 발급 — 구 화면은 페이지의 모든 행에 발급했다).
+ * 전체 탭 링크는 `status=all` 을 유지한다(PR #111 §8 결함, 이 화면에서 해소). 결정 후 서버 액션은 `?ok=…` 로 돌아오고 선택이 비므로 첫 행이 선택된다.
+ */
 export default async function AdminAcademicRecordChangesPage(props: PageProps) {
   await requireRole("admin");
   const sp = (await props.searchParams) ?? {};
-  const flashErr = typeof sp.error === "string" ? sp.error : null;
-  const okParam = typeof sp.ok === "string" ? sp.ok : null;
-  const flashOk =
-    okParam === "approve"
-      ? "학적변경요청을 승인하고 학교 정보를 반영했습니다."
-      : okParam === "reject"
-        ? "학적변경요청을 반려했습니다."
-        : okParam === "resubmit"
-          ? "재제출을 요청했습니다."
-          : null;
+  const rawParams = parseAdminListParams(sp, { defaultPageSize: ACADEMIC_RECORD_CHANGE_DEFAULT_PAGE_SIZE, defaultStatus: ACADEMIC_RECORD_CHANGE_DEFAULT_TAB });
+  const tab = resolveAcademicRecordChangeTab(rawParams.status);
+  const selectedParam = pick(sp[ACADEMIC_RECORD_CHANGE_SELECTED_PARAM]);
+  // 선택 요청 키는 탭·검색·페이지 링크에 실리지 않게 목록 파라미터에서 뺀다.
+  const { [ACADEMIC_RECORD_CHANGE_SELECTED_PARAM]: _selectedExtra, ...extraWithoutSelected } = rawParams.extra;
+  const params: AdminListParams = { ...rawParams, status: tab, extra: extraWithoutSelected };
+
+  const flashOk = academicRecordChangeFlashOkMessage(pick(sp.ok));
+  const flashErrRaw = pick(sp.error) || null;
+  const flashErr = flashErrRaw ? (toAdminDisplayError(flashErrRaw, "default") ?? "처리에 실패했습니다. 잠시 후 다시 시도해 주세요.") : null;
 
   const supabase = await createClient();
-  // [보안 주석] service_role로 RLS 우회
-  // 이 페이지는 (admin)/layout.tsx + (admin)/(console)/layout.tsx
-  // 이중 requireRole("admin") 가드로 보호됨. 관리자 업무상 의도된 사용임.
-  const readDb = mentorProfilesAdminReadClient(supabase);
-  const params = parseAdminListParams(sp, { defaultPageSize: 25, defaultStatus: "pending" });
-  const [paged, byStatus] = await Promise.all([
-    loadAdminAcademicRecordChangesListPaged(supabase, params),
-    countAdminAcademicRecordChangesByStatus(supabase),
+  const [queue, counts] = await Promise.all([
+    loadAcademicRecordChangeQueue(supabase, { tab, search: params.search, page: params.page, pageSize: params.pageSize }),
+    countAcademicRecordChangeTabs(supabase),
   ]);
-  const list = {
-    rows: paged.rows as unknown as MentorAcademicRecordChangeRow[],
-    error: paged.error,
-  };
-  const ACADEMIC_BASE_PATH = "/admin/academic-record-changes";
-  const statusTabs = [
-    { value: "pending", label: "대기", count: byStatus.pending ?? 0 },
-    { value: "resubmit_required", label: "재제출 필요", count: byStatus.resubmit_required ?? 0 },
-    { value: "approved", label: "승인", count: byStatus.approved ?? 0 },
-    { value: "rejected", label: "반려", count: byStatus.rejected ?? 0 },
-    { value: "all", label: "전체", count: byStatus.all ?? 0 },
-  ];
-
-  const mentorIds = list.rows.map((r) => r.mentor_id).filter(Boolean);
-  const [userMap, profileByMentorId] = await Promise.all([
-    fetchAdminUsersDisplayByIds(readDb, mentorIds),
-    fetchAcademicRecordChangeProfilesByIds(readDb, mentorIds),
-  ]);
-
-  const userById: Record<string, { nickname: string | null; full_name: string | null }> = {};
-  userMap.forEach((v, k) => {
-    userById[k] = v;
-  });
-
-  const signedUrlById: Record<string, string | null> = {};
-  for (const r of list.rows) {
-    signedUrlById[r.id] = await resolveStudentIdImageSignedUrl(readDb, r.document_storage_ref);
-  }
+  const selectedId = selectedParam || queue.rows[0]?.id || null;
+  const detail = selectedId ? await loadAcademicRecordChangeDetail(supabase, selectedId) : null;
 
   return (
-    <div className="space-y-4">
+    <AdminPageLayout
+      title="학적 변경 요청"
+      description="멘토가 제출한 학적 변동 증빙 서류를 보고 변경 전후를 확인한 뒤 승인·반려·재제출을 결정합니다. 승인하면 멘토 프로필 학교가 갱신됩니다."
+    >
       {flashOk ? (
-        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">{flashOk}</p>
+        <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">
+          {flashOk}
+        </p>
       ) : null}
       {flashErr ? (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">{flashErr}</p>
-      ) : null}
-      <div>
-        <h1 className="text-xl font-black text-slate-900">학적변경 요청</h1>
-        <p className="mt-1 text-sm font-medium text-slate-500">
-          멘토가 제출한 학적 변동 증명 서류를 확인하고 학교 정보를 갱신합니다.
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">
+          처리 실패 — {flashErr} 대상은 그대로이니 같은 버튼으로 다시 시도할 수 있습니다.
         </p>
-      </div>
-      <AdminListToolbar
-        basePath={ACADEMIC_BASE_PATH}
+      ) : null}
+
+      <AcademicRecordChangeQueueList
+        items={queue.rows}
         params={params}
-        searchPlaceholder="요청 ID/멘토/대학교/사유로 검색"
-        statusTabs={statusTabs}
+        tab={tab}
+        counts={counts}
+        totalCount={queue.totalCount}
+        selectedId={selectedId}
+        error={queue.error}
       />
-      <AdminAcademicRecordChangeWorkspace
-        rows={list.rows}
-        loadError={list.error}
-        userById={userById}
-        profileByMentorId={profileByMentorId}
-        signedUrlById={signedUrlById}
-      />
-      <AdminListPagination
-        basePath={ACADEMIC_BASE_PATH}
-        params={params}
-        totalCount={paged.totalCount}
-        rowsOnPage={list.rows.length}
-      />
-    </div>
+
+      {queue.rows.length > 0 || selectedParam ? (
+        <AcademicRecordChangeReviewPanel key={detail?.id ?? "none"} detail={detail} flashError={flashErr} />
+      ) : null}
+    </AdminPageLayout>
   );
 }

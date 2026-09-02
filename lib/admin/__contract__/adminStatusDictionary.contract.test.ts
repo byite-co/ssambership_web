@@ -76,6 +76,16 @@ const FIXTURE: Record<
     values: ["escrowed", "assigned", "open", "claimed", "answered", "released", "expired", "refunded", "canceled"],
     inventory: true,
   },
+  "mentor_academic_record_change_requests.status": {
+    // create table 인라인 CHECK(baseline 089) — 인벤토리로만 검증. PR-5 후속 등재(오너 확정).
+    values: ["pending", "approved", "rejected", "resubmit_required"],
+    inventory: true,
+  },
+  "custom_request_orders.status": {
+    // CHECK 없음(4종 동의어 컬럼 — §8-3 정리 전) — 코드가 쓰는 값(관리자 집계 8종)만 등재. PR-5 후속(오너 확정).
+    values: ["pending", "open", "delivered", "revision_requested", "completed", "disputed", "cancelled", "refunded"],
+    inventory: false,
+  },
   "mentor_school_verifications.status": {
     values: ["pending", "approved", "rejected", "resubmit_required", "superseded"],
     constraint: { name: "mentor_school_verifications_status_check", file: BASELINE },
@@ -155,7 +165,7 @@ function checkValuesFromInventory(table: string, column: string): string[] | nul
 
 // ── ① 사전 == 픽스처 ───────────────────────────────────────────────────────────
 
-test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼 + PR-2 학교 등급·계열 2개)", () => {
+test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼 + PR-2 학교 등급·계열 2개 + PR-5 학적 변경·맞춤의뢰 주문 2개)", () => {
   assert.deepEqual(sorted(ADMIN_STATUS_DICTIONARY_KEYS), sorted(Object.keys(FIXTURE)));
 });
 
@@ -201,6 +211,39 @@ test("mentor_profiles.verification_status: 재제출 요청 값은 코드가 실
   assert.ok(actions.includes('{ [STATUS_COLUMN]: "under_review" }'), "재제출 액션이 쓰는 값");
   assert.equal(resolveAdminStatus("mentor_profiles", "verification_status", "under_review").label, "재제출 요청");
   assert.equal(resolveAdminStatus("mentor_profiles", "verification_status", "resubmit_required").known, false);
+});
+
+test("mentor_academic_record_change_requests.status: baseline 인라인 CHECK 4값 == 사전 · 라벨은 대기·승인·반려·재제출 요청(PR-5 후속)", () => {
+  assert.ok(read(BASELINE).includes("status in ('pending', 'approved', 'rejected', 'resubmit_required')"), "baseline 089 인라인 CHECK");
+  assert.deepEqual(
+    ["pending", "approved", "rejected", "resubmit_required"].map((v) => resolveAdminStatus("mentor_academic_record_change_requests", "status", v).label),
+    ["대기", "승인", "반려", "재제출 요청"]
+  );
+  for (const v of ["pending", "approved", "rejected", "resubmit_required"]) assert.equal(resolveAdminStatus("mentor_academic_record_change_requests", "status", v).known, true, v);
+});
+
+test("custom_request_orders.status: DB 에 CHECK 가 없다 → 사전은 코드가 쓰는 값(관리자 집계 8종)만 — 집계 목록과 1:1 · 레거시 동의어는 미등재(neutral)", () => {
+  assert.equal(checkValuesFromInventory("custom_request_orders", "status"), null);
+  const q = read("lib/admin/adminQueries.ts");
+  const fnStart = q.indexOf("export async function countAdminCustomRequestOrdersByStatus");
+  assert.ok(fnStart >= 0);
+  const listStart = q.indexOf("const statuses = [", fnStart);
+  const listed = [...q.slice(listStart, q.indexOf("];", listStart)).matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(sorted(listed), sorted(adminStatusAllowedValues("custom_request_orders", "status")), "사전 == 관리자 집계가 세는 값");
+  for (const legacy of ["canceled", "accepted", "done", "finished", "closed", "in_progress", "submitted", "unpaid", "paid"]) {
+    const r = resolveAdminStatus("custom_request_orders", "status", legacy);
+    assert.equal(r.known, false, legacy);
+    assert.equal(r.tone, "neutral", legacy);
+  }
+});
+
+test("content_reports.status 라벨(PR-5 후속 오너 확정): 대기 · 검토 중 · 해결 · 반려 · 기각 · 숨김 처리 · 삭제 처리 — 콘텐츠 검수 탭이 이 라벨을 그대로 쓴다", () => {
+  assert.deepEqual(
+    ["pending", "reviewing", "resolved", "rejected", "dismissed", "hidden", "removed"].map((v) => resolveAdminStatus("content_reports", "status", v).label),
+    ["대기", "검토 중", "해결", "반려", "기각", "숨김 처리", "삭제 처리"]
+  );
+  const console_ = read("lib/admin/contentReportConsole.ts");
+  assert.ok(console_.includes('resolveAdminStatus("content_reports", "status", value).label'), "탭 라벨은 사전에서 온다");
 });
 
 // ── ③ 정규화 규칙 ─────────────────────────────────────────────────────────────
