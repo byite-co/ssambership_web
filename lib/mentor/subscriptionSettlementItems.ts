@@ -3,23 +3,17 @@ import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { API_WEB_V1_SCHEMA } from "@/lib/apiWebV1/rpc";
+import { subscriptionSettlementStatus } from "@/lib/mentor/subscriptionSettlementItemsCore";
 
 export const SUBSCRIPTION_SETTLEMENT_ITEMS_TABLE = "subscription_settlement_items" as const;
 
-/**
- * 구독 정산 항목 상태. DB CHECK 는 ('accruing','pending','paid','hold','canceled') 5종이다.
- *
- * ★ accruing = 구독 사이클이 아직 안 끝나 **지급 불가**한 적립 상태다. 종전 매핑은
- *   미지값을 전부 pending 으로 접어서 적립중 금액이 "지급 대기"로 표시되고 지급 예정
- *   합계에도 들어갔다 — 아직 받을 수 없는 돈이 받을 수 있는 돈으로 보였다(QA-A2).
- *   오너 판단 2026-08-06: **적립중과 지급 예정을 구분해 보여준다.**
- */
-export type SubscriptionSettlementItemStatus =
-  | "accruing"
-  | "pending"
-  | "paid"
-  | "hold"
-  | "canceled";
+// 상태 타입·cents→캐시·상태 정규화는 순수 모듈(subscriptionSettlementItemsCore.ts)에 두고 재수출한다 —
+// 관리자 정산 파서(lib/admin/adminSettlementItems.ts)가 server-only 없이 node:test 로 검증되게 하기 위함(PR-1b).
+export {
+  minorCentsToCash,
+  subscriptionSettlementStatus,
+  type SubscriptionSettlementItemStatus,
+} from "@/lib/mentor/subscriptionSettlementItemsCore";
 export type SubscriptionSettlementItemRow = Record<string, unknown>;
 
 const SELECT_COLUMNS = [
@@ -48,20 +42,6 @@ const SELECT_COLUMNS = [
 // W4(C10): isSchemaNotReadyError(42P01/42883/42703/PGRST204/205 로그 억제 신호) 제거 —
 // public.refresh_subscription_settlement_items() 는 187 baseline 실존이라 스키마 부재 분기는
 // 도달 불가 레거시였다. 모든 실패를 로그·error 로 남긴다.
-
-export function minorCentsToCash(value: unknown): number {
-  const n = typeof value === "number" ? value : Number(value ?? 0);
-  return Number.isFinite(n) ? Math.floor(Math.abs(n) / 100) : 0;
-}
-
-export function subscriptionSettlementStatus(value: unknown): SubscriptionSettlementItemStatus {
-  const status = String(value ?? "pending").trim().toLowerCase();
-  if (status === "accruing") return "accruing";
-  if (status === "paid") return "paid";
-  if (status === "hold" || status === "on_hold") return "hold";
-  if (status === "canceled" || status === "cancelled") return "canceled";
-  return "pending";
-}
 
 export function subscriptionSettlementStatusLabel(value: unknown): string {
   switch (subscriptionSettlementStatus(value)) {

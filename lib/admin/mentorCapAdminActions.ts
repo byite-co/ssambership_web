@@ -7,7 +7,6 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { logAdminAction } from "@/lib/admin/adminActionLog";
 import { resolveAdminWriteClient } from "@/lib/admin/adminWriteClient";
-import { MENTOR_CAP_LIMIT_DEFAULT } from "@/lib/subscribe/mentorCapService";
 
 const TABLE = "mentor_profiles";
 
@@ -68,7 +67,8 @@ export async function updateMentorCapLimitAction(formData: FormData) {
     actionType: "mentor_cap_limit_update",
     targetType: "mentor_profile",
     targetId: mentorUserId,
-    detail: { capLimit, default: MENTOR_CAP_LIMIT_DEFAULT },
+    // 기본 한도는 DB(mentor_profiles.cap_limit default · mentor_cap_limit()) 소유 — TS 사본을 남기지 않는다(PR-1b).
+    detail: { capLimit },
   });
 
   revalidatePath(detailPath(mentorUserId));

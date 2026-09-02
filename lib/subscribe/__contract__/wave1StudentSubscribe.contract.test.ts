@@ -9,13 +9,16 @@ const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
 test("D-ST-11: cap usage 는 '판정 불가'(indeterminate)를 used 0 과 구분한다", () => {
-  const svc = read("lib/subscribe/mentorCapService.ts");
-  assert.ok(svc.includes("indeterminate"), "indeterminate 신호가 없음");
-  assert.ok(svc.includes("aggregateFailed"), "구독 집계 실패를 판정 불가로 전파하지 않음");
+  // PR-1b: 판정 로직은 순수 모듈(mentorCapUsageCore.ts)로 옮겨졌다 — 서버 진입점은 클라이언트 생성만 한다.
+  const core = read("lib/subscribe/mentorCapUsageCore.ts");
+  assert.ok(core.includes("indeterminate"), "indeterminate 신호가 없음");
+  assert.ok(core.includes("indeterminateUsage("), "RPC 실패를 판정 불가로 전파하지 않음");
   assert.ok(
-    /if\s*\(usage\.indeterminate\)\s*return true;/.test(svc),
+    /if\s*\(usage\.indeterminate\)\s*return true;/.test(core),
     "wouldExceedCap 이 indeterminate 를 fail-closed(true)로 처리하지 않음",
   );
+  const svc = read("lib/subscribe/mentorCapService.ts");
+  assert.ok(svc.includes("indeterminateUsage()"), "서비스 키 부재를 판정 불가로 전파하지 않음");
 });
 
 test("D-ST-11: 결제 경로는 cap 판정 불가 시 fail-closed 로 거부한다", () => {

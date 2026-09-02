@@ -93,7 +93,6 @@ const DIRECT_ACCESS_EXEMPT: Record<string, string> = {
     "서비스 롤 전용(활동 전이 saga + C1 게이트 3 조회 — loadMentorActivityForGate 은 indeterminate fail-closed)",
   "lib/mentor/mentorPayoutsService.ts": "본인 행 조회(멘토 정산 계좌 마스킹 표시)",
   "lib/auth/mentorSignupStudentIdAction.ts": "서비스 롤(가입 창구 학생증 반영 — 본인 행 한정 가드)",
-  "lib/subscribe/mentorCapService.ts": "서비스 롤(cap 집계 — D-ST-11 indeterminate fail-closed 선례)",
   "lib/admin/adminQueries.ts": "관리자 콘솔 조회(requireRole admin 뒤 admin/readDb 클라이언트)",
   "lib/admin/adminUnifiedActivityLog.ts": "관리자 활동 로그 집계(관리자 클라이언트)",
   "lib/admin/mentorAcademicRecordChangeReview.ts": "관리자 학적 변경 심사 조회",

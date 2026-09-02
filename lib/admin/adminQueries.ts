@@ -1,14 +1,22 @@
 ﻿import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { formatKoreanDate } from "@/lib/utils/formatDisplay";
 import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { mentorProfilesAdminReadClient } from "@/lib/admin/mentorProfilesAdminRead";
 import type { AdminReviewModerationPlan } from "@/lib/admin/reviewLabels";
+import { loadSubscriptionSettlementRowsForAdmin } from "@/lib/mentor/subscriptionSettlementItems";
+// PR-1b: 정산 행 파싱·요약은 순수 모듈로 분리(node:test 검증) — 금액·요율은 DB 행 그대로, 요율 폴백 리터럴 없음.
 import {
-  loadSubscriptionSettlementRowsForAdmin,
-  minorCentsToCash,
-  subscriptionSettlementStatus,
-} from "@/lib/mentor/subscriptionSettlementItems";
+  emptySettlementSummary,
+  parseCosItem,
+  parseSubscriptionSettlementItem,
+  summarizeSettlementRows,
+  toMoneyInt,
+  withFeeRateUnsetMarker,
+  type AdminSettlementListItem,
+  type AdminSettlementSummary,
+} from "@/lib/admin/adminSettlementItems";
+
+export type { AdminSettlementListItem, AdminSettlementSummary } from "@/lib/admin/adminSettlementItems";
 
 type Row = Record<string, unknown>;
 
@@ -847,148 +855,6 @@ export function adminSettlementStatusLabel(status: string): string {
   return map[s] ?? `${status} (확인 필요)`;
 }
 
-function toMoneyInt(v: unknown): number {
-  if (typeof v === "number" && Number.isFinite(v)) return Math.round(v);
-  if (typeof v === "string" && v.trim() !== "") {
-    const n = Number(v);
-    return Number.isFinite(n) ? Math.round(n) : 0;
-  }
-  return 0;
-}
-
-export type AdminSettlementSummary = {
-  totalRows: number;
-  pendingMentorAmountSum: number;
-  paidMentorAmountSum: number;
-  /** 적립중(지급 불가) 멘토 정산금 합계 — pendingMentorAmountSum 과 겹치지 않는다. */
-  accruingMentorAmountSum: number;
-  pendingCount: number;
-  accruingCount: number;
-  onHoldCount: number;
-  payableCount: number;
-  paidCount: number;
-  cancelledCount: number;
-};
-
-export type AdminSettlementListItem = {
-  id: string;
-  sourceType: "custom_request" | "subscription";
-  customRequestOrderId: string;
-  mentorId: string;
-  payoutAccountDisplay: string;
-  studentId: string | null;
-  grossAmount: number;
-  platformFeeAmount: number;
-  mentorAmount: number;
-  feeRate: number;
-  status: string;
-  reason: string | null;
-  paidAt: string | null;
-  createdAt: string;
-  updatedAt: string;
-  /** 주문 보조 조회 성공 시 툴팁용(한 줄) */
-  orderMetaLine: string | null;
-};
-
-function emptySettlementSummary(): AdminSettlementSummary {
-  return {
-    totalRows: 0,
-    pendingMentorAmountSum: 0,
-    paidMentorAmountSum: 0,
-    accruingMentorAmountSum: 0,
-    pendingCount: 0,
-    accruingCount: 0,
-    onHoldCount: 0,
-    payableCount: 0,
-    paidCount: 0,
-    cancelledCount: 0,
-  };
-}
-
-function summarizeSettlementRows(rows: AdminSettlementListItem[]): AdminSettlementSummary {
-  const s = emptySettlementSummary();
-  s.totalRows = rows.length;
-  for (const r of rows) {
-    const st = r.status.trim().toLowerCase();
-    const m = r.mentorAmount;
-    if (st === "pending" || st === "on_hold" || st === "hold" || st === "payable") {
-      s.pendingMentorAmountSum += m;
-    }
-    if (st === "paid") {
-      s.paidMentorAmountSum += m;
-    }
-    if (st === "accruing") {
-      s.accruingMentorAmountSum += m;
-    }
-    if (st === "accruing") s.accruingCount += 1;
-    else if (st === "pending") s.pendingCount += 1;
-    else if (st === "on_hold" || st === "hold") s.onHoldCount += 1;
-    else if (st === "payable") s.payableCount += 1;
-    else if (st === "paid") s.paidCount += 1;
-    else if (st === "cancelled" || st === "canceled") s.cancelledCount += 1;
-  }
-  return s;
-}
-
-function parseCosItem(r: Row): AdminSettlementListItem | null {
-  const id = r.id != null ? String(r.id) : "";
-  if (!id) return null;
-  const feeRaw = r.fee_rate;
-  const feeNum = typeof feeRaw === "number" ? feeRaw : Number(feeRaw);
-  return {
-    id,
-    sourceType: "custom_request",
-    customRequestOrderId: String(r.custom_request_order_id ?? ""),
-    mentorId: String(r.mentor_id ?? ""),
-    payoutAccountDisplay: "미등록",
-    studentId: r.student_id != null && String(r.student_id).length ? String(r.student_id) : null,
-    grossAmount: toMoneyInt(r.gross_amount),
-    platformFeeAmount: toMoneyInt(r.platform_fee_amount),
-    mentorAmount: toMoneyInt(r.mentor_amount),
-    feeRate: Number.isFinite(feeNum) ? feeNum : 0,
-    status: String(r.status ?? "pending"),
-    reason: r.reason != null && String(r.reason).length ? String(r.reason) : null,
-    paidAt: r.paid_at != null ? String(r.paid_at) : null,
-    createdAt: String(r.created_at ?? ""),
-    updatedAt: String(r.updated_at ?? ""),
-    orderMetaLine: null,
-  };
-}
-
-
-function parseSubscriptionSettlementItem(r: Row): AdminSettlementListItem | null {
-  const id = r.id != null ? String(r.id) : "";
-  if (!id) return null;
-  const billingEventId = String(r.billing_event_id ?? "");
-  const feeRaw = r.fee_rate;
-  const feeNum = typeof feeRaw === "number" ? feeRaw : Number(feeRaw);
-  // TZ-FIX R3 #28: UTC ISO slice 절단 → KST 달력일 (formatKoreanDate, P-C).
-  const periodStart = typeof r.period_start === "string" && r.period_start ? formatKoreanDate(r.period_start) : "";
-  const periodEnd = typeof r.period_end === "string" && r.period_end ? formatKoreanDate(r.period_end) : "";
-  const meta = [
-    "\uAD6C\uB3C5 \uC815\uC0B0",
-    r.event_type != null ? String(r.event_type) : "",
-    periodStart || periodEnd ? `${periodStart || "?"}~${periodEnd || "?"}` : "",
-  ].filter(Boolean).join(" · ");
-  return {
-    id,
-    sourceType: "subscription",
-    customRequestOrderId: billingEventId || String(r.subscription_id ?? ""),
-    mentorId: String(r.mentor_id ?? ""),
-    payoutAccountDisplay: "미등록",
-    studentId: r.student_id != null && String(r.student_id).length ? String(r.student_id) : null,
-    grossAmount: minorCentsToCash(r.gross_cents),
-    platformFeeAmount: minorCentsToCash(r.platform_fee_cents),
-    mentorAmount: minorCentsToCash(r.mentor_amount_cents),
-    feeRate: Number.isFinite(feeNum) ? feeNum : 0.3,
-    status: subscriptionSettlementStatus(r.status),
-    reason: r.hold_reason != null && String(r.hold_reason).length ? String(r.hold_reason) : null,
-    paidAt: r.paid_at != null ? String(r.paid_at) : null,
-    createdAt: String(r.billing_at ?? r.created_at ?? ""),
-    updatedAt: String(r.updated_at ?? r.created_at ?? r.billing_at ?? ""),
-    orderMetaLine: meta || null,
-  };
-}
 function maskAdminPayoutAccount(bank: unknown, account: unknown): string {
   const digits = String(account ?? "").replace(/\D/g, "");
   if (!digits) return "미등록";
@@ -1133,7 +999,7 @@ export async function loadAdminSettlementsList(
     it.payoutAccountDisplay = payoutAccountMap.get(it.mentorId) ?? "미등록";
     if (it.sourceType === "custom_request") {
       const o = orderMap.get(it.customRequestOrderId);
-      if (o) it.orderMetaLine = buildOrderMetaLine(o);
+      if (o) it.orderMetaLine = withFeeRateUnsetMarker(buildOrderMetaLine(o), it.feeRate);
     }
   }
 

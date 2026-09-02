@@ -16,7 +16,9 @@ type Props = {
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
 
-function fmtCap(n: number): string {
+/** cap 수치는 DB RPC 값 그대로(가중치 합 — 단위 없음). 판정 불가(null)는 지어내지 않고 '—'. */
+function fmtCap(n: number | null): string {
+  if (n == null) return "—";
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
@@ -124,7 +126,7 @@ export default async function AdminMentorApprovalDetailPage(props: Props) {
             <span className="text-base font-bold text-slate-400">/ {fmtCap(capUsage.capLimit)}</span>
           </p>
           <p className="mt-1 text-xs text-slate-500">
-            {capUsage.activeCount}명 구독 중 · {capUsage.pct}% 사용
+            {capUsage.activeCount ?? "—"}명 구독 중 · {capUsage.pct}% 사용
             {capUsage.isFull ? <span className="ml-2 font-bold text-[#e08a2f]">구독 마감</span> : null}
           </p>
 
@@ -148,7 +150,7 @@ export default async function AdminMentorApprovalDetailPage(props: Props) {
                 step="0.5"
                 min="0"
                 max="1000"
-                defaultValue={fmtCap(capUsage.capLimit)}
+                defaultValue={capUsage.capLimit != null ? fmtCap(capUsage.capLimit) : undefined}
                 className="mt-1 block w-28 rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold text-slate-900"
               />
             </label>

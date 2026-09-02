@@ -410,7 +410,9 @@ function OrderList({ orders }: { orders: MentorHubOrderRow[] }) {
 /* ───────────────── 우측 통계 카드 (구독 학생 / 평균 평점 / 구독 수용량) ─────────────────
    3카드 동일 크기·패딩·구조로 통일. 공통 카드 + 상단 아이콘/라벨 row. */
 
-function fmtCap(n: number): string {
+/** cap 수치는 DB RPC 값 그대로. 판정 불가(null)는 '—'. */
+function fmtCap(n: number | null): string {
+  if (n == null) return "—";
   return Number.isInteger(n) ? String(n) : n.toFixed(1);
 }
 
