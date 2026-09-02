@@ -227,6 +227,8 @@ update public.mobile_app_version_policies
 
 **게이트의 구멍(코드 확인).** 게이트는 `main.dart:55`에서 앱 시작 시 **한 번만** 평가되고 복귀(resume) 시 재검사가 없다. 따라서 (a) 상향 시점에 이미 떠 있는 구앱 세션은 **프로세스를 재시작할 때까지** 계속 저장할 수 있다. (b) 오프라인 콜드 스타트는 직전 통과 build의 캐시로 통과한다(`version_gate_controller.dart:90-95`) — 이후 연결이 돌아오면 저장 가능. (c) 빌드 번호를 못 읽으면 통과(`version_gate_decision.dart:37`), (d) 웹 타깃은 게이트가 아예 없다(`gate_platform.dart:11`). 그러므로 "③ 완료"는 **"모든 구앱이 온라인에서 한 번 재시작한 뒤"** 로 읽어야 하고, 이 구멍을 메우는 것이 §5-3이다.
 
+**게이트 화면의 스토어 버튼(라이브 확인, 2026-09-02).** `mobile_app_version_policies` 현재 행: android `min_supported_build 9 · latest_build 16`, ios `1 · 16`, `minimum_version_name` '1.0.0', **`store_url` 두 행 모두 NULL, `message` 빈 문자열**(§11 #12 해소). 앱의 `ForceUpdateScreen`은 '스토어에서 업데이트' 버튼을 항상 그리지만, 누르면 `validatedStoreUri(storeUrl)`가 빈 문자열에 `null`을 돌려주어 스토어를 열지 않고 스낵바 '스토어를 열 수 없어요. 스토어에서 직접 업데이트해 주세요.'만 띄운다(`version_gate_screens.dart:19-37`, `store_url_policy.dart:21-29`). 즉 **지금 값 그대로 `191`을 적용하면 구앱 사용자는 업데이트 화면에 갇히고 앱 안에서 스토어로 가는 길이 없다.** `191`이 두 플랫폼의 `store_url`과 `message`를 함께 채워야 한다(§12-2에 반영). 값의 형식은 DB CHECK가 강제한다 — `mavp_store_url_chk`(https) + `mavp_store_url_platform_chk`(`20260808080056`: android는 `play.google.com`, ios는 `apps.apple.com`/`itunes.apple.com`)라 틀린 값은 마이그레이션이 실패한다. Play URL은 `applicationId`(`android/app/build.gradle.kts:43` `com.ssambership.edu`)로 정해지고, App Store URL은 숫자 앱 id가 필요하다(§11 #14, 오너).
+
 ### 5-3. 방어 2 — 서버 정책 (권장 · **결정 #2**)
 
 순서는 운영 규율에 기대는 방어다. DB가 스스로 막게 하려면 정책을 바꿔야 하는데, **"수정·삭제 모두 15분 창"만으로는 부족하다.** 구앱의 저장 순서는 UPDATE(최신 내 노트) → 성공 시 DELETE(나머지 내 노트)이고, RLS는 거부가 아니라 **필터**라서:
@@ -334,7 +336,7 @@ update public.mobile_app_version_policies
 |---|---|---|
 | ① | DB: `190` 머지 → `db-apply-pending` apply(미적용 `189`와 **함께** 전량 적용) | 원장에 version 등재 · pg_constraint에서 제약 부재 확인 · 웹·앱 동작 변화 **없음**(웹 버튼 숨김·앱 UPDATE 그대로). **`191`은 이 시점에 main에 있으면 안 된다**(같이 적용돼 전원 강제 업데이트) |
 | ② | 앱: `appendMyNote` + 타임라인 화면 빌드 → 스토어 심사·배포 | CI(analyze·test) 그린 · 스토어 게시 완료 · 결제 무관 기능이라 심사 리스크 낮음(인계 §5 권고 순서 ①단계에 해당) |
-| ③ | 버전 게이트: `191`을 **양 스토어 게시 완료 후** 머지 → `db-apply-pending` apply (`min_supported_build`를 ②의 build로, **forceUpdate**) | 적용 전 `mobile_app_version_policies` 현재값 읽어 `sql_apply_manifest` 행에 기록(롤백용) · 원장 등재 · `get_mobile_app_version_policy('ios'/'android')` 응답 확인 · 구앱(build 19) 콜드 스타트가 `ForceUpdateScreen`에서 멈추는 것을 테스트 기기로 확인 · 스토어 바이너리의 실제 `buildNumber`가 19인지 확인(§11) |
+| ③ | 버전 게이트: `191`을 **양 스토어 게시 완료 후** 머지 → `db-apply-pending` apply (`min_supported_build`를 ②의 build로, **forceUpdate**) | 적용 전 `mobile_app_version_policies` 현재값 읽어 `sql_apply_manifest` 행에 기록(롤백용) · 원장 등재 · `get_mobile_app_version_policy('ios'/'android')` 응답 확인 · 구앱(build 19) 콜드 스타트가 `ForceUpdateScreen`에서 멈추는 것을 테스트 기기로 확인 · 스토어 바이너리의 실제 `buildNumber`가 19인지 확인(§11) · **`store_url`·`message`를 두 플랫폼 행에 채운 채 적용**(현재 둘 다 비어 있어 게이트 화면의 스토어 버튼이 스낵바만 띄운다 — §5-2 · §11 #14) |
 | ④ | 웹: 패널 `canAdd` 개방 + 타임라인 정렬 + 카피 배포 | 결정 #2 채택 시 ③ 직후 가능. 미채택 시 ③ 후 **재시작 유예 48시간 이상**(게이트는 콜드 스타트에서만 평가) |
 | ⑤ | 문서: `db_expected_state.md`·`CLAUDE.md` 행 갱신, 앱 `APP_FEATURE_STATUS.md`, 계약 문서 | — |
 
@@ -376,8 +378,9 @@ update public.mobile_app_version_policies
 | 9 | 웹 노트 모달이 서버 액션 리다이렉트 뒤 실제로 열린 채 남는지(React 클라이언트 상태 유지 여부) — 정적으로는 닫는 코드가 없다 | 브라우저 1회 |
 | 10 | 웹 액션이 `revalidatePath(room)`만 하는데 멘토 thread 상세 경로 갱신이 충분한지 — 페이지가 searchParams를 동적으로 읽어 문제없을 것으로 보이나 런타임 미확인 | 브라우저 1회 |
 | 11 | 부모 원장의 현재 최대 version — `verify_local_stack_state.sh:58` 주석은 "프로덕션 원장 102본, `20260831100100`(189) 미적용"이라 적혀 있다. 지금도 그런지 | `select max(version) from supabase_migrations.schema_migrations` |
-| 12 | `mobile_app_version_policies` 현재 행(양 플랫폼 존재 여부·`min_supported_build`·`latest_build`; `20260808080056` 주석에 android min=9 언급) — `191` 자기 검증이 "2행, min ≥ N"을 요구 | 읽기 전용 SELECT, 적용 전 |
+| 12 | ~~`mobile_app_version_policies` 현재 행~~ — **해소(2026-09-02 라이브 SELECT)**: android `min 9 · latest 16`, ios `min 1 · latest 16`, `minimum_version_name` '1.0.0', **`store_url` NULL(양쪽) · `message` ''**, `updated_at 2026-08-06`. `191` 자가 검증 "2행, min ≥ N"은 충족 가능하나 `store_url`·`message`가 비어 있어 §5-2의 스토어 버튼 문제가 있다 | 적용 직전 다시 SELECT해 `sql_apply_manifest` 행에 기록 |
 | 13 | Supabase CLI 2.111.0 `db push`의 out-of-order 로컬 version 거부(`--include-all`) 동작 — CLI 지식 기반, 저장소 증거는 `--db-url` 존재 검사뿐 | CLI 문서 |
+| 14 | 양 스토어의 앱 상세 URL — `191`의 `store_url` 값. Play는 `https://play.google.com/store/apps/details?id=com.ssambership.edu`(`applicationId`로 확정), App Store는 `https://apps.apple.com/kr/app/id<숫자 id>` 형식이라 **숫자 앱 id를 오너가 준다**(bundle id `com.ssambership.app`, `ios/Runner.xcodeproj/project.pbxproj:389`). 강제 업데이트 안내 문구(`message`)도 함께 | 오너 · 스토어 콘솔 |
 
 (초안 시점의 미확인 — outbound manifest·소형 뷰포트/계층 테스트·레거시 memo 도달 여부·로컬 스택 md5·버전 정책 원천·구앱 예외 처리 경로 — 는 코드 열람으로 해소해 §2·§4·§5·§8에 반영했다.)
 
@@ -575,6 +578,8 @@ commit;
 --   mobile_app_version_policies.min_supported_build 를 N 으로 상향(앱은
 --   currentBuild < min_supported_build 면 GateForceUpdate — version_gate_decision.dart:38).
 --   latest_build 도 함께 N 이상으로 맞춰 CHECK mavp_latest_ge_min_chk(latest >= min) 를 지킨다.
+--   store_url·message 도 함께 채운다 — 라이브 두 행 모두 비어 있고(2026-09-02), 비어 있으면
+--   ForceUpdateScreen 의 '스토어에서 업데이트' 버튼이 스낵바만 띄운다(version_gate_screens.dart:19-37).
 --
 -- Base: supabase/sql/162_mobile_app_version_policy.sql (테이블·RPC·seed) ·
 --   선례 supabase/migrations/20260806075353_mobile_version_policy_latest_build_16.sql (greatest 멱등 UPDATE).
@@ -595,11 +600,23 @@ update public.mobile_app_version_policies
    set min_supported_build  = greatest(min_supported_build, N),
        latest_build         = greatest(coalesce(latest_build, 0), N),
        minimum_version_name = '<신앱 표시 버전, 예 1.0.1>',
+       -- 스토어 버튼 활성화. 이미 값이 있으면 유지(멱등). 형식은 CHECK mavp_store_url_chk(https) +
+       -- mavp_store_url_platform_chk(20260808080056: android=play.google.com, ios=apps.apple.com/itunes.apple.com)
+       -- 가 강제하므로 틀린 값은 여기서 실패한다.
+       store_url            = coalesce(store_url, case platform
+                                when 'android' then 'https://play.google.com/store/apps/details?id=com.ssambership.edu'
+                                when 'ios'     then '<App Store 상세 URL, 예 https://apps.apple.com/kr/app/id123456789>'
+                              end),
+       message              = case when coalesce(message, '') = ''
+                                then '<강제 업데이트 안내 문구, 예: 연결노트가 새로워졌어요. 최신 버전으로 업데이트해 주세요.>'
+                                else message end,
        updated_at           = now()
  where platform in ('ios', 'android')
    and (min_supported_build < N
         or coalesce(latest_build, 0) < N
-        or minimum_version_name is distinct from '<신앱 표시 버전, 예 1.0.1>');
+        or minimum_version_name is distinct from '<신앱 표시 버전, 예 1.0.1>'
+        or store_url is null
+        or coalesce(message, '') = '');
 
 -- 자가 검증 — 두 플랫폼 행이 존재하고 min_supported_build >= N. 행 부재는 게이트 무효
 -- (RPC 가 min=1 기본값을 돌려준다 — 162) 이므로 실패로 본다. 클린 재생에도 162 seed 2행이 있다.
@@ -609,9 +626,11 @@ BEGIN
   SELECT count(*) INTO v_n FROM public.mobile_app_version_policies
    WHERE platform IN ('ios', 'android')
      AND min_supported_build >= N
-     AND latest_build >= min_supported_build;
+     AND latest_build >= min_supported_build
+     AND store_url IS NOT NULL
+     AND coalesce(message, '') <> '';
   IF v_n <> 2 THEN
-    RAISE EXCEPTION '191_VERIFY: version policy rows with min_supported_build >= N: % (expected 2)', v_n;
+    RAISE EXCEPTION '191_VERIFY: version policy rows with min_supported_build >= N and store_url/message set: % (expected 2)', v_n;
   END IF;
 END $$;
 
@@ -625,5 +644,5 @@ select conname, pg_get_constraintdef(oid) from pg_constraint
 select indexname, indexdef from pg_indexes where schemaname = 'public' and tablename = 'connection_notes' order by 1;
 select policyname, cmd, qual, with_check from pg_policies where tablename = 'connection_notes' order by cmd;
 select tgname from pg_trigger where tgrelid = 'public.connection_notes'::regclass and not tgisinternal;
-select platform, min_supported_build, latest_build, minimum_version_name from public.mobile_app_version_policies;
+select platform, min_supported_build, latest_build, minimum_version_name, store_url, message from public.mobile_app_version_policies;
 ```
