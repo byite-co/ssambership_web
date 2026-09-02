@@ -39,6 +39,13 @@ export type AdminConfirmDialogProps = {
   summary?: string;
   /** 대상·금액 재표시 행 */
   details?: AdminConfirmDetail[];
+  /**
+   * summary·details 아래, 사유 입력 위에 그릴 추가 내용(PR-3: 일괄 처리 대상 체크 목록).
+   * 폼 요소(<form>)를 넣지 않는다 — Enter 가 submit 을 일으키면 안 된다. 체크박스·버튼(type=button)만.
+   */
+  body?: ReactNode;
+  /** 있으면 확인(및 프리셋 칩)을 잠그고 이 문구를 보인다(PR-3: 일괄 대상이 0건) */
+  confirmBlockedMessage?: string | null;
   confirmLabel: string;
   cancelLabel?: string;
   reasonLabel?: string;
@@ -84,6 +91,8 @@ export function AdminConfirmDialog(props: AdminConfirmDialogProps) {
     requirements,
     summary,
     details,
+    body,
+    confirmBlockedMessage,
     confirmLabel,
     cancelLabel = "취소",
     reasonLabel = "사유",
@@ -144,7 +153,8 @@ export function AdminConfirmDialog(props: AdminConfirmDialogProps) {
   if (!open || !requirements.needsDialog) return null;
 
   const evaluation = evaluateAdminConfirm(requirements, { reason, typedConfirmText });
-  const canConfirm = evaluation.ok && !pending;
+  const blocked = Boolean(confirmBlockedMessage);
+  const canConfirm = evaluation.ok && !pending && !blocked;
   const reasonBlocked = evaluation.blockedBy.includes("reason");
   const confirmTextBlocked = evaluation.blockedBy.includes("confirmText");
 
@@ -205,7 +215,7 @@ export function AdminConfirmDialog(props: AdminConfirmDialogProps) {
           {requirements.title}
         </h2>
         {summary ? (
-          <p id={descriptionId} className="mt-2 text-sm font-semibold leading-6 text-slate-800">
+          <p id={descriptionId} className="mt-2 whitespace-pre-line text-sm font-semibold leading-6 text-slate-800">
             {summary}
           </p>
         ) : null}
@@ -221,6 +231,13 @@ export function AdminConfirmDialog(props: AdminConfirmDialogProps) {
           </dl>
         ) : null}
 
+        {body ? <div className="mt-3">{body}</div> : null}
+        {confirmBlockedMessage ? (
+          <p role="status" className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
+            {confirmBlockedMessage}
+          </p>
+        ) : null}
+
         {requirements.reasonRequired && hasPresets ? (
           <div className="mt-4">
             <p className="text-xs font-bold text-slate-700">
@@ -231,7 +248,7 @@ export function AdminConfirmDialog(props: AdminConfirmDialogProps) {
                 <button
                   key={preset}
                   type="button"
-                  disabled={pending}
+                  disabled={pending || blocked}
                   onClick={() => onConfirm(preset)}
                   className={cn(
                     "rounded-xl border bg-white px-3 py-2 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-60",

@@ -185,12 +185,18 @@ test("ConfirmSubmitButton: 버튼 교체형 — formAction/name/value/form 보�
 });
 
 /**
- * PR-2 이관 범위: ConfirmSubmitButton 을 쓰는 관리자 파일은 멘토 승인 작업대의 결정 영역·심사 패널뿐이다.
- * AdminConfirmDialog 를 직접 import 하는 곳은 ConfirmSubmitButton 자신만이다(자체 모달 금지).
+ * 이관 범위: ConfirmSubmitButton 을 쓰는 관리자 파일은 멘토 승인 작업대(PR-2)의 결정 영역·심사 패널과 환불 화면(PR-3)의
+ * 승인·반려 버튼·목록 표(일괄 처리)뿐이다. AdminConfirmDialog 를 직접 import 하는 곳은 ConfirmSubmitButton 자신만이다(자체 모달 금지).
  */
-const PR2_CONFIRM_IMPORTERS = ["components/admin/MentorApprovalDecisionBar.tsx", "components/admin/MentorApprovalReviewPanel.tsx"];
+const PR2_CONFIRM_IMPORTERS = [
+  "components/admin/MentorApprovalDecisionBar.tsx",
+  "components/admin/MentorApprovalReviewPanel.tsx",
+  // PR-3 환불 관리
+  "components/admin/RefundDecisionButtons.tsx",
+  "components/admin/RefundQueueTable.tsx",
+];
 
-test("PR-2 범위: ConfirmSubmitButton 을 import 하는 관리자 파일은 멘토 승인 작업대뿐이고, AdminConfirmDialog 직접 import 는 없다", () => {
+test("이관 범위: ConfirmSubmitButton 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)뿐이고, AdminConfirmDialog 직접 import 는 없다", () => {
   const files: string[] = [];
   const walk = (dir: string) => {
     for (const name of readdirSync(dir)) {

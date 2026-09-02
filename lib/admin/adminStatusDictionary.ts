@@ -89,11 +89,11 @@ const DICTIONARY = {
     refunded: { label: "환불 완료", tone: "neutral", risk: "high" },
   },
 
-  /** CHECK refunds_status_check (baseline) — 4값. 라벨은 refunds/page.tsx(M12). */
+  /** CHECK refunds_status_check (baseline) — 4값. 라벨은 PR-3 환불 화면 지시서 §1(대기 · 완료 · 반려 · 취소). */
   "refunds.status": {
     pending: { label: "대기", tone: "warning" },
-    succeeded: { label: "승인 완료", tone: "success", risk: "high" },
-    rejected: { label: "거절", tone: "danger", risk: "medium" },
+    succeeded: { label: "완료", tone: "success", risk: "high" },
+    rejected: { label: "반려", tone: "danger", risk: "medium" },
     canceled: { label: "취소", tone: "neutral" },
   },
 
