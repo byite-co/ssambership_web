@@ -92,14 +92,17 @@ test("탭은 대기·승인·반려·재제출·전체 5개, 기본 탭은 대�
   assert.equal(academicRecordChangeTabAscending("all"), false);
 });
 
-test("상태 사전 대조: 이 컬럼은 사전에 없다 → AdminStatusPill 은 neutral 톤 + 원시 값으로 그린다(사전에 추가하지 않고 보고 — PR-6 후보)", () => {
-  assert.deepEqual(adminStatusAllowedValues("mentor_academic_record_change_requests", "status"), [], "사전 미등재(이 PR 에서 추가하지 않는다)");
-  for (const v of ["pending", "approved", "rejected", "resubmit_required"]) {
+test("상태 사전 대조: mentor_academic_record_change_requests.status 4값이 등재됐다(PR-5 후속) — 탭 값과 1:1 · 라벨 대기·승인·반려·재제출 요청 · AdminStatusPill 은 사전 라벨로 그린다", () => {
+  const sorted = (xs: readonly string[]) => [...xs].sort();
+  assert.deepEqual(sorted(adminStatusAllowedValues("mentor_academic_record_change_requests", "status")), sorted(ACADEMIC_RECORD_CHANGE_TAB_VALUES.filter((t) => t !== "all")));
+  const expected: Record<string, string> = { pending: "대기", approved: "승인", rejected: "반려", resubmit_required: "재제출 요청" };
+  for (const [v, label] of Object.entries(expected)) {
     const r = resolveAdminStatus("mentor_academic_record_change_requests", "status", v);
-    assert.equal(r.known, false, v);
-    assert.equal(r.tone, "neutral", v);
-    assert.equal(r.label, v, "원시 값 그대로");
+    assert.equal(r.known, true, v);
+    assert.equal(r.label, label, v);
   }
+  // 탭 라벨은 짧은 표기(재제출) — 멘토 승인 탭(under_review → 재제출)과 같은 관례. 사전 라벨(재제출 요청)은 배지에서.
+  assert.equal(ACADEMIC_RECORD_CHANGE_TABS.find((t) => t.value === "resubmit_required")?.label, "재제출");
 });
 
 test("심사 대상(pending·resubmit_required)은 서버 액션 REVIEWABLE_STATUSES 와 같은 집합", () => {

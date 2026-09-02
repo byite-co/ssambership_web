@@ -90,14 +90,16 @@ test("컬럼 동의어는 이관 전 화면의 키 목록·순서 그대로 — 
   assert.equal(customRequestOrderMoney({}), "—");
 });
 
-test("상태 사전 대조: custom_request_orders.status 는 CHECK 도 사전도 없다 → AdminStatusPill 은 neutral + 원시 값(사전에 추가하지 않고 보고)", () => {
-  assert.deepEqual(adminStatusAllowedValues("custom_request_orders", "status"), []);
-  for (const t of CUSTOM_REQUEST_ORDER_TAB_VALUES) {
-    if (t === "all") continue;
-    const r = resolveAdminStatus("custom_request_orders", "status", t);
-    assert.equal(r.known, false, t);
-    assert.equal(r.tone, "neutral", t);
+test("상태 사전 대조: custom_request_orders.status 는 CHECK 가 없어 코드 사용값 8종만 등재(PR-5 후속) — 탭 값·라벨과 1:1", () => {
+  const sorted = (xs: readonly string[]) => [...xs].sort();
+  assert.deepEqual(sorted(adminStatusAllowedValues("custom_request_orders", "status")), sorted(CUSTOM_REQUEST_ORDER_TAB_VALUES.filter((t) => t !== "all")));
+  for (const t of CUSTOM_REQUEST_ORDER_TABS) {
+    if (t.value === "all") continue;
+    const r = resolveAdminStatus("custom_request_orders", "status", t.value);
+    assert.equal(r.known, true, t.value);
+    assert.equal(r.label, t.label, `${t.value}: 탭 라벨 = 사전 라벨`);
   }
+  assert.equal(resolveAdminStatus("custom_request_orders", "status", "canceled").known, false, "레거시 동의어는 미등재 → neutral");
 });
 
 test("비활성 배너 원문 · 빈 상태 문구 · 변형", () => {

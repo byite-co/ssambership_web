@@ -2,8 +2,8 @@
  * 관리자 · 콘텐츠 검수(신고) 화면(PR-5 §1)의 순수 규칙 — 목록·신고 상세·조치 확인 모달이 함께 쓴다.
  *
  * - 탭 값은 `content_reports.status` CHECK 7종(pending·reviewing·resolved·rejected·dismissed·hidden·removed) 중
- *   **코드가 실제로 쓰는 6종**만이다. `rejected` 는 어떤 액션도 쓰지 않아(adminReportActions·bulkActions·
- *   communityReportActions 실측) 탭에서 뺐다 — 전체 탭 건수에는 포함된다.
+ *   **코드가 실제로 쓰는 6종**만이다. `rejected` 는 어떤 액션도 쓰지 않아(adminReportActions·communityReportActions 실측)
+ *   탭에서 뺐다 — 전체 탭 건수에는 포함된다. **탭 라벨은 상태 사전(`content_reports.status`)의 라벨 그대로**(전체 탭만 화면 고유).
  * - 오래된 신고가 위(`created_at asc`). 미처리(pending·reviewing) 건의 경과 시간이 24시간을 넘으면 주의색, 48시간을 넘으면 위험색.
  * - 조치 등급: 검토 중·처리 완료·기각·숨김·복구 = stateChange(한 줄 확인) · 삭제 = destructive(대상 ID 재입력).
  *   삭제 모달에는 안전한 대안 `숨김으로 대신하기` 버튼을 함께 둔다.
@@ -17,6 +17,7 @@
  */
 import type { AdminListParams } from "./adminListParams.ts";
 import { ADMIN_LIST_SEARCH_USER_ID_LIMIT, buildAdminDataTableUrl } from "./adminDataTable.ts";
+import { resolveAdminStatus } from "./adminStatusDictionary.ts";
 import { contentReportRowIsActionable } from "./contentReportLabels.ts";
 
 export const CONTENT_REPORT_BASE_PATH = "/admin/moderation";
@@ -32,15 +33,13 @@ export const CONTENT_REPORT_DEFAULT_TAB: ContentReportTab = "pending";
 /** 코드가 `content_reports.status` 에 실제로 쓰는 값(CHECK 7종 중 rejected 제외) */
 export const CONTENT_REPORT_WRITTEN_STATUSES: readonly string[] = ["pending", "reviewing", "resolved", "dismissed", "hidden", "removed"];
 
-export const CONTENT_REPORT_TABS: readonly { value: ContentReportTab; label: string }[] = [
-  { value: "pending", label: "대기" },
-  { value: "reviewing", label: "검토 중" },
-  { value: "resolved", label: "해결" },
-  { value: "dismissed", label: "기각" },
-  { value: "hidden", label: "숨김" },
-  { value: "removed", label: "삭제" },
-  { value: "all", label: "전체" },
-];
+export const CONTENT_REPORT_ALL_TAB_LABEL = "전체";
+
+/** 탭 라벨은 상태 사전(`content_reports.status`)에서 온다 — 사전 라벨이 바뀌면 탭도 따라간다. 전체 탭만 화면 고유 라벨. */
+export const CONTENT_REPORT_TABS: readonly { value: ContentReportTab; label: string }[] = CONTENT_REPORT_TAB_VALUES.map((value) => ({
+  value,
+  label: value === "all" ? CONTENT_REPORT_ALL_TAB_LABEL : resolveAdminStatus("content_reports", "status", value).label,
+}));
 
 export function isContentReportTab(value: string): value is ContentReportTab {
   return (CONTENT_REPORT_TAB_VALUES as readonly string[]).includes(value);

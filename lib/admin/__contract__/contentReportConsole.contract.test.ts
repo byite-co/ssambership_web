@@ -83,7 +83,12 @@ const HOUR = 3_600_000;
 
 test("탭은 대기·검토 중·해결·기각·숨김·삭제·전체 7개, 기본 탭은 대기 — 값은 CHECK 7종 중 코드가 실제로 쓰는 6종(rejected 제외)", () => {
   assert.deepEqual([...CONTENT_REPORT_TAB_VALUES], ["pending", "reviewing", "resolved", "dismissed", "hidden", "removed", "all"]);
-  assert.deepEqual(CONTENT_REPORT_TABS.map((t) => t.label), ["대기", "검토 중", "해결", "기각", "숨김", "삭제", "전체"]);
+  assert.deepEqual(CONTENT_REPORT_TABS.map((t) => t.label), ["대기", "검토 중", "해결", "기각", "숨김 처리", "삭제 처리", "전체"]);
+  for (const t of CONTENT_REPORT_TABS) {
+    if (t.value === "all") continue;
+    assert.equal(t.label, resolveAdminStatus("content_reports", "status", t.value).label, `${t.value}: 탭 라벨 = 사전 라벨`);
+  }
+  assert.ok(stripComments(read(CONSOLE)).includes('resolveAdminStatus("content_reports", "status", value).label'), "탭 라벨은 사전에서 파생(하드코딩 없음)");
   assert.equal(CONTENT_REPORT_DEFAULT_TAB, "pending");
   const allowed = adminStatusAllowedValues("content_reports", "status");
   assert.equal(allowed.length, 7, "상태 사전 = CHECK 7종");
@@ -93,6 +98,7 @@ test("탭은 대기·검토 중·해결·기각·숨김·삭제·전체 7개, �
   // 실측: 어떤 서버 액션도 content_reports.status 에 'rejected' 를 쓰지 않는다
   const writers = [read(SERVER_ACTIONS), read("lib/admin/bulkActions.ts"), read("lib/community/communityReportActions.ts")].map(stripComments).join("\n");
   assert.ok(!/["']rejected["']/.test(writers), "rejected 를 쓰는 액션 없음");
+  assert.ok(!read("lib/admin/bulkActions.ts").includes("bulkUpdateContentReportsAction"), "호출자 없는 신고 일괄 액션은 삭제됐다(PR-5 후속)");
   for (const t of CONTENT_REPORT_TABS) {
     if (t.value === "all") continue;
     assert.equal(resolveAdminStatus("content_reports", "status", t.value).known, true, `${t.value} 사전 등재`);
