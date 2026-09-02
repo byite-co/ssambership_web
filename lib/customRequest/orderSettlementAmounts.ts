@@ -5,8 +5,8 @@ import { loadApplicationById } from "@/lib/customRequest/customRequestQueries";
 
 type Row = Record<string, unknown>;
 
-/** 플랫폼 5% / 멘토 95% (수수료 정책 변경 252) */
-export const CUSTOM_ORDER_PLATFORM_FEE_RATE = 0.05 as const;
+// PR-1b V-4: 구 CUSTOM_ORDER_PLATFORM_FEE_RATE(0.05 TS 사본) 삭제 — 요율 정본은 DB(정산 행 fee_rate · 분배/수락 RPC)다.
+// 아래 분할 함수의 요율은 호출부가 DB(RPC 결과)에서 받은 값을 명시적으로 넘긴다(기본값 없음).
 
 function toPositiveIntWon(v: unknown): number | null {
   if (v === null || v === undefined) return null;
@@ -85,7 +85,7 @@ export function pickGrossAmountWonFromOrderAndApplication(order: Row | null, app
 
 export function splitPlatformAndMentorForGross(
   grossWon: number,
-  feeRate: number = CUSTOM_ORDER_PLATFORM_FEE_RATE
+  feeRate: number
 ): { platformFee: number; mentorAmount: number } {
   const g = Math.max(0, Math.floor(grossWon));
   const platformFee = Math.floor(g * feeRate);

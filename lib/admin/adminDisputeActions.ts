@@ -279,6 +279,8 @@ export async function applyCustomOrderDisputeSplitAdminAction(formData: FormData
   }
 
   // D-AD-5: 실제 돈이 움직이는 조치이므로 감사 트레일 정본(admin_action_logs)에 기록한다.
+  // PR-1b V-4: 실제 적용 요율·금액은 RPC 결과(DB)가 정본 — 함께 남겨 화면 미리보기(정산 행 요율)와 사후 대조한다.
+  const applied = split.data ?? {};
   let logClient: SupabaseClient;
   try {
     logClient = createServiceRoleClient();
@@ -290,7 +292,14 @@ export async function applyCustomOrderDisputeSplitAdminAction(formData: FormData
     actionType: "dispute_custom_order_split",
     targetType: "dispute",
     targetId: disputeId,
-    detail: { orderId, mentorGrossWon: mentorParsed, studentRefundWon: studentParsed },
+    detail: {
+      orderId,
+      mentorGrossWon: mentorParsed,
+      studentRefundWon: studentParsed,
+      appliedFeeRate: applied.fee_rate ?? null,
+      appliedMentorPlatformFeeWon: applied.mentor_platform_fee_won ?? null,
+      appliedMentorNetWon: applied.mentor_net_won ?? null,
+    },
   });
 
   revalidatePath(LIST_PATH);

@@ -7,7 +7,6 @@ import { requireRole } from "@/lib/auth/routeGuard";
 import { loadDisputeActorSummaries, loadDisputeById } from "@/lib/disputes/disputeQueries";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { loadAdminDisputeEscrowSplitPanelState } from "@/lib/admin/adminDisputeEscrowSplitQueries";
-import { CUSTOM_ORDER_PLATFORM_FEE_RATE } from "@/lib/customRequest/orderSettlementAmounts";
 import { loadAdminDisputeNotes } from "@/lib/admin/adminCaseNotes";
 import { loadAdminDisputeDeliverables } from "@/lib/admin/adminDisputeDeliverables";
 import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
@@ -123,7 +122,6 @@ export default async function AdminDisputeDetailPage(props: PageProps) {
               disputeId={id}
               adminNotes={adminNotes}
               escrowSplitPanelState={escrowSplitPanelState}
-              platformFeeRate={CUSTOM_ORDER_PLATFORM_FEE_RATE}
             />
 
             <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">

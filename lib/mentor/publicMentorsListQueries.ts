@@ -8,7 +8,7 @@ import { MENTORS_PAGE_SIZE } from "@/lib/mentor/mentorsListSearchParams";
 import { mentorIsVerified } from "@/lib/mentor/mentorPublicProfileDisplay";
 import { rowsFromSupabaseData } from "@/lib/qna/safeSelect";
 import { assignPlansByTier, type PlansByTier, type SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
-import { loadMentorCapUsageBatch, type MentorCapUsage } from "@/lib/subscribe/mentorCapService";
+import { loadMentorCapUsageBatch } from "@/lib/subscribe/mentorCapService";
 import { mentorVerificationStatusAllowsActivity } from "@/lib/mentor/mentorVerificationGate";
 import { getMajorSubjects, getMinorSubjects } from "@/lib/subjects/subjectCatalog";
 import { mentorPlanCashKrw } from "@/lib/subscribe/mentorPlanPricing";
@@ -572,9 +572,6 @@ export async function loadPublicMentorsList(
   diagnostics.push(`plans: ${planBatch.probe}`);
 
   const statsMap = buildMentorListStats(ids, revBatch.map);
-  const capMap =
-    ids.length > 0 ? await loadMentorCapUsageBatch(ids) : new Map<string, MentorCapUsage>();
-
   const cards: MentorPublicListCard[] = [];
   for (const u of users) {
     const prow = profileByUser.get(u.id) ?? null;
@@ -617,7 +614,7 @@ export async function loadPublicMentorsList(
         connectedStudents: null,
         satisfactionLabel: rev.avg != null ? `${Math.round((rev.avg / 5) * 100)}%` : "—",
       },
-      subscriptionClosed: capMap.get(u.id)?.isFull ?? false,
+      subscriptionClosed: false, // 페이지 확정 후 cap RPC 로 채운다(아래) — 필터·정렬은 이 값을 쓰지 않는다
       hasCustomIntro,
     };
     if (cardMatchesFilters(filters, card)) {
@@ -630,6 +627,14 @@ export async function loadPublicMentorsList(
   const start = (page - 1) * pageSize;
   const sliced = cards.slice(start, start + pageSize);
   const hasMore = start + pageSize < totalCount;
+
+  // PR-1b: cap 마감 배지는 현재 페이지 카드에만 채운다 — cap 은 DB RPC(mentor_cap_used/mentor_cap_limit)
+  // 멘토별 호출이라 디렉터리 전량(수천 명 가능)에 돌리지 않는다. cardMatchesFilters·sortKey 는
+  // subscriptionClosed 를 참조하지 않으므로 목록 구성·순서는 불변이다.
+  if (sliced.length > 0) {
+    const capMap = await loadMentorCapUsageBatch(sliced.map((c) => c.mentorId));
+    for (const c of sliced) c.subscriptionClosed = capMap.get(c.mentorId)?.isFull ?? false;
+  }
 
   const onlySelfVisibleHint =
     Boolean(authId) &&
