@@ -1,0 +1,92 @@
+// 계약 테스트: AdminPageLayout — 관리자 전용 페이지 틀(PR-1 §1).
+// 실행: node --test --experimental-strip-types lib/admin/__contract__/adminPageLayout.contract.test.ts
+//
+// .tsx 는 node --test 로 import 할 수 없어 소스 스캔 tripwire 로 고정한다.
+// 고정하는 것:
+//   ① props 는 title · description? · actions? · children 만 — PageScaffold 의 안내 카드용 props
+//      (sections/emptyState/loadingState/errorState/dataPoints/ctas/hideFooterPlaceholderCards) 를 받지 않는다
+//   ② "준비 중"·"로딩"·"오류"·"참고" 안내 카드를 렌더하는 경로가 없다
+//   ③ PageScaffold 를 import 하지 않고(서비스 화면 공용 — 손대지 않음), Server Component 다
+//   ④ PR-1 범위: 아직 어떤 관리자 화면도 AdminPageLayout 을 쓰지 않는다 · PageScaffold 사용 14화면은 그대로
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
+const SRC = read("components/admin/AdminPageLayout.tsx");
+/** 주석을 걷어낸 코드만 — 부정 단언이 설명 주석에 걸리지 않게 */
+const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+const CODE = stripComments(SRC);
+
+test("props 계약: title · description? · actions? · children 만 받는다", () => {
+  assert.ok(SRC.includes("title: string;"));
+  assert.ok(SRC.includes("description?: ReactNode;"));
+  assert.ok(SRC.includes("actions?: ReactNode;"));
+  assert.ok(SRC.includes("children: ReactNode;"));
+  for (const forbidden of [
+    "sections",
+    "emptyState",
+    "loadingState",
+    "errorState",
+    "dataPoints",
+    "ctas",
+    "hideFooterPlaceholderCards",
+    "compactHero",
+    "hideHero",
+    "eyebrow",
+  ]) {
+    assert.ok(!new RegExp(`\\b${forbidden}\\??:`).test(SRC), `안내 카드용 prop ${forbidden} 금지`);
+  }
+});
+
+test("안내 카드 렌더 경로 없음: '준비 중'·'로딩'·'오류'·'참고'·'표시 중' 문구가 JSX 에 없다", () => {
+  for (const word of ["준비 중", "로딩", "오류", "참고", "표시 중"]) {
+    assert.ok(!CODE.includes(word), `안내 카드 문구 '${word}' 가 코드에 있음`);
+  }
+  assert.ok(!/<article\b/.test(CODE), "카드 그리드(article) 없음");
+});
+
+test("PageScaffold 를 import 하지 않고, 'use client' 없는 Server Component 다", () => {
+  assert.ok(!CODE.includes("PageScaffold"), "PageScaffold import/참조 금지(코드 기준)");
+  assert.ok(!SRC.includes('components/shell/PageScaffold"'));
+  assert.ok(!SRC.startsWith('"use client"'));
+  assert.ok(SRC.includes("export function AdminPageLayout("));
+  assert.ok(/<h1\b/.test(SRC), "h1 제목");
+  assert.ok(SRC.includes("{children}"));
+});
+
+test("PageScaffold 본체는 이 PR 에서 손대지 않았다(서비스 화면 31곳 공용) — props 계약 원형 유지", () => {
+  const scaffold = read("components/shell/PageScaffold.tsx");
+  for (const prop of ["eyebrow?", "ctas?", "sections?", "emptyState?", "dataPoints?", "loadingState?", "errorState?", "hideFooterPlaceholderCards?", "compactHero?", "hideHero?"]) {
+    assert.ok(scaffold.includes(prop), `PageScaffold prop ${prop} 유지`);
+  }
+  assert.ok(scaffold.includes('section.status === "connected" ? "표시 중" : "준비 중"'));
+});
+
+function walk(dir: string, out: string[]) {
+  for (const name of readdirSync(dir)) {
+    const full = join(dir, name);
+    if (statSync(full).isDirectory()) walk(full, out);
+    else if (/\.tsx?$/.test(name)) out.push(full);
+  }
+  return out;
+}
+
+test("PR-1 범위: 아직 어떤 관리자 화면도 AdminPageLayout/AdminStatusPill 을 import 하지 않는다(PR-2 부터 이관)", () => {
+  const files = [...walk(join(ROOT, "app", "(admin)"), []), ...walk(join(ROOT, "components", "admin"), [])];
+  const importers = files
+    .filter((f) => !/components\/admin\/(AdminPageLayout|AdminStatusPill)\.tsx$/.test(f))
+    .filter((f) => /components\/admin\/(AdminPageLayout|AdminStatusPill)"/.test(readFileSync(f, "utf8")))
+    .map((f) => f.slice(ROOT.length));
+  assert.deepEqual(importers, []);
+});
+
+test("PageScaffold 를 쓰는 관리자 화면 14곳은 그대로다(화면 이관 0)", () => {
+  const files = walk(join(ROOT, "app", "(admin)"), []);
+  const users = files.filter((f) => readFileSync(f, "utf8").includes("<PageScaffold")).map((f) => f.slice(ROOT.length + 1));
+  assert.equal(users.length, 14, users.join("\n"));
+});

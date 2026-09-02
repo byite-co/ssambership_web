@@ -1,10 +1,19 @@
 /**
  * 관리자 목록 공용 툴바: 검색 input + 상태 탭.
  * Server Component (form GET) — JS 없이도 동작.
+ *
+ * 파라미터 보존(PR-1 공통 계약 층):
+ *   현재 URL 의 다른 파라미터(`params.extra` — refunds `type`/`sort` 등)와 `basePath` 에 박힌 쿼리
+ *   (community-content `?type=…`)를 검색 form(hidden input)·상태 탭·초기화 링크 모두에서 그대로 실어 나른다.
+ *   GET form 은 action 의 쿼리를 버리므로 action 에는 순수 경로만 두고 나머지는 hidden input 으로 보낸다.
  */
 import Link from "next/link";
 import type { AdminListParams } from "@/lib/admin/adminListParams";
-import { buildAdminListUrl } from "@/lib/admin/adminListParams";
+import {
+  buildAdminListUrl,
+  resolveAdminListExtraParams,
+  splitAdminListBasePath,
+} from "@/lib/admin/adminListParams";
 
 export type AdminStatusTab = { value: string; label: string; count?: number };
 
@@ -18,11 +27,13 @@ type Props = {
 export function AdminListToolbar(props: Props) {
   const { basePath, params, searchPlaceholder, statusTabs } = props;
   const activeStatus = params.status || "all";
+  const { path: actionPath } = splitAdminListBasePath(basePath);
+  const preservedParams = resolveAdminListExtraParams(basePath, params);
 
   return (
     <div className="flex flex-col gap-3 rounded-2xl border border-slate-200 bg-white p-4">
       {/* 검색 */}
-      <form action={basePath} method="GET" className="flex flex-wrap items-center gap-2">
+      <form action={actionPath} method="GET" className="flex flex-wrap items-center gap-2">
         <input
           type="text"
           name="q"
@@ -36,6 +47,10 @@ export function AdminListToolbar(props: Props) {
         {params.status && params.status !== "all" ? (
           <input type="hidden" name="status" value={params.status} />
         ) : null}
+        {/* 화면별 파라미터(type·sort 등) 유지 — 검색해도 탭·정렬이 풀리지 않는다 */}
+        {Object.entries(preservedParams).map(([key, value]) => (
+          <input key={key} type="hidden" name={key} value={value} />
+        ))}
         <button
           type="submit"
           className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-extrabold text-white hover:bg-blue-500"
