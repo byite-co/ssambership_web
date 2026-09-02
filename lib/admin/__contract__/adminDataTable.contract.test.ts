@@ -54,8 +54,14 @@ const MENTOR_LIST = "components/admin/MentorApprovalQueueList.tsx";
 const REFUND_TOOLBAR = "components/admin/RefundQueueToolbar.tsx";
 const REFUND_PAGINATION = "components/admin/RefundQueuePagination.tsx";
 
-/** 이 부품을 쓰는 화면 — PR-5 에서 화면을 이관할 때 이 목록을 갱신한다(멘토 승인·환불 두 화면만). */
-const ADMIN_DATA_TABLE_IMPORTERS = [MENTOR_LIST, REFUND_PAGINATION, REFUND_TOOLBAR];
+// PR-5 세 화면 — 콘텐츠 검수 목록 · 학적 변경 목록 · 맞춤의뢰 주문 툴바(+페이지 본문의 Pagination)
+const REPORT_LIST = "components/admin/ContentReportQueueList.tsx";
+const ACADEMIC_LIST = "components/admin/AcademicRecordChangeQueueList.tsx";
+const ORDER_TOOLBAR = "components/admin/CustomRequestOrderQueueToolbar.tsx";
+const ORDER_PAGE = "app/(admin)/admin/(console)/custom-request-orders/page.tsx";
+
+/** 이 부품을 쓰는 화면 — 새 화면을 이관할 때 이 목록을 갱신한다(PR-2 멘토 승인 · PR-3 환불 · PR-5 세 화면). */
+const ADMIN_DATA_TABLE_IMPORTERS = [MENTOR_LIST, REFUND_PAGINATION, REFUND_TOOLBAR, REPORT_LIST, ACADEMIC_LIST, ORDER_TOOLBAR, ORDER_PAGE];
 
 function spFrom(url: string): Record<string, string | string[] | undefined> {
   const u = new URL(url, "https://ssambership.local");
@@ -184,7 +190,7 @@ test("AdminDataTable 은 Server Component 이고 Counts · Tabs · Pagination �
   assert.ok(!/from "react"|from "@\//.test(pure), "순수 모듈은 React·@/ import 없음(node --test 직접 import)");
 });
 
-test("이관 범위: AdminDataTable 을 import 하는 관리자 파일은 멘토 승인 목록·환불 툴바·환불 페이지네이션 셋뿐이다", () => {
+test("이관 범위: AdminDataTable 을 import 하는 관리자 파일은 멘토 승인 목록·환불 툴바·환불 페이지네이션 + PR-5 세 화면(신고 목록·학적 변경 목록·맞춤의뢰 툴바·페이지)뿐이다", () => {
   const files = [...walk(join(ROOT, "app", "(admin)"), []), ...walk(join(ROOT, "components", "admin"), [])];
   const importers = files
     .filter((f) => !/components\/admin\/AdminDataTable\.tsx$/.test(f))
@@ -217,16 +223,27 @@ test("두 화면에서 공통 부분은 사라지고 고유 부분(검색 form �
   assert.ok(toolbar.includes('name="q"') && toolbar.includes('placeholder="요청자 이름 · 이메일"'), "환불 고유 부분 유지");
 });
 
-test("두 화면의 검색 form 은 같은 규칙 — hidden status 는 기본 탭이 아닐 때만(검색해도 현재 탭 유지)", () => {
+test("검색 form 은 모든 이관 화면에서 같은 규칙 — hidden status 는 기본 탭이 아닐 때만(검색해도 현재 탭 유지) · PR-5 세 화면 등록", () => {
   const list = stripComments(read(MENTOR_LIST));
   const toolbar = stripComments(read(REFUND_TOOLBAR));
   assert.ok(list.includes('{tab !== MENTOR_APPROVAL_DEFAULT_TAB ? <input type="hidden" name="status" value={tab} /> : null}'), "멘토 승인: 기본 탭 상수 기준");
   assert.ok(toolbar.includes('{tab !== REFUND_DEFAULT_TAB ? <input type="hidden" name="status" value={tab} /> : null}'), "환불: 기본 탭 상수 기준");
+  // PR-5 — 기본 탭 상수 이름만 다르고 규칙은 같다(맞춤의뢰 주문은 기본 탭이 all 이라 all 에서 hidden 이 없고 그 외 탭에서 실린다)
+  const reportList = stripComments(read(REPORT_LIST));
+  const academicList = stripComments(read(ACADEMIC_LIST));
+  const orderToolbar = stripComments(read(ORDER_TOOLBAR));
+  assert.ok(reportList.includes('{tab !== CONTENT_REPORT_DEFAULT_TAB ? <input type="hidden" name="status" value={tab} /> : null}'), "콘텐츠 검수: 기본 탭 상수 기준");
+  assert.ok(academicList.includes('{tab !== ACADEMIC_RECORD_CHANGE_DEFAULT_TAB ? <input type="hidden" name="status" value={tab} /> : null}'), "학적 변경: 기본 탭 상수 기준");
+  assert.ok(orderToolbar.includes('{tab !== CUSTOM_REQUEST_ORDER_DEFAULT_TAB ? <input type="hidden" name="status" value={tab} /> : null}'), "맞춤의뢰 주문: 기본 탭 상수 기준");
   for (const [rel, src] of [
     [MENTOR_LIST, list],
     [REFUND_TOOLBAR, toolbar],
+    [REPORT_LIST, reportList],
+    [ACADEMIC_LIST, academicList],
+    [ORDER_TOOLBAR, orderToolbar],
   ] as const) {
     assert.ok(!/tab !== "(all|pending)"/.test(src), `${rel}: 탭 리터럴 비교 없음(기본 탭이 바뀌어도 form 이 따라간다)`);
+    assert.ok(src.includes('name="q"') && src.includes('role="search"'), `${rel}: 검색 form(q) 존재`);
   }
 });
 

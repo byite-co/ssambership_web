@@ -194,9 +194,12 @@ const PR2_CONFIRM_IMPORTERS = [
   // PR-3 환불 관리
   "components/admin/RefundDecisionButtons.tsx",
   "components/admin/RefundQueueTable.tsx",
+  // PR-5 콘텐츠 검수 조치 6종 · 학적 변경 결정 3종
+  "components/admin/ContentReportActionButtons.tsx",
+  "components/admin/AcademicRecordChangeReviewPanel.tsx",
 ];
 
-test("이관 범위: ConfirmSubmitButton 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)뿐이고, AdminConfirmDialog 직접 import 는 없다", () => {
+test("이관 범위: ConfirmSubmitButton 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)·PR-5 신고 조치·학적 변경 결정뿐이고, AdminConfirmDialog 직접 import 는 없다", () => {
   const files: string[] = [];
   const walk = (dir: string) => {
     for (const name of readdirSync(dir)) {

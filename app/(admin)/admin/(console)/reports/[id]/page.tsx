@@ -1,18 +1,20 @@
 import Link from "next/link";
-import { PageScaffold } from "@/components/shell/PageScaffold";
+import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { AdminStatusPill } from "@/components/admin/AdminStatusPill";
+import { ContentReportActionButtons } from "@/components/admin/ContentReportActionButtons";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
-import { updateContentReportStatusAction, updateContentReportModerationAction } from "@/lib/admin/adminReportActions";
 import { loadAdminReportEvidence, type AdminReportEvidence } from "@/lib/admin/adminReportEvidence";
 import { loadAdminReportNotes } from "@/lib/admin/adminCaseNotes";
-import { contentReportStatusLabel } from "@/lib/admin/contentReportLabels";
-import { FormSubmitButton } from "@/components/common/FormSubmitButton";
+import { normalizeModerationTargetType } from "@/lib/admin/communityModerationCore";
+import { CONTENT_REPORT_BASE_PATH, contentReportTargetLabel } from "@/lib/admin/contentReportConsole";
 import { AdminCaseNotesPanel } from "@/components/admin/AdminCaseNotesPanel";
 import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 
 const TABLE = "content_reports" as const;
+const ACTION_LINK = "rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50";
 
 type Props = { params: Promise<{ id: string }> };
 
@@ -170,24 +172,26 @@ export default async function AdminReportDetailPage(props: Props) {
   const reportNotes = row ? await loadAdminReportNotes(supabase, id) : null;
 
   const status = fieldStr(row, "status") ?? "";
+  // 조치 모달 summary 용 — 서버 액션(applyContentModeration)과 같은 판정으로 대상 종류를 정한다(레거시 'comment' 는 null = 콘텐츠 불변).
+  const targetType = fieldStr(row, "target_type");
+  const targetKind = normalizeModerationTargetType(targetType);
 
   return (
-    <PageScaffold
-      hideFooterPlaceholderCards
-      eyebrow="관리자 / 신고"
+    <AdminPageLayout
       title="신고 상세"
-      description="신고 내용과 대상 콘텐츠를 함께 확인하고, 신고 상태·콘텐츠 조치를 처리합니다."
-      ctas={[
-        { href: "/admin/moderation", label: "검수 목록", tone: "blue" },
-        { href: "/admin", label: "대시보드", tone: "slate" },
-      ]}
-      sections={[]}
-      dataPoints={[]}
+      description="신고 내용과 대상 콘텐츠를 함께 확인하고, 신고 상태·콘텐츠 조치를 처리합니다. 모든 조치는 확인 절차를 거칩니다."
+      actions={
+        <>
+          <Link href={CONTENT_REPORT_BASE_PATH} className={ACTION_LINK} prefetch={false}>
+            ← 검수 목록
+          </Link>
+          <Link href="/admin/dashboard" className={ACTION_LINK} prefetch={false}>
+            대시보드
+          </Link>
+        </>
+      }
     >
       <div className="space-y-4">
-        <Link href="/admin/moderation" className="text-sm font-extrabold text-indigo-800 underline" prefetch={false}>
-          ← 콘텐츠 검수 목록
-        </Link>
         {loadErr ? <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-900">{loadErr}</p> : null}
         {!row && !loadErr ? <p className="text-sm text-slate-600">해당 id의 신고를 찾지 못했습니다.</p> : null}
 
@@ -195,9 +199,7 @@ export default async function AdminReportDetailPage(props: Props) {
           <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-extrabold text-slate-900">신고 내용</p>
-              <span className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-700">
-                {contentReportStatusLabel(status)}
-              </span>
+              <AdminStatusPill table="content_reports" column="status" value={status} size="sm" />
             </div>
             <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2">
               <div>
@@ -249,37 +251,8 @@ export default async function AdminReportDetailPage(props: Props) {
             <p className="mt-1 text-xs text-slate-500">
               신고 상태 변경과 콘텐츠 조치(숨김·삭제·복구)를 처리합니다. 콘텐츠 조치는 대상 글·숏폼·댓글에 즉시 반영됩니다.
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
-              <form action={updateContentReportStatusAction} className="inline">
-                <input type="hidden" name="reportId" value={id} />
-                <input type="hidden" name="nextStatus" value="reviewing" />
-                <FormSubmitButton idleLabel="검토 중" pendingLabel="…" className="rounded-lg bg-amber-600 px-3 py-2 text-xs font-bold text-white" />
-              </form>
-              <form action={updateContentReportStatusAction} className="inline">
-                <input type="hidden" name="reportId" value={id} />
-                <input type="hidden" name="nextStatus" value="resolved" />
-                <FormSubmitButton idleLabel="처리 완료" pendingLabel="…" className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-bold text-white" />
-              </form>
-              <form action={updateContentReportStatusAction} className="inline">
-                <input type="hidden" name="reportId" value={id} />
-                <input type="hidden" name="nextStatus" value="dismissed" />
-                <FormSubmitButton idleLabel="종결" pendingLabel="…" className="rounded-lg bg-slate-600 px-3 py-2 text-xs font-bold text-white" />
-              </form>
-              <form action={updateContentReportModerationAction} className="inline">
-                <input type="hidden" name="reportId" value={id} />
-                <input type="hidden" name="intent" value="hidden" />
-                <FormSubmitButton idleLabel="콘텐츠 숨김" pendingLabel="…" className="rounded-lg bg-orange-700 px-3 py-2 text-xs font-bold text-white" />
-              </form>
-              <form action={updateContentReportModerationAction} className="inline">
-                <input type="hidden" name="reportId" value={id} />
-                <input type="hidden" name="intent" value="restored" />
-                <FormSubmitButton idleLabel="콘텐츠 복구" pendingLabel="…" className="rounded-lg bg-teal-700 px-3 py-2 text-xs font-bold text-white" />
-              </form>
-              <form action={updateContentReportModerationAction} className="inline">
-                <input type="hidden" name="reportId" value={id} />
-                <input type="hidden" name="intent" value="deleted" />
-                <FormSubmitButton idleLabel="콘텐츠 삭제" pendingLabel="…" className="rounded-lg bg-red-700 px-3 py-2 text-xs font-bold text-white" />
-              </form>
+            <div className="mt-3">
+              <ContentReportActionButtons reportId={id} targetKind={targetKind} targetId={fieldStr(row, "target_id")} targetLabel={contentReportTargetLabel(targetType)} />
             </div>
           </section>
         ) : null}
@@ -302,6 +275,6 @@ export default async function AdminReportDetailPage(props: Props) {
           </details>
         ) : null}
       </div>
-    </PageScaffold>
+    </AdminPageLayout>
   );
 }
