@@ -2,6 +2,8 @@
  * 멘토 승인 작업대 — 좌측 지원자 목록(PR-2 §2). Server Component.
  *
  * - 검색·탭·페이지는 전부 URL(서버) 기준이다. 클라이언트 필터 없음. 쿼리 키는 `q` · `status` · `page` 만.
+ *   검색 form 은 현재 탭이 기본 탭(대기)이 아닐 때만 hidden `status` 를 싣는다 — 전체 탭에서 검색해도 전체 탭이 유지된다
+ *   (구 조건 `tab !== "all"` 은 전체 탭 검색을 대기 탭으로 튕겼다. 환불 툴바와 같은 규칙).
  * - 선택 행은 `mentor` 키로 싣되, 탭·검색·페이지 링크에는 싣지 않는다(params.extra 에서 제거된 채 넘어온다).
  * - 상단 `대기 N / 전체 M` · 상태 탭 · 하단 `첫–끝 / 필터 후 건수` 는 공용 `AdminDataTable`(PR-4) 조각을 쓴다.
  *   검색 form 과 지원자 카드(행)는 이 화면 고유다(300px 사이드바에 맞춘 배치).
@@ -14,6 +16,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { splitAdminListBasePath, type AdminListParams } from "@/lib/admin/adminListParams";
 import {
   MENTOR_APPROVAL_BASE_PATH,
+  MENTOR_APPROVAL_DEFAULT_TAB,
   MENTOR_APPROVAL_SELECTED_PARAM,
   MENTOR_APPROVAL_TABS,
   buildMentorApprovalListUrl,
@@ -60,7 +63,7 @@ export function MentorApprovalQueueList(props: Props) {
             aria-label="지원자 검색"
             className="min-w-0 flex-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-800 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
           />
-          {tab !== "all" ? <input type="hidden" name="status" value={tab} /> : null}
+          {tab !== MENTOR_APPROVAL_DEFAULT_TAB ? <input type="hidden" name="status" value={tab} /> : null}
           <button type="submit" className="rounded-lg bg-slate-900 px-2.5 py-1.5 text-xs font-extrabold text-white hover:bg-slate-800">
             검색
           </button>

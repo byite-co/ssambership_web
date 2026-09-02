@@ -217,6 +217,19 @@ test("두 화면에서 공통 부분은 사라지고 고유 부분(검색 form �
   assert.ok(toolbar.includes('name="q"') && toolbar.includes('placeholder="요청자 이름 · 이메일"'), "환불 고유 부분 유지");
 });
 
+test("두 화면의 검색 form 은 같은 규칙 — hidden status 는 기본 탭이 아닐 때만(검색해도 현재 탭 유지)", () => {
+  const list = stripComments(read(MENTOR_LIST));
+  const toolbar = stripComments(read(REFUND_TOOLBAR));
+  assert.ok(list.includes('{tab !== MENTOR_APPROVAL_DEFAULT_TAB ? <input type="hidden" name="status" value={tab} /> : null}'), "멘토 승인: 기본 탭 상수 기준");
+  assert.ok(toolbar.includes('{tab !== REFUND_DEFAULT_TAB ? <input type="hidden" name="status" value={tab} /> : null}'), "환불: 기본 탭 상수 기준");
+  for (const [rel, src] of [
+    [MENTOR_LIST, list],
+    [REFUND_TOOLBAR, toolbar],
+  ] as const) {
+    assert.ok(!/tab !== "(all|pending)"/.test(src), `${rel}: 탭 리터럴 비교 없음(기본 탭이 바뀌어도 form 이 따라간다)`);
+  }
+});
+
 test("환불 조회 모듈은 멘토 승인 모듈이 아니라 공용 정본에서 range 분할을 가져온다(화면 간 의존 제거)", () => {
   const refundQueries = stripComments(read("lib/admin/refundConsoleQueries.ts"));
   assert.ok(refundQueries.includes('import { splitPendingFirstRange } from "@/lib/admin/adminDataTable";'));
