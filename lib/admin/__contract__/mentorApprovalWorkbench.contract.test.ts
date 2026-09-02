@@ -126,6 +126,28 @@ test("쿼리 키는 status 하나 — 구 filter 키는 탭에 영향이 없다(
   }
 });
 
+test("검색 form 의 hidden status 는 기본 탭이 아닐 때만 — 어느 탭에서 검색해도 그 탭이 유지된다(전체 탭 → 대기 탭 튐 회귀 고정)", () => {
+  const opts = { defaultPageSize: 25, defaultStatus: MENTOR_APPROVAL_DEFAULT_TAB };
+  // GET form 이 만드는 URL 을 그대로 재현한다: `q` + (기본 탭이 아니면) hidden `status`. action 은 순수 경로.
+  const submitUrl = (q: string, hiddenStatus: string | null) => {
+    const usp = new URLSearchParams({ q });
+    if (hiddenStatus) usp.set("status", hiddenStatus);
+    return `${MENTOR_APPROVAL_BASE_PATH}?${usp.toString()}`;
+  };
+  for (const tab of MENTOR_APPROVAL_TAB_VALUES) {
+    const hidden = tab !== MENTOR_APPROVAL_DEFAULT_TAB ? tab : null;
+    const parsed = parseAdminListParams(spFrom(submitUrl("서연", hidden)), opts);
+    assert.equal(resolveMentorApprovalTab(parsed.status), tab, `${tab} 탭에서 검색 → ${tab} 탭 유지`);
+    assert.equal(parsed.search, "서연");
+  }
+  // status 없는 URL 은 기본 탭(대기)으로 재파싱된다 — 그래서 전체 탭은 hidden status 가 필요하다.
+  // 구 조건 `tab !== "all"` 은 전체 탭에서 hidden 을 빼 검색 결과가 대기 탭으로 튀었다.
+  assert.equal(resolveMentorApprovalTab(parseAdminListParams(spFrom(submitUrl("서연", null)), opts).status), MENTOR_APPROVAL_DEFAULT_TAB);
+  const list = stripComments(read(LIST));
+  assert.ok(list.includes('{tab !== MENTOR_APPROVAL_DEFAULT_TAB ? <input type="hidden" name="status" value={tab} /> : null}'), "hidden status 조건은 기본 탭 상수 기준");
+  assert.ok(!list.includes('tab !== "all"'), "구 조건(tab !== \"all\") 제거");
+});
+
 test("탭 필터는 서버 집합이며 서로 겹치지 않는다 — 대기 탭 + 재제출 탭 = 액션 .in(...) 집합(H1)", () => {
   const pending = mentorApprovalTabStatuses("pending")!;
   const resubmit = mentorApprovalTabStatuses("under_review")!;

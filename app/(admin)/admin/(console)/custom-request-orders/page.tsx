@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AdminDataTable } from "@/components/admin/AdminDataTable";
+import { AdminTableCard } from "@/components/admin/AdminTableCard";
 import { AdminListToolbar } from "@/components/admin/AdminListToolbar";
 import { AdminListPagination } from "@/components/admin/AdminListPagination";
 import { PageScaffold } from "@/components/shell/PageScaffold";
@@ -136,7 +136,7 @@ export default async function AdminCustomRequestOrdersPage(props: PageProps) {
           searchPlaceholder="주문/공모/학생/멘토 ID, 상태 검색"
           statusTabs={statusTabs}
         />
-        <AdminDataTable title="주문 목록" count={totalCount}>
+        <AdminTableCard title="주문 목록" count={totalCount}>
           <table className="min-w-full divide-y divide-slate-100 text-left text-sm">
             <thead className="bg-slate-50 text-xs font-extrabold uppercase tracking-wide text-slate-500">
               <tr>
@@ -187,7 +187,7 @@ export default async function AdminCustomRequestOrdersPage(props: PageProps) {
               )}
             </tbody>
           </table>
-        </AdminDataTable>
+        </AdminTableCard>
         <AdminListPagination
           basePath={ORDERS_BASE_PATH}
           params={params}

@@ -12,9 +12,9 @@ import {
   isMentorApprovalDecidable,
   mentorApprovalTabStatuses,
   normalizeMentorSearchTerm,
-  splitPendingFirstRange,
   type MentorApprovalTab,
 } from "@/lib/admin/mentorApprovalQueue";
+import { splitPendingFirstRange } from "@/lib/admin/adminDataTable";
 import {
   resolveMentorIdentityReview,
   type MentorIdentityReview,
@@ -37,7 +37,7 @@ import { kstDayString } from "@/lib/utils/kstTime";
  * 멘토 승인 작업대(PR-2) 서버 조회 정본.
  *
  * - 목록: 서버 검색(이름·이메일 → users, 대학·학과 → mentor_profiles) + 서버 탭(`status` 키 하나) + 페이징.
- *   전체 탭은 대기 행을 항상 위에 두기 위해 두 range 로 이어 붙인다(`splitPendingFirstRange`).
+ *   전체 탭은 대기 행을 항상 위에 두기 위해 두 range 로 이어 붙인다(공용 정본 `adminDataTable.ts` 의 `splitPendingFirstRange`).
  * - 상세: 선택 1건만 조회한다(구 화면은 25행 전부의 서명 URL 을 발급했다).
  * - `identity_verifications` 는 RLS 정책 0개 테이블 → service_role 로만 읽는다. 키가 없으면 "없음" 으로
  *   속이지 않고 `identityError` 로 판정 불가를 드러낸다(fail-closed).
