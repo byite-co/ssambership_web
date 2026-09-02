@@ -246,6 +246,15 @@ test("content_reports.status 라벨(PR-5 후속 오너 확정): 대기 · 검토
   assert.ok(console_.includes('resolveAdminStatus("content_reports", "status", value).label'), "탭 라벨은 사전에서 온다");
 });
 
+test("disputes.status 라벨(PR-6 후속 · 오너 확정): 열림 · 검토 중 · 상위 이관 · 보류 · 해결 · 기각 · 제재 7일 · 제재 30일 · 영구 제재 — 분쟁 탭은 사전에서 파생", () => {
+  assert.deepEqual(
+    ["open", "under_review", "escalated", "on_hold", "resolved", "dismissed", "sanction_7d", "sanction_30d", "sanction_permanent"].map((v) => resolveAdminStatus("disputes", "status", v).label),
+    ["열림", "검토 중", "상위 이관", "보류", "해결", "기각", "제재 7일", "제재 30일", "영구 제재"]
+  );
+  const disputeConsole = readFileSync(join(ROOT, "lib/admin/disputeConsole.ts"), "utf8");
+  assert.ok(disputeConsole.includes('resolveAdminStatus("disputes", "status", value).label'), "탭 라벨은 사전에서 온다");
+});
+
 // ── ③ 정규화 규칙 ─────────────────────────────────────────────────────────────
 
 test("payments.status: 성공 동의어 5종(succeeded·paid·success·complete·captured)은 모두 '결제 완료'/success 하나로", () => {

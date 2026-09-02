@@ -10,6 +10,7 @@ import { createClient } from "@/lib/supabase/server";
 import { recordCustomOrderDisputeSplitRpc } from "@/lib/customRequest/customOrderDisputeSplitService";
 import { insertAdminDisputeNote } from "@/lib/admin/adminCaseNotes";
 import { logAdminAction } from "@/lib/admin/adminActionLog";
+import { DISPUTE_FUNDS_REASON_REQUIRED_MESSAGE, isDisputeReasonValid } from "@/lib/admin/disputeConsole";
 
 const LIST_PATH = "/admin/disputes";
 
@@ -109,10 +110,11 @@ export async function setDisputeUnderReviewAction(formData: FormData) {
   redirect(okUrl(disputeId, "reviewing"));
 }
 
-/** 해결: 진행 중·기간 제재(sanction_7d/30d) → resolved */
+/** 해결: 진행 중·기간 제재(sanction_7d/30d) → resolved. 사유(선택 `reason`)는 감사 로그 detail 에만 남긴다(PR-6). */
 export async function resolveDisputeAction(formData: FormData) {
   const { user } = await requireRole("admin");
   const disputeId = textFromForm(formData.get("disputeId"));
+  const reason = textFromForm(formData.get("reason"));
   if (!disputeId) redirect(`${LIST_PATH}?error=${encodeURIComponent(safeMsg("분쟁을 식별할 수 없습니다."))}`);
 
   let admin: SupabaseClient;
@@ -144,7 +146,7 @@ export async function resolveDisputeAction(formData: FormData) {
     actionType: "dispute_resolved",
     targetType: "dispute",
     targetId: disputeId,
-    detail: {},
+    detail: { reason: reason || null },
   });
 
   revalidatePath(LIST_PATH);
@@ -153,10 +155,11 @@ export async function resolveDisputeAction(formData: FormData) {
   redirect(okUrl(disputeId, "resolved"));
 }
 
-/** 종결 dismissed */
+/** 기각 dismissed. 사유(선택 `reason`)는 감사 로그 detail 에만 남긴다(PR-6). */
 export async function dismissDisputeAction(formData: FormData) {
   const { user } = await requireRole("admin");
   const disputeId = textFromForm(formData.get("disputeId"));
+  const reason = textFromForm(formData.get("reason"));
   if (!disputeId) redirect(`${LIST_PATH}?error=${encodeURIComponent(safeMsg("분쟁을 식별할 수 없습니다."))}`);
 
   let admin: SupabaseClient;
@@ -188,7 +191,7 @@ export async function dismissDisputeAction(formData: FormData) {
     actionType: "dispute_dismissed",
     targetType: "dispute",
     targetId: disputeId,
-    detail: {},
+    detail: { reason: reason || null },
   });
 
   revalidatePath(LIST_PATH);
@@ -250,14 +253,17 @@ function parseNonNegativeIntWon(raw: string, label: string): number | { error: s
 
 /**
  * 분쟁 예치 분배(4단계-A) — RPC만 호출. UI(폼)는 4단계-B.
- * FormData: disputeId, orderId, mentorGrossWon, studentRefundWon (원, 정수)
+ * FormData: disputeId, orderId, mentorGrossWon, studentRefundWon (원, 정수), reason (자금 조치 — 서버에서도 필수, 감사 로그 detail 에 남긴다 · PR-6)
  */
 export async function applyCustomOrderDisputeSplitAdminAction(formData: FormData) {
   const { user } = await requireRole("admin");
   const disputeId = textFromForm(formData.get("disputeId"));
   const orderId = textFromForm(formData.get("orderId"));
+  const reason = textFromForm(formData.get("reason"));
   if (!disputeId) redirect(`${LIST_PATH}?error=${encodeURIComponent(safeMsg("분쟁을 식별할 수 없습니다."))}`);
   if (!orderId) redirect(errUrlDetail(disputeId, safeMsg("주문 ID가 필요합니다.")));
+  // 확인 모달(critical)을 우회한 제출도 서버에서 막는다 — 사유 없는 자금 이동 금지(환불 승인과 같은 기준).
+  if (!isDisputeReasonValid(reason)) redirect(errUrlDetail(disputeId, safeMsg(DISPUTE_FUNDS_REASON_REQUIRED_MESSAGE)));
 
   const mentorParsed = parseNonNegativeIntWon(textFromForm(formData.get("mentorGrossWon")), "멘토 배정 gross");
   if (typeof mentorParsed !== "number") {
@@ -294,6 +300,7 @@ export async function applyCustomOrderDisputeSplitAdminAction(formData: FormData
     targetId: disputeId,
     detail: {
       orderId,
+      reason,
       mentorGrossWon: mentorParsed,
       studentRefundWon: studentParsed,
       appliedFeeRate: applied.fee_rate ?? null,
