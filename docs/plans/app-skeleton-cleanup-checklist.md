@@ -247,7 +247,57 @@ diff <(sed -n '579,621p' lib/features/community/ui/board/board_detail_screen.dar
 
 ## 7. 로딩 표시 통일
 
-(작성 중)
+### 7-1. 실측 사실
+
+| 항목 | 값 |
+|---|---|
+| `CircularProgressIndicator` | **46줄 / 31파일**(dev 전용 `s3_data_inspector` 3줄 포함) |
+| 분류 | (a) 전면 `const Center(child: CircularProgressIndicator())` **24** + 같은 Center를 `Padding`/`SizedBox`로 감싼 섹션 로더 **5** · (b) 인라인 `SizedBox(N, N, child: CPI(strokeWidth: 2))` **9**(크기 16×2 · 18×2 · 20×4 · 22×1) · (c) 목록 꼬리 페이징 **3** · (d) `Stack` 오버레이 **1** · 이미지 로더/`InteractiveViewer` 안 맨 스피너 **2** · 게이트 화면 브랜드 파랑(`color: ColorTokens.accent`) **2** |
+| `Skeleton`(`lib/design/widgets/skeleton.dart`) | 프로덕션 **0** · 테스트 **0** · dev 갤러리 3곳만. 단일 펄스 사각형이라 스피너 1:1 대체 불가(화면별 자리표시 구성이 필요) |
+| 버튼 진행 상태 | `PrimaryButton`/`SecondaryButton`에 `loading` 파라미터 **없음**. `PrimaryButton` 9곳이 `_busy ? '…중…' : label` 라벨 교체 + `onPressed: null`(문구 5종: 등록/수정/로그인/저장/처리 중). 텍스트형 로더 3곳 별도 |
+| 기존 사설 로딩 클래스 | `_Spinner`(`message_image_attachment.dart:100-108`, 22px) · `VersionGateLoading`(`version_gate_screens.dart:196-205`) |
+| 테스트 | `find.byType(CircularProgressIndicator)` 단언 3줄(3파일) — 래퍼 안에 실제 CPI가 남으면 통과. `tester.tap(find.text('등록 중…'))` 2곳(`free_question_entry_test:344` · `board_post_create_rpc_test:567`)은 **문구가 사라지면 깨진다** |
+| `withOpacity` | `skeleton.dart:44` 1곳(이 축) + 4곳(§8). `withValues(alpha:)`는 이미 3곳에서 사용 중(`theme.dart:61-62`, `home_shell.dart:237`) → 실효 최소 Flutter는 3.27 이상인데 `pubspec.yaml:8`은 `>=3.22.0` |
+
+### 7-2. 항목
+
+| # | 항목 | 위치 | 현재 → 제안 | 판정 | 테스트 영향 | 순서 |
+|---|---|---|---|---|---|---|
+| L1 | `LoadingState` 신설 + 전면 로더 24곳 이관 | `lib/design/widgets/loading_state.dart`(신규) / `scan_annotation_screen:240` · `mentors_screen:212, 236` · `board_list_view:107` · `my_activity_view:73` · `shortform_feed_view:91` · `shortform_compose_screen:201` · `blocked_users_screen:59` · `s3_data_inspector:106`(dev) · `notifications_screen:416` · `mypage_screen:207` · `mentor_iq_list_screen:187` · `iq_create_screen:398` · `iq_detail_screen:806` · `student_iq_list_screen:139` · `mentor_room_home_screen:73` · `student_room_home_screen:97` · `mentor_inbox_screen:167` · `mentor_question_list_screen:95` · `mentor_answer_screen:539` · `chat_screen:526` · `connection_notes_screen:118` · `question_list_screen:112` · `question_room_screen:222` | `class LoadingState({Color? color}) → Center(child: CircularProgressIndicator(color: color))`. `CPI(color: null)`은 무인자 생성과 같다(테마 primary). `return const Center(child: CircularProgressIndicator());` → `return const LoadingState();`. `const` 유지(린트). `mentor_inbox:167`·`question_room:222`의 `&& !snap.hasData` 깜빡임 가드 조건은 **그대로** | **기계적** | `anon_browse_test` · `small_viewport_states_test` — `byType(CPI)`는 안쪽 CPI에 매치 | 1 |
+| L2 | 래퍼가 있는 8곳 — 래퍼는 두고 안쪽만 `LoadingState()` | `board_detail_screen:532` · `shortform_detail_screen:595`(`Padding(12)`) · `iq_detail_screen:1487`(`SizedBox(120)`) · `s3_data_inspector:258, 331`(dev, `Padding(8)`) · `board_list_view:143` · `shortform_feed_view:134`(목록 꼬리 `Padding(vertical: 16)`) · `shortform_compose_screen:207`(Stack 오버레이) | 래퍼 상수(12/8/16/120)는 호출부에 남긴다(`LoadingState.section()`류 named 생성자로 흡수할지는 **결정 #L-5**, 렌더 동일). Stack 안 `Center`는 어차피 Stack 크기로 확장 | **기계적** | `anon_browse_test` | 2 |
+| L3 | `InlineSpinner(size:)` 신설 + 인라인 9곳 (각자 크기 그대로) | `lib/design/widgets/inline_spinner.dart`(신규) / `scan_annotation_screen:215-217`(18) · `pdf_page_select_screen:105-107`(18), `:185-188`(20) · `message_image_attachment:104-106`(`_Spinner` 22) · `attachment_viewer_screen:86-88`(16) · `iq_detail_screen:1299-1301`(16) · `board_detail_screen:682-684, 709-711`(20) · `settings_section:131-133`(20) | `InlineSpinner({required double size, double strokeWidth = 2}) → SizedBox(size, size, CPI(strokeWidth))`. `size`는 **필수**(기본값을 두면 나중에 9곳이 조용히 바뀐다). 주변 `Center`/`_placeholder` 유지. `_Spinner`는 삭제하고 2곳 호출을 `InlineSpinner(size: 22)`로 | **기계적** | `message_image_attachment_test` · `attachment_viewer_test` · `scan_annotation_screen_test` · `pdf_scan_flow_test` | 3 |
+| L4 | 게이트 로딩 브랜드 파랑 → `LoadingState(color: ColorTokens.accent)` | `version_gate_screens.dart:202` | `body: LoadingState(color: ColorTokens.accent)`. 테마 primary는 역할색이라 **색을 바꾸면 멘토 게이트가 초록이 된다** → 색 유지. `splash_screen.dart:25`는 `Column` 안 맨 스피너라 `Center`를 넣으면 레이아웃이 바뀜 → 문서화된 예외로 둔다 | **기계적** | `version_gate_shell_test` | 4 |
+| L5 | 맨 `const CircularProgressIndicator()` 3곳 — 리터럴 유지(예외 기록) | `notifications_screen:464`(이미 `Center` 안 삼항) · `attachment_viewer_screen:103`(`InteractiveViewer` 자식) · `:116`(`Image.network` `loadingBuilder`) | `LoadingState`로 감싸면 `Center`가 추가돼 자식 크기(36×36 → 제약 채움)·이중 센터링이 바뀐다 → **손대지 않음**. 위젯 doc 주석에 예외 3곳 명기 | (제외) | `attachment_viewer_test` | 5 |
+| L6 | `PrimaryButton`에 `loading:` 추가 vs 라벨 교체 9곳 | `primary_button.dart:11` · `secondary_button.dart:13` / `free_question_compose:117` · `board_write:302` · `login:136` · `profile_edit:113` · `account_delete:356, 401, 433` · `new_question:160` · `connection_notes:186` | `PrimaryButton({…, bool loading = false})` — `loading`이면 `onPressed: null` 강제 + busy 자식. 자식 모양이 **결정 #L-3**: (i) `Text(busyLabel ?? label)`(픽셀 동일이나 사이트별 busy 문구가 그대로 필요 → 통일 효과 미미) · (ii) `InlineSpinner(18)`만 · (iii) 스피너 + 라벨. (ii)/(iii)는 시각 변경 + 접근성 라벨 변화 | **결정** | `free_question_entry_test:344` · `board_post_create_rpc_test:567`이 `tap(find.text('등록 중…'))` — 문구가 사라지면 `Bad state: No element`(`warnIfMissed: false`는 경고만 끈다) → `find.byType(PrimaryButton)`으로 고쳐야 함. `action_button_color_test`는 idle/disabled 색만 단언 | 6 |
+| L7 | 린트: `skeleton.dart:44 withOpacity(t)` → `withValues(alpha: t)` | `lib/design/widgets/skeleton.dart:44` | 같은 0.35~0.70 펄스(`withOpacity`는 8bit 반올림, `withValues`는 float — 차이 ≤1/255, `theme.dart:61-62`가 이미 같은 trade). 프로덕션 소비자 0이어도 경고 없이 컴파일되게 | **기계적** | 없음 | 7 |
+| L8 | 전면 로더를 스피너 → `Skeleton`으로 재도장 | (L1 이후 `LoadingState` 한 곳) | **지금 하지 않는다.** L1/L2로 모든 (a)/(c) 사이트가 `LoadingState`를 거치게 되면 재도장은 파일 하나의 결정이 된다(`LoadingState({placeholder})` 또는 `LoadingState.list()`). 채택 시 24곳 중 어디를 스켈레톤으로 하고 어디를 스피너로 둘지(게이트·오버레이·댓글 섹션은 스피너 유지)도 골라야 한다 | **결정 #L-1** | `Skeleton`은 인스턴스마다 `AnimationController`(반복 애니메이션) — `pumpAndSettle`이 끝나지 않는 테스트가 생길 수 있어 화면별 검증 필요. `byType(CPI)` 단언 2건 갱신 | 8 |
+
+### 7-3. 결정 필요
+- **#L-1** 전면 로더 스피너 유지 vs 화면별 스켈레톤 설계 후 `LoadingState` 경유 재도장(L8, 시각 변경).
+- **#L-2** 인라인 스피너 크기 16/18/20/22 그대로(`InlineSpinner(size:)`) vs 하나로 스냅(예: 버튼 슬롯 18·자리표시 20 — 16·22 사이트 2~4px 변화).
+- **#L-3** `PrimaryButton.loading` 렌더 (i)/(ii)/(iii) — (ii)/(iii)는 시각 변경 + 테스트 2줄 수정.
+- **#L-4** busy 문구 5종(등록/수정/로그인/저장/처리 중) 통일 여부 — 카피 변경.
+- **#L-5** 섹션 로더 5곳·목록 꼬리 2곳의 래퍼(`Padding(12)`/`Padding(vertical:16)`)를 named 생성자로 흡수할지 — 렌더 동일, 이름·가독성 문제.
+- **#L-6** `LoadingState`가 `color:`를 노출할지(소비자는 `VersionGateLoading` 1곳) vs `version_gate_screens:202`를 `splash`처럼 리터럴로 둘지.
+
+### 7-4. 이 축에서 제외한 것
+- 깜빡임 가드 정렬(`mentor_inbox:163-167`·`question_room:218-222`는 `&& !snap.hasData`, 나머지 20곳은 `connectionState != done`만) — 스피너가 **언제** 보이는지가 바뀌는 동작 변경.
+- `RefreshIndicator` 6곳(pull-to-refresh) — 다른 어포던스. `LinearProgressIndicator` 0곳.
+- 텍스트형 로더 '불러오는 중…' 3곳(`mentor_detail_screen:348` · `new_question_screen:195` · `live_message_list:180`, `live_message_list_earlier_test:162-163`이 단언) — 스피너로 바꾸면 카피·시각 변경.
+- 로더 옆 오류 뷰 — §5.
+- `pubspec.yaml:8` `flutter: ">=3.22.0"` 하한이 실제(3.27+)보다 낮음 — 매니페스트 정정, UI 아님(§8 참고 항목).
+
+### 7-5. 재현
+```
+cd ssambership-app
+grep -rn "CircularProgressIndicator" lib --include=*.dart | wc -l                                    # 46
+grep -rln "CircularProgressIndicator" lib --include=*.dart | wc -l                                   # 31
+grep -rn "const Center(child: CircularProgressIndicator())" lib --include=*.dart | wc -l             # 25 (24 return + 1 Stack 자식)
+grep -rn "strokeWidth: 2" lib --include=*.dart | wc -l                                               # 9
+grep -rn "Skeleton(" lib --include=*.dart | grep -v "^lib/design/widgets/skeleton.dart"              # widget_gallery 3곳
+grep -rn "중…" lib --include=*.dart | grep "label:" | wc -l                                          # 9
+grep -rn "byType(CircularProgressIndicator)" test | wc -l                                            # 3
+```
 
 ## 8. 잔재 정리·일관성
 
