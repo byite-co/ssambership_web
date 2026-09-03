@@ -108,9 +108,15 @@ const PR2_LAYOUT_PILL_IMPORTERS = [
   "components/admin/AccountDetailHeader.tsx",
   "components/admin/AccountMentorTab.tsx",
   "components/admin/AccountStudentTab.tsx",
+  // PR-8 질문 · 연결노트 드릴다운(멘토별 화면 · 질문 상세 2라우트의 공통 틀 · 개별질문 탭 · 멘토별 질문 탭 · 대화 전문)
+  "app/(admin)/admin/(console)/question-rooms/[roomId]/page.tsx",
+  "components/admin/QuestionDetailScreen.tsx",
+  "components/admin/AccountIndividualQuestionsTab.tsx",
+  "components/admin/QuestionRoomThreadList.tsx",
+  "components/admin/QuestionConversationView.tsx",
 ];
 
-test("이관 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)·PR-5 세 화면·PR-6 분쟁 화면·PR-7 계정 화면뿐이다", () => {
+test("이관 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)·PR-5 세 화면·PR-6 분쟁 화면·PR-7 계정 화면·PR-8 질문 드릴다운뿐이다", () => {
   const files = [...walk(join(ROOT, "app", "(admin)"), []), ...walk(join(ROOT, "components", "admin"), [])];
   const importers = files
     .filter((f) => !/components\/admin\/(AdminPageLayout|AdminStatusPill)\.tsx$/.test(f))

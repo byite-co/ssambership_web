@@ -76,6 +76,18 @@ const FIXTURE: Record<
     values: ["escrowed", "assigned", "open", "claimed", "answered", "released", "expired", "refunded", "canceled"],
     inventory: true,
   },
+  "question_threads.status": {
+    // PR-8 등재 — 관리자 질문 드릴다운. baseline 032(주간 질문 한도 P0)의 이름 있는 제약.
+    values: ["pending", "answered", "confirmed", "open", "closed", "archived"],
+    constraint: { name: "question_threads_status_check", file: BASELINE },
+    inventory: true,
+  },
+  "question_threads.mastery_status": {
+    // PR-8 등재 — 오답노트·숙달 배지.
+    values: ["unknown", "wrong", "review", "mastered"],
+    constraint: { name: "question_threads_mastery_status_check", file: BASELINE },
+    inventory: true,
+  },
   "mentor_academic_record_change_requests.status": {
     // create table 인라인 CHECK(baseline 089) — 인벤토리로만 검증. PR-5 후속 등재(오너 확정).
     values: ["pending", "approved", "rejected", "resubmit_required"],
@@ -165,7 +177,7 @@ function checkValuesFromInventory(table: string, column: string): string[] | nul
 
 // ── ① 사전 == 픽스처 ───────────────────────────────────────────────────────────
 
-test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼 + PR-2 학교 등급·계열 2개 + PR-5 학적 변경·맞춤의뢰 주문 2개)", () => {
+test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼 + PR-2 학교 등급·계열 2개 + PR-5 학적 변경·맞춤의뢰 주문 2개 + PR-8 질문 스레드 상태·숙달 2개)", () => {
   assert.deepEqual(sorted(ADMIN_STATUS_DICTIONARY_KEYS), sorted(Object.keys(FIXTURE)));
 });
 

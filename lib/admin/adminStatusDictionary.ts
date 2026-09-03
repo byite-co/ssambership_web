@@ -129,6 +129,27 @@ const DICTIONARY = {
   },
 
   /**
+   * CHECK question_threads_status_check (baseline 032) — 6값. pending/answered/confirmed 가 현행 3단계, open/closed/archived 는 레거시 호환(컬럼 주석).
+   * PR-8 등재 — 관리자 질문 드릴다운(멘토별 화면 질문 탭 · 질문 상세 요약)이 쓴다. 학생·멘토 화면 라벨(`questionThreadStatus.ts`)은 그대로 둔다.
+   */
+  "question_threads.status": {
+    pending: { label: "답변 대기", tone: "warning" },
+    answered: { label: "답변 완료", tone: "info" },
+    confirmed: { label: "학생 확인", tone: "success" },
+    open: { label: "열림", tone: "neutral" },
+    closed: { label: "종료", tone: "neutral" },
+    archived: { label: "보관", tone: "neutral" },
+  },
+
+  /** CHECK question_threads_mastery_status_check (baseline) — 4값. 학생 본인만 토글하는 숙달 상태. PR-8 등재(배지 — `unknown` 은 배지 없음). */
+  "question_threads.mastery_status": {
+    unknown: { label: "미판정", tone: "neutral" },
+    wrong: { label: "오답", tone: "danger" },
+    review: { label: "복습 필요", tone: "warning" },
+    mastered: { label: "숙달", tone: "success" },
+  },
+
+  /**
    * CHECK 인라인(baseline 089 `status in (...)`) — 4값. 학적 변경 요청 화면(PR-5)의 탭 값과 1:1.
    * 재제출 값은 mentor_school_verifications 와 같은 `resubmit_required`(mentor_profiles 의 under_review 와 다르다).
    */

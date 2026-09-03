@@ -160,21 +160,26 @@ export function resolveAccountLastActivity(input: { updatedAt: string | null; la
 // ── 상세: 탭 · 헤더 상태축 ───────────────────────────────────────────────────
 
 export const ACCOUNT_DETAIL_TAB_PARAM = "tab";
-export const ACCOUNT_PR8_PLACEHOLDER = "PR-8에서 열립니다";
 
-export type AccountDetailTab = "mentor" | "students" | "student" | "individual" | "mentors" | "admin";
-export type AccountDetailTabDef = { value: AccountDetailTab; label: string; /** PR-8 로 미룬 탭 — 자리만 */ deferred: boolean };
+export type AccountDetailTab = "mentor" | "students" | "answers" | "student" | "individual" | "mentors" | "admin";
+export type AccountDetailTabDef = { value: AccountDetailTab; label: string };
 
+/**
+ * 역할별 탭 — PR-7 이 자리만 만들어 둔 탭은 PR-8 에서 열렸다(질문 · 연결노트 드릴다운, `questionDrilldownConsole.ts`):
+ * 학생 [개별질문]·[구독 멘토] / 멘토 [담당 학생]·[개별질문 답변]. 멘토의 [담당 학생]·학생의 [구독 멘토]는 같은 멘토별 화면
+ * (`/admin/question-rooms/<roomId>`)으로 이어진다 — 방향만 반대. [개별질문]·[개별질문 답변]은 같은 표(질문이 단위)다.
+ */
 const MENTOR_TABS: readonly AccountDetailTabDef[] = [
-  { value: "mentor", label: "멘토", deferred: false },
-  { value: "students", label: "담당 학생", deferred: true },
+  { value: "mentor", label: "멘토" },
+  { value: "students", label: "담당 학생" },
+  { value: "answers", label: "개별질문 답변" },
 ];
 const STUDENT_TABS: readonly AccountDetailTabDef[] = [
-  { value: "student", label: "학생", deferred: false },
-  { value: "individual", label: "개별질문", deferred: true },
-  { value: "mentors", label: "구독 멘토", deferred: true },
+  { value: "student", label: "학생" },
+  { value: "individual", label: "개별질문" },
+  { value: "mentors", label: "구독 멘토" },
 ];
-const ADMIN_TABS: readonly AccountDetailTabDef[] = [{ value: "admin", label: "관리자", deferred: false }];
+const ADMIN_TABS: readonly AccountDetailTabDef[] = [{ value: "admin", label: "관리자" }];
 
 export function accountDetailTabsForRole(role: string | null | undefined): readonly AccountDetailTabDef[] {
   const r = String(role ?? "").trim().toLowerCase();
@@ -515,6 +520,7 @@ const ACCOUNT_ACTION_LOG_LABELS: Readonly<Record<string, string>> = {
   mentor_settlement_hold_released: "정산 보류 해제",
   refund_approve: "환불 승인",
   refund_reject: "환불 반려",
+  question_body_viewed: "질문 본문 열람",
 };
 
 export function accountActionLogLabel(actionType: string | null | undefined): string {

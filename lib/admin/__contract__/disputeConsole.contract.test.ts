@@ -533,9 +533,11 @@ test("서버 조회: 오래된 것이 위(created_at asc) · 제재 탭 .in · h
     "mentorApprovalDocumentActions.ts",
     "mentorCapAdminActions.ts",
     "mentorSchoolVerificationReviewActions.ts",
+    // PR-8: 질문 첨부 뷰어의 서명 URL 재요청(읽기 전용 · DB 쓰기 없음) — 쓰기 액션이 아니다
+    "questionDrilldownDocumentActions.ts",
     "refundActions.ts",
     "schoolClassificationActions.ts",
-  ], "PR-6 는 서버 액션을 새로 만들지 않았다(기존 쓰기 경로만)");
+  ], "PR-6 는 서버 액션을 새로 만들지 않았다(기존 쓰기 경로만) · PR-8 은 읽기 전용 서명 URL 액션 하나");
   const pure = stripComments(read(CONSOLE));
   assert.ok(!/from "react"|from "@\//.test(pure), "순수 모듈은 React·@/ import 없음");
 });

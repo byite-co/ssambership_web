@@ -23,7 +23,6 @@ import {
   ACCOUNT_DETAIL_ACTIONS,
   ACCOUNT_DETAIL_TAB_PARAM,
   ACCOUNT_IDENTITY_UNVERIFIED_WARNING,
-  ACCOUNT_PR8_PLACEHOLDER,
   ACCOUNT_ROLE_PARAM,
   ACCOUNT_ROLE_TABS,
   ACCOUNT_ROLE_TAB_VALUES,
@@ -226,20 +225,25 @@ test("헤더 상태축은 계정·승인 둘(멘토) / 계정 하나(학생·관
   assert.ok(mentorTab.includes("schoolVerificationSectionLabel(") && mentorTab.includes("mentorActivitySectionLabel(activity.state)"), "라벨은 멘토 탭 섹션에");
 });
 
-test("상세 탭: 멘토=멘토·담당 학생(PR-8) / 학생=학생·개별질문(PR-8)·구독 멘토(PR-8) / 관리자=관리자 · 모르는 값은 첫 탭 · PR-8 자리는 안내만", () => {
-  assert.deepEqual(accountDetailTabsForRole("mentor").map((t) => [t.value, t.deferred]), [["mentor", false], ["students", true]]);
-  assert.deepEqual(accountDetailTabsForRole("student").map((t) => [t.value, t.deferred]), [["student", false], ["individual", true], ["mentors", true]]);
+test("상세 탭: 멘토=멘토·담당 학생·개별질문 답변 / 학생=학생·개별질문·구독 멘토 / 관리자=관리자 · 모르는 값은 첫 탭 · PR-8 자리표시자는 전부 열렸다", () => {
+  assert.deepEqual(accountDetailTabsForRole("mentor").map((t) => t.value), ["mentor", "students", "answers"]);
+  assert.deepEqual(accountDetailTabsForRole("student").map((t) => t.value), ["student", "individual", "mentors"]);
   assert.deepEqual(accountDetailTabsForRole("admin").map((t) => t.value), ["admin"]);
+  assert.deepEqual(accountDetailTabsForRole("mentor").map((t) => t.label), ["멘토", "담당 학생", "개별질문 답변"]);
+  assert.deepEqual(accountDetailTabsForRole("student").map((t) => t.label), ["학생", "개별질문", "구독 멘토"]);
+  for (const t of [...accountDetailTabsForRole("mentor"), ...accountDetailTabsForRole("student")]) assert.ok(!("deferred" in t), `${t.value}: PR-8 자리(deferred) 없음`);
   assert.equal(resolveAccountDetailTab("mentor", "students"), "students");
+  assert.equal(resolveAccountDetailTab("mentor", "answers"), "answers");
   assert.equal(resolveAccountDetailTab("mentor", "student"), "mentor", "다른 역할의 탭 값은 첫 탭");
   assert.equal(resolveAccountDetailTab("student", ""), "student");
-  assert.equal(ACCOUNT_PR8_PLACEHOLDER, "PR-8에서 열립니다");
   assert.equal(buildAccountDetailUrl(UUID, { tab: "mentor", capOk: true }), `/admin/users/${UUID}?tab=mentor&capOk=1`);
   assert.equal(accountDetailPath(UUID), `/admin/users/${UUID}`);
   assert.equal(ACCOUNT_DETAIL_TAB_PARAM, "tab");
   const page = stripComments(read(DETAIL_PAGE));
-  assert.ok(page.includes("tabDef.deferred ? (") && page.includes("<AccountDeferredTabNotice"), "PR-8 탭은 안내만");
-  assert.ok(!/question_threads|question_messages|connection_notes|individual_questions/.test(page), "질문·연결노트 드릴다운 없음(PR-8)");
+  assert.ok(!page.includes("AccountDeferredTabNotice") && !page.includes("PR-8에서 열립니다"), "PR-8 자리표시자 제거");
+  assert.ok(page.includes("<AccountIndividualQuestionsTab variant={drilldownRole}") && page.includes("<AccountRoomsTab variant={drilldownRole}"), "PR-8 드릴다운 탭 배선");
+  assert.ok(page.includes('(role === "student" && tab === "individual") || (role === "mentor" && tab === "answers")'), "개별질문 · 개별질문 답변은 같은 표(질문이 단위)");
+  assert.ok(page.includes('(role === "student" && tab === "mentors") || (role === "mentor" && tab === "students")'), "구독 멘토 · 담당 학생은 같은 표(멘토별 화면으로, 방향만 반대)");
 });
 
 // ── §4 멘토 탭: 요금제 없음 경고 · 정원 RPC · 내역 합 = 사용량 · 정산 계좌 경고 · 자동 판정 배지 ──

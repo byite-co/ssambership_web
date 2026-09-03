@@ -136,6 +136,8 @@ const DIRECT_ACCESS_EXEMPT: Record<string, string> = {
     "관리자 계정 상세 공통(PR-7 — 서비스 롤 전용: users 1행 + 처리자·관련자 표시명. 이중 requireRole admin 가드 뒤)",
   "lib/admin/accountMentorQueries.ts":
     "관리자 계정 상세 멘토 탭(PR-7 — 서비스 롤 전용: mentor_profiles 1행(프로필·정산 계좌·활동 상태). 이중 requireRole admin 가드 뒤)",
+  "lib/admin/questionDrilldownQueries.ts":
+    "관리자 질문·연결노트 드릴다운(PR-8 — 서비스 롤 전용: users 실명·닉네임·역할(학생 실명 · 멘토 닉네임 규칙) + mentor_profiles.teaching_subjects(방 목록 과목). 이중 requireRole admin 가드 뒤)",
   "lib/community/communityAuthorLabels.ts":
     "알려진 열화(범위 밖): 타인 행은 RLS 0행 → 폴백 라벨. 학생 nickname 은 어떤 뷰에도 없어 마이그레이션 필요",
   "app/(student)/settings/blocks/page.tsx":
