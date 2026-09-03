@@ -44,8 +44,11 @@ import {
   buildCommunityContentRestoreSummary,
   buildCommunityContentSearchOr,
   buildCommunityContentTypeTabUrl,
+  COMMUNITY_CONTENT_DELETED_BY_LABELS,
   communityContentActionButtonId,
   communityContentAvailableActions,
+  communityContentDeletedBy,
+  communityContentDeletedByLabel,
   communityContentEffectiveStatus,
   communityContentEmptyVariant,
   communityContentFlashOkMessage,
@@ -328,4 +331,32 @@ test("UI 카피 금지어 없음(선생님·강사님·수강생·과외·alert)
       assert.ok(!code.includes(banned), `${rel}: 금지 문구 ${banned}`);
     }
   }
+});
+
+// ── 누가 지웠나 — deleted_by 배지(PR-W3 · DB-3 SQL 196) ──────────────────────────
+
+test("deleted_by 판정: 작성자 본인이면 작성자 삭제(숏폼은 creator_id 도 본인) · 다른 계정이면 관리자 삭제 · 삭제 행이 아니거나 기록이 없으면 null", () => {
+  assert.equal(communityContentDeletedBy({ deletedAt: "2026-09-03T00:00:00Z", deletedBy: "u1", authorId: "u1" }), "author");
+  assert.equal(communityContentDeletedBy({ deletedAt: "2026-09-03T00:00:00Z", deletedBy: " u1 ", authorId: "u1" }), "author", "공백 정규화");
+  assert.equal(communityContentDeletedBy({ deletedAt: "2026-09-03T00:00:00Z", deletedBy: "c1", authorId: "u1", creatorId: "c1" }), "author", "숏폼 creator 는 본인(sf_update_own · RPC 와 같은 정의)");
+  assert.equal(communityContentDeletedBy({ deletedAt: "2026-09-03T00:00:00Z", deletedBy: "admin", authorId: "u1" }), "admin");
+  assert.equal(communityContentDeletedBy({ deletedAt: "2026-09-03T00:00:00Z", deletedBy: "admin", authorId: "u1", creatorId: "c1" }), "admin");
+  assert.equal(communityContentDeletedBy({ deletedAt: null, deletedBy: "u1", authorId: "u1" }), null, "삭제 행이 아니면 null");
+  assert.equal(communityContentDeletedBy({ deletedAt: "2026-09-03T00:00:00Z", deletedBy: null, authorId: "u1" }), null, "deleted_by 기록 없음(194 이전 · F6 글 삭제)");
+  assert.equal(communityContentDeletedBy({ deletedAt: "2026-09-03T00:00:00Z", deletedBy: "u1", authorId: "" }), "admin", "작성자 id 를 모르면 본인으로 보지 않는다");
+  assert.deepEqual(COMMUNITY_CONTENT_DELETED_BY_LABELS, { author: "작성자 삭제", admin: "관리자 삭제" });
+  assert.equal(communityContentDeletedByLabel("author"), "작성자 삭제");
+  assert.equal(communityContentDeletedByLabel("admin"), "관리자 삭제");
+  assert.equal(communityContentDeletedByLabel(null), null);
+});
+
+test("deleted_by 배선: 조회가 세 종류 전부 deleted_by(숏폼은 creator_id 도)를 읽어 행에 싣고, 목록이 삭제됨 배지 옆에 작성자/관리자 삭제를 그린다", () => {
+  const q = stripComments(read(QUERIES));
+  assert.equal((q.match(/, deleted_by"/g) ?? []).length, 3, "글·숏폼·댓글 컬럼 목록 전부 deleted_by");
+  assert.ok(q.includes('"id, author_id, creator_id, author_label'), "숏폼은 creator_id 도 읽는다");
+  assert.ok(q.includes('deletedBy: communityContentDeletedBy({ deletedAt, deletedBy: row.deleted_by, authorId, creatorId: type === "shortforms" ? row.creator_id : null })'));
+  const list = stripComments(read(LIST));
+  assert.ok(list.includes("data-community-content-deleted-by={item.deletedBy}"), "삭제 주체 배지 표식");
+  assert.ok(list.includes("communityContentDeletedByLabel(item.deletedBy)"), "라벨은 콘솔 규칙에서");
+  assert.ok(!list.includes('"작성자 삭제"') && !list.includes('"관리자 삭제"'), "문구 리터럴은 콘솔 정본에만");
 });

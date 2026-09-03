@@ -104,6 +104,29 @@ do $$ begin
   end if;
 end $$;
 
+-- realtime 인가 대역 — Broadcast/Presence private 채널의 RLS 판정 테이블(realtime.messages) + realtime.topic().
+--   부모 실측(2026-09-03): owner supabase_realtime_admin · RLS on · 정책 0 · anon/authenticated/service_role SELECT·INSERT·UPDATE ·
+--   topic() = select nullif(current_setting('realtime.topic', true), '')::text. 197(admin:* 토픽 정책)이 이 객체를 전제한다.
+--   Realtime 서버는 join 검사 트랜잭션에서 realtime.topic 을 set_config 로 넣고 SELECT/INSERT 를 시도한다 — 로컬 fixture 도 같은 방식으로 재현한다.
+create schema if not exists realtime;
+create table if not exists realtime.messages (
+  topic text not null,
+  extension text not null,
+  payload jsonb,
+  event text,
+  private boolean default false,
+  updated_at timestamp without time zone not null default now(),
+  inserted_at timestamp without time zone not null default now(),
+  id uuid not null default gen_random_uuid(),
+  binary_payload bytea,
+  primary key (id, inserted_at)
+);
+alter table realtime.messages enable row level security;
+create or replace function realtime.topic() returns text language sql stable as
+$$ select nullif(current_setting('realtime.topic', true), '')::text $$;
+grant usage on schema realtime to postgres, anon, authenticated, service_role;
+grant select, insert, update on realtime.messages to postgres, anon, authenticated, service_role;
+
 -- pg_cron 대역 (payout scheduler 등이 cron.schedule 호출 시)
 create schema if not exists cron;
 create table if not exists cron.job (jobid bigserial primary key, schedule text, command text, jobname text);

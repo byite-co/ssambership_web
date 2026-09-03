@@ -250,7 +250,9 @@ test("presence 문구: 목록 배지 `박운영 심사 중` · 상세 `박운영
 test("presence 배선: Realtime 채널 track/untrack 만(DB 쓰기 0) · 구독 실패는 unavailable 로 조용히 · 배지·안내·확인 모달 한 줄 · 결정 버튼 잠금 없음", () => {
   const provider = stripComments(read(PROVIDER));
   assert.ok(read(PROVIDER).startsWith('"use client"'));
-  assert.ok(provider.includes("supabase.channel(MENTOR_APPROVAL_PRESENCE_CHANNEL, { config: { presence: { key: adminId } } })"));
+  assert.ok(provider.includes("supabase.channel(MENTOR_APPROVAL_PRESENCE_CHANNEL, { config: { presence: { key: adminId }, private: true } })"), "PR-W3: private 채널(DB-3 SQL 197 realtime.messages 정책)");
+  assert.ok(/supabase\.realtime\s*\.setAuth\(\)\s*\.then\(/.test(provider), "구독 전 supabase.realtime.setAuth() — private 채널 인가는 JWT 로 판정");
+  assert.ok(!/\{ config: \{ presence: \{ key: adminId \} \} \}/.test(provider), "public 채널 구성 잔존 0");
   assert.ok(provider.includes("channel.track(buildPresencePayload(") && provider.includes("channel.untrack()"));
   assert.ok(provider.includes('channel.on("presence", { event: "sync" }'));
   assert.ok(!/\.from\(|\.insert\(|\.update\(|\.upsert\(|\.rpc\(/.test(provider), "DB 쓰기·읽기 0 — Presence 만");

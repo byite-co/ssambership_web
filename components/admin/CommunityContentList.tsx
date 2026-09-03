@@ -4,6 +4,7 @@
  *
  * - 검색·탭·페이지는 전부 URL(서버) 기준. 검색 form 은 현재 종류가 기본(글)이 아닐 때 hidden `type`, 현재 탭이 기본(전체)이 아닐 때 hidden `status` 를 싣는다.
  * - 상태 배지: 게시·숨김·임시는 종류별 사전(`AdminStatusPill`) · 삭제됨은 `deleted_at` 판정이라 화면 배지(CHECK 가 deleted 를 막는다).
+ *   삭제됨 옆에 누가 지웠는지 — `작성자 삭제`(deleted_by = 작성자 · RPC `soft_delete_own_content`) / `관리자 삭제`(콘솔) — 를 함께 보인다(PR-W3 · DB-3 SQL 196).
  * - 신고 건수 → 신고 검수 목록(대상 ID 검색) · 작성자 → 계정 상세 · 제목 → 공개 화면(새 탭).
  * - 조치는 행마다 `CommunityContentActionButtons`(확인 절차 — 종류별 삭제 방식 명시).
  */
@@ -29,6 +30,7 @@ import {
   COMMUNITY_CONTENT_TYPE_TABS,
   buildCommunityContentListUrl,
   buildCommunityContentTypeTabUrl,
+  communityContentDeletedByLabel,
   communityContentEmptyVariant,
   communityContentPublicPath,
   communityContentReportsUrl,
@@ -191,7 +193,14 @@ export function CommunityContentList({ items, params, type, tab, counts, typeCou
                       </td>
                       <td className="px-3 py-3 align-top">
                         {item.status === "deleted" ? (
-                          <StatusBadge label={COMMUNITY_CONTENT_DELETED_LABEL} tone="danger" size="sm" />
+                          <span className="inline-flex flex-wrap items-center gap-1">
+                            <StatusBadge label={COMMUNITY_CONTENT_DELETED_LABEL} tone="danger" size="sm" />
+                            {item.deletedBy ? (
+                              <span data-community-content-deleted-by={item.deletedBy}>
+                                <StatusBadge label={communityContentDeletedByLabel(item.deletedBy) ?? ""} tone={item.deletedBy === "author" ? "neutral" : "warning"} size="sm" />
+                              </span>
+                            ) : null}
+                          </span>
                         ) : (
                           <AdminStatusPill table={table} column="status" value={item.rawStatus} size="sm" />
                         )}
