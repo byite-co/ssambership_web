@@ -13,7 +13,7 @@
 - **Frontend:** Next.js 16 (App Router) + React 19 + TypeScript + Tailwind CSS 4
 - **Backend:** Supabase (Auth, Postgres, Storage, RLS)
 - **결제:** 토스페이먼츠 (`@tosspayments/tosspayments-sdk`)
-- **차트:** recharts (관리자 대시보드)
+- **차트:** recharts (멘토 수익·정산 차트 — 관리자 대시보드는 PR-12 에서 차트 없이 오늘 할 일·현황·최근 활동 세 블록)
 - **경로:** `D:\dev\ssambership_web`
 
 ## 브랜드 컬러 (변경 금지)

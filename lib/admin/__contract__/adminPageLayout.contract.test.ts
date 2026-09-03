@@ -133,9 +133,12 @@ const PR2_LAYOUT_PILL_IMPORTERS = [
   "app/(admin)/admin/(console)/school-classifications/page.tsx",
   "components/admin/SchoolClassificationPanels.tsx",
   "app/(admin)/admin/(console)/mentor-activity/page.tsx",
+  // PR-12 대시보드(오늘 할 일 · 현황 · 최근 활동) · SLA 대시보드(건별 기한 4종 — 상태 배지)
+  "app/(admin)/admin/(console)/dashboard/page.tsx",
+  "app/(admin)/admin/(console)/sla/page.tsx",
 ];
 
-test("이관 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)·PR-5 세 화면·PR-6 분쟁 화면·PR-7 계정 화면·PR-8 질문 드릴다운·PR-9 정산·충전 화면·PR-10 공지·감사 로그·설정 화면·PR-11 커뮤니티·리뷰·등급 분류·멘토 활동 화면뿐이다", () => {
+test("이관 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)·PR-5 세 화면·PR-6 분쟁 화면·PR-7 계정 화면·PR-8 질문 드릴다운·PR-9 정산·충전 화면·PR-10 공지·감사 로그·설정 화면·PR-11 커뮤니티·리뷰·등급 분류·멘토 활동 화면·PR-12 대시보드·SLA 화면뿐이다", () => {
   const files = [...walk(join(ROOT, "app", "(admin)"), []), ...walk(join(ROOT, "components", "admin"), [])];
   const importers = files
     .filter((f) => !/components\/admin\/(AdminPageLayout|AdminStatusPill)\.tsx$/.test(f))
@@ -145,10 +148,13 @@ test("이관 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자
   assert.deepEqual(importers, [...PR2_LAYOUT_PILL_IMPORTERS].sort());
 });
 
-test("PageScaffold 를 쓰는 관리자 화면은 1곳(SLA — PR-12)이다(PR-3 환불 목록·상세 2화면 · PR-5 신고 상세·맞춤의뢰 주문 2화면 · PR-6 분쟁 상세 1화면 · PR-7 계정 목록 + 구 멘토 승인 상세(리다이렉트) 2화면 · PR-9 정산 관리 1화면 · PR-10 공지·감사 로그 2화면 · PR-11 리뷰 목록·상세·멘토 활동 3화면 이관)", () => {
+test("PageScaffold 를 쓰는 관리자 화면은 0곳이다 — 콘솔 28라우트 전부 공통 부품 위(PR-12 에서 마지막 SLA 이관 · 대시보드·로그인은 처음부터 PageScaffold 미사용)", () => {
   const files = walk(join(ROOT, "app", "(admin)"), []);
   const users = files.filter((f) => readFileSync(f, "utf8").includes("<PageScaffold")).map((f) => f.slice(ROOT.length + 1).replace(/\\/g, "/"));
-  assert.equal(users.length, 1, users.join("\n"));
+  assert.equal(users.length, 0, users.join("\n"));
+  const importers = files.filter((f) => stripComments(readFileSync(f, "utf8")).includes("components/shell/PageScaffold")).map((f) => f.slice(ROOT.length + 1).replace(/\\/g, "/"));
+  assert.deepEqual(importers, [], "관리자 라우트 트리에 PageScaffold import 0");
+  assert.ok(!users.some((f) => /\/(sla|dashboard)\//.test(f)), "PR-12 SLA·대시보드는 PageScaffold 를 쓰지 않는다");
   assert.ok(!users.some((f) => /\/(reviews|mentor-activity|community-content|school-classifications)\//.test(f)), "PR-11 네 화면은 PageScaffold 를 쓰지 않는다");
   assert.ok(!users.some((f) => /\/(notices|audit-logs|settings)\//.test(f)), "PR-10 공지·감사 로그·설정은 PageScaffold 를 쓰지 않는다");
   assert.ok(!users.some((f) => /\/settlements\//.test(f)), "PR-9 정산 관리는 PageScaffold 를 쓰지 않는다(준비 중 카드 제거)");
