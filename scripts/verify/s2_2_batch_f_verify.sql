@@ -380,9 +380,9 @@ begin
     v_ok := (v_res->>'ok')::boolean
             and (select count(*) from public.mentor_plans
                   where mentor_id = v_mentor
-                    and ((plan_tier = 'limited'  and amount_cents = 2990000  and cap_weight = 1.0)
-                      or (plan_tier = 'standard' and amount_cents = 8490000  and cap_weight = 2.5)
-                      or (plan_tier = 'premium'  and amount_cents = 17490000 and cap_weight = 4.5))) = 3;
+                    and ((plan_tier = 'limited'  and amount_cents = 2990000  and cap_weight = public.subscription_cap_weight('limited'))
+                      or (plan_tier = 'standard' and amount_cents = 8490000  and cap_weight = public.subscription_cap_weight('standard'))
+                      or (plan_tier = 'premium'  and amount_cents = 17490000 and cap_weight = public.subscription_cap_weight('premium')))) = 3;  -- DB-1(190): cap_weight 는 함수 정본
     v_det := coalesce(v_res->>'code','ok');
     perform set_config('request.jwt.claims', json_build_object('sub', v_mentor, 'role', 'authenticated')::text, true);
     execute 'set local role authenticated';

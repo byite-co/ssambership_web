@@ -332,9 +332,9 @@ begin
     if v_ok then
       v_ok := (select count(*) from public.mentor_plans mp
                 where mp.mentor_id = v_mentor
-                  and ((mp.plan_tier='limited' and mp.amount_cents=3500000 and mp.cap_weight=1.0)
-                       or (mp.plan_tier='standard' and mp.amount_cents=9900000 and mp.cap_weight=2.5)
-                       or (mp.plan_tier='premium' and mp.amount_cents=20000000 and mp.cap_weight=4.5))) = 3;
+                  and ((mp.plan_tier='limited' and mp.amount_cents=3500000 and mp.cap_weight=public.subscription_cap_weight('limited'))
+                       or (mp.plan_tier='standard' and mp.amount_cents=9900000 and mp.cap_weight=public.subscription_cap_weight('standard'))
+                       or (mp.plan_tier='premium' and mp.amount_cents=20000000 and mp.cap_weight=public.subscription_cap_weight('premium')))) = 3;  -- DB-1(190): cap_weight 는 함수 정본
       v_det := v_det || ' | ×100 저장 + cap 강제';
       perform set_config('request.jwt.claims', json_build_object('sub', v_student, 'role', 'authenticated')::text, true);
       execute 'set local role authenticated';
