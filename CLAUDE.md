@@ -80,6 +80,7 @@
 /admin/disputes                신고·분쟁
 /admin/refunds                 환불
 /admin/notices                 공지·이벤트
+/admin/deletions               탈퇴 요청 현황(조회 전용) · /admin/deletions/[id] 9단계 타임라인
 ```
 
 레거시 단축: `/dashboard` → 멘토/관리자 role별 redirect 페이지 참고

@@ -67,20 +67,21 @@ const MOCK: AdminTodoCountsInput = {
   refund: { pending: 4 },
   dispute: { open: 6, under_review: 7 },
   topup: { pending: 8 },
+  accountDeletion: { stalled: 2 },
 };
 
 // ── ① 8칸 = 각 모듈 건수 ─────────────────────────────────────────────────────
 
-test("8칸 순서·키: 승인 대기 · 미확정 등급 · 미답변 질문 · 미처리 신고 / 환불 요청 · 분쟁 · 충전 대기 · 이탈 의심", () => {
-  assert.deepEqual([...ADMIN_TODO_KEYS], ["mentor_approval", "school_tier_unconfirmed", "unanswered_questions", "content_reports", "refunds", "disputes", "topups", "abandonment"]);
+test("9칸 순서·키: 승인 대기 · 미확정 등급 · 미답변 질문 · 미처리 신고 / 환불 요청 · 분쟁 · 충전 대기 · 이탈 의심 / 탈퇴 멈춤(PR-13)", () => {
+  assert.deepEqual([...ADMIN_TODO_KEYS], ["mentor_approval", "school_tier_unconfirmed", "unanswered_questions", "content_reports", "refunds", "disputes", "topups", "abandonment", "deletion_stalled"]);
   assert.deepEqual(
     ADMIN_TODO_DEFINITIONS.map((d) => d.label),
-    ["승인 대기", "미확정 등급", "미답변 질문", "미처리 신고", "환불 요청", "분쟁", "충전 대기", "이탈 의심"]
+    ["승인 대기", "미확정 등급", "미답변 질문", "미처리 신고", "환불 요청", "분쟁", "충전 대기", "이탈 의심", "탈퇴 멈춤"]
   );
   assert.deepEqual(ADMIN_TODO_DEFINITIONS.map((d) => d.key), [...ADMIN_TODO_KEYS]);
 });
 
-test("건수 일치 ★: 8칸 숫자 = 각 화면 모듈 함수 값(모킹) — 승인 pending · 신고 pending · 환불 pending · 분쟁 open+under_review · 충전 pending · 미답변 합 · 이탈 abandoned · 미확정 등급", () => {
+test("건수 일치 ★: 9칸 숫자 = 각 화면 모듈 함수 값(모킹) — 승인 pending · 신고 pending · 환불 pending · 분쟁 open+under_review · 충전 pending · 미답변 합 · 이탈 abandoned · 미확정 등급 · 탈퇴 멈춤", () => {
   const cards = buildAdminTodoCards(MOCK);
   const byKey = Object.fromEntries(cards.map((c) => [c.key, c.count]));
   assert.equal(byKey.mentor_approval, MOCK.mentorApproval.pending);
@@ -91,7 +92,8 @@ test("건수 일치 ★: 8칸 숫자 = 각 화면 모듈 함수 값(모킹) — 
   assert.equal(byKey.disputes, MOCK.dispute.open + MOCK.dispute.under_review);
   assert.equal(byKey.topups, MOCK.topup.pending);
   assert.equal(byKey.abandonment, MOCK.mentorActivity.counts.abandoned);
-  assert.deepEqual(cards.map((c) => c.count), [1, 0, 5, 3, 4, 13, 8, 2]);
+  assert.equal(byKey.deletion_stalled, MOCK.accountDeletion.stalled);
+  assert.deepEqual(cards.map((c) => c.count), [1, 0, 5, 3, 4, 13, 8, 2, 2]);
   // 음수·NaN 은 0 으로(화면 탭도 0 이하를 보여주지 않는다)
   assert.equal(adminTodoCount("refunds", { ...MOCK, refund: { pending: -3 } }), 0);
   assert.equal(adminTodoCount("disputes", { ...MOCK, dispute: { open: Number.NaN, under_review: 2 } }), 2);
@@ -116,6 +118,8 @@ test("조회 모듈: 각 화면의 건수 함수를 그대로 호출하고 그 �
   assert.ok(q.includes("counts: { abandoned: mentorActivity.counts.abandoned }"));
   assert.ok(q.includes("mentorApproval: { pending: mentorApproval.pending }") && q.includes("contentReport: { pending: contentReport.pending }"));
   assert.ok(q.includes("refund: { pending: refund.pending }") && q.includes("dispute: { open: dispute.open, under_review: dispute.under_review }") && q.includes("topup: { pending: topup.pending }"));
+  assert.ok(q.includes("countAccountDeletionStalled(now.toISOString())") && q.includes("accountDeletion: { stalled: deletionStalled ?? 0 }"), "탈퇴 멈춤 = 탈퇴 요청 화면의 집계 함수(PR-13)");
+  assert.ok(!q.includes('.from("account_deletion_jobs")'), "account_deletion_jobs 직접 조회 없음 — 화면 모듈 함수 재사용");
   assert.ok(q.includes('.eq("status", "pending").is("reviewed_by", null)'), "미확정 등급 = pending + reviewed_by NULL(지시서 §1-2 표)");
   for (const table of ["refunds", "content_reports", "disputes", "paysync_invoices", "question_threads", "mentor_student_rooms", "mentor_activity_events"]) {
     assert.ok(!q.includes(`.from("${table}")`), `${table} 직접 조회 없음 — 화면 모듈 함수 재사용`);
@@ -146,7 +150,7 @@ test("0 이면 quiet(회색 · 보통 굵기) · 1 이상이면 attention(굵게
 
 // ── ③ 링크 목적지 8개 ────────────────────────────────────────────────────────
 
-test("링크 목적지 8개 — 그 화면의 실제 키(멘토 활동은 status · 지시서 표기 tab= 은 그 화면이 읽지 않는다)", () => {
+test("링크 목적지 9개 — 그 화면의 실제 키(멘토 활동은 status · 지시서 표기 tab= 은 그 화면이 읽지 않는다 · 탈퇴 멈춤은 탈퇴 요청 진행 중 탭)", () => {
   assert.deepEqual(
     ADMIN_TODO_DEFINITIONS.map((d) => d.href),
     [
@@ -158,6 +162,7 @@ test("링크 목적지 8개 — 그 화면의 실제 키(멘토 활동은 status
       "/admin/disputes",
       "/admin/topups?status=pending",
       "/admin/mentor-activity?status=abandoned",
+      "/admin/deletions",
     ]
   );
   assert.equal(resolveMentorActivityTab("abandoned"), "abandoned", "status=abandoned 가 이탈 의심 탭으로 열린다");

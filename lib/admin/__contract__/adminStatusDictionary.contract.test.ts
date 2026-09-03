@@ -26,6 +26,7 @@ import {
   adminStatusAllowedValues,
   resolveAdminStatus,
 } from "../adminStatusDictionary.ts";
+import { ACCOUNT_DELETION_ACTIVE_STATES, ACCOUNT_DELETION_TERMINAL_STATES } from "../../account/accountDeletionJobStates.ts";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
@@ -163,6 +164,11 @@ const FIXTURE: Record<
     values: ["executing", "completed"],
     inventory: true,
   },
+  "account_deletion_jobs.state": {
+    // PR-13 탈퇴 요청 현황 — 151 create table 인라인 CHECK(인벤토리 account_deletion_jobs_state_check). 활성 6값은 accountDeletionJobStates.ts 미러와 같다(아래 전용 테스트).
+    values: ["pending", "locked", "purging", "storage_purged", "finalized", "auth_soft_deleted", "completed", "canceled", "failed"],
+    inventory: true,
+  },
 };
 
 const sorted = (xs: Iterable<string>) => [...xs].sort();
@@ -212,7 +218,7 @@ function checkValuesFromInventory(table: string, column: string): string[] | nul
 
 // ── ① 사전 == 픽스처 ───────────────────────────────────────────────────────────
 
-test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼 + PR-2 학교 등급·계열 2개 + PR-5 학적 변경·맞춤의뢰 주문 2개 + PR-8 질문 스레드 상태·숙달 2개 + PR-9 충전 주문·지급 실행 2개 + PR-10 공지 대상 1개 + PR-11 리뷰 상태·커뮤니티 3테이블 상태 4개)", () => {
+test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼 + PR-2 학교 등급·계열 2개 + PR-5 학적 변경·맞춤의뢰 주문 2개 + PR-8 질문 스레드 상태·숙달 2개 + PR-9 충전 주문·지급 실행 2개 + PR-10 공지 대상 1개 + PR-11 리뷰 상태·커뮤니티 3테이블 상태 4개 + PR-13 탈퇴 job 상태 1개)", () => {
   assert.deepEqual(sorted(ADMIN_STATUS_DICTIONARY_KEYS), sorted(Object.keys(FIXTURE)));
 });
 
@@ -286,6 +292,17 @@ test("paysync_invoices.status: 20260830100100 인라인 CHECK 4값 == 사전 · 
     ["대기", "완료", "만료", "취소"]
   );
   assert.equal(resolveAdminStatus("paysync_invoices", "status", "paid").risk, "high", "완료 = 캐시 적립 완료(자금 확정)");
+});
+
+test("account_deletion_jobs.state: 151 인라인 CHECK 9값 == 사전 · 라벨은 지시서 사전(대기·잠금·삭제 중·파일 삭제됨·마무리·인증 해제·완료·취소·실패) · 활성 6값 = accountDeletionJobStates 미러", () => {
+  const sql = read("supabase/migrations/20260720081121_p1_10_account_deletion_saga_151.sql");
+  assert.ok(sql.includes("check (state in ('pending','locked','purging','storage_purged','finalized','auth_soft_deleted','completed','canceled','failed'))"), "151 인라인 CHECK 원문");
+  assert.deepEqual(
+    ["pending", "locked", "purging", "storage_purged", "finalized", "auth_soft_deleted", "completed", "canceled", "failed"].map((v) => resolveAdminStatus("account_deletion_jobs", "state", v).label),
+    ["대기", "잠금", "삭제 중", "파일 삭제됨", "마무리", "인증 해제", "완료", "취소", "실패"]
+  );
+  assert.deepEqual(sorted([...ACCOUNT_DELETION_ACTIVE_STATES, ...ACCOUNT_DELETION_TERMINAL_STATES]), sorted(adminStatusAllowedValues("account_deletion_jobs", "state")), "활성 + 종료 = 사전 전체");
+  assert.equal(resolveAdminStatus("account_deletion_jobs", "state", "completed").risk, "high", "완료 = 익명화·auth 해제 확정(되돌릴 수 없음)");
 });
 
 test("payout_runs.status: baseline 인라인 CHECK 2값 == 사전(실행 중·완료)", () => {

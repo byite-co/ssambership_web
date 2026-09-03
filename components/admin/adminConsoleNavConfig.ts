@@ -3,6 +3,8 @@ export const ADMIN_CONSOLE_NAV = [
   { href: "/admin/dashboard", label: "대시보드", icon: "dashboard" },
   { href: "/admin/mentor-approval", label: "멘토 승인", icon: "mentor" },
   { href: "/admin/users", label: "계정 관리", icon: "mentor" },
+  // PR-13: 탈퇴 처리 파이프라인 감시(조회 전용) — 계정 관리 바로 아래
+  { href: "/admin/deletions", label: "탈퇴 요청", icon: "mentor" },
   { href: "/admin/mentor-activity", label: "멘토 활동", icon: "mentor" },
   { href: "/admin/academic-record-changes", label: "학적변경 요청", icon: "mentor" },
   { href: "/admin/school-classifications", label: "등급 분류", icon: "settings" },

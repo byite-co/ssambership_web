@@ -167,6 +167,8 @@ const FIXED: Record<string, AdminActionTypeEntry> = {
   payout_run_execute: entry("정산 실행", "settlement"),
   // 질문 열람(questionDrilldownConsole.ts — PR-8 원칙 3)
   question_body_viewed: entry("질문 본문 열람", "question_view"),
+  // 질문 내보내기(questionExportConsole.ts — PR-13 §2-4 · 미성년자 대화 반출 기록)
+  question_export: entry("질문 내보내기(CSV)", "question_view"),
   // 시스템 설정(adminTopupPackageActions.ts)
   topup_package_activated: entry("충전 패키지 활성화", "settings"),
   topup_package_deactivated: entry("충전 패키지 비활성화", "settings"),

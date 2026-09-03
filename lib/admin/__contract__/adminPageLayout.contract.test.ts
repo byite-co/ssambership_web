@@ -136,9 +136,14 @@ const PR2_LAYOUT_PILL_IMPORTERS = [
   // PR-12 대시보드(오늘 할 일 · 현황 · 최근 활동) · SLA 대시보드(건별 기한 4종 — 상태 배지)
   "app/(admin)/admin/(console)/dashboard/page.tsx",
   "app/(admin)/admin/(console)/sla/page.tsx",
+  // PR-13 탈퇴 요청 현황(목록 · 상세 — 상태 배지는 account_deletion_jobs.state 사전)
+  "app/(admin)/admin/(console)/deletions/page.tsx",
+  "app/(admin)/admin/(console)/deletions/[id]/page.tsx",
+  "components/admin/AccountDeletionQueueTable.tsx",
+  "components/admin/AccountDeletionJobDetail.tsx",
 ];
 
-test("이관 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)·PR-5 세 화면·PR-6 분쟁 화면·PR-7 계정 화면·PR-8 질문 드릴다운·PR-9 정산·충전 화면·PR-10 공지·감사 로그·설정 화면·PR-11 커뮤니티·리뷰·등급 분류·멘토 활동 화면·PR-12 대시보드·SLA 화면뿐이다", () => {
+test("이관 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)·PR-5 세 화면·PR-6 분쟁 화면·PR-7 계정 화면·PR-8 질문 드릴다운·PR-9 정산·충전 화면·PR-10 공지·감사 로그·설정 화면·PR-11 커뮤니티·리뷰·등급 분류·멘토 활동 화면·PR-12 대시보드·SLA 화면·PR-13 탈퇴 요청 화면뿐이다", () => {
   const files = [...walk(join(ROOT, "app", "(admin)"), []), ...walk(join(ROOT, "components", "admin"), [])];
   const importers = files
     .filter((f) => !/components\/admin\/(AdminPageLayout|AdminStatusPill)\.tsx$/.test(f))
