@@ -28,6 +28,7 @@ import {
   type MentorActivityListItem,
   type MentorActivityTab,
 } from "@/lib/admin/mentorActivityConsole";
+import { SLA_BASE_PATH } from "@/lib/admin/slaConsole";
 import type { MentorActivityTabCounts } from "@/lib/admin/mentorActivityQueries";
 import { formatKoreanDate } from "@/lib/utils/formatDisplay";
 import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
@@ -136,7 +137,10 @@ export function MentorActivityList({ items, params, tab, counts, totalCount, err
                         {item.studentCount}명
                       </td>
                       <td className={cn("whitespace-nowrap px-3 py-3 align-top text-xs tabular-nums", item.unansweredCount > 0 ? "font-extrabold text-red-700" : "text-slate-600")}>
-                        {item.unansweredCount}건
+                        {/* PR-12 §2-3: 멘토별 집계(이 화면) ↔ 건별 기한(SLA) — 미답변 수에서 SLA 대시보드로 */}
+                        <Link href={SLA_BASE_PATH} className="hover:underline" prefetch={false} title="SLA 대시보드(건별 기한)">
+                          {item.unansweredCount}건
+                        </Link>
                       </td>
                       <td className="whitespace-nowrap px-3 py-3 align-top">
                         <span

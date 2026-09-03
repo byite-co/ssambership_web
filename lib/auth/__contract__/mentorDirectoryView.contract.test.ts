@@ -117,7 +117,10 @@ const DIRECT_ACCESS_EXEMPT: Record<string, string> = {
   "lib/admin/accountStatusActions.ts": "관리자 서비스 롤 계정 상태 조치(outboundSurface 면제와 동일)",
   "lib/admin/accountStatusQueries.ts": "관리자 계정 상태 콘솔 조회(admin 클라이언트)",
   "lib/admin/accountStatusCore.ts": "관리자 서비스 롤 계정 상태 코어",
-  "lib/admin/adminDashboardExtended.ts": "관리자 대시보드 집계(admin 클라이언트)",
+  "lib/admin/adminDashboardQueries.ts":
+    "PR-12 대시보드 — 관리자 전용(이중 requireRole) 읽기(mentorProfilesAdminReadClient: 서비스 롤 우선/세션 폴백): 현황의 이번 주 신규 가입(users.created_at head count) · 계좌 미등록 멘토(mentor_profiles.payout_account_number). 오늘 할 일 8칸은 각 화면 건수 함수 재사용 · 쓰기 없음",
+  "lib/admin/slaDashboard.ts":
+    "PR-12 SLA 대시보드 — 관리자 전용(이중 requireRole) service_role 읽기: 건별 기한 4종 항목의 멘토 표시명(users). 공개 경로 호출부 없음 · 쓰기 없음",
   "lib/admin/refundConsoleQueries.ts":
     "관리자 환불 화면 조회(PR-3 — 서비스 롤 우선/세션 폴백 · 요청자·처리자·멘토 표시명 + 요청자 이름·이메일 검색 users 조인 · 이중 requireRole admin 가드 뒤, users_admin_select_all 로 읽힘)",
   "lib/admin/mentorActivityQueries.ts":
