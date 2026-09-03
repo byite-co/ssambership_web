@@ -1,7 +1,7 @@
 /**
  * 계정 상세 — 멘토 탭(PR-7 §2-3). 섹션은 순서대로 접히고(`<details>`), 첫 화면에는 제목 + 요약 한 줄만 보인다. 경고는 요약 줄에 그대로 나온다.
  *
- *   프로필 · 학교 인증(`인증: …` 라벨 · 서류 뷰어 · 등급 확정) · 요금제(★ mentor_plans) · 정원(★ RPC + 요금제별 내역 · 정원 조정) ·
+ *   프로필 · 학교 인증(`인증: …` 라벨 · 서류 뷰어 · 등급 확정 / 등급 정정) · 요금제(★ mentor_plans) · 정원(★ RPC + 요금제별 내역 · 정원 조정) ·
  *   활동 상태(`활동: …` 라벨 · 조치 버튼 없음) · 정산 계좌(미등록 경고) · 받은 리뷰(RPC 통계 · 최근 5건) · 처리 이력
  *
  * Server Component — 데이터는 `loadMentorAccountSection` 이 만든다. 정원·요금제 값을 여기서 계산하지 않는다.
@@ -31,7 +31,15 @@ import type { AccountActionLogs } from "@/lib/admin/accountDetailQueries";
 import type { MentorAccountSection } from "@/lib/admin/accountMentorQueries";
 import { adminStatusAllowedValues, resolveAdminStatus } from "@/lib/admin/adminStatusDictionary";
 import { DOCUMENT_EMPTY_LABEL } from "@/lib/admin/documentViewerModel";
-import { SCHOOL_TIER_BADGE_AUTO, SCHOOL_TIER_BADGE_CONFIRMED_PREFIX, schoolTierConfirmBlockerMessage } from "@/lib/admin/mentorSchoolTierReview";
+import {
+  SCHOOL_TIER_BADGE_AUTO,
+  SCHOOL_TIER_BADGE_CONFIRMED_PREFIX,
+  buildSchoolTierConfirmSummary,
+  schoolTierConfirmBlockerMessage,
+  schoolTierConfirmButtonLabel,
+  schoolTierConfirmDialogTitle,
+  schoolTierConfirmPendingLabel,
+} from "@/lib/admin/mentorSchoolTierReview";
 import { approveMentorSchoolVerificationAction } from "@/lib/admin/mentorSchoolVerificationReviewActions";
 import { formatCashKrw, formatKoreanDate } from "@/lib/utils/formatDisplay";
 import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
@@ -219,15 +227,15 @@ export function AccountMentorTab({ userId, displayName, section, logs, logsMoreH
                 </label>
                 <ConfirmSubmitButton
                   level="stateChange"
-                  summary={`${displayName} 멘토의 학교 등급을 확정합니다. 확정하면 reviewed_by 에 처리한 관리자가 기록되고, 멘토 승인 화면으로 이동합니다.`}
-                  dialogTitle="학교 등급 확정"
-                  confirmLabel="확정"
-                  pendingLabel="확정 중…"
+                  summary={buildSchoolTierConfirmSummary(displayName, schoolTier, { afterNote: "처리 후 멘토 승인 화면으로 이동합니다." })}
+                  dialogTitle={schoolTierConfirmDialogTitle(schoolTier)}
+                  confirmLabel={schoolTierConfirmButtonLabel(schoolTier)}
+                  pendingLabel={schoolTierConfirmPendingLabel(schoolTier)}
                   disabled={!schoolTier.confirmable}
                   title={schoolTier.confirmable ? undefined : "현재 행은 확정 RPC 가 받지 않습니다"}
                   className="h-[34px] rounded-lg bg-slate-900 px-3 text-xs font-extrabold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                 >
-                  확정
+                  {schoolTierConfirmButtonLabel(schoolTier)}
                 </ConfirmSubmitButton>
               </div>
             </form>
