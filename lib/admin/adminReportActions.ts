@@ -121,11 +121,12 @@ export async function updateContentReportModerationAction(formData: FormData) {
   }
   const reportRowTyped = reportRow as { target_type?: string | null; target_id?: string | null };
 
-  // ★ 실제 콘텐츠 변경(community_posts/shortform_posts/community_comments)
+  // ★ 실제 콘텐츠 변경(community_posts/shortform_posts/community_comments/comments) — 삭제는 소프트 삭제(deleted_by = 이 관리자)
   const moderation = await applyContentModeration({
     targetType: reportRowTyped.target_type,
     targetId: reportRowTyped.target_id,
     intent: intent as ModerationIntent,
+    actorId: user.id,
   });
   if (!moderation.ok) {
     redirect(errUrl(safeMsg(`콘텐츠 처리 실패: ${moderation.error}`)));

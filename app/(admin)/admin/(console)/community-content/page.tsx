@@ -30,7 +30,8 @@ function pick(value: string | string[] | undefined): string {
  * 관리자 · 커뮤니티 관리(PR-11 §1 · 패턴 A). `AdminPageLayout` + `AdminDataTable` 위에 있다.
  *
  * 쿼리: `type`(종류 탭 — 글 `posts`(기본) · 숏폼 `shortforms` · 댓글 `comments` · extra) · `status`(상태 탭 — 게시 · 숨김 · 삭제됨 · 전체(기본)) · `q` · `page`. 전부 서버 조회.
- * 삭제됨은 `deleted_at IS NOT NULL` 판정(CHECK 가 deleted 를 막는다). 조치 4종은 행의 확인 절차를 거치며 종류별 삭제 방식(soft/하드)을 정직하게 보여준다.
+ * 삭제됨은 `deleted_at IS NOT NULL` 판정(CHECK 가 deleted 를 막는다 · DB-2 SQL 194 부터 글·숏폼·댓글 전부). 조치 3종은 행의 확인 절차(stateChange)를 거치고,
+ * 삭제는 소프트 삭제라 삭제됨 탭에서 복원한다(PR-W2 — 하드 DELETE 경로 0).
  * (admin)/layout.tsx + (console)/layout.tsx 의 이중 requireRole("admin") 가드 아래에 있다.
  */
 export default async function AdminCommunityContentPage(props: PageProps) {
@@ -57,7 +58,7 @@ export default async function AdminCommunityContentPage(props: PageProps) {
   return (
     <AdminPageLayout
       title="커뮤니티 관리"
-      description="신고가 없어도 글·숏폼·댓글을 찾아 숨김·복원·삭제합니다. 게시판 글 삭제는 복구할 수 있고, 숏폼·댓글 삭제는 영구 삭제라 복구할 수 없습니다 — 삭제 전 확인 모달이 그 차이를 보여줍니다."
+      description="신고가 없어도 글·숏폼·댓글을 찾아 숨김·복원·삭제합니다. 삭제는 소프트 삭제라 '삭제됨' 탭에서 복원할 수 있습니다."
       actions={
         <>
           <Link href={CONTENT_REPORT_BASE_PATH} className={ACTION_LINK} prefetch={false}>

@@ -194,7 +194,7 @@ const PR2_CONFIRM_IMPORTERS = [
   // PR-3 환불 관리
   "components/admin/RefundDecisionButtons.tsx",
   "components/admin/RefundQueueTable.tsx",
-  // PR-5 콘텐츠 검수 조치 6종 · 학적 변경 결정 3종
+  // PR-5 콘텐츠 검수 조치 6종(전부 stateChange — PR-W2 부터 삭제도 소프트 삭제) · 학적 변경 결정 3종
   "components/admin/ContentReportActionButtons.tsx",
   "components/admin/AcademicRecordChangeReviewPanel.tsx",
   // PR-6 신고 상세 경고·정지 2종 · 분쟁 목록 일괄(critical) · 분쟁 상세 다음 조치(상태 4·제재 1 — 자금 3종은 components/disputes/DisputeEscrowSplitPanel)
@@ -211,7 +211,7 @@ const PR2_CONFIRM_IMPORTERS = [
   "components/admin/NoticeListTable.tsx",
   "components/admin/PromotionSection.tsx",
   "components/admin/SettingsTopupPackageTable.tsx",
-  // PR-11 커뮤니티 조치 3종(숨김·복원 stateChange · 삭제 destructive + 숨김으로 대신하기) · 리뷰 조치 4종(stateChange) · 멘토 활동 기존 3경로(보류 확정 stateChange · 구제·유예 정리 critical)
+  // PR-11 커뮤니티 조치 3종(숨김·복원·삭제 전부 stateChange — PR-W2 소프트 삭제 · 삭제 모달에 숨김으로 대신하기) · 리뷰 조치 4종(stateChange) · 멘토 활동 기존 3경로(보류 확정 stateChange · 구제·유예 정리 critical)
   "components/admin/CommunityContentActionButtons.tsx",
   "components/admin/ReviewActionButtons.tsx",
   "components/admin/MentorActivityActionButtons.tsx",

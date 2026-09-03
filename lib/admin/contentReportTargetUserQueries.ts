@@ -34,7 +34,10 @@ async function countActiveWarnings(client: SupabaseClient, userId: string): Prom
   return count ?? 0;
 }
 
-/** 작성자의 글·숏폼·댓글 id — 이전 신고 건수 집계용. PR-7 계정 상세(학생 탭 "신고당한 건")도 재사용한다. */
+/**
+ * 작성자의 글·숏폼·댓글 id — 이전 신고 건수 집계용. PR-7 계정 상세(학생 탭 "신고당한 건")도 재사용한다.
+ * deleted_at 무관(의도): 소프트 삭제(SQL 194)된 콘텐츠를 대상으로 한 신고도 "이전 신고" 다 — 삭제로 이력이 사라지면 안 된다.
+ */
 export async function loadAuthorContentIds(client: SupabaseClient, authorId: string): Promise<string[]> {
   const tables = ["community_posts", "shortform_posts", "comments", "community_comments"] as const;
   const results = await Promise.all(

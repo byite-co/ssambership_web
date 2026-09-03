@@ -10,7 +10,7 @@
  * | 기각(종결)  | stateChange  | 한 줄 확인                                      |
  * | 콘텐츠 숨김 | stateChange  | "숨깁니다. 복구할 수 있습니다."                    |
  * | 콘텐츠 복구 | stateChange  | 한 줄 확인                                      |
- * | 콘텐츠 삭제 | destructive  | 대상 ID(앞 8자) 재입력 + 종류별 복구 가능 여부 명시   |
+ * | 콘텐츠 삭제 | stateChange  | "삭제합니다. 삭제 후 복구할 수 있습니다."(소프트 삭제 · PR-W2 — 재입력 없음) |
  *
  * 삭제 모달의 `숨김으로 대신하기`: 삭제 다이얼로그를 닫고(트리거 리마운트) 숨김 트리거를 click 해 **숨김 확인 모달만 연다** —
  * 실행은 그 모달의 확인 뒤 `requestSubmit(button)` 으로만 일어난다(단축키 A/R/D 와 같은 "다이얼로그만 열기" 패턴).
@@ -30,7 +30,6 @@ import {
   buildContentReportHideSummary,
   buildContentReportRestoreSummary,
   buildContentReportStatusSummary,
-  contentReportDeleteConfirmText,
   contentReportDeleteEffect,
   type ContentReportTargetKind,
 } from "@/lib/admin/contentReportConsole";
@@ -48,7 +47,6 @@ const BUTTON = "inline-flex h-9 items-center justify-center rounded-lg px-3 text
 
 const DELETE_EFFECT_LABEL = {
   soft_delete: "소프트 삭제(복구 가능)",
-  hard_delete: "하드 삭제(복구 불가)",
   report_only: "콘텐츠 불변 · 신고 상태만 변경",
 } as const;
 
@@ -56,7 +54,6 @@ export function ContentReportActionButtons({ reportId, targetKind, targetId, tar
   // 삭제 다이얼로그를 닫는 유일한 수단 — 트리거를 리마운트한다(ConfirmSubmitButton 은 닫기 API 를 노출하지 않는다).
   const [deleteInstance, setDeleteInstance] = useState(0);
   const effect = contentReportDeleteEffect(targetKind);
-  const confirmText = contentReportDeleteConfirmText(targetId, reportId);
 
   const hideInstead = () => {
     setDeleteInstance((n) => n + 1);
@@ -149,9 +146,8 @@ export function ContentReportActionButtons({ reportId, targetKind, targetId, tar
         <input type="hidden" name={CONTENT_REPORT_INTENT_FIELD} value="deleted" />
         <ConfirmSubmitButton
           id={CONTENT_REPORT_ACTION_BUTTON_IDS.deleted}
-          level="destructive"
+          level="stateChange"
           summary={buildContentReportDeleteSummary(targetKind)}
-          confirmText={confirmText}
           details={[targetRow, { label: "삭제 방식", value: DELETE_EFFECT_LABEL[effect] }]}
           body={
             effect === "report_only" ? null : (

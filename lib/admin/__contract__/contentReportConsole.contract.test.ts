@@ -5,8 +5,8 @@
 //   ① 순수 규칙(탭 = 코드가 쓰는 status 6종 · status 키 하나 · status=all 유지 · 검색 or() · 대상 종류별 삭제 효과/summary ·
 //      경과 24h/48h 색 · 빈 상태 원문 · 플래시)은 직접 검증한다
 //   ② 렌더·배선 규칙은 소스 스캔 tripwire 로 고정한다(PageScaffold 미사용 · AdminPageLayout/AdminDataTable/AdminStatusPill 사용 ·
-//      검색 form 규칙 · 조치 6종 등급(5 stateChange + 1 destructive) · 삭제 모달 `숨김으로 대신하기` · 서버 액션·DB 쓰기 불변 ·
-//      숏폼·댓글 하드 DELETE 그대로 · 구 워크스페이스 삭제)
+//      검색 form 규칙 · 조치 6종 등급(전부 stateChange — PR-W2 소프트 삭제) · 삭제 모달 `숨김으로 대신하기` · 서버 액션·필드명 불변 ·
+//      코어 소프트 삭제(하드 DELETE 0 · DB-2 SQL 194) · 구 워크스페이스 삭제)
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -22,7 +22,6 @@ import {
   CONTENT_REPORT_ACTIONS,
   CONTENT_REPORT_ACTION_BUTTON_IDS,
   CONTENT_REPORT_BASE_PATH,
-  CONTENT_REPORT_CONFIRM_TEXT_LENGTH,
   CONTENT_REPORT_DEFAULT_PAGE_SIZE,
   CONTENT_REPORT_DEFAULT_TAB,
   CONTENT_REPORT_ELAPSED_DANGER_HOURS,
@@ -42,7 +41,6 @@ import {
   buildContentReportRestoreSummary,
   buildContentReportSearchOr,
   buildContentReportStatusSummary,
-  contentReportDeleteConfirmText,
   contentReportDeleteEffect,
   contentReportDetailPath,
   contentReportElapsed,
@@ -162,21 +160,22 @@ test("대상 종류 라벨: 게시판 글 · 숏폼 · 댓글(레거시 comment 
   assert.equal(contentReportTargetLabel(null), "—");
 });
 
-test("삭제 효과 = applyContentModeration 분기 그대로: 게시판 글 soft-delete(복구 가능) · 숏폼·댓글 하드 DELETE(복구 불가) · 미지원 유형은 신고 상태만", () => {
-  assert.equal(contentReportDeleteEffect("community_post"), "soft_delete");
-  for (const k of ["shortform_post", "community_comment", "board_comment"] as ContentReportTargetKind[]) assert.equal(contentReportDeleteEffect(k), "hard_delete", String(k));
+test("삭제 효과 = applyContentModeration 그대로: 지원 유형 4종 전부 소프트 삭제(deleted_at/deleted_by · 복구 가능) · 미지원 유형은 신고 상태만 — 하드 DELETE 0(PR-W2 · SQL 194)", () => {
+  for (const k of ["community_post", "shortform_post", "community_comment", "board_comment"] as ContentReportTargetKind[]) assert.equal(contentReportDeleteEffect(k), "soft_delete", String(k));
   assert.equal(contentReportDeleteEffect(null), "report_only");
-  // 코어 실측: community_post 만 deleted_at 갱신, 나머지는 .delete()
   const core = stripComments(read(MODERATION_CORE));
-  assert.ok(core.includes('if (targetType === "community_post") {') && core.includes(".update({ deleted_at: new Date().toISOString() })"), "게시판 글 soft-delete");
-  assert.ok(core.includes(".delete().eq(\"id\", targetId)"), "그 외 하드 DELETE — 바꾸지 않았다(soft-delete 전환은 DB 작업)");
+  assert.ok(core.includes(".update({ deleted_at: new Date().toISOString(), deleted_by: actorId })"), "네 테이블 공통 soft-delete");
+  assert.ok(!core.includes(".delete("), "하드 DELETE 없음");
+  assert.ok(core.includes("statusPatch.deleted_at = null") && core.includes("{ is_deleted: false, deleted_at: null, deleted_by: null }"), "콘텐츠 복구 = deleted_at 해제");
 });
 
-test("삭제 summary 는 대상 종류별 복구 가능 여부를 명시한다 · 숨김은 '복구할 수 있습니다' · 복구·상태 전이 summary", () => {
-  assert.equal(buildContentReportDeleteSummary("community_post"), "이 게시판 글을 삭제합니다. 게시판 글은 소프트 삭제라 관리자가 복구할 수 있습니다.");
-  assert.equal(buildContentReportDeleteSummary("shortform_post"), "이 숏폼을 영구 삭제합니다. 복구할 수 없습니다.");
-  assert.equal(buildContentReportDeleteSummary("board_comment"), "이 댓글을 영구 삭제합니다. 복구할 수 없습니다.");
-  assert.equal(buildContentReportDeleteSummary("community_comment"), "이 댓글을 영구 삭제합니다. 복구할 수 없습니다.");
+test("삭제 summary 는 모든 지원 유형에 `삭제 후 복구할 수 있습니다` · 복구 불가 문구 0 · 숨김은 '복구할 수 있습니다' · 복구·상태 전이 summary", () => {
+  assert.equal(buildContentReportDeleteSummary("community_post"), "이 게시판 글을 삭제합니다. 삭제 후 복구할 수 있습니다.");
+  assert.equal(buildContentReportDeleteSummary("shortform_post"), "이 숏폼을 삭제합니다. 삭제 후 복구할 수 있습니다.");
+  assert.equal(buildContentReportDeleteSummary("board_comment"), "이 댓글을 삭제합니다. 삭제 후 복구할 수 있습니다.");
+  assert.equal(buildContentReportDeleteSummary("community_comment"), "이 댓글을 삭제합니다. 삭제 후 복구할 수 있습니다.");
+  const pure = stripComments(read(CONSOLE));
+  for (const banned of ["복구 불가", "영구 삭제", "복구할 수 없습니다", "되돌릴 수 없는"]) assert.ok(!pure.includes(banned), `복구 불가 문구 폐기: ${banned}`);
   assert.ok(buildContentReportDeleteSummary(null).includes("콘텐츠는 바뀌지 않습니다") && buildContentReportDeleteSummary(null).includes("'삭제 처리'"));
   assert.equal(buildContentReportHideSummary("shortform_post"), "이 숏폼을 숨깁니다. 복구할 수 있습니다.");
   assert.ok(buildContentReportHideSummary(null).includes("'숨김 처리'"));
@@ -187,25 +186,23 @@ test("삭제 summary 는 대상 종류별 복구 가능 여부를 명시한다 �
   for (const s of ["reviewing", "resolved", "dismissed"] as const) assert.ok(buildContentReportStatusSummary(s).includes("콘텐츠는 바뀌지 않습니다"));
 });
 
-test("destructive 재입력 문자열은 대상 ID 앞 8자(없으면 신고 ID) — 정책상 불일치면 확인 불가", () => {
-  assert.equal(CONTENT_REPORT_CONFIRM_TEXT_LENGTH, 8);
-  assert.equal(contentReportDeleteConfirmText(UUID, "r-id"), "11111111");
-  assert.equal(contentReportDeleteConfirmText(null, "22222222-2222-4222-8222-222222222222"), "22222222");
-  assert.equal(contentReportDeleteConfirmText("  abc ", "r"), "abc");
-  const req = resolveAdminConfirmRequirements({ level: "destructive", confirmText: contentReportDeleteConfirmText(UUID, "r") });
-  assert.equal(req.confirmText, "11111111");
-  assert.equal(evaluateAdminConfirm(req, { reason: "", typedConfirmText: "1111111" }).ok, false);
-  assert.equal(evaluateAdminConfirm(req, { reason: "", typedConfirmText: "11111111" }).ok, true);
+test("삭제는 재입력 없음(PR-W2): stateChange 요구 사항에 confirmText 가 없다 · 순수 모듈에 재입력 헬퍼 없음", () => {
+  const req = resolveAdminConfirmRequirements({ level: CONTENT_REPORT_ACTIONS.deleted.level, confirmText: UUID.slice(0, 8) });
+  assert.equal(req.needsDialog, true);
+  assert.equal(req.confirmText, null, "stateChange 는 confirmText 를 받아도 재입력 단계를 만들지 않는다");
+  assert.equal(evaluateAdminConfirm(req, { reason: "", typedConfirmText: "" }).ok, true);
+  assert.ok(!stripComments(read(CONSOLE)).includes("ConfirmText"), "재입력 헬퍼 삭제");
 });
 
-test("조치 6종의 등급: 검토 중·처리 완료·기각·숨김·복구 = stateChange(한 줄 확인) · 삭제 = destructive(재입력) — 전부 다이얼로그를 거친다", () => {
+test("조치 6종의 등급: 전부 stateChange(한 줄 확인 — 삭제도 소프트 삭제라 복구 가능 · PR-W2) — 전부 다이얼로그를 거친다", () => {
   assert.deepEqual(Object.keys(CONTENT_REPORT_ACTIONS), ["reviewing", "resolved", "dismissed", "hidden", "restored", "deleted"]);
   for (const [key, a] of Object.entries(CONTENT_REPORT_ACTIONS)) {
-    assert.equal(a.level, key === "deleted" ? "destructive" : "stateChange", key);
+    assert.equal(a.level, "stateChange", key);
     assert.equal(resolveAdminConfirmRequirements({ level: a.level, confirmText: "x" }).needsDialog, true, key);
     assert.ok(a.label && a.dialogTitle && a.confirmLabel && a.pendingLabel, key);
   }
   assert.equal(CONTENT_REPORT_ACTIONS.dismissed.label, "기각");
+  assert.equal(CONTENT_REPORT_ACTIONS.deleted.dialogTitle, "콘텐츠 삭제");
   assert.equal(new Set(Object.values(CONTENT_REPORT_ACTION_BUTTON_IDS)).size, 6, "버튼 id 는 서로 다르다");
   assert.equal(CONTENT_REPORT_HIDE_INSTEAD_LABEL, "숨김으로 대신하기");
 });
@@ -222,6 +219,7 @@ test("서버 액션이 읽는 필드명·허용 값은 그대로다(DB 쓰기 �
   assert.ok(actions.includes('.in("status", ["pending", "reviewing"])'), "상태 전이 조건 그대로");
   assert.ok(actions.includes("hidden: \"hidden\",") && actions.includes("deleted: \"removed\",") && actions.includes("restored: \"resolved\","), "조치 → 신고 상태 매핑 그대로");
   assert.ok(actions.includes("applyContentModeration({"), "콘텐츠 변경은 코어 그대로");
+  assert.ok(actions.includes("actorId: user.id,"), "삭제 시 deleted_by = 조치한 관리자(PR-W2)");
 });
 
 // ── 경과 ────────────────────────────────────────────────────────────────────
@@ -256,7 +254,7 @@ test("빈 상태: 지시서 §1-3 원문 + 처리 순서 3단계 · 신고가 0�
   assert.equal(CONTENT_REPORT_EMPTY_STATE.stepsTitle, "신고가 들어오면 이렇게 처리합니다");
   assert.deepEqual([...CONTENT_REPORT_EMPTY_STATE.steps], [
     "대상 콘텐츠와 신고 사유를 확인합니다",
-    "숨김(복구 가능) · 경고 · 정지 · 삭제(복구 불가) 중 하나를 고릅니다",
+    "숨김(복구 가능) · 경고 · 정지 · 삭제(복구 가능) 중 하나를 고릅니다",
     "처리 결과가 신고자에게 전달됩니다",
   ]);
   assert.equal(contentReportEmptyVariant("", 0), "first");
@@ -307,14 +305,15 @@ test("신고 상세: PageScaffold 미사용 · AdminPageLayout · AdminStatusPil
   assert.ok(!page.includes("updateContentReportStatusAction") && !page.includes("updateContentReportModerationAction"), "액션 폼은 조치 부품 안으로");
 });
 
-test("조치 부품: ConfirmSubmitButton 6개(stateChange 5 · destructive 1) · 삭제는 confirmText + 종류별 summary + 숨김으로 대신하기(숨김 모달만 연다) · 필드명 상수 · 서버 액션 그대로", () => {
+test("조치 부품: ConfirmSubmitButton 6개(전부 stateChange · destructive 0) · 삭제는 재입력 없이 종류별 summary + 숨김으로 대신하기(숨김 모달만 연다) · 필드명 상수 · 서버 액션 그대로", () => {
   const src = stripComments(read(ACTIONS_UI));
   assert.ok(src.startsWith('"use client"'));
   assert.equal((src.match(/<ConfirmSubmitButton\b/g) ?? []).length, 6);
-  assert.equal((src.match(/level="stateChange"/g) ?? []).length, 5);
-  assert.equal((src.match(/level="destructive"/g) ?? []).length, 1);
+  assert.equal((src.match(/level="stateChange"/g) ?? []).length, 6);
+  assert.equal((src.match(/level="destructive"/g) ?? []).length, 0, "PR-W2: 삭제도 stateChange");
   assert.ok(!/level="(critical|immediate)"/.test(src), "이 화면의 조치에 critical·immediate 없음");
-  assert.ok(src.includes("confirmText={confirmText}") && src.includes("contentReportDeleteConfirmText(targetId, reportId)"), "삭제 재입력");
+  assert.ok(!src.includes("confirmText=") && !src.includes("ConfirmText("), "삭제 재입력 없음");
+  assert.ok(!src.includes("복구 불가") && !src.includes("하드 삭제"), "복구 불가 문구 없음");
   assert.ok(src.includes("summary={buildContentReportDeleteSummary(targetKind)}") && src.includes("summary={buildContentReportHideSummary(targetKind)}"), "종류별 summary");
   assert.ok(src.includes("{CONTENT_REPORT_HIDE_INSTEAD_LABEL}") && src.includes("data-content-report-hide-instead"), "삭제 모달 안 숨김 대안");
   assert.ok(src.includes("document.getElementById(CONTENT_REPORT_ACTION_BUTTON_IDS.hidden)?.click()"), "대안 클릭 = 숨김 확인 모달 열기");

@@ -1,9 +1,11 @@
 /**
  * 커뮤니티 모더레이션 검증 — STEP 1 + 2 + 3.
  *
- * (1) 신고-경유: applyContentModeration 헬퍼 직접 호출 → 콘텐츠 status 변경 확인 + anon SELECT 차단
- * (2) 댓글 RLS: admin은 UPDATE/DELETE 가능, anon 은 hidden 댓글 못 봄
+ * (1) 신고-경유: applyContentModeration 헬퍼와 같은 DB 조작 → 콘텐츠 status/deleted_at 변경 확인 + anon SELECT 차단
+ * (2) 댓글 RLS: admin은 UPDATE 가능, anon 은 hidden·삭제 댓글 못 봄
  * (3) 직접 모더레이션: /admin/community-content GET 200, status 탭/검색 정상
+ *
+ * PR-W2(DB-2 SQL 194): 삭제는 하드 DELETE 가 아니라 소프트 삭제(deleted_at=now() · deleted_by=조치 관리자)다 — 행이 남고 anon 에게 안 보이며 복원할 수 있다.
  */
 import { test, expect, type Page } from "@playwright/test";
 import { randomUUID } from "node:crypto";
@@ -12,7 +14,7 @@ import * as db from "./helpers/db";
 import { loadEnvLocal } from "./helpers/env";
 
 // 헬퍼 import 시 server-only 체인이 걸려 Playwright 환경(Node)에서 실패하므로
-// 동일 효과를 직접 DB 조작으로 시뮬한다 — 헬퍼와 동일한 SET status / DELETE.
+// 동일 효과를 직접 DB 조작으로 시뮬한다 — 헬퍼와 동일한 SET status / 소프트 삭제 UPDATE(deleted_at·deleted_by) / 복원(deleted_at NULL).
 function normalizeModerationTargetType(raw: string | null | undefined): string | null {
   const s = String(raw ?? "").trim().toLowerCase();
   if (s === "community_post" || s === "community" || s === "post") return "community_post";
@@ -29,17 +31,29 @@ async function applyContentModerationViaDb(args: {
   targetType: string;
   targetId: string;
   intent: "hidden" | "deleted" | "restored";
+  /** 조치 관리자 id(deleted_by) — 코어의 actorId */
+  actorId?: string;
 }): Promise<{ ok: boolean; applied: boolean; note?: string; error?: string }> {
   const t = normalizeModerationTargetType(args.targetType);
   if (!t) return { ok: true, applied: false, note: "unsupported" };
   const table = TABLE_BY_TYPE[t];
   if (args.intent === "deleted") {
-    const { data, error } = await admin.from(table).delete().eq("id", args.targetId).select("id");
+    const { data, error } = await admin
+      .from(table)
+      .update({ deleted_at: new Date().toISOString(), deleted_by: args.actorId ?? null })
+      .eq("id", args.targetId)
+      .is("deleted_at", null)
+      .select("id");
     if (error) return { ok: false, applied: false, error: error.message };
     return { ok: true, applied: (data ?? []).length > 0 };
   }
   const nextStatus = args.intent === "hidden" ? "hidden" : t === "community_comment" ? "visible" : "published";
-  const { data, error } = await admin.from(table).update({ status: nextStatus }).eq("id", args.targetId).select("id");
+  const patch: Record<string, unknown> = { status: nextStatus };
+  if (args.intent === "restored") {
+    patch.deleted_at = null;
+    patch.deleted_by = null;
+  }
+  const { data, error } = await admin.from(table).update(patch).eq("id", args.targetId).select("id");
   if (error) return { ok: false, applied: false, error: error.message };
   return { ok: true, applied: (data ?? []).length > 0 };
 }
@@ -150,17 +164,27 @@ test("(1) community_post: restored → published 복구", async () => {
   expect((data as { status: string }).status).toBe("published");
 });
 
-test("(1) community_post: deleted 처리 시 행 삭제", async () => {
+test("(1) community_post: deleted 처리 = 소프트 삭제(행 보존 · deleted_at/deleted_by · anon 미노출) · 재삭제는 applied=false", async () => {
   const studentId = await db.userIdByEmail(STUDENT_EMAIL);
+  const adminId = await db.userIdByEmail(ADMIN_EMAIL);
   const postId = await newCommunityPost(studentId, randomUUID());
-  const r = await applyContentModerationViaDb({ targetType: "community_post", targetId: postId, intent: "deleted" });
+  const r = await applyContentModerationViaDb({ targetType: "community_post", targetId: postId, intent: "deleted", actorId: adminId });
   expect(r.ok).toBe(true);
-  const { data } = await admin.from("community_posts").select("id").eq("id", postId);
-  expect((data ?? []).length).toBe(0);
+  expect(r.applied).toBe(true);
+  const { data } = await admin.from("community_posts").select("id, deleted_at, deleted_by").eq("id", postId);
+  expect((data ?? []).length, "행이 남는다").toBe(1);
+  expect((data?.[0] as { deleted_at: string | null }).deleted_at).toBeTruthy();
+  expect((data?.[0] as { deleted_by: string | null }).deleted_by).toBe(adminId);
+  const sb = createClient(URL, ANON_KEY, { auth: { persistSession: false } });
+  const r1 = await sb.from("community_posts").select("id").eq("id", postId);
+  expect((r1.data ?? []).length, "삭제 후 anon 미노출").toBe(0);
+  const again = await applyContentModerationViaDb({ targetType: "community_post", targetId: postId, intent: "deleted", actorId: adminId });
+  expect(again.applied, "이미 삭제된 행은 건너뛴다(멱등)").toBe(false);
 });
 
-test("(1) shortform_post: hidden/restored/deleted 동작", async () => {
+test("(1) shortform_post: hidden/restored/deleted(소프트)/restored(삭제 복원) 동작", async () => {
   const studentId = await db.userIdByEmail(STUDENT_EMAIL);
+  const adminId = await db.userIdByEmail(ADMIN_EMAIL);
   const sfId = await newShortform(studentId, randomUUID());
 
   await applyContentModerationViaDb({ targetType: "shortform_post", targetId: sfId, intent: "hidden" });
@@ -171,9 +195,18 @@ test("(1) shortform_post: hidden/restored/deleted 동작", async () => {
   const { data: r2 } = await admin.from("shortform_posts").select("status").eq("id", sfId).single();
   expect((r2 as { status: string }).status).toBe("published");
 
-  await applyContentModerationViaDb({ targetType: "shortform_post", targetId: sfId, intent: "deleted" });
-  const { data: r3 } = await admin.from("shortform_posts").select("id").eq("id", sfId);
-  expect((r3 ?? []).length).toBe(0);
+  await applyContentModerationViaDb({ targetType: "shortform_post", targetId: sfId, intent: "deleted", actorId: adminId });
+  const { data: r3 } = await admin.from("shortform_posts").select("id, deleted_at").eq("id", sfId);
+  expect((r3 ?? []).length, "소프트 삭제 — 행 보존").toBe(1);
+  expect((r3?.[0] as { deleted_at: string | null }).deleted_at).toBeTruthy();
+  const sb = createClient(URL, ANON_KEY, { auth: { persistSession: false } });
+  const anonR = await sb.from("shortform_posts").select("id").eq("id", sfId);
+  expect((anonR.data ?? []).length, "삭제 후 anon 미노출(sf_select_published deleted_at IS NULL)").toBe(0);
+
+  await applyContentModerationViaDb({ targetType: "shortform_post", targetId: sfId, intent: "restored" });
+  const { data: r4 } = await admin.from("shortform_posts").select("status, deleted_at").eq("id", sfId).single();
+  expect((r4 as { status: string; deleted_at: string | null }).status).toBe("published");
+  expect((r4 as { deleted_at: string | null }).deleted_at, "삭제 복원 = deleted_at NULL").toBeNull();
 });
 
 test("(2) community_comment: admin이 UPDATE 가능 + hidden 시 anon에 안 보임", async () => {
@@ -197,8 +230,9 @@ test("(2) community_comment: admin이 UPDATE 가능 + hidden 시 anon에 안 보
   expect((r1.data ?? []).length, "hidden 댓글 anon 미노출").toBe(0);
 });
 
-test("(2) community_comment: admin이 DELETE 가능 + 작성자 본인은 hidden도 본인 댓글로 조회 가능", async () => {
+test("(2) community_comment: admin 소프트 삭제 가능(행 보존 · anon·작성자 미노출) + 작성자 본인은 hidden도 본인 댓글로 조회 가능", async () => {
   const studentId = await db.userIdByEmail(STUDENT_EMAIL);
+  const adminId = await db.userIdByEmail(ADMIN_EMAIL);
   const postId = await newCommunityPost(studentId, randomUUID());
   const commentId = await newComment(studentId, postId, randomUUID());
 
@@ -210,11 +244,14 @@ test("(2) community_comment: admin이 DELETE 가능 + 작성자 본인은 hidden
   expect(ownR.error).toBeFalsy();
   expect((ownR.data ?? []).length, "본인 댓글 hidden도 조회 가능").toBe(1);
 
-  // admin DELETE
-  const r = await applyContentModerationViaDb({ targetType: "community_comment", targetId: commentId, intent: "deleted" });
+  // admin 소프트 삭제 — 행은 남고(deleted_at) 작성자 본인에게도 안 보인다(community_comments_select_visible: deleted_at IS NULL 이 먼저)
+  const r = await applyContentModerationViaDb({ targetType: "community_comment", targetId: commentId, intent: "deleted", actorId: adminId });
   expect(r.ok).toBe(true);
-  const { data } = await admin.from("community_comments").select("id").eq("id", commentId);
-  expect((data ?? []).length).toBe(0);
+  const { data } = await admin.from("community_comments").select("id, deleted_at, deleted_by").eq("id", commentId);
+  expect((data ?? []).length, "행 보존").toBe(1);
+  expect((data?.[0] as { deleted_by: string | null }).deleted_by).toBe(adminId);
+  const gone = await sbStu.from("community_comments").select("id").eq("id", commentId);
+  expect((gone.data ?? []).length, "삭제된 댓글은 작성자 본인에게도 미노출").toBe(0);
 });
 
 test("(3) /admin/community-content: 페이지 200 + 탭/검색/페이지네이션 동작", async ({ page }: { page: Page }) => {
