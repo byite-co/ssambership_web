@@ -3,7 +3,6 @@
 -- =============================================================================
 -- forward: supabase/sql/194_community_soft_delete_deleted_at.sql
 -- 되돌리는 것(역순):
---   B-4  하드 DELETE 차단 트리거 3종 + ugc_block_hard_delete() DROP  (forward 에서 B-4 를 뺐다면 이 블록도 뺀다)
 --   B-3g 쓰기 가드 2종을 운영 적용본(shortform_posts_protected_guard · comments_write_guard = 164 본문)으로 복원
 --   B-3f RPC 4종 복원 — shortform_view_record_v2 · increment_shortform_post_view(037/038 본문) ·
 --        rls_private.report_target_content_valid(20260806075316 본문) · community_comment_soft_delete_self(20260803162808 본문 —
@@ -22,12 +21,6 @@
 -- =============================================================================
 
 begin;
-
--- B-4
-drop trigger if exists trg_shortform_posts_no_delete on public.shortform_posts;
-drop trigger if exists trg_comments_no_delete on public.comments;
-drop trigger if exists trg_community_comments_no_delete on public.community_comments;
-drop function if exists public.ugc_block_hard_delete();
 
 -- B-3g — 운영 적용본(2026-09-03 실측 pg_get_functiondef) 그대로
 create or replace function public.shortform_posts_protected_guard()
@@ -476,8 +469,8 @@ begin
               and ((table_name in ('shortform_posts', 'comments', 'community_comments') and column_name in ('deleted_at', 'deleted_by'))
                 or (table_name = 'community_posts' and column_name = 'deleted_by')))
      or not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'community_posts' and column_name = 'deleted_at')
-     or exists (select 1 from pg_proc where proname in ('comments_sync_deleted_flag', 'ugc_block_hard_delete'))
-     or exists (select 1 from pg_trigger where tgname in ('trg_comments_sync_deleted_flag', 'trg_shortform_posts_no_delete', 'trg_comments_no_delete', 'trg_community_comments_no_delete'))
+     or exists (select 1 from pg_proc where proname = 'comments_sync_deleted_flag')
+     or exists (select 1 from pg_trigger where tgname = 'trg_comments_sync_deleted_flag')
      or exists (select 1 from pg_policies where schemaname = 'public'
                  and policyname in ('sf_select_published', 'comments_select_visible', 'community_comments_select_visible') and qual like '%deleted_at%')
      or pg_get_viewdef('api_web_v1.community_comments_v1'::regclass) like '%deleted_at%'

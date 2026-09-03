@@ -49,9 +49,9 @@ select pg_temp.ok((select roles::text || '|' || qual from pg_policies where tabl
                   and (select roles::text || '|' || qual from pg_policies where tablename = 'comments' and policyname = 'comments_select_visible') = pg_temp.snap('pol_c')
                   and (select roles::text || '|' || qual from pg_policies where tablename = 'community_comments' and policyname = 'community_comments_select_visible') = pg_temp.snap('pol_cc'),
                   'B-3e SELECT 정책 3종 roles·qual 일치');
-select pg_temp.ok(not exists (select 1 from pg_proc where proname in ('comments_sync_deleted_flag', 'ugc_block_hard_delete'))
-                  and not exists (select 1 from pg_trigger where tgname in ('trg_comments_sync_deleted_flag', 'trg_shortform_posts_no_delete', 'trg_comments_no_delete', 'trg_community_comments_no_delete')),
-                  'B-3a/B-4 신규 함수·트리거 부재');
+select pg_temp.ok(not exists (select 1 from pg_proc where proname = 'comments_sync_deleted_flag')
+                  and not exists (select 1 from pg_trigger where tgname = 'trg_comments_sync_deleted_flag'),
+                  'B-3a 신규 함수·트리거 부재');
 select pg_temp.ok((select status from public.shortform_posts where id = '00000000-0000-4000-8000-00000000d2f2') = 'hidden'
                   and (select (detail ->> 'shortform_posts_hidden')::int from public.admin_action_logs where action_type = 'community_soft_delete_rollback' order by created_at desc limit 1) = 1,
                   'B 데이터: forward 기간 soft delete 행 → 숨김 전환 + 기록');

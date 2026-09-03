@@ -36,10 +36,9 @@
 --            복원(deleted_at → NULL)은 관리자만(위조 방지 · 심층 방어). 작성자 본인의 직접 UPDATE soft delete 는 그 앞단에서
 --            RLS 가 거부한다 — UPDATE 의 새 행도 SELECT 정책(deleted_at IS NULL)을 통과해야 하므로(community_posts 와 같은 성질).
 --            본인 삭제는 SECURITY DEFINER RPC 경로(숏폼 댓글 community_comment_soft_delete_self · 게시판 글 community_post_soft_delete).
--- B-4 하드 DELETE 차단(권고 · 오너가 거부하면 "B-4" 블록과 rollback 의 대응 블록만 뺀다): shortform_posts · comments ·
---     community_comments 에 BEFORE DELETE 트리거(ugc_block_hard_delete — payout_run_items_block_mutation 과 같은 패턴).
---     PR-W2 전까지 관리자 삭제 버튼(service_role DELETE)이 DB 에서 거부된다 — 순서상 허용(PR-W2 가 UPDATE 로 바꾼다).
---     계정 삭제 purge(SQL 151·20260820100700 · TS 워커)는 이 세 테이블 행을 DELETE 하지 않는다(실측) → 영향 없음.
+-- B-4 하드 DELETE 차단 트리거는 두지 않는다(오너 결정 2026-09-03 — 지시서 B-4 "권고하되 오너가 거부하면 뺀다"). 하드 DELETE 는
+--     기존 경로 그대로(comments_write_guard 가 비관리자 DELETE 를 거부 · 정본/레거시 DELETE 미러는 상대 행에 deleted_at 을 남긴다).
+--     PR-W2 가 관리자 삭제 액션 3종을 UPDATE(deleted_at) 로 바꾼다.
 --
 -- Apply: 저장소 표준 경로(db-apply-pending) — 즉석 실행 금지. 적용 순서 A(193) → B(194) → C(195).
 --   pack 등재: supabase/baseline/post_ledger_backfills/20260903200200_community_soft_delete_deleted_at.sql
@@ -108,7 +107,7 @@ begin
   if v_missing is not null then
     raise exception '194_GATE: 트리거 부재 — %', v_missing;
   end if;
-  if exists (select 1 from pg_proc where proname in ('comments_sync_deleted_flag', 'ugc_block_hard_delete')) then
+  if exists (select 1 from pg_proc where proname = 'comments_sync_deleted_flag') then
     raise exception '194_GATE: 194 함수가 이미 있다(이미 적용)';
   end if;
 end $$;
@@ -643,37 +642,6 @@ begin
 end;
 $$;
 
--- ── B-4. 하드 DELETE 차단(권고 · 오너 거부 시 이 블록만 뺀다 — rollback 의 "B-4" 블록도 함께) ───
-create or replace function public.ugc_block_hard_delete()
-returns trigger
-language plpgsql
-as $$
-begin
-  raise exception 'UGC_HARD_DELETE_FORBIDDEN: % is soft-delete only (set deleted_at); % not allowed', tg_table_name, tg_op
-    using errcode = 'P0001';
-end;
-$$;
-
-comment on function public.ugc_block_hard_delete() is
-  '194 B-4: shortform_posts · comments · community_comments 의 하드 DELETE 를 거부한다(payout_run_items_block_mutation 과 같은 패턴). 삭제는 deleted_at/deleted_by 로만.';
-
-revoke all on function public.ugc_block_hard_delete() from public, anon, authenticated;
-
-drop trigger if exists trg_shortform_posts_no_delete on public.shortform_posts;
-create trigger trg_shortform_posts_no_delete
-  before delete on public.shortform_posts
-  for each row execute function public.ugc_block_hard_delete();
-
-drop trigger if exists trg_comments_no_delete on public.comments;
-create trigger trg_comments_no_delete
-  before delete on public.comments
-  for each row execute function public.ugc_block_hard_delete();
-
-drop trigger if exists trg_community_comments_no_delete on public.community_comments;
-create trigger trg_community_comments_no_delete
-  before delete on public.community_comments
-  for each row execute function public.ugc_block_hard_delete();
-
 -- ── 적용 직후 자가 검증 ───────────────────────────────────────────────────────
 do $$
 declare v_n integer;
@@ -724,14 +692,8 @@ begin
         not like '%UPDATE OF is_deleted, deleted_at%' then
     raise exception '194_SELFCHECK: comments 트리거 불일치';
   end if;
-  -- B-4
-  if not exists (select 1 from pg_trigger where tgname = 'trg_shortform_posts_no_delete' and tgrelid = 'public.shortform_posts'::regclass)
-     or not exists (select 1 from pg_trigger where tgname = 'trg_comments_no_delete' and tgrelid = 'public.comments'::regclass)
-     or not exists (select 1 from pg_trigger where tgname = 'trg_community_comments_no_delete' and tgrelid = 'public.community_comments'::regclass) then
-    raise exception '194_SELFCHECK: B-4 하드 DELETE 차단 트리거 부재';
-  end if;
   for v_n in select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-              where n.nspname = 'public' and p.proname in ('comments_sync_deleted_flag', 'ugc_block_hard_delete')
+              where n.nspname = 'public' and p.proname = 'comments_sync_deleted_flag'
                 and (has_function_privilege('anon', p.oid, 'EXECUTE') or has_function_privilege('authenticated', p.oid, 'EXECUTE'))
   loop
     raise exception '194_SELFCHECK: 트리거 함수에 anon·authenticated EXECUTE 잔존';

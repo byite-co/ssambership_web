@@ -54,13 +54,13 @@ echo "open_transactions=$OPEN"
 
 echo "=== [4] 구조 카운트"
 # 기대치는 109본 pack(생성기 108 + PR60 1) 기준
-# (tables=84 functions=227 policies=175 buckets=13)이며, PG16 스크래치 재생 실측
+# (tables=84 functions=226 policies=175 buckets=13)이며, PG16 스크래치 재생 실측
 # (scripts/verify/local_db2_batch_check.sh [7])과 일치한다.
 # (프로덕션 원장은 106본 — 20260903200100~200300 미적용 상태다.)
 # 106본→109본(DB-2 운영 DB 정리 배치 · 2026-09-03) 델타:
 #   tables    -1 = school_tier_mappings DROP (20260903200300)
-#   functions +2 = comments_sync_deleted_flag + ugc_block_hard_delete (20260903200200 —
-#                school_tier_suggest·RPC·브리지·가드·RPC 4종은 본문 치환이라 카운트 불변)
+#   functions +1 = comments_sync_deleted_flag (20260903200200 — school_tier_suggest·RPC·
+#                브리지·가드·RPC 4종은 본문 치환이라 카운트 불변 · 하드 DELETE 차단 트리거는 오너 결정으로 미포함)
 #   policies  -1 = school_tier_mappings_admin_all 이 테이블과 함께 사라짐 (20260903200300 —
 #                20260903200200 의 SELECT 정책 3종은 같은 이름으로 재생성이라 불변)
 # 103본→106본(DB-1 운영 DB 정리 배치 · 2026-09-03) 델타:
@@ -124,7 +124,7 @@ count_check(){ # count_check <label> <expected> <sql>
 }
 count_check tables 84 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
-count_check functions 227 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+count_check functions 226 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
 count_check policies 175 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"

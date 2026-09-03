@@ -290,15 +290,6 @@ reset role;
 update public.comments set deleted_at = null, deleted_by = null where id = :c1::uuid;
 select pg_temp.ok((select comment_count from public.community_posts where id = :p1::uuid) = 2, 'B-3 복원(서비스 경로) → 댓글 수 2');
 
--- ═══ B-4. 하드 DELETE 차단 ═══
-select pg_temp.ok(r like 'UGC_HARD_DELETE_FORBIDDEN%', 'B-4 shortform_posts DELETE 거부(postgres): ' || r) from (select pg_temp.try(format($q$ delete from public.shortform_posts where id = %L $q$, :sf1::uuid)) r) t;
-select pg_temp.ok(r like 'UGC_HARD_DELETE_FORBIDDEN%', 'B-4 comments DELETE 거부: ' || r) from (select pg_temp.try(format($q$ delete from public.comments where id = %L $q$, :c1::uuid)) r) t;
-select pg_temp.ok(r like 'UGC_HARD_DELETE_FORBIDDEN%', 'B-4 community_comments DELETE 거부: ' || r) from (select pg_temp.try(format($q$ delete from public.community_comments where id = %L $q$, :sc1::uuid)) r) t;
-set local role service_role;
-select pg_temp.ok(r like 'UGC_HARD_DELETE_FORBIDDEN%', 'B-4 service_role(관리자 액션 경로)도 거부: ' || r) from (select pg_temp.try(format($q$ delete from public.shortform_posts where id = %L $q$, :sf1::uuid)) r) t;
-reset role;
-select pg_temp.ok((select count(*) from public.shortform_posts) = 2 and (select count(*) from public.comments) = 2 and (select count(*) from public.community_comments) = 4, 'B-4 행 수 불변');
-
 -- ═══ C. 매핑 테이블 ═══
 select pg_temp.ok(to_regclass('public.school_tier_mappings') is null, 'C school_tier_mappings 제거');
 select pg_temp.ok((select count(*) from public.school_tier_catalog) = 6 and (select count(*) from public.major_category_catalog) = 8, 'C 카탈로그 불변(6 · 8)');

@@ -6,7 +6,7 @@
 #   [0] platform stub → [1] pack 적용(DB-2 = 20260903200100~200300 제외 전부 — DB-1 포함) → [2] pre fixture
 #       (운영 형태 재현: 관리자 1 · 확정된 미분류 approved 행(일괄 확정형 2 · 개별 확정형 1 · 대학명 없음 1) · 확정 서연고 행 ·
 #        pending 미분류 · rejected · 게시판 글/정본·레거시 댓글 · 숏폼/숏폼 댓글) + §6 사전 실측
-#   → [3] 193 → 194 → 195 순 적용 → [4] post fixture(A-1~A-3 · B-1~B-4 · C assertion, 전부 rollback)
+#   → [3] 193 → 194 → 195 순 적용 → [4] post fixture(A-1~A-3 · B-1~B-3 · C assertion, 전부 rollback)
 #   → [4b] forward 기간 데이터(숏폼 1건 soft delete · COMMIT) → [5] rollback 195 → 194 → 193 → rollback fixture(복원 assertion)
 #   → [6] 193/194/195 재적용 → post fixture 재실행 → [7] 구조 카운트.
 #
