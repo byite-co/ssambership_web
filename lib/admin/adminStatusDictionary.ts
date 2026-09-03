@@ -68,7 +68,7 @@ const DICTIONARY = {
   /**
    * CHECK disputes_status_check (SQL 120) — 9값.
    * PR-6 후속(오너 확정): 라벨을 분쟁 화면 탭 표기와 통일 — 접수·진행→열림 · 에스컬레이션→상위 이관 · 종결→기각 · 7일/30일 정지→제재 7일/30일 ·
-   * 영구 차단→영구 제재. 분쟁 탭은 이 사전 라벨을 그대로 파생한다. (활동 로그 전용 `disputeLabels.ts`·`adminOperationalLabels.ts` 는 구 표기 — 별도 정리)
+   * 영구 차단→영구 제재. 분쟁 탭은 이 사전 라벨을 그대로 파생한다. (`disputeLabels.ts` 는 PR-10 부터 이 사전에 위임한다)
    */
   "disputes.status": {
     open: { label: "열림", tone: "warning" },
@@ -231,6 +231,17 @@ const DICTIONARY = {
   "app_notices.display_mode": {
     page: { label: "목록 노출", tone: "neutral" },
     popup: { label: "팝업 노출", tone: "info" },
+  },
+
+  /**
+   * CHECK 없음(baseline `target text null`) · 현행 행 전부 NULL. 구 코드는 자유 문자열 입력(`타겟/노출 화면(문자)`) 한 곳뿐이고 읽는 곳이 없었다
+   * (PR-10 §1-1 확인) → PR-10 부터 공지 폼이 이 3값(노출 대상 역할)만 쓴다. **이 사전이 유일한 허용 목록**이다. NULL 은 `all` 로 읽는다
+   * (`noticeConsole.resolveNoticeTarget`). PR-10b 팝업이 역할별 노출에 그대로 쓴다.
+   */
+  "app_notices.target": {
+    all: { label: "전체", tone: "neutral" },
+    student: { label: "학생", tone: "info" },
+    mentor: { label: "멘토", tone: "success" },
   },
 
   /**

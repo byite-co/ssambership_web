@@ -94,7 +94,6 @@ const DIRECT_ACCESS_EXEMPT: Record<string, string> = {
   "lib/mentor/mentorPayoutsService.ts": "본인 행 조회(멘토 정산 계좌 마스킹 표시)",
   "lib/auth/mentorSignupStudentIdAction.ts": "서비스 롤(가입 창구 학생증 반영 — 본인 행 한정 가드)",
   "lib/admin/adminQueries.ts": "관리자 콘솔 조회(requireRole admin 뒤 admin/readDb 클라이언트)",
-  "lib/admin/adminUnifiedActivityLog.ts": "관리자 활동 로그 집계(관리자 클라이언트)",
   "lib/admin/mentorAcademicRecordChangeReview.ts": "관리자 학적 변경 심사 조회",
   "lib/admin/mentorAcademicRecordChangeReviewActions.ts": "관리자 학적 변경 심사 액션",
   "lib/admin/mentorApprovalWorkbenchQueries.ts":
@@ -136,6 +135,10 @@ const DIRECT_ACCESS_EXEMPT: Record<string, string> = {
     "PR-9 정산 관리 — 관리자 전용(이중 requireRole) service_role 읽기: 멘토 이름·계좌(mentor_profiles.payout_*)·멘토 검색(users role=mentor). 공개 경로 호출부 없음",
   "lib/admin/topupConsoleQueries.ts":
     "PR-9 충전 관리 — 관리자 전용 service_role 읽기: 요청자 실명·닉네임(users) 검색·표시. 공개 경로 호출부 없음",
+  "lib/admin/auditLogQueries.ts":
+    "PR-10 감사 로그 — 관리자 전용 service_role 읽기(세션 폴백): 실행자·대상 이름표(users) + 대상 검색(users 이름·닉네임·이메일) · 관리자 목록(users role=admin). 이중 requireRole admin 가드 뒤 · 공개 경로 호출부 없음",
+  "lib/admin/settingsQueries.ts":
+    "PR-10 시스템 설정 — 관리자 전용 service_role 읽기: 관리자 계정 목록(users role=admin — 조회만, 추가·삭제 없음). 이중 requireRole admin 가드 뒤",
   "lib/admin/accountDetailQueries.ts":
     "관리자 계정 상세 공통(PR-7 — 서비스 롤 전용: users 1행 + 처리자·관련자 표시명. 이중 requireRole admin 가드 뒤)",
   "lib/admin/accountMentorQueries.ts":

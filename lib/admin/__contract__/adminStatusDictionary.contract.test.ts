@@ -128,6 +128,11 @@ const FIXTURE: Record<
     constraint: { name: "app_notices_display_mode_allowed", file: SQL_DISPLAY_MODE },
     inventory: false, // 08-04 인벤토리 이후(08-30) 추가
   },
+  "app_notices.target": {
+    // CHECK 없음(baseline `target text null`) · 현행 행 전부 NULL. 구 코드는 자유 문자열 입력뿐이고 읽는 곳이 없었다 → PR-10 부터 사전이 유일 허용 목록(노출 대상 역할 3값).
+    values: ["all", "student", "mentor"],
+    inventory: false,
+  },
   "paysync_invoices.status": {
     // PR-9 충전 관리 — 08-30 신설 테이블의 create table 인라인 CHECK. 인벤토리(08-04)에 없고 이름 있는 제약도 아니라 아래 전용 테스트가 SQL 원문으로 대조한다.
     values: ["pending", "paid", "expired", "canceled"],
@@ -187,7 +192,7 @@ function checkValuesFromInventory(table: string, column: string): string[] | nul
 
 // ── ① 사전 == 픽스처 ───────────────────────────────────────────────────────────
 
-test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼 + PR-2 학교 등급·계열 2개 + PR-5 학적 변경·맞춤의뢰 주문 2개 + PR-8 질문 스레드 상태·숙달 2개 + PR-9 충전 주문·지급 실행 2개)", () => {
+test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼 + PR-2 학교 등급·계열 2개 + PR-5 학적 변경·맞춤의뢰 주문 2개 + PR-8 질문 스레드 상태·숙달 2개 + PR-9 충전 주문·지급 실행 2개 + PR-10 공지 대상 1개)", () => {
   assert.deepEqual(sorted(ADMIN_STATUS_DICTIONARY_KEYS), sorted(Object.keys(FIXTURE)));
 });
 
@@ -233,6 +238,15 @@ test("mentor_profiles.verification_status: 재제출 요청 값은 코드가 실
   assert.ok(actions.includes('{ [STATUS_COLUMN]: "under_review" }'), "재제출 액션이 쓰는 값");
   assert.equal(resolveAdminStatus("mentor_profiles", "verification_status", "under_review").label, "재제출 요청");
   assert.equal(resolveAdminStatus("mentor_profiles", "verification_status", "resubmit_required").known, false);
+});
+
+test("app_notices.target: DB 에 CHECK 가 없다 → 사전이 유일한 허용 목록(전체·학생·멘토) · 공지 폼 옵션과 1:1(PR-10)", () => {
+  assert.equal(checkValuesFromInventory("app_notices", "target"), null);
+  assert.ok(read(BASELINE).includes("  target text null,"), "baseline 인라인 CHECK 없음");
+  assert.deepEqual(["all", "student", "mentor"].map((v) => resolveAdminStatus("app_notices", "target", v).label), ["전체", "학생", "멘토"]);
+  const notice = read("lib/admin/noticeConsole.ts");
+  assert.ok(notice.includes('export const NOTICE_TARGET_VALUES = ["all", "student", "mentor"] as const;'), "폼 옵션 = 사전 값");
+  assert.ok(notice.includes('resolveAdminStatus("app_notices", "target", value).label'), "옵션 라벨은 사전에서 온다");
 });
 
 test("mentor_academic_record_change_requests.status: baseline 인라인 CHECK 4값 == 사전 · 라벨은 대기·승인·반려·재제출 요청(PR-5 후속)", () => {

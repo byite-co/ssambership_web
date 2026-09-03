@@ -1,202 +1,94 @@
-import { requireRole } from "@/lib/auth/routeGuard";
-import { createClient } from "@/lib/supabase/server";
-import { toggleCashTopupPackageActiveAction } from "@/lib/admin/adminTopupPackageActions";
-import { SUBSCRIBE_PLAN_CATALOG } from "@/lib/subscribe/subscribePlanCatalog";
-import { MENTOR_SUBSCRIPTION_PRICE_RULES, SUBSCRIBE_PLAN_TIERS } from "@/lib/subscribe/mentorPlanPricing";
+import Link from "next/link";
+import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { SettingsAdminAccountList } from "@/components/admin/SettingsAdminAccountList";
+import { SettingsAppVersionTable } from "@/components/admin/SettingsAppVersionTable";
+import { SettingsPolicyCards } from "@/components/admin/SettingsPolicyCards";
+import { SettingsTopupPackageTable } from "@/components/admin/SettingsTopupPackageTable";
+import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
+import { buildCapLine, buildFeeLine, buildSettingsPlanRows, formatPlanBandLine } from "@/lib/admin/settingsConsole";
+import { loadSettingsAdminAccounts, loadSettingsAppVersionPolicies, loadSettingsCapPolicy, loadSettingsPayoutScheduler, loadSettingsTopupPackages } from "@/lib/admin/settingsQueries";
 import {
-  SUBSCRIPTION_PLATFORM_FEE_LABEL,
-  CUSTOM_REQUEST_PLATFORM_FEE_LABEL,
-  INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL,
-  PAYOUT_WITHHOLDING_LABEL,
+  MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
+  MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE,
+  MENTOR_SUBSCRIPTION_PLATFORM_SHARE,
+  PAYOUT_DAY_LABEL,
 } from "@/lib/mentor/mentorPayoutsConstants";
+import { MENTOR_SUBSCRIPTION_PRICE_RULES } from "@/lib/subscribe/mentorPlanPricing";
+import { SUBSCRIBE_PLAN_CATALOG } from "@/lib/subscribe/subscribePlanCatalog";
+import { createClient } from "@/lib/supabase/server";
 
 type PageProps = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 
-type TopupPackageRow = {
-  id: string;
-  label: string | null;
-  amount_cents: number | null;
-  price_cents: number | null;
-  display_order: number | null;
-  active: boolean | null;
-};
+const ACTION_LINK = "rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50";
 
-function won(cents: number | null | undefined): string {
-  if (typeof cents !== "number" || !Number.isFinite(cents)) return "—";
-  return `${Math.round(cents / 100).toLocaleString("ko-KR")}원`;
+function pick(value: string | string[] | undefined): string {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0].trim();
+  return "";
 }
 
-function cash(krw: number): string {
-  return `${krw.toLocaleString("ko-KR")}캐시`;
-}
-
+/**
+ * 관리자 · 시스템 설정(PR-10 §3) — 섹션 4개 + 관리자 계정.
+ *
+ * - 편집은 **충전 패키지 토글 하나**(기존 액션 · stateChange 확인). 요금제·수수료·정원·정산 설정·앱 버전 정책·관리자 계정은 읽기 전용.
+ * - 읽기 전용 값은 정본에서 온다: 카탈로그·밴드 `lib/subscribe/*` · 수수료 `mentorPayoutsConstants` · 지급일 `PAYOUT_DAY_LABEL` ·
+ *   정원 가중치·기본 한도는 DB 함수(`subscription_cap_weight` · `mentor_cap_limit`). TS 에 숫자를 박지 않는다.
+ * (admin)/layout.tsx + (console)/layout.tsx 의 이중 requireRole("admin") 가드 아래에 있다.
+ */
 export default async function AdminSettingsPage(props: PageProps) {
-  await requireRole("admin");
   const sp = (await props.searchParams) ?? {};
-  const flashOk = sp.ok === "1";
-  const flashErr = typeof sp.error === "string" && sp.error.length ? sp.error : null;
+  const flashOk = pick(sp.ok) === "1";
+  const flashErrRaw = pick(sp.error) || null;
+  const flashErr = flashErrRaw ? (toAdminDisplayError(flashErrRaw, "default") ?? "처리에 실패했습니다. 잠시 후 다시 시도해 주세요.") : null;
 
   const supabase = await createClient();
-  const { data: packagesData, error: packagesError } = await supabase
-    .from("cash_topup_packages")
-    .select("id, label, amount_cents, price_cents, display_order, active")
-    .order("display_order", { ascending: true });
-  const packages = ((packagesData as TopupPackageRow[] | null) ?? []).filter((p) => p.id);
+  const [packages, cap, schedulerEnabled, appVersion, admins] = await Promise.all([
+    loadSettingsTopupPackages(supabase),
+    loadSettingsCapPolicy(),
+    loadSettingsPayoutScheduler(),
+    loadSettingsAppVersionPolicies(),
+    loadSettingsAdminAccounts(),
+  ]);
+
+  const planRows = buildSettingsPlanRows(SUBSCRIBE_PLAN_CATALOG, MENTOR_SUBSCRIPTION_PRICE_RULES);
+  const feeLine = buildFeeLine({
+    subscription: MENTOR_SUBSCRIPTION_PLATFORM_SHARE,
+    individualQuestion: MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE,
+    customRequest: MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
+  });
+  const capLine = buildCapLine(cap);
+  const planBandLine = formatPlanBandLine(planRows);
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-black text-slate-900">시스템 설정</h1>
-        <p className="mt-1 text-sm text-slate-600">
-          플랫폼 운영 설정을 관리합니다. 요금제·수수료는 코드 정본 잠금값이라 이 화면에서는 열람만 가능합니다.
-        </p>
-      </header>
-
+    <AdminPageLayout
+      title="시스템 설정"
+      description="운영 설정을 한 화면에서 봅니다. 이 화면에서 바꿀 수 있는 것은 충전 패키지 노출뿐이며, 나머지는 코드·DB 함수·배치가 관리하는 읽기 전용 값입니다."
+      actions={
+        <>
+          <Link href="/admin/settlements" className={ACTION_LINK} prefetch={false}>
+            정산 관리
+          </Link>
+          <Link href="/admin/audit-logs" className={ACTION_LINK} prefetch={false}>
+            감사 로그
+          </Link>
+        </>
+      }
+    >
       {flashOk ? (
-        <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-900">
+        <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">
           변경을 저장했습니다.
         </p>
       ) : null}
       {flashErr ? (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-900">{flashErr}</p>
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">
+          처리 실패 — {flashErr}
+        </p>
       ) : null}
 
-      {/* 캐시 충전 패키지 — 이 화면에서 유일하게 수정 가능한 실운영 설정 */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 bg-slate-50/60 px-5 py-3.5">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">캐시 충전 패키지</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            캐시 충전 화면(/wallet/charge)에 노출되는 패키지입니다. 비활성화하면 즉시 노출이 중단됩니다.
-          </p>
-        </div>
-        {packagesError ? (
-          <p className="px-5 py-6 text-sm font-semibold text-red-800">충전 패키지 목록을 불러오지 못했습니다.</p>
-        ) : packages.length === 0 ? (
-          <p className="px-5 py-6 text-sm font-semibold text-slate-500">등록된 충전 패키지가 없습니다.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead className="bg-slate-50 text-xs font-extrabold uppercase tracking-wide text-slate-500">
-                <tr>
-                  <th className="px-5 py-3">이름</th>
-                  <th className="px-5 py-3">지급 캐시</th>
-                  <th className="px-5 py-3">결제 금액</th>
-                  <th className="px-5 py-3">노출 순서</th>
-                  <th className="px-5 py-3">상태</th>
-                  <th className="px-5 py-3">조치</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {packages.map((p) => (
-                  <tr key={p.id}>
-                    <td className="px-5 py-3.5 font-bold text-slate-900">{p.label ?? "—"}</td>
-                    <td className="px-5 py-3.5 tabular-nums text-slate-800">{won(p.amount_cents)}</td>
-                    <td className="px-5 py-3.5 tabular-nums text-slate-800">{won(p.price_cents)}</td>
-                    <td className="px-5 py-3.5 tabular-nums text-slate-500">{p.display_order ?? "—"}</td>
-                    <td className="px-5 py-3.5">
-                      {p.active ? (
-                        <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
-                          노출 중
-                        </span>
-                      ) : (
-                        <span className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-bold text-slate-600">
-                          비활성
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <form action={toggleCashTopupPackageActiveAction}>
-                        <input type="hidden" name="id" value={p.id} />
-                        <input type="hidden" name="nextActive" value={p.active ? "false" : "true"} />
-                        <button
-                          type="submit"
-                          className={
-                            p.active
-                              ? "rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
-                              : "rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-emerald-500"
-                          }
-                        >
-                          {p.active ? "비활성화" : "활성화"}
-                        </button>
-                      </form>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {/* 요금제 잠금값 — 정본은 코드(lib/subscribe/*). 읽기 전용 */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="border-b border-slate-100 bg-slate-50/60 px-5 py-3.5">
-          <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">구독 요금제 (잠금값 · 읽기 전용)</h2>
-          <p className="mt-1 text-xs text-slate-500">
-            정본: <code className="font-mono">lib/subscribe/subscribePlanCatalog.ts</code> ·{" "}
-            <code className="font-mono">lib/subscribe/mentorPlanPricing.ts</code> — 변경은 코드 수정·배포로만 가능합니다.
-          </p>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
-            <thead className="bg-slate-50 text-xs font-extrabold uppercase tracking-wide text-slate-500">
-              <tr>
-                <th className="px-5 py-3">플랜</th>
-                <th className="px-5 py-3">주간 질문</th>
-                <th className="px-5 py-3">카탈로그 표시가</th>
-                <th className="px-5 py-3">멘토 가격 밴드 (min · 권장 · max)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {SUBSCRIBE_PLAN_TIERS.map((tier) => {
-                const catalog = SUBSCRIBE_PLAN_CATALOG.find((c) => c.tier === tier);
-                const band = MENTOR_SUBSCRIPTION_PRICE_RULES[tier];
-                return (
-                  <tr key={tier}>
-                    <td className="px-5 py-3.5 font-bold text-slate-900">
-                      {catalog?.label ?? tier}
-                      {catalog?.recommend ? (
-                        <span className="ml-2 rounded-md bg-blue-50 px-2 py-0.5 text-[11px] font-extrabold text-blue-700">추천</span>
-                      ) : null}
-                    </td>
-                    <td className="px-5 py-3.5 text-slate-700">{catalog?.weeklyLabel ?? "—"}</td>
-                    <td className="px-5 py-3.5 tabular-nums text-slate-800">{catalog ? cash(catalog.cashKrw) : "—"}</td>
-                    <td className="px-5 py-3.5 tabular-nums text-slate-800">
-                      {cash(band.minCashKrw)} · {cash(band.recommendedCashKrw)} · {cash(band.maxCashKrw)}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      {/* 수수료 잠금값 */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h2 className="text-xs font-bold uppercase tracking-wider text-slate-700">수수료 정책 (잠금값 · 읽기 전용)</h2>
-        <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <dt className="text-xs font-black text-slate-500">구독</dt>
-            <dd className="mt-1 font-bold text-slate-900">{SUBSCRIPTION_PLATFORM_FEE_LABEL}</dd>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <dt className="text-xs font-black text-slate-500">맞춤의뢰</dt>
-            <dd className="mt-1 font-bold text-slate-900">{CUSTOM_REQUEST_PLATFORM_FEE_LABEL}</dd>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <dt className="text-xs font-black text-slate-500">개별 질문</dt>
-            <dd className="mt-1 font-bold text-slate-900">{INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL}</dd>
-          </div>
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <dt className="text-xs font-black text-slate-500">정산 지급</dt>
-            <dd className="mt-1 font-bold text-slate-900">{PAYOUT_WITHHOLDING_LABEL}</dd>
-          </div>
-        </dl>
-        <p className="mt-3 text-xs text-slate-500">
-          정본: <code className="font-mono">lib/mentor/mentorPayoutsConstants.ts</code> — cap 1.0 / 2.5 / 4.5, 1캐시 = 1원.
-        </p>
-      </section>
-    </div>
+      <SettingsTopupPackageTable rows={packages.rows} error={packages.error} />
+      <SettingsPolicyCards planRows={planRows} planBandLine={planBandLine} feeLine={feeLine} capLine={capLine} schedulerEnabled={schedulerEnabled} payoutDayLabel={PAYOUT_DAY_LABEL} />
+      <SettingsAppVersionTable rows={appVersion.rows} error={appVersion.error} />
+      <SettingsAdminAccountList rows={admins.rows} error={admins.error} />
+    </AdminPageLayout>
   );
 }
