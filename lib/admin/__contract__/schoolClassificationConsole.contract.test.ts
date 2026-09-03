@@ -1,5 +1,6 @@
-// 계약 테스트: 등급 분류 화면(PR-11 §3) — §0-B 두 답(트리거는 LIKE 하드코딩 · 확정 행 정정 경로 없음)을 코드·SQL 로 고정하고,
-// 화면의 LIKE 규칙 표가 SQL 192 원문과 같은지, 편집 폼이 없는지, 미분류 목록이 맨 위인지 대조한다.
+// 계약 테스트: 등급 분류 화면(PR-11 §3 · PR-W1 정정) — §0-B-1(트리거는 LIKE 하드코딩)과 정정 경로(확정 RPC 한 경로 · 미분류 목록의
+// 등급 정정 버튼 = 같은 RPC 액션 · '그외')를 코드·SQL 로 고정하고, 화면의 LIKE 규칙 표가 SQL 192 원문과 같은지, 정정 폼 외 편집 폼이 없는지,
+// 미분류 목록이 맨 위인지 대조한다. (LIKE 표의 폴백은 아직 192 원문(미분류) — DB-2(193) 적용 후 PR-W2 가 새 폴백(그외)으로 갱신한다.)
 // 실행: node --test --experimental-strip-types lib/admin/__contract__/schoolClassificationConsole.contract.test.ts
 
 import test from "node:test";
@@ -18,20 +19,26 @@ import {
   SCHOOL_MAPPING_READONLY_NOTE,
   SCHOOL_RULE_HARDCODED_NOTICE,
   SCHOOL_RULE_SOURCE,
+  SCHOOL_TIER_CORRECTION_BUTTON_LABEL,
   SCHOOL_TIER_CORRECTION_DETAIL,
-  SCHOOL_TIER_CORRECTION_PENDING_NOTE,
+  SCHOOL_TIER_CORRECTION_FORM_FIELDS,
+  SCHOOL_TIER_CORRECTION_NOTE,
+  SCHOOL_TIER_CORRECTION_TARGET,
+  SCHOOL_TIER_CORRECTION_UNAVAILABLE_LABEL,
   SCHOOL_TIER_LIKE_FALLBACK,
   SCHOOL_TIER_LIKE_RULES,
   SCHOOL_TIER_UNCLASSIFIED,
   SCHOOL_TIER_VALUES,
   SCHOOL_UNCLASSIFIED_EMPTY_STATE,
   branchCampusHint,
+  buildSchoolTierCorrectionSummary,
   buildSchoolTierDistribution,
   formatSchoolTierDistribution,
   isBranchCampusSuspect,
   majorCategoryByLikeRules,
   matchSqlLike,
   schoolTierByLikeRules,
+  schoolTierCorrectionFormValues,
   sortUnclassifiedMentors,
   unclassifiedMentorAccountUrl,
   type UnclassifiedMentorItem,
@@ -124,15 +131,15 @@ test("표시용 LIKE 흉내는 SQL 자가 검증 예와 같다: 성균관대학�
   assert.equal(matchSqlLike("x", "%"), true);
 });
 
-// ── §0-B-2 확정 행 정정 경로 없음 ────────────────────────────────────────────
+// ── 정정 경로(PR-W1) — 확정 RPC 한 경로 · 미분류 목록의 등급 정정 버튼 ─────────────
 
-test("§0-B-2: 확정 RPC 는 확정된 approved(reviewed_by NOT NULL)를 받지 않고(NOT_REVIEWABLE), 반려·재제출 액션은 pending·resubmit_required 만 갱신 · 관리자 코드에 다른 갱신 경로 없음 → 화면은 정정 버튼 없이 안내만", () => {
+test("정정 경로(PR-W1): 확정 RPC 한 경로 — 확정된 approved 잠금 폐기 · 반려·재제출 액션 불변 · 관리자 코드에 다른 갱신 경로 없음 · 미분류 목록의 등급 정정 = 같은 RPC 액션('그외' · 폼 필드 = 액션이 읽는 키)", () => {
   const sql = read(SQL_192);
-  assert.ok(sql.includes("or (v_row.status = 'approved' and v_row.reviewed_by is null)") && sql.includes("raise exception 'NOT_REVIEWABLE: %'"));
+  assert.ok(sql.includes("raise exception 'NOT_REVIEWABLE: %'"), "rejected·superseded 는 여전히 NOT_REVIEWABLE");
   const actions = stripComments(read(RPC_ACTIONS));
-  assert.ok(actions.includes('const REVIEWABLE_STATUSES = ["pending", "resubmit_required"] as const;') && actions.includes('.in("status", [...REVIEWABLE_STATUSES])'));
-  const review = read(TIER_REVIEW);
-  assert.ok(review.includes('if (reviewed) blockers.push("already_confirmed");'), "PR-2c 잠금 규칙 그대로");
+  assert.ok(actions.includes('const REVIEWABLE_STATUSES = ["pending", "resubmit_required"] as const;') && actions.includes('.in("status", [...REVIEWABLE_STATUSES])'), "반려·재제출은 pending·resubmit_required 만");
+  const review = stripComments(read(TIER_REVIEW));
+  assert.ok(!review.includes("already_confirmed") && review.includes("SCHOOL_TIER_CONFIRMABLE_STATUSES"), "PR-W1: 확정된 행(approved · reviewed_by) 잠금 폐기 — 정정 가능");
   const adminFiles = walk(join(ROOT, "lib", "admin"), []).filter((f) => !f.includes("__contract__"));
   // `.from(TABLE)` 상수 참조(반려·재제출 액션)까지 잡는다 — 테이블명이 리터럴이든 상수든 갱신 체인이면 대상.
   const updaters = adminFiles
@@ -141,9 +148,48 @@ test("§0-B-2: 확정 RPC 는 확정된 approved(reviewed_by NOT NULL)를 받지
       return code.includes("mentor_school_verifications") && /\.from\((TABLE|"mentor_school_verifications")\)\s*\.\s*(update|upsert|delete)\(/.test(code);
     })
     .map((f) => f.slice(ROOT.length).replace(/\\/g, "/").replace(/^\//, ""));
-  assert.deepEqual(updaters, ["lib/admin/mentorSchoolVerificationReviewActions.ts"], "관리자 쪽 갱신 경로는 반려·재제출 액션뿐");
-  assert.equal(SCHOOL_TIER_CORRECTION_PENDING_NOTE, "등급 정정은 DB-2 후 가능");
-  assert.ok(SCHOOL_TIER_CORRECTION_DETAIL.includes("approve_mentor_school_verification_admin") && SCHOOL_TIER_CORRECTION_DETAIL.includes("NOT_REVIEWABLE"));
+  assert.deepEqual(updaters, ["lib/admin/mentorSchoolVerificationReviewActions.ts"], "관리자 쪽 직접 갱신 경로는 반려·재제출 액션뿐(정정은 RPC)");
+  // 정정 버튼 계약 — 지시서: `등급 정정` · stateChange · summary `김OO 멘토의 등급을 미분류 → 그외로 정정합니다`
+  assert.equal(SCHOOL_TIER_CORRECTION_BUTTON_LABEL, "등급 정정");
+  assert.equal(SCHOOL_TIER_CORRECTION_TARGET, "그외");
+  assert.equal(buildSchoolTierCorrectionSummary("김OO", "미분류"), "김OO 멘토의 등급을 미분류 → 그외로 정정합니다.");
+  assert.ok(SCHOOL_TIER_CORRECTION_NOTE.includes("정정") && SCHOOL_TIER_CORRECTION_DETAIL.includes("approve_mentor_school_verification_admin") && SCHOOL_TIER_CORRECTION_DETAIL.includes("NOT_REVIEWABLE"));
+  assert.equal(SCHOOL_TIER_CORRECTION_UNAVAILABLE_LABEL, "학교·학과 미입력 — 계정 상세에서 정정");
+  // 폼 필드명 == 서버 액션(approveMentorSchoolVerificationAction)이 formData.get 으로 읽는 키 전부
+  const fnStart = actions.indexOf("export async function approveMentorSchoolVerificationAction");
+  const fnEnd = actions.indexOf("export async function", fnStart + 1);
+  assert.ok(fnStart >= 0 && fnEnd > fnStart);
+  const keys = [...actions.slice(fnStart, fnEnd).matchAll(/formData\.get\("(\w+)"\)/g)].map((m) => m[1]).sort();
+  assert.deepEqual(keys, [...Object.values(SCHOOL_TIER_CORRECTION_FORM_FIELDS)].sort());
+  assert.deepEqual(Object.keys(SCHOOL_TIER_CORRECTION_FORM_FIELDS), [...Object.values(SCHOOL_TIER_CORRECTION_FORM_FIELDS)]);
+  // 폼 값: 인증 행 값 그대로 · 등급은 그외 · 학교/학과/계열이 비면 null(RPC INVALID_INPUT 방지 → 안내)
+  const base: UnclassifiedMentorItem = {
+    verificationId: "v1",
+    mentorId: "m1",
+    name: "김OO",
+    universityName: "가천대학교",
+    departmentName: "의예과",
+    reviewerName: "관리자",
+    reviewedAt: "2026-09-03T02:58:53Z",
+    confirmed: true,
+    verifiedUniversityName: "가천대학교",
+    verifiedUniversityId: null,
+    verifiedDepartmentName: "의예과",
+    verifiedMajorCategory: "메디컬",
+    tier: "미분류",
+  };
+  assert.deepEqual(schoolTierCorrectionFormValues(base), {
+    verificationId: "v1",
+    verifiedUniversityName: "가천대학교",
+    verifiedUniversityId: "",
+    verifiedDepartmentName: "의예과",
+    verifiedMajorCategory: "메디컬",
+    schoolTier: "그외",
+  });
+  assert.deepEqual(schoolTierCorrectionFormValues({ ...base, verifiedUniversityId: "gachon" })?.verifiedUniversityId, "gachon");
+  assert.equal(schoolTierCorrectionFormValues({ ...base, verifiedUniversityName: "  " }), null);
+  assert.equal(schoolTierCorrectionFormValues({ ...base, verifiedDepartmentName: null }), null);
+  assert.equal(schoolTierCorrectionFormValues({ ...base, verifiedMajorCategory: null }), null);
 });
 
 // ── 카탈로그 · 분포 · 미분류 · 분교 ─────────────────────────────────────────
@@ -163,7 +209,21 @@ test("등급별 분포는 사전 순서 6칸(0 포함) + 사전 밖 값 · 한 �
   const rows = buildSchoolTierDistribution([{ school_tier: "서연고" }, { school_tier: "서연고" }, { school_tier: "미분류" }, { school_tier: null }, { school_tier: "이상값" }]);
   assert.deepEqual(rows.map((r) => [r.tier, r.count]), [["서연고", 2], ["서성한", 0], ["중경외시", 0], ["건동홍", 0], ["그외", 0], ["미분류", 2], ["이상값", 1]]);
   assert.equal(formatSchoolTierDistribution(rows.slice(0, 6)), "서연고 2명 · 서성한 0명 · 중경외시 0명 · 건동홍 0명 · 그외 0명 · 미분류 2명");
-  const item = (name: string, uni: string): UnclassifiedMentorItem => ({ verificationId: `v-${name}`, mentorId: `m-${name}`, name, universityName: uni, departmentName: "의예과", reviewerName: "관리자", reviewedAt: null, confirmed: true });
+  const item = (name: string, uni: string): UnclassifiedMentorItem => ({
+    verificationId: `v-${name}`,
+    mentorId: `m-${name}`,
+    name,
+    universityName: uni,
+    departmentName: "의예과",
+    reviewerName: "관리자",
+    reviewedAt: null,
+    confirmed: true,
+    verifiedUniversityName: uni,
+    verifiedUniversityId: null,
+    verifiedDepartmentName: "의예과",
+    verifiedMajorCategory: "메디컬",
+    tier: "미분류",
+  });
   assert.deepEqual(sortUnclassifiedMentors([item("나", "계명대학교"), item("가", "계명대학교"), item("다", "가천대학교")]).map((i) => i.name), ["다", "가", "나"]);
   assert.equal(unclassifiedMentorAccountUrl("u1"), "/admin/users/u1?tab=mentor");
   assert.equal(SCHOOL_UNCLASSIFIED_EMPTY_STATE.title, "미분류 멘토가 없습니다");
@@ -193,11 +253,19 @@ test("페이지: PageScaffold 미사용 · AdminPageLayout · 편집 액션 impo
   assert.ok(existsSync(join(ROOT, LOADING)));
 });
 
-test("섹션 부품: Server Component · <form>·ConfirmSubmitButton·서버 액션 0 · 안내 3종(정정 DB-2 · 규칙 고정 · 매핑 읽기 전용) · LIKE 표 렌더 · AdminStatusPill(school_tier·verified_major_category) · 조회 모듈은 select 만", () => {
+test("섹션 부품: Server Component · 폼은 미분류 행의 등급 정정 하나(approveMentorSchoolVerificationAction · ConfirmSubmitButton stateChange · hidden 6 필드 상수) · 매핑·카탈로그 편집 폼 0 · 안내 3종(정정 · 규칙 고정 · 매핑 읽기 전용) · LIKE 표 렌더 · AdminStatusPill · 조회 모듈은 select 만", () => {
   const src = stripComments(read(PANELS));
   assert.ok(!src.startsWith('"use client"'));
-  assert.ok(!/<form\b/.test(src) && !src.includes("ConfirmSubmitButton") && !src.includes("Action}"), "쓰기 경로 0");
-  assert.ok(src.includes("{SCHOOL_TIER_CORRECTION_PENDING_NOTE} — {SCHOOL_TIER_CORRECTION_DETAIL}") && src.includes("{SCHOOL_RULE_HARDCODED_NOTICE}") && src.includes("hint={SCHOOL_MAPPING_READONLY_NOTE}"));
+  assert.equal((src.match(/<form\b/g) ?? []).length, 1, "폼은 정정 하나");
+  assert.ok(src.includes("action={approveMentorSchoolVerificationAction}"), "정정 = 기존 확정 RPC 액션(새 쓰기 경로 0)");
+  assert.equal((src.match(/<ConfirmSubmitButton/g) ?? []).length, 1);
+  assert.equal((src.match(/level="stateChange"/g) ?? []).length, 1, "정정은 stateChange(재입력 없음)");
+  assert.ok(!src.includes('level="destructive"') && !src.includes('level="critical"'));
+  assert.ok(!src.includes("schoolClassificationActions"), "매핑·카탈로그 편집 액션 0(§8-3)");
+  for (const k of Object.keys(SCHOOL_TIER_CORRECTION_FORM_FIELDS)) assert.ok(src.includes(`name={SCHOOL_TIER_CORRECTION_FORM_FIELDS.${k}}`), `hidden 필드 ${k}`);
+  assert.ok(src.includes("schoolTierCorrectionFormValues(it)") && src.includes("buildSchoolTierCorrectionSummary(it.name, it.tier)"), "폼 값·summary 헬퍼");
+  assert.ok(src.includes("confirmLabel={SCHOOL_TIER_CORRECTION_BUTTON_LABEL}") && src.includes("{SCHOOL_TIER_CORRECTION_BUTTON_LABEL}") && src.includes("SCHOOL_TIER_CORRECTION_UNAVAILABLE_LABEL"), "버튼 라벨 상수 · 미입력 안내");
+  assert.ok(src.includes("{SCHOOL_TIER_CORRECTION_NOTE} — {SCHOOL_TIER_CORRECTION_DETAIL}") && src.includes("{SCHOOL_RULE_HARDCODED_NOTICE}") && src.includes("hint={SCHOOL_MAPPING_READONLY_NOTE}"));
   assert.ok(src.includes("SCHOOL_TIER_LIKE_RULES.map") && src.includes("MAJOR_CATEGORY_LIKE_RULES.map"), "트리거 패턴 표");
   assert.ok(src.includes('column="school_tier"') && src.includes('column="verified_major_category"'));
   assert.ok(src.includes("unclassifiedMentorAccountUrl(it.mentorId)"), "미분류 행 → 계정 상세");
@@ -205,6 +273,7 @@ test("섹션 부품: Server Component · <form>·ConfirmSubmitButton·서버 액
   const q = stripComments(read(QUERIES));
   assert.ok(!/\.(insert|update|upsert|delete|rpc)\(/.test(q), "조회 전용");
   assert.ok(q.includes('.eq("status", "approved")'), "확정 승인 행 기준");
+  assert.ok(q.includes("verified_university_id") && q.includes("verifiedMajorCategory: strOrNull(r.verified_major_category)"), "정정 폼 값을 인증 행에서 읽는다");
   const pure = stripComments(read(CONSOLE));
   assert.ok(!/from "react"|from "@\//.test(pure), "순수 모듈은 React·@/ import 없음");
   const nav = read("components/admin/adminConsoleNavConfig.ts");

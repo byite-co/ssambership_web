@@ -3,7 +3,7 @@
  *
  *   ① 신원  — 가입 이름 ↔ 본인인증 실명 대조(일치 / 불일치 / 진행 중 / 만료·실패 / 시도 없음)
  *   ② 자격  — 대학·학과 · 과목 · 고교 · 소개 · 정원(DB RPC 값 그대로) · 같은 학교 당일 가입 경고
- *   ③ 학교 등급 — 자동 판정(미확정) / 확정됨 배지 · 등급·계열 드롭다운(상태 사전 값) · 확정(기존 RPC)
+ *   ③ 학교 등급 — 자동 판정(미확정) / 확정됨 배지 · 등급·계열 드롭다운(상태 사전 값) · 확정 / 등급 정정(기존 RPC 한 경로 · PR-W1)
  *   ④ 결정  — 하단 고정(MentorApprovalDecisionBar). 이미 처리된 건은 배너로 대체.
  */
 import Link from "next/link";
@@ -25,7 +25,15 @@ import {
   sameSchoolTodayWarning,
 } from "@/lib/admin/mentorApprovalDecision";
 import { identityReviewLabel, identityReviewTone } from "@/lib/admin/mentorIdentityReview";
-import { SCHOOL_TIER_BADGE_AUTO, SCHOOL_TIER_BADGE_CONFIRMED_PREFIX, schoolTierConfirmBlockerMessage } from "@/lib/admin/mentorSchoolTierReview";
+import {
+  SCHOOL_TIER_BADGE_AUTO,
+  SCHOOL_TIER_BADGE_CONFIRMED_PREFIX,
+  buildSchoolTierConfirmSummary,
+  schoolTierConfirmBlockerMessage,
+  schoolTierConfirmButtonLabel,
+  schoolTierConfirmDialogTitle,
+  schoolTierConfirmPendingLabel,
+} from "@/lib/admin/mentorSchoolTierReview";
 import { approveMentorSchoolVerificationAction } from "@/lib/admin/mentorSchoolVerificationReviewActions";
 import type { MentorApprovalDetail } from "@/lib/admin/mentorApprovalWorkbenchQueries";
 import { formatKoreanDate } from "@/lib/utils/formatDisplay";
@@ -249,15 +257,15 @@ export function MentorApprovalReviewPanel(props: Props) {
                   </label>
                   <ConfirmSubmitButton
                     level="stateChange"
-                    summary={`${detail.displayName} 멘토의 학교 등급을 확정합니다. 확정하면 reviewed_by 에 처리한 관리자가 기록됩니다.`}
-                    dialogTitle="학교 등급 확정"
-                    confirmLabel="확정"
-                    pendingLabel="확정 중…"
+                    summary={buildSchoolTierConfirmSummary(detail.displayName, schoolTier)}
+                    dialogTitle={schoolTierConfirmDialogTitle(schoolTier)}
+                    confirmLabel={schoolTierConfirmButtonLabel(schoolTier)}
+                    pendingLabel={schoolTierConfirmPendingLabel(schoolTier)}
                     disabled={!schoolTier.confirmable}
                     title={schoolTier.confirmable ? undefined : "현재 행은 확정 RPC 가 받지 않습니다"}
                     className="h-[34px] rounded-lg bg-slate-900 px-3 text-xs font-extrabold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
                   >
-                    확정
+                    {schoolTierConfirmButtonLabel(schoolTier)}
                   </ConfirmSubmitButton>
                 </div>
               </form>

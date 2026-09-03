@@ -14,13 +14,13 @@ import {
 } from "@/lib/admin/schoolClassificationConsole";
 
 /**
- * 등급 분류(PR-11 §3) 서버 조회 — 확정 승인 행(approved · 멘토당 1행)의 등급별 분포 · 미분류 멘토 목록 · 캠퍼스 표기 멘토. 전부 읽기.
+ * 등급 분류(PR-11 §3 · PR-W1) 서버 조회 — 확정 승인 행(approved · 멘토당 1행)의 등급별 분포 · 미분류 멘토 목록(정정 폼 값 포함) · 캠퍼스 표기 멘토. 전부 읽기.
  *
  * `mentor_school_verifications` 는 관리자 세션으로도 읽히지만(is_admin SELECT) 멘토 입력값(`mentor_profiles.university_name`)은 본인 행 RLS 라
  * 관리자 읽기 클라이언트(service_role 우선 · 세션 폴백)로 함께 읽는다. 행 상한 2000(멘토 74명).
  */
 
-const VERIFICATION_COLUMNS = "id, mentor_id, status, school_tier, verified_university_name, verified_department_name, verified_major_category, reviewed_by, reviewed_at";
+const VERIFICATION_COLUMNS = "id, mentor_id, status, school_tier, verified_university_name, verified_university_id, verified_department_name, verified_major_category, reviewed_by, reviewed_at";
 const PROFILE_COLUMNS = "user_id, university_name, department_name, verification_status";
 const ROW_LIMIT = 2000;
 
@@ -88,6 +88,12 @@ export async function loadSchoolClassificationOverview(supabase: SupabaseClient)
         reviewerName: reviewedBy ? (reviewerNames.get(reviewedBy) ?? reviewedBy.slice(0, 8)) : null,
         reviewedAt: strOrNull(r.reviewed_at),
         confirmed: Boolean(reviewedBy),
+        // 정정 폼(PR-W1) — 인증 행의 verified_* 우선, 없으면 프로필 값. RPC 가 btrim 후 저장한다.
+        verifiedUniversityName: strOrNull(r.verified_university_name) ?? strOrNull(profile?.university_name),
+        verifiedUniversityId: strOrNull(r.verified_university_id),
+        verifiedDepartmentName: strOrNull(r.verified_department_name) ?? strOrNull(profile?.department_name),
+        verifiedMajorCategory: strOrNull(r.verified_major_category),
+        tier,
       });
     }
     if (isBranchCampusSuspect(universityName, tier)) branchCampus.push({ mentorId, name, universityName, tier });

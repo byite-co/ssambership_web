@@ -1,11 +1,15 @@
 /**
- * 등급 분류 화면(PR-11 §3)의 섹션 부품 — 미분류 멘토 목록(맨 위) · 등급별 분포 · 판정 규칙(DB 트리거의 LIKE 패턴 표) · 카탈로그(읽기 전용) ·
- * 학교명 매핑(읽기 전용) · 캠퍼스 표기 멘토. 전부 Server Component · 폼 없음(편집 액션 0 — §0-B 실측에 따라 화면이 판정에 영향 없는 편집을 내놓지 않는다).
+ * 등급 분류 화면(PR-11 §3 · PR-W1 정정)의 섹션 부품 — 미분류 멘토 목록(맨 위 · 행별 `등급 정정` 폼) · 등급별 분포 · 판정 규칙(DB 트리거의 LIKE 패턴 표) ·
+ * 카탈로그(읽기 전용) · 학교명 매핑(읽기 전용) · 캠퍼스 표기 멘토. 전부 Server Component.
+ * 유일한 폼은 미분류 행의 등급 정정이며 기존 확정 RPC 액션(`approveMentorSchoolVerificationAction`)을 그대로 쓴다(새 쓰기 경로 0 · stateChange).
+ * 그 밖의 편집 폼은 없다(§0-B 실측에 따라 판정에 영향 없는 편집을 내놓지 않는다).
  */
 import Link from "next/link";
 import { AdminStatusPill } from "@/components/admin/AdminStatusPill";
+import { ConfirmSubmitButton } from "@/components/admin/ConfirmSubmitButton";
 import { StatusBadge } from "@/components/design-system/StatusBadge";
 import { EmptyState } from "@/components/common/EmptyState";
+import { approveMentorSchoolVerificationAction } from "@/lib/admin/mentorSchoolVerificationReviewActions";
 import type { BranchCampusMentorItem } from "@/lib/admin/schoolClassificationQueries";
 import {
   BRANCH_CAMPUS_HINT_LABELS,
@@ -18,15 +22,23 @@ import {
   SCHOOL_MAPPING_READONLY_NOTE,
   SCHOOL_RULE_HARDCODED_NOTICE,
   SCHOOL_RULE_SOURCE,
+  SCHOOL_TIER_CORRECTION_BUTTON_LABEL,
   SCHOOL_TIER_CORRECTION_DETAIL,
-  SCHOOL_TIER_CORRECTION_PENDING_NOTE,
+  SCHOOL_TIER_CORRECTION_DIALOG_TITLE,
+  SCHOOL_TIER_CORRECTION_FORM_FIELDS,
+  SCHOOL_TIER_CORRECTION_NOTE,
+  SCHOOL_TIER_CORRECTION_PENDING_LABEL,
+  SCHOOL_TIER_CORRECTION_TARGET,
+  SCHOOL_TIER_CORRECTION_UNAVAILABLE_LABEL,
   SCHOOL_TIER_LIKE_FALLBACK,
   SCHOOL_TIER_LIKE_RULES,
   SCHOOL_TIER_VALUES,
   SCHOOL_UNCLASSIFIED_EMPTY_STATE,
   SCHOOL_VERIFICATION_TABLE,
   branchCampusHint,
+  buildSchoolTierCorrectionSummary,
   formatSchoolTierDistribution,
+  schoolTierCorrectionFormValues,
   unclassifiedMentorAccountUrl,
   type SchoolTierDistributionRow,
   type UnclassifiedMentorItem,
@@ -51,13 +63,13 @@ function SectionHeader({ title, count, hint }: { title: string; count?: number; 
   );
 }
 
-/** 미분류 멘토 목록 — 맨 위. 정정 버튼 없음(§0-B-2 · 경로 없음) → `등급 정정은 DB-2 후 가능` 표시 + 계정 상세 링크. */
+/** 미분류 멘토 목록 — 맨 위. 행별 `등급 정정` 폼(PR-W1) = 기존 확정 RPC 액션 · stateChange · 등급 '그외'(새 폴백). 다른 등급은 계정 상세에서. */
 export function SchoolClassificationUnclassifiedTable({ items }: { items: UnclassifiedMentorItem[] }) {
   return (
     <section className={CARD} data-school-unclassified>
       <SectionHeader title="미분류 멘토" count={items.length} hint="확정 등급이 '미분류' 인 멘토입니다. 대학명은 멘토가 입력한 값 그대로입니다." />
-      <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900" data-school-correction-note>
-        {SCHOOL_TIER_CORRECTION_PENDING_NOTE} — {SCHOOL_TIER_CORRECTION_DETAIL}
+      <p className="mt-3 rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs font-bold text-slate-800" data-school-correction-note>
+        {SCHOOL_TIER_CORRECTION_NOTE} — {SCHOOL_TIER_CORRECTION_DETAIL}
       </p>
       {items.length === 0 ? (
         <div className="mt-4">
@@ -77,20 +89,52 @@ export function SchoolClassificationUnclassifiedTable({ items }: { items: Unclas
               </tr>
             </thead>
             <tbody>
-              {items.map((it) => (
-                <tr key={it.verificationId} className="border-t border-slate-100 hover:bg-slate-50/60" data-school-unclassified-row={it.mentorId}>
-                  <td className={cn(TD, "font-extrabold text-slate-900")}>
-                    <Link href={unclassifiedMentorAccountUrl(it.mentorId)} className="hover:underline" prefetch={false} title="계정 상세(멘토 탭)">
-                      {it.name}
-                    </Link>
-                  </td>
-                  <td className={TD}>{it.universityName}</td>
-                  <td className={TD}>{it.departmentName}</td>
-                  <td className={TD}>{it.confirmed ? (it.reviewerName ?? "관리자") : <StatusBadge label="자동 판정 · 미확정" tone="warning" size="sm" />}</td>
-                  <td className={cn(TD, "whitespace-nowrap tabular-nums")}>{formatKoreanDate(it.reviewedAt)}</td>
-                  <td className={cn(TD, "whitespace-nowrap text-[11px] font-bold text-slate-500")}>{SCHOOL_TIER_CORRECTION_PENDING_NOTE}</td>
-                </tr>
-              ))}
+              {items.map((it) => {
+                const values = schoolTierCorrectionFormValues(it);
+                return (
+                  <tr key={it.verificationId} className="border-t border-slate-100 hover:bg-slate-50/60" data-school-unclassified-row={it.mentorId}>
+                    <td className={cn(TD, "font-extrabold text-slate-900")}>
+                      <Link href={unclassifiedMentorAccountUrl(it.mentorId)} className="hover:underline" prefetch={false} title="계정 상세(멘토 탭)">
+                        {it.name}
+                      </Link>
+                    </td>
+                    <td className={TD}>{it.universityName}</td>
+                    <td className={TD}>{it.departmentName}</td>
+                    <td className={TD}>{it.confirmed ? (it.reviewerName ?? "관리자") : <StatusBadge label="자동 판정 · 미확정" tone="warning" size="sm" />}</td>
+                    <td className={cn(TD, "whitespace-nowrap tabular-nums")}>{formatKoreanDate(it.reviewedAt)}</td>
+                    <td className={cn(TD, "whitespace-nowrap")}>
+                      {values ? (
+                        <form action={approveMentorSchoolVerificationAction} className="inline" data-school-correction-form={it.verificationId}>
+                          <input type="hidden" name={SCHOOL_TIER_CORRECTION_FORM_FIELDS.verificationId} value={values.verificationId} />
+                          <input type="hidden" name={SCHOOL_TIER_CORRECTION_FORM_FIELDS.verifiedUniversityName} value={values.verifiedUniversityName} />
+                          <input type="hidden" name={SCHOOL_TIER_CORRECTION_FORM_FIELDS.verifiedUniversityId} value={values.verifiedUniversityId} />
+                          <input type="hidden" name={SCHOOL_TIER_CORRECTION_FORM_FIELDS.verifiedDepartmentName} value={values.verifiedDepartmentName} />
+                          <input type="hidden" name={SCHOOL_TIER_CORRECTION_FORM_FIELDS.verifiedMajorCategory} value={values.verifiedMajorCategory} />
+                          <input type="hidden" name={SCHOOL_TIER_CORRECTION_FORM_FIELDS.schoolTier} value={values.schoolTier} />
+                          <ConfirmSubmitButton
+                            level="stateChange"
+                            summary={buildSchoolTierCorrectionSummary(it.name, it.tier)}
+                            details={[
+                              { label: "대상", value: `${it.name} · ${it.universityName}` },
+                              { label: "등급", value: `${it.tier} → ${SCHOOL_TIER_CORRECTION_TARGET}` },
+                            ]}
+                            dialogTitle={SCHOOL_TIER_CORRECTION_DIALOG_TITLE}
+                            confirmLabel={SCHOOL_TIER_CORRECTION_BUTTON_LABEL}
+                            pendingLabel={SCHOOL_TIER_CORRECTION_PENDING_LABEL}
+                            className="h-8 rounded-lg bg-slate-900 px-3 text-[11px] font-extrabold text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:bg-slate-300"
+                          >
+                            {SCHOOL_TIER_CORRECTION_BUTTON_LABEL}
+                          </ConfirmSubmitButton>
+                        </form>
+                      ) : (
+                        <span className="text-[11px] font-bold text-slate-500" data-school-correction-unavailable>
+                          {SCHOOL_TIER_CORRECTION_UNAVAILABLE_LABEL}
+                        </span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

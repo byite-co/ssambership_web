@@ -1,14 +1,15 @@
 /**
- * 관리자 · 등급 분류 화면(PR-11 §3)의 순수 규칙 — 카탈로그(읽기 전용) · 판정 규칙 표(DB 트리거의 LIKE 패턴) · 매핑 표(읽기 전용) ·
- * 등급별 분포 · 미분류 멘토 목록 · 정정 경로 안내.
+ * 관리자 · 등급 분류 화면(PR-11 §3 · PR-W1 정정)의 순수 규칙 — 카탈로그(읽기 전용) · 판정 규칙 표(DB 트리거의 LIKE 패턴) · 매핑 표(읽기 전용) ·
+ * 등급별 분포 · 미분류 멘토 목록 + 등급 정정(같은 확정 RPC) · 정정 경로 안내.
  *
  * §0-B 실측(DB-1 SQL 192 · 운영 DB 2026-09-03):
  *   1. 트리거 `trg_auto_school_verification` → `auto_school_verification()` → `school_tier_suggest(university_name)` 는 **LIKE 패턴 하드코딩**이다.
  *      `school_tier_mappings` 를 읽는 함수·트리거·RPC 는 없다(읽는 코드 0 · 행 0). → 매핑 표를 편집해도 판정이 바뀌지 않으므로 화면은 읽기 전용이고
  *      트리거의 패턴 자체를 표로 보여준다(`SCHOOL_TIER_LIKE_RULES` — 계약 테스트가 SQL 192 원문과 대조한다).
- *   2. 확정된 행(`approved` + `reviewed_by NOT NULL`)의 등급을 바꾸는 쓰기 경로는 없다 — 확정 RPC `approve_mentor_school_verification_admin` 은
- *      pending · resubmit_required · 잠정 approved(reviewed_by NULL)만 받고(NOT_REVIEWABLE), 반려·재제출 액션도 pending·resubmit_required 만 갱신한다.
- *      → 미분류로 확정된 멘토의 정정 버튼은 없고 `등급 정정은 DB-2 후 가능` 을 표시한다(새 쓰기 경로 금지).
+ *   2. 확정된 행(`approved` + `reviewed_by NOT NULL`)의 정정은 확정 RPC `approve_mentor_school_verification_admin` **한 경로**다(PR-W1 · DB-2 SQL 193 A-2:
+ *      approved 는 reviewed_by 유무와 무관하게 허용 · 정정 시 이전 등급·확정자를 감사 로그에 남긴다). 반려·재제출 액션은 여전히 pending·resubmit_required 만 갱신한다.
+ *      → 미분류 목록의 `등급 정정` 버튼은 같은 RPC 액션(`approveMentorSchoolVerificationAction`)으로 등급을 '그외'(새 폴백)로 넘긴다(새 쓰기 경로 0).
+ *      DB-2(193) 적용 전에는 옛 RPC(192)가 확정된 행을 NOT_REVIEWABLE 로 거절한다(처리 실패 표시 · 데이터 불변 — 오너 허용 구간).
  *
  * 여기의 LIKE 표·판정 헬퍼는 **표시 전용**이다(정본은 DB 함수 · TS 사본으로 판정하지 않는다).
  * node --test 계약 테스트가 직접 import 하므로 React·`@/` import 를 두지 않는다.
@@ -137,11 +138,51 @@ export function majorCategoryByLikeRules(departmentName: string | null | undefin
   return MAJOR_CATEGORY_LIKE_FALLBACK;
 }
 
-// ── 정정 경로 — 없음(§0-B-2) ────────────────────────────────────────────────────
+// ── 정정 경로 — 확정 RPC 한 경로(PR-W1 · SQL 193 A-2) ──────────────────────────────
 
-export const SCHOOL_TIER_CORRECTION_PENDING_NOTE = "등급 정정은 DB-2 후 가능";
+/** 미분류 목록의 정정 버튼이 넘기는 등급 — 새 폴백 '그외'. 다른 등급은 계정 상세(멘토 탭) 드롭다운으로 정정한다. */
+export const SCHOOL_TIER_CORRECTION_TARGET = SCHOOL_TIER_OTHER;
+export const SCHOOL_TIER_CORRECTION_BUTTON_LABEL = "등급 정정";
+export const SCHOOL_TIER_CORRECTION_DIALOG_TITLE = "학교 등급 정정";
+export const SCHOOL_TIER_CORRECTION_PENDING_LABEL = "정정 중…";
+export const SCHOOL_TIER_CORRECTION_NOTE = "확정된 등급도 정정할 수 있습니다.";
 export const SCHOOL_TIER_CORRECTION_DETAIL =
-  "확정된 행(approved · reviewed_by 기록)은 확정 RPC approve_mentor_school_verification_admin 이 받지 않습니다(NOT_REVIEWABLE). 정정 버튼이 없는 이유이며, 정정 경로는 DB-2 항목입니다.";
+  "정정은 확정 RPC approve_mentor_school_verification_admin 과 같은 경로입니다 — 등급을 '그외'로 바꾸고 reviewed_by·reviewed_at 을 새로 기록하며 이전 등급·확정자는 감사 로그(school_tier_corrected)에 남습니다. 다른 등급으로 바꾸려면 계정 상세(멘토 탭)에서 정정하세요. DB-2(SQL 193) 적용 전에는 확정된 행의 정정이 NOT_REVIEWABLE 로 거절됩니다(처리 실패 표시 · 데이터 불변).";
+/** 학교·학과·계열이 비어 RPC 가 INVALID_INPUT 으로 거절할 행 — 버튼 대신 안내 */
+export const SCHOOL_TIER_CORRECTION_UNAVAILABLE_LABEL = "학교·학과 미입력 — 계정 상세에서 정정";
+
+/** 서버 액션(`approveMentorSchoolVerificationAction`)이 읽는 폼 필드명 — 계약 테스트가 액션 원문과 대조한다. */
+export const SCHOOL_TIER_CORRECTION_FORM_FIELDS = {
+  verificationId: "verificationId",
+  verifiedUniversityName: "verifiedUniversityName",
+  verifiedUniversityId: "verifiedUniversityId",
+  verifiedDepartmentName: "verifiedDepartmentName",
+  verifiedMajorCategory: "verifiedMajorCategory",
+  schoolTier: "schoolTier",
+} as const;
+
+export type SchoolTierCorrectionFormValues = Record<keyof typeof SCHOOL_TIER_CORRECTION_FORM_FIELDS, string>;
+
+/** 정정 summary — `김OO 멘토의 등급을 미분류 → 그외로 정정합니다.` */
+export function buildSchoolTierCorrectionSummary(displayName: string, fromTier: string, toTier: string = SCHOOL_TIER_CORRECTION_TARGET): string {
+  return `${displayName} 멘토의 등급을 ${fromTier} → ${toTier}로 정정합니다.`;
+}
+
+/** 정정 폼 값 — 인증 행의 verified_* 값(없으면 프로필 값)을 그대로 넘긴다. 학교·학과·계열이 비면 null(RPC INVALID_INPUT 방지). */
+export function schoolTierCorrectionFormValues(item: UnclassifiedMentorItem): SchoolTierCorrectionFormValues | null {
+  const university = String(item.verifiedUniversityName ?? "").trim();
+  const department = String(item.verifiedDepartmentName ?? "").trim();
+  const category = String(item.verifiedMajorCategory ?? "").trim();
+  if (!item.verificationId || !university || !department || !category) return null;
+  return {
+    verificationId: item.verificationId,
+    verifiedUniversityName: university,
+    verifiedUniversityId: String(item.verifiedUniversityId ?? "").trim(),
+    verifiedDepartmentName: department,
+    verifiedMajorCategory: category,
+    schoolTier: SCHOOL_TIER_CORRECTION_TARGET,
+  };
+}
 
 // ── 분포 · 미분류 목록 ─────────────────────────────────────────────────────────
 
@@ -176,6 +217,13 @@ export type UnclassifiedMentorItem = {
   reviewedAt: string | null;
   /** `reviewed_by IS NOT NULL` */
   confirmed: boolean;
+  /** 인증 행의 verified_* 값(없으면 프로필 값) — 정정 폼이 RPC 에 그대로 넘긴다 */
+  verifiedUniversityName: string | null;
+  verifiedUniversityId: string | null;
+  verifiedDepartmentName: string | null;
+  verifiedMajorCategory: string | null;
+  /** 현재 등급(목록은 미분류만 담는다) */
+  tier: string;
 };
 
 /** 대학명 → 이름 순. 같은 대학이 묶여 보이게. */

@@ -215,9 +215,11 @@ const PR2_CONFIRM_IMPORTERS = [
   "components/admin/CommunityContentActionButtons.tsx",
   "components/admin/ReviewActionButtons.tsx",
   "components/admin/MentorActivityActionButtons.tsx",
+  // PR-W1 등급 분류 — 미분류 멘토 행의 등급 정정(stateChange · PR-2 와 같은 확정 RPC 액션 · 새 쓰기 경로 0)
+  "components/admin/SchoolClassificationPanels.tsx",
 ];
 
-test("이관 범위: ConfirmSubmitButton 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)·PR-5 신고 조치·학적 변경 결정·PR-6 경고·정지·분쟁 조치·PR-7 계정 상세 조치·정원 조정·PR-9 정산 실행·PR-10 공지·프로모션·충전 패키지 토글·PR-11 커뮤니티·리뷰·멘토 활동 조치뿐이고, AdminConfirmDialog 직접 import 는 없다", () => {
+test("이관 범위: ConfirmSubmitButton 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)·PR-5 신고 조치·학적 변경 결정·PR-6 경고·정지·분쟁 조치·PR-7 계정 상세 조치·정원 조정·PR-9 정산 실행·PR-10 공지·프로모션·충전 패키지 토글·PR-11 커뮤니티·리뷰·멘토 활동 조치·PR-W1 등급 정정뿐이고, AdminConfirmDialog 직접 import 는 없다", () => {
   const files: string[] = [];
   const walk = (dir: string) => {
     for (const name of readdirSync(dir)) {

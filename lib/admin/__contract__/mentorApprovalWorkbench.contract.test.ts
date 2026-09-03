@@ -58,13 +58,20 @@ import {
   stepDocumentZoom,
 } from "../documentViewerModel.ts";
 import {
+  SCHOOL_TIER_CONFIRMABLE_STATUSES,
+  SCHOOL_TIER_CONFIRM_BUTTON_LABEL,
+  SCHOOL_TIER_CORRECT_BUTTON_LABEL,
   SCHOOL_TIER_LOCKING_BLOCKERS,
   SCHOOL_TIER_PROVISIONAL_STATUS,
   SCHOOL_TIER_RPC_REVIEWABLE_STATUSES,
+  buildSchoolTierConfirmSummary,
   isSchoolTierLockingBlocker,
   pickSchoolTierReviewRow,
   resolveSchoolTierReviewState,
   schoolTierConfirmBlockerMessage,
+  schoolTierConfirmButtonLabel,
+  schoolTierConfirmDialogTitle,
+  schoolTierConfirmPendingLabel,
   type SchoolTierReviewRowLite,
 } from "../mentorSchoolTierReview.ts";
 import { adminStatusAllowedValues } from "../adminStatusDictionary.ts";
@@ -443,33 +450,45 @@ test("reviewed_by NULL → 자동 판정·미확정, NOT NULL → 확정됨 · �
   assert.equal(none.suggestedTier, "미분류");
 });
 
-test("PR-2c 잠금 조건: pending · resubmit_required · 잠정 approved(reviewed_by NULL) 는 서류 없이도 확정 가능 — 서류 없음은 경고만(SQL 192 B-3 규칙)", () => {
+test("PR-W1 잠금 조건: pending · resubmit_required · approved(잠정·확정 무관)는 서류 없이도 확정·정정 가능 — 서류 없음은 경고만 · 확정된 행은 '등급 정정'(SQL 193 A-2 규칙)", () => {
   assert.deepEqual([...SCHOOL_TIER_RPC_REVIEWABLE_STATUSES], ["pending", "resubmit_required"]);
   assert.equal(SCHOOL_TIER_PROVISIONAL_STATUS, "approved");
-  assert.deepEqual([...SCHOOL_TIER_LOCKING_BLOCKERS], ["not_reviewable_status", "already_confirmed"]);
+  assert.deepEqual([...SCHOOL_TIER_CONFIRMABLE_STATUSES], ["pending", "resubmit_required", "approved"]);
+  assert.deepEqual([...SCHOOL_TIER_LOCKING_BLOCKERS], ["not_reviewable_status"], "already_confirmed 잠금 폐기(PR-W1)");
   assert.equal(isSchoolTierLockingBlocker("document_missing"), false, "서류 없음은 잠금 사유가 아니다");
+  assert.equal(SCHOOL_TIER_CONFIRM_BUTTON_LABEL, "확정");
+  assert.equal(SCHOOL_TIER_CORRECT_BUTTON_LABEL, "등급 정정");
   const DOC = "student-id-images/u/school-verifications/a.pdf";
-  // 서류 없는 pending · resubmit_required → 확정 버튼 활성 · 경고 1건
+  // 서류 없는 pending · resubmit_required → 확정 버튼 활성 · 경고 1건 · 라벨 '확정'
   for (const status of ["pending", "resubmit_required"]) {
     const s = resolveSchoolTierReviewState(tierRow({ status }));
     assert.equal(s.confirmable, true, status);
     assert.deepEqual(s.blockers, ["document_missing"], status);
+    assert.equal(schoolTierConfirmButtonLabel(s), "확정", status);
   }
-  // 서류 없는 잠정 approved(reviewed_by NULL · 트리거 자동 행) → 활성 · 경고 1건(구 잠금 폐기)
+  // 서류 없는 잠정 approved(reviewed_by NULL · 트리거 자동 행) → 활성 · 경고 1건 · 라벨 '확정'
   const provisional = resolveSchoolTierReviewState(tierRow({}));
   assert.equal(provisional.mode, "auto");
   assert.equal(provisional.confirmable, true);
   assert.deepEqual(provisional.blockers, ["document_missing"]);
+  assert.equal(schoolTierConfirmButtonLabel(provisional), "확정");
+  assert.equal(schoolTierConfirmDialogTitle(provisional), "학교 등급 확정");
+  assert.equal(schoolTierConfirmPendingLabel(provisional), "확정 중…");
   // 서류 있는 pending → 활성 · 사유 0
   const ok = resolveSchoolTierReviewState(tierRow({ status: "pending", document_storage_ref: DOC }));
   assert.equal(ok.confirmable, true);
   assert.deepEqual(ok.blockers, []);
-  // approved + reviewed_by NOT NULL → 잠김(이미 확정) — 서류가 있어도
+  // approved + reviewed_by NOT NULL(확정된 행) → PR-W1: 정정 가능(버튼 열림) · 라벨 '등급 정정'
   const confirmed = resolveSchoolTierReviewState(tierRow({ reviewed_by: "admin-uuid", document_storage_ref: DOC }));
   assert.equal(confirmed.mode, "confirmed");
-  assert.equal(confirmed.confirmable, false);
-  assert.deepEqual(confirmed.blockers, ["already_confirmed"]);
-  assert.equal(resolveSchoolTierReviewState(tierRow({ reviewed_by: "   " })).confirmable, true, "공백 reviewed_by 는 NULL 취급(배지 기준과 동일)");
+  assert.equal(confirmed.confirmable, true, "PR-W1: 확정된 행도 정정 가능");
+  assert.deepEqual(confirmed.blockers, []);
+  assert.equal(schoolTierConfirmButtonLabel(confirmed), "등급 정정");
+  assert.equal(schoolTierConfirmDialogTitle(confirmed), "학교 등급 정정");
+  assert.equal(schoolTierConfirmPendingLabel(confirmed), "정정 중…");
+  assert.deepEqual(resolveSchoolTierReviewState(tierRow({ reviewed_by: "admin-uuid" })).blockers, ["document_missing"], "확정된 행 · 서류 없음 = 경고만");
+  assert.equal(resolveSchoolTierReviewState(tierRow({ reviewed_by: "   " })).mode, "auto", "공백 reviewed_by 는 NULL 취급(배지 기준과 동일)");
+  assert.equal(schoolTierConfirmButtonLabel(resolveSchoolTierReviewState(null)), "확정");
   // rejected · superseded → 잠김 — 서류가 있어도
   for (const status of ["rejected", "superseded"]) {
     const s = resolveSchoolTierReviewState(tierRow({ status, document_storage_ref: DOC }));
@@ -477,19 +496,31 @@ test("PR-2c 잠금 조건: pending · resubmit_required · 잠정 approved(revie
     assert.deepEqual(s.blockers, ["not_reviewable_status"], status);
     assert.deepEqual(resolveSchoolTierReviewState(tierRow({ status })).blockers, ["not_reviewable_status", "document_missing"], `${status} · 서류 없음`);
   }
-  // 문구: 잠금 사유는 RPC 이름 · 경고는 "확정할 수 있다"(옛 DOCUMENT_REF_MISSING 거부 문구 폐기)
-  assert.ok(schoolTierConfirmBlockerMessage("not_reviewable_status", "rejected").includes("approve_mentor_school_verification_admin"));
-  assert.ok(schoolTierConfirmBlockerMessage("not_reviewable_status", "rejected").includes("'rejected'"));
-  assert.ok(schoolTierConfirmBlockerMessage("already_confirmed").includes("이미 관리자가 확정한 행"));
+  // summary: 확정 vs 정정(이전 등급·확정자 감사 로그) · 화면별 후속 안내
+  const confirmSummary = buildSchoolTierConfirmSummary("김멘토", provisional);
+  assert.ok(confirmSummary.startsWith("김멘토 멘토의 학교 등급을 확정합니다") && confirmSummary.includes("reviewed_by"));
+  const correctSummary = buildSchoolTierConfirmSummary("김멘토", confirmed, { afterNote: "처리 후 멘토 승인 화면으로 이동합니다." });
+  assert.ok(correctSummary.startsWith("김멘토 멘토의 확정된 학교 등급을 정정합니다") && correctSummary.includes("이전 등급·확정자는 감사 로그"));
+  assert.ok(correctSummary.endsWith("처리 후 멘토 승인 화면으로 이동합니다."));
+  // 문구: 잠금 사유는 RPC 이름 + approved 포함 · 경고는 "확정할 수 있다"(옛 DOCUMENT_REF_MISSING 거부 문구 폐기)
+  const locked = schoolTierConfirmBlockerMessage("not_reviewable_status", "rejected");
+  assert.ok(locked.includes("approve_mentor_school_verification_admin") && locked.includes("'rejected'") && locked.includes("approved"));
   const warn = schoolTierConfirmBlockerMessage("document_missing");
   assert.ok(warn.includes("제출된 학교 인증 서류가 없습니다") && warn.includes("서류 없이도 확정할 수 있습니다"), "서류 없음 경고 문구");
   assert.ok(!warn.includes("DOCUMENT_REF_MISSING") && !warn.includes("거부"), "옛 거부 문구 폐기");
-  // 화면 배선: 경고도 같은 목록(data-school-tier-blockers)으로 렌더 — 잠금은 confirmable 만 본다(PR-2 화면 불변)
+  const review = stripComments(read("lib/admin/mentorSchoolTierReview.ts"));
+  assert.ok(!review.includes("already_confirmed"), "옛 잠금 사유 already_confirmed 는 코드에서 사라졌다");
+  // 화면 배선: 경고도 같은 목록(data-school-tier-blockers)으로 렌더 — 잠금은 confirmable 만 본다 · 라벨·summary·제목은 헬퍼(두 화면 동일)
   const panel = stripComments(read(PANEL));
   assert.ok(panel.includes("schoolTier.blockers.map((b) =>") && panel.includes("schoolTierConfirmBlockerMessage(b, schoolTier.row?.status)"), "사유·경고 목록 렌더");
   assert.ok(panel.includes("disabled={!schoolTier.confirmable}") && !panel.includes("document_missing"), "잠금은 confirmable 만 · 화면이 서류 유무로 따로 잠그지 않는다");
-  // RPC 는 reviewed_by · reviewed_at 을 채운다(174 · 192 공통) — SQL 원문으로 고정.
-  // 174 의 status·서류 제한은 #116(SQL 192)이 대체하므로 더 이상 화면 계약으로 고정하지 않는다.
+  assert.equal((panel.match(/schoolTierConfirmButtonLabel\(schoolTier\)/g) ?? []).length, 2, "버튼 문구·confirmLabel 둘 다 헬퍼(확정/등급 정정)");
+  assert.ok(panel.includes("buildSchoolTierConfirmSummary(detail.displayName, schoolTier)") && panel.includes("schoolTierConfirmDialogTitle(schoolTier)"), "summary·제목 헬퍼");
+  const tab = stripComments(read("components/admin/AccountMentorTab.tsx"));
+  assert.equal((tab.match(/schoolTierConfirmButtonLabel\(schoolTier\)/g) ?? []).length, 2, "계정 상세 멘토 탭도 같은 라벨 헬퍼");
+  assert.ok(tab.includes("buildSchoolTierConfirmSummary(displayName, schoolTier, { afterNote:"), "계정 상세는 이동 안내를 덧붙인다");
+  // RPC 는 reviewed_by · reviewed_at 을 채운다(174 · 192 · 193 공통) — SQL 원문으로 고정.
+  // 174 의 status·서류 제한은 192 가, 192 의 "approved AND reviewed_by IS NULL" 은 193 이 대체하므로 화면 계약으로 고정하지 않는다.
   const sql = read("supabase/sql/174_mentor_school_verification_approval_canon.sql");
   assert.ok(sql.includes("reviewed_by = v_admin,") && sql.includes("reviewed_at = now(),"), "RPC 가 reviewed_by·reviewed_at 을 채운다");
 });
