@@ -1,8 +1,9 @@
 /**
  * 멘토 정산 UI 표시 헬퍼 — 클라이언트·서버 공용 (server-only import 없음)
  */
-import { calcPayoutWithholding } from "@/lib/mentor/mentorPayoutsConstants";
+import { calcPayoutWithholding } from "@/lib/payout/payoutComputation";
 import { isAccruingPayoutStatus } from "@/lib/mentor/payoutLineStatus";
+import { formatCashKrw as formatCashKrwDisplay } from "@/lib/utils/formatDisplay";
 import { kstDateString, kstYearMonth, nextYearMonth } from "@/lib/mentor/mentorSettlementSchema";
 import type {
   MentorPayoutDetailLine,
@@ -15,6 +16,13 @@ import type {
 // DB fee_rate 를 TS 잠금값으로 "보정"하던 사문 코드(호출자 0). 요율 표시는 lib/payout/settlementFeeRate.ts(DB 값 그대로)로만.
 
 const WEEKDAY_KO = ["일", "월", "화", "수", "목", "금", "토"] as const;
+
+export const DEFAULT_MASKED_BANK_DISPLAY = "정산 계좌 미등록";
+
+/** 정산 화면 인앱 가치 표시 — 캐시 단위(숫자 동일, 표시만). 실결제 KRW는 충전/토스에서만. */
+export function formatCashKrw(n: number): string {
+  return formatCashKrwDisplay(n, { unit: "캐시" });
+}
 
 export function formatPayoutDateLabel(iso: string): string {
   const d = new Date(iso);

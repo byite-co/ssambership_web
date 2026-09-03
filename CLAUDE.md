@@ -35,7 +35,7 @@
 - **가격(캐시/월, 카탈로그 기본 표시가):** 29,900 / 84,900 / 174,900 — 정본 `lib/subscribe/subscribePlanCatalog.ts` (멘토 플랜 행·권장가 조회가 모두 실패했을 때의 표시 폴백)
 - **멘토 가격 밴드(min/권장/max, 캐시):** 라이트 29,900/29,900/69,900 · 스탠다드 84,900/84,900/149,900 · 프리미엄 174,900/174,900/329,900 — 정본 `lib/subscribe/mentorPlanPricing.ts`. **실차감액**은 `mentor_plans` 행 금액 → 없으면 권장가 순으로 결정
 - **cap:** 가중치 라이트 1.0 / 스탠다드 2.25 / 프리미엄 4.75 · 멘토 한도 기본 50 — 정본 `subscription_cap_weight()` · `mentor_cap_limit()` (DB RPC, TS 사본 금지)
-- **수수료(플랫폼 공제):** 구독 15% · 맞춤의뢰 5% · 개별질문 15% (멘토 수령 85/95/85)
+- **수수료(플랫폼 공제):** 구독 15% · 맞춤의뢰 5% · 개별질문 15% (멘토 수령 85/95/85) — 정책 요율 정본 `lib/payout/platformFeePolicy.ts`(코드의 요율 리터럴은 이 파일에만 · 멘토 몫은 `1 − 요율` 파생) · **적용된 요율**은 정산 행 `fee_rate`(`lib/payout/settlementFeeRate.ts`)이며 정책으로 재계산하지 않는다
 - **질문방:** `mentor_student_rooms` → `question_threads` → `question_messages`
 - **연결노트:** room 단위 (`connection_notes`)
 - **커뮤니티:** 게시판(`community_posts`) / 숏폼(`shortform_posts`) 분리

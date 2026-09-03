@@ -1,10 +1,7 @@
 import Link from "next/link";
 import { PAGE_COL_GAP, SURFACE_CARD } from "@/lib/ui/surfaceCard";
-import {
-  MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
-  MENTOR_SUBSCRIPTION_PLATFORM_SHARE,
-  PAYOUT_DAY_LABEL,
-} from "@/lib/mentor/mentorPayoutsConstants";
+import { PAYOUT_DAY_LABEL } from "@/lib/payout/payoutComputation";
+import { platformFeePercentLabel } from "@/lib/payout/platformFeePolicy";
 import { formatRunDateLabel, type SettlementTrendPoint } from "@/lib/mentor/mentorSettlementDisplay";
 import { MentorPayoutsMonthlyAreaChartLazy } from "./MentorPayoutsChartLazy";
 
@@ -59,8 +56,8 @@ export function MentorPayoutsRightPanel(props: Props) {
           <div className="flex items-start justify-between gap-3">
             <dt className="shrink-0 text-[11px] font-medium text-slate-400">수수료</dt>
             <dd className="text-right text-[13px] font-medium text-slate-700">
-              구독 {Math.round(MENTOR_SUBSCRIPTION_PLATFORM_SHARE * 100)}% · 맞춤의뢰{" "}
-              {Math.round(MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE * 100)}%
+              구독 {platformFeePercentLabel("subscription")} · 맞춤의뢰{" "}
+              {platformFeePercentLabel("customRequest")}
             </dd>
           </div>
           <div className="flex items-start justify-between gap-3">

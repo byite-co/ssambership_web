@@ -9,21 +9,17 @@ import {
   minorCentsToCash,
   subscriptionSettlementStatus,
 } from "@/lib/mentor/subscriptionSettlementItems";
-import {
-  calcPayoutWithholding,
-  DEFAULT_MASKED_BANK_DISPLAY,
-  MENTOR_CUSTOM_REQUEST_SHARE,
-  MENTOR_INDIVIDUAL_QUESTION_SHARE,
-} from "@/lib/mentor/mentorPayoutsConstants";
+import { calcPayoutWithholding } from "@/lib/payout/payoutComputation";
 import {
   customRequestCompletedOrderLine,
+  customRequestPerformanceAmount,
   customRequestSettlementLine,
-  intWon,
-  orderGrossWon,
+  individualQuestionLine,
   pickTs,
 } from "@/lib/mentor/mentorPayoutLinesCore";
 import {
   buildPayoutScheduleInfo,
+  DEFAULT_MASKED_BANK_DISPLAY,
   detailLineToSettlementRow,
   withPayoutWithholding,
 } from "@/lib/mentor/mentorPayoutsDisplay";
@@ -184,8 +180,38 @@ async function loadCustomRequestLines(client: SupabaseClient, mentorId: string):
 }
 
 /**
+ * V-5: 개별질문 지급 스냅샷(payout_run_items · source_type = individual_question) — 지급 run(SQL 153)이 기록한 적용
+ * 요율·금액. RLS pri_select_mentor_own(SQL 106)로 본인 행만 읽힌다. 조회 실패는 로그 후 빈 맵 → 라인은 정책 추정으로
+ * 표시된다(표시 전용 degrade · 성공 아님).
+ */
+async function loadIndividualQuestionRunItems(
+  client: SupabaseClient,
+  mentorId: string,
+  questionIds: string[]
+): Promise<Map<string, Row>> {
+  const bySource = new Map<string, Row>();
+  if (questionIds.length === 0) return bySource;
+  const { data, error } = await client
+    .from("payout_run_items")
+    .select("source_id, gross_cents, platform_fee_cents, mentor_amount_cents, fee_rate")
+    .eq("mentor_id", mentorId)
+    .eq("source_type", "individual_question")
+    .in("source_id", questionIds);
+  if (error || !data) {
+    if (error) console.error("[loadIndividualQuestionRunItems] payout_run_items", error.message);
+    return bySource;
+  }
+  for (const row of data as Row[]) {
+    const sid = String(row.source_id ?? "");
+    if (sid && !bySource.has(sid)) bySource.set(sid, row);
+  }
+  return bySource;
+}
+
+/**
  * W-04: 개별질문(IQ) 정산 라인 — individual_questions released 건 기반.
- * 산식은 SQL 096/107/109와 동일: 멘토 85% = floor(price_cents * 0.85).
+ * V-5: 지급 스냅샷(payout_run_items)이 있으면 행 그대로(적용 요율), 없으면 정책 요율(lib/payout/platformFeePolicy.ts)로
+ * 추정하고 '예상' 으로 표시한다 — 매퍼는 lib/mentor/mentorPayoutLinesCore.ts(individualQuestionLine).
  * 현행(즉시지급)은 release_ledger_id 설정 → "지급완료", 후불 분리(109) 전환 시
  * released & ledger null 건이 자연히 "정산예정"으로 표시된다.
  */
@@ -207,31 +233,23 @@ async function loadIndividualQuestionLines(
     return [];
   }
 
-  const lines: MentorPayoutDetailLine[] = [];
-  for (const q of data as Row[]) {
+  const questions = (data as Row[]).filter((q) => {
     // 담당 멘토 확정 — claimed 우선(107 뷰와 동일). 지정만 되고 타 멘토가 claim한 건 제외.
     const effectiveMentor = String(q.claimed_mentor_id ?? q.designated_mentor_id ?? "");
-    if (effectiveMentor !== mentorId) continue;
+    if (effectiveMentor !== mentorId) return false;
     const st = String(q.status ?? "").toLowerCase();
-    if (["refunded", "expired", "canceled", "cancelled"].includes(st)) continue;
-    const priceCents = intWon(q.price_cents);
-    if (priceCents <= 0) continue;
-    const netCents = Math.floor(priceCents * MENTOR_INDIVIDUAL_QUESTION_SHARE);
-    const qid = String(q.id ?? "");
-    const date =
-      [q.released_at, q.answered_at, q.created_at].find((v) => typeof v === "string" && v) as string | undefined;
-    lines.push(
-      withPayoutWithholding({
-        id: `iq-${qid}`,
-        type: "individual_question",
-        date: date ?? new Date().toISOString(),
-        description: qid ? `개별질문 · ${qid.slice(0, 8)}` : "개별질문",
-        paymentAmount: minorCentsToCash(priceCents),
-        feeAmount: minorCentsToCash(priceCents - netCents),
-        netAmount: minorCentsToCash(netCents),
-        status: q.release_ledger_id ? "지급완료" : "정산예정",
-      })
-    );
+    return !["refunded", "expired", "canceled", "cancelled"].includes(st);
+  });
+  const runItems = await loadIndividualQuestionRunItems(
+    client,
+    mentorId,
+    questions.map((q) => String(q.id ?? "")).filter(Boolean)
+  );
+
+  const lines: MentorPayoutDetailLine[] = [];
+  for (const q of questions) {
+    const draft = individualQuestionLine(q, runItems.get(String(q.id ?? "")) ?? null);
+    if (draft) lines.push(withPayoutWithholding(draft));
   }
   return lines;
 }
@@ -470,35 +488,53 @@ function orderPerfStatus(o: Row): MentorPayoutPerformanceRow["uiStatus"] {
   return "in_progress";
 }
 
+/**
+ * 성과 목록(멘토 정산 화면 '수행 내역' 탭).
+ * V-5: 맞춤의뢰 금액은 주문에 정산 행(custom_order_settlement_items)이 있으면 행의 mentor_amount(적용 요율), 없으면
+ * 정책 요율 추정 + '예상' 표기(amountEstimated) — 매퍼 customRequestPerformanceAmount. 구독 행은 정산 행 값 그대로.
+ */
 export async function loadPerformanceLines(
   client: SupabaseClient,
   mentorId: string
 ): Promise<MentorPayoutPerformanceRow[]> {
   const rows: MentorPayoutPerformanceRow[] = [];
 
-  const { data: orders, error } = await client
-    .from("custom_request_orders")
-    .select("*")
-    .eq("mentor_id", mentorId)
-    .order("created_at", { ascending: false })
-    .limit(80);
+  const [{ data: orders, error }, settlement, subscriptionRows] = await Promise.all([
+    client
+      .from("custom_request_orders")
+      .select("*")
+      .eq("mentor_id", mentorId)
+      .order("created_at", { ascending: false })
+      .limit(80),
+    loadMentorSettlementItemsForPayouts(client, mentorId),
+    loadSubscriptionSettlementRowsForMentor(client, mentorId, 40),
+  ]);
+
+  // 정산 행 조회 실패는 무음으로 접지 않는다 — 로그 후 전 주문 '예상' 표기(표시 전용 degrade · 성공 아님).
+  if (settlement.error) console.error("[loadPerformanceLines] custom_order_settlement_items", settlement.error);
+  const settlementByOrder = new Map<string, Row>();
+  for (const { settlement: s } of settlement.lines) {
+    const oid = String(s.custom_request_order_id ?? "");
+    if (oid && !settlementByOrder.has(oid)) settlementByOrder.set(oid, s);
+  }
 
   if (!error && orders) {
     for (const o of orders as Row[]) {
-      const gross = orderGrossWon(o);
+      const oid = String(o.id ?? "");
+      const { amount, amountEstimated } = customRequestPerformanceAmount(o, settlementByOrder.get(oid) ?? null);
       rows.push({
-        id: `perf-cr-${String(o.id ?? "")}`,
+        id: `perf-cr-${oid}`,
         date: pickTs(o),
         type: "custom_request",
         title: orderTitle(o),
         studentName: orderStudentName(o),
-        amount: gross > 0 ? Math.floor(gross * MENTOR_CUSTOM_REQUEST_SHARE) : 0,
+        amount,
+        amountEstimated,
         uiStatus: orderPerfStatus(o),
       });
     }
   }
 
-  const subscriptionRows = await loadSubscriptionSettlementRowsForMentor(client, mentorId, 40);
   for (const r of subscriptionRows) {
     const status = subscriptionSettlementStatus(r.status);
     rows.push({
@@ -508,6 +544,7 @@ export async function loadPerformanceLines(
       title: SUBSCRIPTION_SETTLEMENT_LABEL,
       studentName: SUBSCRIPTION_STUDENT_LABEL,
       amount: minorCentsToCash(r.mentor_amount_cents),
+      amountEstimated: false,
       uiStatus: status === "paid" ? "done" : status === "canceled" ? "cancelled" : "in_progress",
     });
   }

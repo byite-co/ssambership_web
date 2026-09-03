@@ -1,4 +1,4 @@
-import { formatCashKrw } from "@/lib/mentor/mentorPayoutsConstants";
+import { formatCashKrw } from "@/lib/mentor/mentorPayoutsDisplay";
 import type { PayoutLineType } from "@/lib/mentor/mentorPayoutsTypes";
 import {
   settlementHoldReasonLabel,

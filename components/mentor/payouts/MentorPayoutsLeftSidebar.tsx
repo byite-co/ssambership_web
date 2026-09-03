@@ -1,11 +1,6 @@
 import Link from "next/link";
-import {
-  CUSTOM_REQUEST_PLATFORM_FEE_LABEL,
-  MENTOR_CUSTOM_REQUEST_SHARE,
-  MENTOR_SUBSCRIPTION_SHARE,
-  PAYOUT_DAY_LABEL,
-  SUBSCRIPTION_PLATFORM_FEE_LABEL,
-} from "@/lib/mentor/mentorPayoutsConstants";
+import { PAYOUT_DAY_LABEL } from "@/lib/payout/payoutComputation";
+import { mentorSharePercentLabel, platformFeeDeductionLabel } from "@/lib/payout/platformFeePolicy";
 import type { MentorPayoutScheduleInfo, MentorPayoutSummary } from "@/lib/mentor/mentorPayoutsTypes";
 import { MentorPayoutsDonutChart } from "./MentorPayoutsCharts";
 import { formatCashKrw } from "./payoutUi";
@@ -53,11 +48,11 @@ export function MentorPayoutsLeftSidebar(props: Props) {
             </div>
             <div className="flex justify-between gap-2 pl-2 text-[11px]">
               <dt className="font-medium text-slate-500">구독</dt>
-              <dd className="text-right font-semibold text-slate-700">{SUBSCRIPTION_PLATFORM_FEE_LABEL}</dd>
+              <dd className="text-right font-semibold text-slate-700">{platformFeeDeductionLabel("subscription")}</dd>
             </div>
             <div className="flex justify-between gap-2 pl-2 text-[11px]">
               <dt className="font-medium text-slate-500">맞춤의뢰</dt>
-              <dd className="text-right font-semibold text-slate-700">{CUSTOM_REQUEST_PLATFORM_FEE_LABEL}</dd>
+              <dd className="text-right font-semibold text-slate-700">{platformFeeDeductionLabel("customRequest")}</dd>
             </div>
           </div>
         </dl>
@@ -94,10 +89,10 @@ export function MentorPayoutsLeftSidebar(props: Props) {
           <li>수수료는 유형별로 상이하며, 정산 시 차감됩니다.</li>
           <li>환불/취소 건은 익월 정산에 반영될 수 있습니다.</li>
         </ul>
-        {/* 잠금값에서 끌어온다 — 하드코딩된 70%/80%는 실제 지급 비율(85%/95%)과 달랐다. */}
+        {/* 정책 요율 정본(lib/payout/platformFeePolicy.ts)에서 파생 — 예전에 하드코딩됐던 70%/80% 는 실제 지급 비율과 달랐다. */}
         <p className="mt-3 text-[10px] text-slate-500">
-          구독 멘토 몫 {Math.round(MENTOR_SUBSCRIPTION_SHARE * 100)}% · 맞춤의뢰 멘토 몫{" "}
-          {Math.round(MENTOR_CUSTOM_REQUEST_SHARE * 100)}%
+          구독 멘토 몫 {mentorSharePercentLabel("subscription")} · 맞춤의뢰 멘토 몫{" "}
+          {mentorSharePercentLabel("customRequest")}
         </p>
         <Link href="/support" className="mt-3 inline-flex text-xs font-bold text-[#059669] hover:underline">
           정산 가이드 보기 &gt;

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { LegalDocLayout, LegalList, LegalSection } from "@/components/legal/LegalDocLayout";
 import { COMPANY } from "@/lib/legal/companyInfo";
+import { mentorSharePercentLabel, platformFeePercentLabel } from "@/lib/payout/platformFeePolicy";
 
 export const metadata = {
   title: "이용약관",
@@ -211,7 +212,7 @@ export default function LegalTermsPage() {
       <LegalSection title="제16조 (수수료 및 정산)">
         <LegalOrderedList
           items={[
-            <>회사는 멘토링 거래의 중개 및 결제·정산 시스템 제공의 대가로 학생이 결제한 대금에서 플랫폼 수수료를 공제하고 잔액을 멘토에게 정산합니다. 수수료율은 <strong>구독 15%, 개별질문 15%, 맞춤의뢰 5%</strong>이며, 이에 따라 멘토는 각각 대금의 <strong>85%·85%·95%</strong>를 수령합니다.</>,
+            <>회사는 멘토링 거래의 중개 및 결제·정산 시스템 제공의 대가로 학생이 결제한 대금에서 플랫폼 수수료를 공제하고 잔액을 멘토에게 정산합니다. 수수료율은 <strong>구독 {platformFeePercentLabel("subscription")}, 개별질문 {platformFeePercentLabel("individualQuestion")}, 맞춤의뢰 {platformFeePercentLabel("customRequest")}</strong>이며, 이에 따라 멘토는 각각 대금의 <strong>{mentorSharePercentLabel("subscription")}·{mentorSharePercentLabel("individualQuestion")}·{mentorSharePercentLabel("customRequest")}</strong>를 수령합니다.</>,
             "멘토에게 지급되는 정산금은 사업소득에 해당하며, 회사는 「소득세법」 등 관련 법령에 따라 원천징수 의무가 있는 경우 해당 세액을 공제한 후 지급하고, 원천징수영수증 등 증빙을 발급합니다. 멘토가 사업자등록을 한 경우 회사는 멘토의 요청에 따라 관련 법령에 맞는 방식으로 정산합니다.",
             <>정산 예정 금액·정산 내역은 멘토 정산 화면에서 확인할 수 있으며, 정산 주기·방법·최소 정산 금액은 <PolicyLink href="/legal/payout-guide">정산 안내</PolicyLink>에 따릅니다.</>,
             "멘토는 정산 계좌 및 세무 처리에 필요한 정보를 정확하게 등록하여야 하며, 정보 오류로 인한 지급 지연·오지급의 책임은 멘토에게 있습니다.",

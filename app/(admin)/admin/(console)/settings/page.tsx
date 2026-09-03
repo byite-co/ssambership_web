@@ -7,12 +7,8 @@ import { SettingsTopupPackageTable } from "@/components/admin/SettingsTopupPacka
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { buildCapLine, buildFeeLine, buildSettingsPlanRows, formatPlanBandLine } from "@/lib/admin/settingsConsole";
 import { loadSettingsAdminAccounts, loadSettingsAppVersionPolicies, loadSettingsCapPolicy, loadSettingsPayoutScheduler, loadSettingsTopupPackages } from "@/lib/admin/settingsQueries";
-import {
-  MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
-  MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE,
-  MENTOR_SUBSCRIPTION_PLATFORM_SHARE,
-  PAYOUT_DAY_LABEL,
-} from "@/lib/mentor/mentorPayoutsConstants";
+import { PAYOUT_DAY_LABEL } from "@/lib/payout/payoutComputation";
+import { PLATFORM_FEE_POLICY } from "@/lib/payout/platformFeePolicy";
 import { MENTOR_SUBSCRIPTION_PRICE_RULES } from "@/lib/subscribe/mentorPlanPricing";
 import { SUBSCRIBE_PLAN_CATALOG } from "@/lib/subscribe/subscribePlanCatalog";
 import { createClient } from "@/lib/supabase/server";
@@ -31,7 +27,7 @@ function pick(value: string | string[] | undefined): string {
  * 관리자 · 시스템 설정(PR-10 §3) — 섹션 4개 + 관리자 계정.
  *
  * - 편집은 **충전 패키지 토글 하나**(기존 액션 · stateChange 확인). 요금제·수수료·정원·정산 설정·앱 버전 정책·관리자 계정은 읽기 전용.
- * - 읽기 전용 값은 정본에서 온다: 카탈로그·밴드 `lib/subscribe/*` · 수수료 `mentorPayoutsConstants` · 지급일 `PAYOUT_DAY_LABEL` ·
+ * - 읽기 전용 값은 정본에서 온다: 카탈로그·밴드 `lib/subscribe/*` · 수수료 정책 요율 `lib/payout/platformFeePolicy.ts` · 지급일 `PAYOUT_DAY_LABEL` ·
  *   정원 가중치·기본 한도는 DB 함수(`subscription_cap_weight` · `mentor_cap_limit`). TS 에 숫자를 박지 않는다.
  * (admin)/layout.tsx + (console)/layout.tsx 의 이중 requireRole("admin") 가드 아래에 있다.
  */
@@ -51,11 +47,7 @@ export default async function AdminSettingsPage(props: PageProps) {
   ]);
 
   const planRows = buildSettingsPlanRows(SUBSCRIBE_PLAN_CATALOG, MENTOR_SUBSCRIPTION_PRICE_RULES);
-  const feeLine = buildFeeLine({
-    subscription: MENTOR_SUBSCRIPTION_PLATFORM_SHARE,
-    individualQuestion: MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE,
-    customRequest: MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE,
-  });
+  const feeLine = buildFeeLine(PLATFORM_FEE_POLICY);
   const capLine = buildCapLine(cap);
   const planBandLine = formatPlanBandLine(planRows);
 

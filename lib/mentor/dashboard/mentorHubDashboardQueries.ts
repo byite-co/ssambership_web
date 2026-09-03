@@ -21,7 +21,7 @@ import {
 } from "@/lib/home/mentorDashboardQueries";
 import { fetchRoomsForUser } from "@/lib/qna/questionRoomQueries";
 import { loadMentorPayoutsPageData } from "@/lib/mentor/mentorPayoutsService";
-import { MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE } from "@/lib/mentor/mentorPayoutsConstants";
+import { estimateMentorAmount } from "@/lib/payout/platformFeePolicy";
 import { fetchMentorProfileRow } from "@/lib/mentor/mentorProfileQueries";
 import {
   mapOrderRowToHub,
@@ -152,6 +152,7 @@ async function loadMentorRating(
   return { avg: Math.round(avg * 10) / 10, count: ratings.length };
 }
 
+/** 진행 중 주문의 예상 수익 — 정산 행이 아직 없는 미리보기라 정책 요율(lib/payout/platformFeePolicy.ts)로 추정한다(V-5). */
 function estimateInProgressRevenue(orders: Row[], disputeSet: ReadonlySet<string>): number {
   let sum = 0;
   for (const row of orders) {
@@ -161,7 +162,7 @@ function estimateInProgressRevenue(orders: Row[], disputeSet: ReadonlySet<string
       const v = row[k];
       const n = typeof v === "number" ? v : Number(v);
       if (Number.isFinite(n) && n > 0) {
-        sum += Math.floor(n * (1 - MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE));
+        sum += estimateMentorAmount(n, "custom_request");
         break;
       }
     }

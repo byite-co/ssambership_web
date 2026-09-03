@@ -1,6 +1,6 @@
 /**
  * 시스템 설정 · 요금제·수수료(읽기 전용) · 정산 설정(읽기 전용) — PR-10 §3-2. Server Component.
- * 값은 화면(page)이 정본(`lib/subscribe/*` · `mentorPayoutsConstants` · DB 함수)에서 읽어 넘기고, 여기서는 그리기만 한다.
+ * 값은 화면(page)이 정본(`lib/subscribe/*` · `lib/payout/platformFeePolicy.ts` · DB 함수)에서 읽어 넘기고, 여기서는 그리기만 한다.
  */
 import { SETTINGS_READ_ONLY_NOTE, SETTINGS_SCHEDULER_NOTE, formatCash, schedulerStateLabel, schedulerWarning, type SettingsPlanRow } from "@/lib/admin/settingsConsole";
 

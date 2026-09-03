@@ -24,7 +24,6 @@ export type CustomRequestOrderCompleteViewProps = {
   } | null;
   payment: {
     amountLabel: string;
-    feeLabel: string;
     paidAtLabel: string;
   };
   review: {

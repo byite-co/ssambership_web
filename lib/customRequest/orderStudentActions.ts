@@ -23,7 +23,7 @@ import {
 import { ORDER_CHILD_FK_COLUMN } from "@/lib/customRequest/customRequestQueries";
 import { recordOrderEventBestEffort } from "@/lib/customRequest/orderRoomMutations";
 import { splitPlatformAndMentorForGross } from "@/lib/customRequest/orderSettlementAmounts";
-import { MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE } from "@/lib/mentor/mentorPayoutsConstants";
+import { platformFeeRate } from "@/lib/payout/platformFeePolicy";
 import {
   acceptCustomOrderDeliverableAtomic,
   recordCustomOrderSettlementCreatedEvent,
@@ -163,7 +163,8 @@ export async function acceptCustomOrderDeliverableAction(formData: FormData): Pr
   });
 
   if (atomic.settlementCreated && atomic.settlementId && atomic.gross != null) {
-    const feeRate = atomic.feeRate ?? MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE;
+    // V-5: 요율은 RPC(정산 행을 DB 요율로 생성) 결과가 정본 — 돌려주지 않은 경우에만 정책 요율(주문 이벤트 기록용).
+    const feeRate = atomic.feeRate ?? platformFeeRate("custom_request");
     const { platformFee, mentorAmount } = splitPlatformAndMentorForGross(atomic.gross, feeRate);
     await recordCustomOrderSettlementCreatedEvent(supabase, orderId, user.id, {
       settlementId: atomic.settlementId,

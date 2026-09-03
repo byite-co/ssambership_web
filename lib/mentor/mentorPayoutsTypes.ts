@@ -20,6 +20,11 @@ export type MentorPayoutDetailLine = {
    * 않는다). 소스가 요율을 노출하지 않는 라인(개별질문 등)은 undefined.
    */
   feeRate?: number | null;
+  /**
+   * V-5: 정산 행(지급 스냅샷)이 없어 정책 요율(lib/payout/platformFeePolicy.ts)로 추정한 라인 — 설명 끝에 '예상' 이 붙는다.
+   * 행 기반 라인은 undefined.
+   */
+  amountEstimated?: boolean;
 };
 
 export type MentorPayoutMonthlyCard = {
@@ -100,6 +105,8 @@ export type MentorPayoutPerformanceRow = {
   title: string;
   studentName: string;
   amount: number;
+  /** V-5: 정산 행이 없어 정책 요율로 추정한 금액이면 true — 표에 '예상' 을 표기한다. 행 기반 금액은 false. */
+  amountEstimated: boolean;
   uiStatus: "done" | "in_progress" | "cancelled";
 };
 
