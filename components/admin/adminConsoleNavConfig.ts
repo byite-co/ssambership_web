@@ -11,6 +11,8 @@ export const ADMIN_CONSOLE_NAV = [
   { href: "/admin/reviews", label: "리뷰 관리", icon: "reviews" },
   { href: "/admin/custom-request-orders", label: "맞춤의뢰 주문", icon: "orders" },
   { href: "/admin/disputes", label: "신고·분쟁", icon: "disputes" },
+  // 정산 그룹 — 충전(입금 대기) · 환불 · 정산 순(PR-9 §2-1: 충전 관리는 환불 위)
+  { href: "/admin/topups", label: "충전 관리", icon: "refunds" },
   { href: "/admin/refunds", label: "환불 관리", icon: "refunds" },
   { href: "/admin/settlements", label: "정산 관리", icon: "refunds" },
   { href: "/admin/sla", label: "SLA 대시보드", icon: "dashboard" },

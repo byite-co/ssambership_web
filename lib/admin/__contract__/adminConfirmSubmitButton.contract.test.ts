@@ -205,9 +205,11 @@ const PR2_CONFIRM_IMPORTERS = [
   "components/admin/AccountActionPanel.tsx",
   "components/admin/AccountMentorTab.tsx",
   "components/admin/MentorCapAdjustForm.tsx",
+  // PR-9 정산 실행(critical — 자금 확정)
+  "components/admin/SettlementExecuteButton.tsx",
 ];
 
-test("이관 범위: ConfirmSubmitButton 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)·PR-5 신고 조치·학적 변경 결정·PR-6 경고·정지·분쟁 조치·PR-7 계정 상세 조치·정원 조정뿐이고, AdminConfirmDialog 직접 import 는 없다", () => {
+test("이관 범위: ConfirmSubmitButton 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)·PR-5 신고 조치·학적 변경 결정·PR-6 경고·정지·분쟁 조치·PR-7 계정 상세 조치·정원 조정·PR-9 정산 실행뿐이고, AdminConfirmDialog 직접 import 는 없다", () => {
   const files: string[] = [];
   const walk = (dir: string) => {
     for (const name of readdirSync(dir)) {

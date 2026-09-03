@@ -132,6 +132,10 @@ const DIRECT_ACCESS_EXEMPT: Record<string, string> = {
     "관리자 신고 상세 신고당한 사용자 블록(PR-6 — 작성자 1행: 역할·상태·가입일. 증거 조회와 같은 클라이언트(서비스 롤 우선/세션 폴백) · requireRole admin 뒤, users_admin_select_all 로 읽힘)",
   "lib/admin/accountListQueries.ts":
     "관리자 계정 목록(PR-7 — 서비스 롤 전용: users 역할·상태·본인인증 필터 + 이름·닉네임·이메일 검색 · mentor_profiles 승인 상태 배지. 이중 requireRole admin 가드 뒤)",
+  "lib/admin/settlementConsoleQueries.ts":
+    "PR-9 정산 관리 — 관리자 전용(이중 requireRole) service_role 읽기: 멘토 이름·계좌(mentor_profiles.payout_*)·멘토 검색(users role=mentor). 공개 경로 호출부 없음",
+  "lib/admin/topupConsoleQueries.ts":
+    "PR-9 충전 관리 — 관리자 전용 service_role 읽기: 요청자 실명·닉네임(users) 검색·표시. 공개 경로 호출부 없음",
   "lib/admin/accountDetailQueries.ts":
     "관리자 계정 상세 공통(PR-7 — 서비스 롤 전용: users 1행 + 처리자·관련자 표시명. 이중 requireRole admin 가드 뒤)",
   "lib/admin/accountMentorQueries.ts":

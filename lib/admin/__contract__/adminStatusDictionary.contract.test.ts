@@ -128,6 +128,16 @@ const FIXTURE: Record<
     constraint: { name: "app_notices_display_mode_allowed", file: SQL_DISPLAY_MODE },
     inventory: false, // 08-04 인벤토리 이후(08-30) 추가
   },
+  "paysync_invoices.status": {
+    // PR-9 충전 관리 — 08-30 신설 테이블의 create table 인라인 CHECK. 인벤토리(08-04)에 없고 이름 있는 제약도 아니라 아래 전용 테스트가 SQL 원문으로 대조한다.
+    values: ["pending", "paid", "expired", "canceled"],
+    inventory: false,
+  },
+  "payout_runs.status": {
+    // PR-9 정산 지급 이력 — baseline 106 create table 인라인 CHECK(인벤토리 payout_runs_status_check).
+    values: ["executing", "completed"],
+    inventory: true,
+  },
 };
 
 const sorted = (xs: Iterable<string>) => [...xs].sort();
@@ -177,7 +187,7 @@ function checkValuesFromInventory(table: string, column: string): string[] | nul
 
 // ── ① 사전 == 픽스처 ───────────────────────────────────────────────────────────
 
-test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼 + PR-2 학교 등급·계열 2개 + PR-5 학적 변경·맞춤의뢰 주문 2개 + PR-8 질문 스레드 상태·숙달 2개)", () => {
+test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼 + PR-2 학교 등급·계열 2개 + PR-5 학적 변경·맞춤의뢰 주문 2개 + PR-8 질문 스레드 상태·숙달 2개 + PR-9 충전 주문·지급 실행 2개)", () => {
   assert.deepEqual(sorted(ADMIN_STATUS_DICTIONARY_KEYS), sorted(Object.keys(FIXTURE)));
 });
 
@@ -232,6 +242,21 @@ test("mentor_academic_record_change_requests.status: baseline 인라인 CHECK 4�
     ["대기", "승인", "반려", "재제출 요청"]
   );
   for (const v of ["pending", "approved", "rejected", "resubmit_required"]) assert.equal(resolveAdminStatus("mentor_academic_record_change_requests", "status", v).known, true, v);
+});
+
+test("paysync_invoices.status: 20260830100100 인라인 CHECK 4값 == 사전 · 라벨은 충전 관리 탭 표기(대기·완료·만료·취소)", () => {
+  const sql = read("supabase/migrations/20260830100100_paysync_invoices.sql");
+  assert.ok(sql.includes("check (status in ('pending', 'paid', 'expired', 'canceled'))"), "인라인 CHECK 원문");
+  assert.deepEqual(
+    ["pending", "paid", "expired", "canceled"].map((v) => resolveAdminStatus("paysync_invoices", "status", v).label),
+    ["대기", "완료", "만료", "취소"]
+  );
+  assert.equal(resolveAdminStatus("paysync_invoices", "status", "paid").risk, "high", "완료 = 캐시 적립 완료(자금 확정)");
+});
+
+test("payout_runs.status: baseline 인라인 CHECK 2값 == 사전(실행 중·완료)", () => {
+  assert.ok(read(BASELINE).includes("status text not null default 'executing' check (status in ('executing', 'completed'))"), "baseline 106 인라인 CHECK");
+  assert.deepEqual(["executing", "completed"].map((v) => resolveAdminStatus("payout_runs", "status", v).label), ["실행 중", "완료"]);
 });
 
 test("custom_request_orders.status: DB 에 CHECK 가 없다 → 사전은 코드가 쓰는 값(관리자 집계 8종)만 — 집계 목록과 1:1 · 레거시 동의어는 미등재(neutral)", () => {
