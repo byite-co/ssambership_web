@@ -2,10 +2,7 @@
 
 import { CalendarX } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
-import {
-  PAYOUT_WITHHOLDING_LABEL,
-  PAYOUT_WITHHOLDING_TOOLTIP,
-} from "@/lib/mentor/mentorPayoutsConstants";
+import { PAYOUT_WITHHOLDING_LABEL, PAYOUT_WITHHOLDING_TOOLTIP } from "@/lib/payout/payoutComputation";
 import type { MentorSettlementTableRow } from "@/lib/mentor/mentorSettlementDisplay";
 import { formatKoreanDate } from "@/lib/utils/formatDisplay";
 import {

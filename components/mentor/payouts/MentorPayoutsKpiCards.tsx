@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  CUSTOM_REQUEST_PLATFORM_FEE_LABEL,
-  SUBSCRIPTION_PLATFORM_FEE_LABEL,
-} from "@/lib/mentor/mentorPayoutsConstants";
+import { platformFeeDeductionLabel } from "@/lib/payout/platformFeePolicy";
 import { formatCashKrw, momClass, momLabel } from "./payoutUi";
 
 type Kpi = { amount: number; momPct: number | null };
@@ -19,13 +16,13 @@ export function MentorPayoutsKpiCards(props: {
       title: "구독 수익",
       kpi: props.subscription,
       highlight: false,
-      feeNote: SUBSCRIPTION_PLATFORM_FEE_LABEL,
+      feeNote: platformFeeDeductionLabel("subscription"),
     },
     {
       title: "맞춤의뢰 수익",
       kpi: props.customRequest,
       highlight: false,
-      feeNote: CUSTOM_REQUEST_PLATFORM_FEE_LABEL,
+      feeNote: platformFeeDeductionLabel("customRequest"),
     },
     { title: "총 수익", kpi: props.total, highlight: true, feeNote: null as string | null },
     {

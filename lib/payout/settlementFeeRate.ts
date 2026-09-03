@@ -1,6 +1,9 @@
 /**
  * 정산 요율(fee_rate) 공용 순수 헬퍼 — server-only import 금지 · node:test 검증 가능 · 클라이언트 컴포넌트에서도 import 가능.
  *
+ * ★ 이 모듈은 **적용된 요율**(정산 행)만 다룬다. 정산 행이 없는 미리보기의 **정책 요율**은 lib/payout/platformFeePolicy.ts 가
+ *   정본이며, 두 값은 섞지 않는다(V-5 — 정책 모듈을 정산 행 컨텍스트에서 부르면 가드가 실패한다).
+ *
  * ★ 값의 정본은 DB 다: subscription_settlement_items.fee_rate · custom_order_settlement_items.fee_rate ·
  *   정산/분배 RPC 본문(refresh_subscription_settlement_items · record_custom_order_dispute_split).
  *   코드에는 요율 사본·폴백 리터럴(0.3 / 0.15 / 0.05 / 0)을 두지 않는다 — 행에 요율이 없으면 null 로 남기고
@@ -10,6 +13,8 @@
  * (lib/admin/adminDisputeEscrowSplitQueries.ts → components/disputes/DisputeEscrowSplitPanel.tsx) ·
  * 멘토 정산 라인(lib/mentor/mentorPayoutLinesCore.ts).
  */
+import { formatRatePercent } from "./ratePercent.ts";
+
 export const SETTLEMENT_FEE_RATE_UNSET_LABEL = "요율 미설정";
 
 /** DB fee_rate → 분수(0.15). 없거나 숫자가 아니면 null — 추측값 금지. DB 가 0 을 저장했으면 0 은 값이다. */
@@ -20,9 +25,8 @@ export function parseSettlementFeeRate(raw: unknown): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-/** 요율 표시 라벨 — null 은 '요율 미설정', 숫자는 백분율("15%" · "5.5%"). */
+/** 요율 표시 라벨 — null 은 '요율 미설정', 숫자는 백분율("15%" · "5.5%" — 정책 라벨과 같은 formatRatePercent). */
 export function settlementFeeRateLabel(feeRate: number | null): string {
   if (feeRate == null) return SETTLEMENT_FEE_RATE_UNSET_LABEL;
-  const pct = Number((feeRate * 100).toFixed(2));
-  return `${pct}%`;
+  return formatRatePercent(feeRate);
 }

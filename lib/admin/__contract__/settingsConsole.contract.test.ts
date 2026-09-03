@@ -2,7 +2,7 @@
 // 실행: node --test --experimental-strip-types lib/admin/__contract__/settingsConsole.contract.test.ts
 //
 // 고정하는 것(지시서 §4):
-//   ① 요금제·밴드는 `lib/subscribe/*` 정본, 수수료는 `mentorPayoutsConstants`, 정원은 DB 함수(SQL 190) — 순수 모듈에 숫자 리터럴 없음(소스 트립와이어)
+//   ① 요금제·밴드는 `lib/subscribe/*` 정본, 수수료는 `lib/payout/platformFeePolicy.ts`(V-5 — 구 mentorPayoutsConstants 삭제), 정원은 DB 함수(SQL 190) — 순수 모듈에 숫자 리터럴 없음(소스 트립와이어)
 //   ② `store_url` NULL → 경고 · 정책 행 없음 → 경고 · 스케줄러 켜짐 → 경고
 //   ③ e2e 계정 판정 · 관리자 계정 조치 없음(조회만)
 //   ④ 충전 패키지 토글은 ConfirmSubmitButton stateChange + summary(`30,000원 패키지를 비활성화합니다. 충전 화면에서 사라집니다.`) · 그 외 편집 UI 0
@@ -39,6 +39,7 @@ import {
   topupPackageDisplayName,
 } from "../settingsConsole.ts";
 import { SUBSCRIBE_PLAN_CATALOG } from "../../subscribe/subscribePlanCatalog.ts";
+import { PLATFORM_FEE_POLICY } from "../../payout/platformFeePolicy.ts";
 import { ADMIN_CONSOLE_NAV } from "../../../components/admin/adminConsoleNavConfig.ts";
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
@@ -64,14 +65,12 @@ function bandsFromSource(): Record<string, { minCashKrw: number; recommendedCash
   return out;
 }
 
-/** `mentorPayoutsConstants.ts` 도 `@/` import — 플랫폼 몫 3종을 소스에서 뽑는다. */
+/** 수수료 정책 요율 정본 `lib/payout/platformFeePolicy.ts` 는 순수 모듈이라 직접 import 한다(V-5 — 구 mentorPayoutsConstants 소스 regex 추출 대체). */
 function feesFromSource(): { subscription: number; individualQuestion: number; customRequest: number } {
-  const src = stripComments(read("lib/mentor/mentorPayoutsConstants.ts"));
-  const pick = (name: string) => Number(src.match(new RegExp(`export const ${name} = ([\\d.]+) as const;`))?.[1]);
   return {
-    subscription: pick("MENTOR_SUBSCRIPTION_PLATFORM_SHARE"),
-    individualQuestion: pick("MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE"),
-    customRequest: pick("MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE"),
+    subscription: PLATFORM_FEE_POLICY.subscription,
+    individualQuestion: PLATFORM_FEE_POLICY.individualQuestion,
+    customRequest: PLATFORM_FEE_POLICY.customRequest,
   };
 }
 
@@ -125,9 +124,8 @@ test("순수 모듈에 요금제·수수료·정원 숫자 리터럴이 없다(�
   assert.ok(page.includes('import { SUBSCRIBE_PLAN_CATALOG } from "@/lib/subscribe/subscribePlanCatalog";'));
   assert.ok(page.includes('import { MENTOR_SUBSCRIPTION_PRICE_RULES } from "@/lib/subscribe/mentorPlanPricing";'));
   assert.ok(page.includes("buildSettingsPlanRows(SUBSCRIBE_PLAN_CATALOG, MENTOR_SUBSCRIPTION_PRICE_RULES)"));
-  for (const c of ["MENTOR_SUBSCRIPTION_PLATFORM_SHARE", "MENTOR_INDIVIDUAL_QUESTION_PLATFORM_SHARE", "MENTOR_CUSTOM_REQUEST_PLATFORM_SHARE", "PAYOUT_DAY_LABEL"]) {
-    assert.ok(page.includes(c), `${c} 정본 import`);
-  }
+  assert.ok(page.includes('import { PLATFORM_FEE_POLICY } from "@/lib/payout/platformFeePolicy";') && page.includes("buildFeeLine(PLATFORM_FEE_POLICY)"), "수수료는 정책 요율 정본(V-5)");
+  assert.ok(page.includes('import { PAYOUT_DAY_LABEL } from "@/lib/payout/payoutComputation";'), "PAYOUT_DAY_LABEL 정본 import");
   assert.ok(page.includes("payoutDayLabel={PAYOUT_DAY_LABEL}"), "지급일은 payoutComputation 정본");
   const queries = stripComments(read(QUERIES));
   assert.ok(queries.includes("createSupabaseMentorCapDataSource(db)") && queries.includes("loadCapWeightByTier(source)") && queries.includes("source.capLimit(SETTINGS_CAP_PROBE_MENTOR_ID)"), "정원은 DB 함수 어댑터");

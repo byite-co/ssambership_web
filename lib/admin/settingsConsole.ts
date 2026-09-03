@@ -2,7 +2,7 @@
  * 관리자 · 시스템 설정 화면(PR-10 §3)의 순수 규칙 — 섹션 4개(충전 패키지 · 요금제·수수료 · 정산 설정 · 앱 버전 정책) + 관리자 계정.
  *
  * - **편집은 충전 패키지 토글 하나뿐**(기존 액션 · `stateChange` 확인 — 학생에게 보이는 상품). 나머지는 읽기 전용이며 왜 읽기 전용인지 한 줄로 보인다.
- * - 요금제·수수료·정원은 **정본에서 읽어** 표시한다: 카탈로그·밴드는 `lib/subscribe/*`, 수수료는 `lib/mentor/mentorPayoutsConstants.ts`,
+ * - 요금제·수수료·정원은 **정본에서 읽어** 표시한다: 카탈로그·밴드는 `lib/subscribe/*`, 수수료 정책 요율은 `lib/payout/platformFeePolicy.ts`,
  *   정원 가중치·기본 한도는 DB 함수(`subscription_cap_weight` · `mentor_cap_limit` — `mentorCapUsageCore` 어댑터). **이 모듈에 숫자를 박지 않는다**
  *   (계약 테스트가 리터럴을 금지한다) — 화면이 정본 값을 인자로 넘기고 이 모듈은 문자열만 만든다.
  * - 앱 버전 정책(`mobile_app_version_policies`)은 정책 0개 `service_role` 전용이고 쓰기 경로가 없다 → 표시 + `store_url` NULL 경고만.

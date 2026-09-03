@@ -6,6 +6,7 @@ import { CheckCircle2, Clock, Inbox, MessageCircle, MessageCircleCheck, MessageS
 import { FormSubmitButton } from "@/components/common/FormSubmitButton";
 import { EmptyState } from "@/components/common/EmptyState";
 import { listCardClassName, type ListCardTone } from "@/components/design-system/ListCard";
+import { platformFeePercentLabel } from "@/lib/payout/platformFeePolicy";
 import { getSubjectLabel } from "@/lib/subjects/subjectCatalog";
 import {
   confirmIndividualQuestionAnswerAction,
@@ -683,7 +684,8 @@ export function IndividualQuestionDetailView(props: {
               </dl>
               {!isStudent && released ? (
                 <p className="mt-3 text-xs font-medium leading-5 text-slate-500">
-                  플랫폼 수수료(15%) 차감 후 실수령액은 <span className="font-bold text-slate-600">[정산]</span> 페이지에서 확인할 수 있어요.
+                  플랫폼 수수료({platformFeePercentLabel("individualQuestion")}) 차감 후 실수령액은{" "}
+                  <span className="font-bold text-slate-600">[정산]</span> 페이지에서 확인할 수 있어요.
                 </p>
               ) : null}
             </section>

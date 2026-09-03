@@ -1,5 +1,6 @@
 "use client";
 
+import { PAYOUT_AMOUNT_ESTIMATED_LABEL } from "@/lib/mentor/mentorPayoutLinesCore";
 import type { MentorPayoutPerformanceRow } from "@/lib/mentor/mentorPayoutsTypes";
 import {
   formatCashKrw,
@@ -48,6 +49,15 @@ export function MentorPayoutsPerformanceTable(props: { rows: MentorPayoutPerform
                 <td className="px-4 py-3 text-slate-700">{row.studentName}</td>
                 <td className="px-4 py-3 text-right tabular-nums font-bold text-slate-900">
                   {formatCashKrw(row.amount)}
+                  {/* V-5: 정산 행이 없는 금액은 정책 요율 추정 — 확정 금액과 구분해 표기한다. */}
+                  {row.amountEstimated ? (
+                    <span
+                      className="ml-1 text-[10px] font-semibold text-slate-400"
+                      title="정산 행이 아직 없어 정책 요율로 계산한 예상 금액입니다. 확정 금액은 정산 내역 탭에서 확인하세요."
+                    >
+                      {PAYOUT_AMOUNT_ESTIMATED_LABEL}
+                    </span>
+                  ) : null}
                 </td>
                 <td className="px-4 py-3">
                   <span className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-extrabold ${st.className}`}>

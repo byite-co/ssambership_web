@@ -1,10 +1,5 @@
-import {
-  CUSTOM_REQUEST_PLATFORM_FEE_LABEL,
-  INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL,
-  PAYOUT_WITHHOLDING_LABEL,
-  PAYOUT_WITHHOLDING_TOOLTIP,
-  SUBSCRIPTION_PLATFORM_FEE_LABEL,
-} from "@/lib/mentor/mentorPayoutsConstants";
+import { PAYOUT_WITHHOLDING_LABEL, PAYOUT_WITHHOLDING_TOOLTIP } from "@/lib/payout/payoutComputation";
+import { platformFeeDeductionLabel } from "@/lib/payout/platformFeePolicy";
 import { Repeat, Briefcase, MessageCircleQuestion, TriangleAlert, Wallet } from "lucide-react";
 import { centsToCash, formatKstMonthDay, type MentorSettlementSummary } from "@/lib/mentor/mentorSettlementSchema";
 import { formatRunDateLabel, monthNumberOf } from "@/lib/mentor/mentorSettlementDisplay";
@@ -127,7 +122,7 @@ export function MentorPayoutsHeroCard(props: Props) {
           <p className="mt-2 text-[20px] font-bold tabular-nums text-slate-900">
             <CashText cash={subscriptionCash} />
           </p>
-          <p className="mt-1 text-[11px] text-slate-400">{SUBSCRIPTION_PLATFORM_FEE_LABEL}</p>
+          <p className="mt-1 text-[11px] text-slate-400">{platformFeeDeductionLabel("subscription")}</p>
         </div>
         <div>
           <div className="flex items-center gap-2">
@@ -139,7 +134,7 @@ export function MentorPayoutsHeroCard(props: Props) {
           <p className="mt-2 text-[20px] font-bold tabular-nums text-slate-900">
             <CashText cash={customRequestCash} />
           </p>
-          <p className="mt-1 text-[11px] text-slate-400">{CUSTOM_REQUEST_PLATFORM_FEE_LABEL}</p>
+          <p className="mt-1 text-[11px] text-slate-400">{platformFeeDeductionLabel("customRequest")}</p>
         </div>
         <div>
           <div className="flex items-center gap-2">
@@ -151,7 +146,7 @@ export function MentorPayoutsHeroCard(props: Props) {
           <p className="mt-2 text-[20px] font-bold tabular-nums text-slate-900">
             <CashText cash={individualQuestionCash} />
           </p>
-          <p className="mt-1 text-[11px] text-slate-400">{INDIVIDUAL_QUESTION_PLATFORM_FEE_LABEL}</p>
+          <p className="mt-1 text-[11px] text-slate-400">{platformFeeDeductionLabel("individualQuestion")}</p>
         </div>
         <div>
           <div className="flex items-center gap-2">
