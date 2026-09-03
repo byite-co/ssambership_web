@@ -114,11 +114,11 @@ function spFrom(url: string): Record<string, string | string[] | undefined> {
 
 // ── §11 탭: status 키 하나 · 클라이언트 필터 없음 ─────────────────────────────
 
-test("탭은 대기·승인·반려·재제출·전체 5개, 기본 탭은 대기", () => {
-  assert.deepEqual([...MENTOR_APPROVAL_TAB_VALUES], ["pending", "approved", "rejected", "under_review", "all"]);
+test("탭은 대기·승인·반려·재제출·보류·전체 6개(PR-2b 보류 추가), 기본 탭은 대기", () => {
+  assert.deepEqual([...MENTOR_APPROVAL_TAB_VALUES], ["pending", "approved", "rejected", "under_review", "on_hold", "all"]);
   assert.deepEqual(
     MENTOR_APPROVAL_TABS.map((t) => t.label),
-    ["대기", "승인", "반려", "재제출", "전체"]
+    ["대기", "승인", "반려", "재제출", "보류", "전체"]
   );
   assert.equal(MENTOR_APPROVAL_DEFAULT_TAB, "pending");
 });
@@ -618,8 +618,9 @@ test("키 매핑: J/K/N/F 이동·전체화면 · A/R/D 는 확인 모달만 여
   assert.equal(resolveMentorApprovalShortcut("d"), "openResubmit");
   assert.equal(resolveMentorApprovalShortcut("Enter"), null);
   assert.equal(resolveMentorApprovalShortcut("x"), null);
-  assert.deepEqual([...MENTOR_APPROVAL_DIALOG_ONLY_ACTIONS], ["openApprove", "openReject", "openResubmit"]);
-  assert.equal(MENTOR_APPROVAL_SHORTCUTS.length, 7, "하단 표시 목록 7개");
+  assert.equal(resolveMentorApprovalShortcut("h"), "openHold", "PR-2b: H 는 보류 메모 모달만 연다");
+  assert.deepEqual([...MENTOR_APPROVAL_DIALOG_ONLY_ACTIONS], ["openApprove", "openReject", "openResubmit", "openHold"]);
+  assert.equal(MENTOR_APPROVAL_SHORTCUTS.length, 8, "하단 표시 목록 8개(PR-2b H 추가)");
 });
 
 test("단축키 배선: 핸들러 첫 줄에서 shouldIgnore 검사 · A/R/D 는 트리거 버튼 click(다이얼로그 열기)만 · requestSubmit/서버 액션 호출 없음 · 하단 항상 표시", () => {

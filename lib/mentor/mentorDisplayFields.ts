@@ -114,6 +114,8 @@ export function mentorVerificationKo(raw: string | null | undefined): string {
     in_review: "검토 중",
     reviewing: "검토 중",
     under_review: "검토 중",
+    // PR-2b: 보류(on_hold)는 관리자 내부 상태 — 멘토에게는 '보류' 라는 말을 쓰지 않는다.
+    on_hold: "검토 중",
     rejected: "반려",
     denied: "반려",
     none: "미인증",

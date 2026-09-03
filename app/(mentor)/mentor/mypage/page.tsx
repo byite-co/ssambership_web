@@ -40,7 +40,8 @@ type VerificationToken = { label: string; tone: "ok" | "pending" | "none" };
 function verificationLabel(status: string | null): VerificationToken {
   const s = (status ?? "").trim().toLowerCase();
   if (s === "approved" || s === "verified") return { label: "인증 완료", tone: "ok" };
-  if (s === "pending" || s === "in_review" || s === "submitted") return { label: "인증 검토중", tone: "pending" };
+  // PR-2b: 보류(on_hold)는 관리자 내부 상태 — 멘토에게는 검토 중으로 보인다.
+  if (s === "pending" || s === "in_review" || s === "submitted" || s === "on_hold") return { label: "인증 검토중", tone: "pending" };
   if (s === "rejected") return { label: "인증 반려", tone: "none" };
   return { label: "미인증", tone: "none" };
 }

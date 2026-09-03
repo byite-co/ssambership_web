@@ -7,8 +7,10 @@
  * - 셋 모두 `ConfirmSubmitButton`(stateChange) 확인 절차를 거친다. 반려·재제출은 사유 프리셋 한 번 클릭으로 끝난다.
  * - 서버 액션은 기존 것 그대로(DB 쓰기 동일). 사유는 액션이 읽는 필드명으로 실려 감사 로그에 남는다.
  * - 단축키 A/R/D 는 이 버튼들을 id 로 click 해 **다이얼로그만 연다**(실행은 확인 뒤에만).
+ * - PR-2b: 다른 관리자가 같은 지원자를 보고 있으면 확인 모달에 `동시 심사` 한 줄을 더한다(Presence 표시 전용 — 잠금 없음).
  */
 import { ConfirmSubmitButton } from "@/components/admin/ConfirmSubmitButton";
+import { usePresenceConfirmDetails } from "@/components/admin/MentorApprovalPresenceProvider";
 import {
   approveMentorApplicationAction,
   rejectMentorApplicationAction,
@@ -36,6 +38,7 @@ const BUTTON_BASE = "inline-flex h-11 w-full items-center justify-center rounded
 
 export function MentorApprovalDecisionBar(props: Props) {
   const { mentorUserId, approveSummary, rejectSummary, resubmitSummary, flashError } = props;
+  const presenceDetails = usePresenceConfirmDetails(mentorUserId);
 
   return (
     <div className="space-y-2 border-t border-slate-200 bg-white p-3" data-decision-bar>
@@ -51,6 +54,7 @@ export function MentorApprovalDecisionBar(props: Props) {
             id={MENTOR_DECISION_BUTTON_IDS.approve}
             level="stateChange"
             summary={approveSummary}
+            details={presenceDetails}
             dialogTitle="멘토 승인"
             confirmLabel="승인"
             pendingLabel="승인 중…"
@@ -65,6 +69,7 @@ export function MentorApprovalDecisionBar(props: Props) {
             id={MENTOR_DECISION_BUTTON_IDS.reject}
             level="stateChange"
             summary={rejectSummary}
+            details={presenceDetails}
             dialogTitle="반려 사유"
             confirmLabel="반려"
             pendingLabel="반려 중…"
@@ -84,6 +89,7 @@ export function MentorApprovalDecisionBar(props: Props) {
             id={MENTOR_DECISION_BUTTON_IDS.resubmit}
             level="stateChange"
             summary={resubmitSummary}
+            details={presenceDetails}
             dialogTitle="재제출 요청 사유"
             confirmLabel="재제출 요청"
             pendingLabel="요청 중…"

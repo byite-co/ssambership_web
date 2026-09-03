@@ -89,7 +89,8 @@ export type MentorApprovalShortcutAction =
   | "fullscreen"
   | "openApprove"
   | "openReject"
-  | "openResubmit";
+  | "openResubmit"
+  | "openHold";
 
 export const MENTOR_APPROVAL_SHORTCUTS: readonly { key: string; action: MentorApprovalShortcutAction; label: string }[] = [
   { key: "J", action: "next", label: "다음 지원자" },
@@ -99,10 +100,12 @@ export const MENTOR_APPROVAL_SHORTCUTS: readonly { key: string; action: MentorAp
   { key: "A", action: "openApprove", label: "승인 확인 열기" },
   { key: "R", action: "openReject", label: "반려 사유 열기" },
   { key: "D", action: "openResubmit", label: "재제출 사유 열기" },
+  // PR-2b: 보류도 모달만 연다(메모 프리셋 → 확인).
+  { key: "H", action: "openHold", label: "보류 메모 열기" },
 ];
 
 /** 확인 모달만 여는(실행하지 않는) 액션 */
-export const MENTOR_APPROVAL_DIALOG_ONLY_ACTIONS: readonly MentorApprovalShortcutAction[] = ["openApprove", "openReject", "openResubmit"];
+export const MENTOR_APPROVAL_DIALOG_ONLY_ACTIONS: readonly MentorApprovalShortcutAction[] = ["openApprove", "openReject", "openResubmit", "openHold"];
 
 const EDITABLE_TAGS = new Set(["INPUT", "TEXTAREA", "SELECT"]);
 
@@ -136,7 +139,7 @@ export function resolveMentorApprovalShortcut(key: string | null | undefined): M
   return MENTOR_APPROVAL_SHORTCUTS.find((s) => s.key === k)?.action ?? null;
 }
 
-/** "이미 처리됨" 배너용 — admin_action_logs.action_type → 결과 라벨 */
+/** "이미 처리됨" 배너용 — admin_action_logs.action_type → 결과 라벨. PR-2b 의 보류·되돌리기 계열도 같은 배너가 쓴다(값은 mentorApprovalHold.ts 상수와 같다). */
 export function mentorDecisionResultLabel(actionType: string | null | undefined): string {
   switch (actionType) {
     case "mentor_approve":
@@ -145,6 +148,14 @@ export function mentorDecisionResultLabel(actionType: string | null | undefined)
       return "반려";
     case "mentor_request_documents":
       return "재제출 요청";
+    case "mentor_hold":
+      return "보류";
+    case "mentor_hold_release":
+      return "보류 해제";
+    case "mentor_approval_revoked":
+      return "승인 취소";
+    case "mentor_rejection_reverted":
+      return "반려 되돌리기";
     default:
       return "처리";
   }

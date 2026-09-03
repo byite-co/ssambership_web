@@ -5,6 +5,9 @@
  *   ② 자격  — 대학·학과 · 과목 · 고교 · 소개 · 정원(DB RPC 값 그대로) · 같은 학교 당일 가입 경고
  *   ③ 학교 등급 — 자동 판정(미확정) / 확정됨 배지 · 등급·계열 드롭다운(상태 사전 값) · 확정 / 등급 정정(기존 RPC 한 경로 · PR-W1)
  *   ④ 결정  — 하단 고정(MentorApprovalDecisionBar). 이미 처리된 건은 배너로 대체.
+ *
+ * PR-2b: 결정 바 위에 보류 한 줄(H) · 보류 건은 메모·보류한 관리자·시각 배너 + `보류 해제` · 승인 건은 `승인 취소`(critical · 활성 구독 시 잠금) ·
+ *   반려 건은 `반려 되돌리기` · 대기 행의 `승인 취소됨` 배지 · 다른 관리자가 보고 있으면 상단 안내(Presence, 잠금 없음).
  */
 import Link from "next/link";
 import type { ReactNode } from "react";
@@ -12,6 +15,9 @@ import { AdminStatusPill } from "@/components/admin/AdminStatusPill";
 import { ConfirmSubmitButton } from "@/components/admin/ConfirmSubmitButton";
 import { IdentityReviewBlock } from "@/components/admin/IdentityReviewBlock";
 import { MentorApprovalDecisionBar } from "@/components/admin/MentorApprovalDecisionBar";
+import { MentorApprovalHoldBar } from "@/components/admin/MentorApprovalHoldBar";
+import { MentorApprovalPresenceNotice } from "@/components/admin/MentorApprovalPresenceNotice";
+import { MentorApprovalRevokeButton, MentorHoldReleaseButton, MentorRejectionRevertButton } from "@/components/admin/MentorApprovalStatusControls";
 import { StatusBadge } from "@/components/design-system/StatusBadge";
 import { EmptyState } from "@/components/common/EmptyState";
 import { accountDetailPath } from "@/lib/admin/accountDetailConsole";
@@ -24,6 +30,15 @@ import {
   mentorDecisionResultLabel,
   sameSchoolTodayWarning,
 } from "@/lib/admin/mentorApprovalDecision";
+import {
+  MENTOR_APPROVAL_REVOKED_BADGE,
+  MENTOR_HOLD_BUTTON_IDS,
+  buildMentorHoldReleaseSummary,
+  buildMentorHoldSummary,
+  buildMentorRejectRevertSummary,
+  buildMentorRevokeSummary,
+  revokeBlockedMessage,
+} from "@/lib/admin/mentorApprovalHold";
 import { identityReviewLabel, identityReviewTone } from "@/lib/admin/mentorIdentityReview";
 import {
   SCHOOL_TIER_BADGE_AUTO,
@@ -123,7 +138,10 @@ export function MentorApprovalReviewPanel(props: Props) {
               </h2>
               <p className="truncate text-xs text-slate-500">{user?.email ?? "이메일 없음"}</p>
             </div>
-            <AdminStatusPill table="mentor_profiles" column="verification_status" value={detail.status} size="sm" className="shrink-0" />
+            <span className="flex shrink-0 items-center gap-1">
+              {detail.revoked ? <StatusBadge label={MENTOR_APPROVAL_REVOKED_BADGE} tone="danger" size="sm" /> : null}
+              <AdminStatusPill table="mentor_profiles" column="verification_status" value={detail.status} size="sm" className="shrink-0" />
+            </span>
           </div>
           <p className="mt-1 text-[11px] text-slate-500">
             신청 {formatKoreanDate(profile.created_at)} · 가입 {formatKoreanDate(user?.created_at)} ·{" "}
@@ -131,7 +149,15 @@ export function MentorApprovalReviewPanel(props: Props) {
               공개 프로필
             </Link>
           </p>
-          {!detail.decidable ? (
+          <MentorApprovalPresenceNotice mentorId={detail.mentorUserId} />
+          {detail.hold ? (
+            <div className="mt-2 rounded-xl border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-950" data-hold-banner>
+              <p className="font-black">보류 중 — {detail.hold.note || "메모 없음"}</p>
+              <p className="mt-0.5 text-[11px] text-sky-800">
+                {detail.hold.adminName ?? "관리자 미상"} · {detail.hold.createdAt ? formatKoDateTimeKst(detail.hold.createdAt) : "시각 미상"} · 멘토에게는 알리지 않았습니다
+              </p>
+            </div>
+          ) : !detail.decidable ? (
             <p className="mt-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-800" data-already-processed>
               이미 처리됨 —{" "}
               {detail.lastDecision
@@ -285,15 +311,40 @@ export function MentorApprovalReviewPanel(props: Props) {
         </Section>
       </div>
 
-      {/* ④ 결정 — 하단 고정 */}
+      {/* ④ 결정 — 하단 고정. 보류(H)는 결정 바 위 한 줄(PR-2b) */}
       {detail.decidable ? (
-        <MentorApprovalDecisionBar
-          mentorUserId={detail.mentorUserId}
-          approveSummary={approveSummary}
-          rejectSummary={buildMentorRejectSummary(detail.displayName)}
-          resubmitSummary={buildMentorResubmitSummary(detail.displayName)}
-          flashError={flashError}
-        />
+        <>
+          <MentorApprovalHoldBar mentorUserId={detail.mentorUserId} holdSummary={buildMentorHoldSummary(detail.displayName)} />
+          <MentorApprovalDecisionBar
+            mentorUserId={detail.mentorUserId}
+            approveSummary={approveSummary}
+            rejectSummary={buildMentorRejectSummary(detail.displayName)}
+            resubmitSummary={buildMentorResubmitSummary(detail.displayName)}
+            flashError={flashError}
+          />
+        </>
+      ) : null}
+      {/* PR-2b: 보류 해제 · 승인 취소(critical · 활성 구독 시 잠금) · 반려 되돌리기 — 하단 고정 */}
+      {detail.hold ? (
+        <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-white p-3" data-hold-release-bar>
+          <p className="min-w-0 text-[11px] leading-4 text-slate-500">해제하면 대기 상태로 돌아가고 이 지원자가 그대로 선택돼 바로 결정할 수 있습니다.</p>
+          <MentorHoldReleaseButton id={MENTOR_HOLD_BUTTON_IDS.release} mentorUserId={detail.mentorUserId} summary={buildMentorHoldReleaseSummary(detail.displayName)} />
+        </div>
+      ) : detail.status === "approved" ? (
+        <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-white p-3" data-revoke-bar>
+          <p className="min-w-0 text-[11px] leading-4 text-slate-500">승인을 취소하면 멘토 목록에서 사라지고 대기로 돌아갑니다. 학교 등급 확정·요금제는 유지됩니다.</p>
+          <MentorApprovalRevokeButton
+            id={MENTOR_HOLD_BUTTON_IDS.revoke}
+            mentorUserId={detail.mentorUserId}
+            summary={buildMentorRevokeSummary(detail.displayName)}
+            blockedMessage={revokeBlockedMessage(detail.activeSubscriptionCount)}
+          />
+        </div>
+      ) : detail.status === "rejected" ? (
+        <div className="flex items-center justify-between gap-3 border-t border-slate-200 bg-white p-3" data-revert-bar>
+          <p className="min-w-0 text-[11px] leading-4 text-slate-500">잘못 누른 반려는 대기로 되돌릴 수 있습니다. 되돌린 뒤 다시 심사합니다.</p>
+          <MentorRejectionRevertButton id={MENTOR_HOLD_BUTTON_IDS.revert} mentorUserId={detail.mentorUserId} summary={buildMentorRejectRevertSummary(detail.displayName)} />
+        </div>
       ) : null}
     </div>
   );

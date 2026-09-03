@@ -531,6 +531,9 @@ test("서버 조회: 오래된 것이 위(created_at asc) · 제재 탭 .in · h
     "mentorActivityAdminActions.ts",
     "mentorApprovalActions.ts",
     "mentorApprovalDocumentActions.ts",
+    // PR-2b 멘토 승인: 보류·보류 해제 / 승인 취소·반려 되돌리기 — 새 쓰기 경로 2개(verification_status 한 컬럼 전이)
+    "mentorApprovalHoldActions.ts",
+    "mentorApprovalRevokeActions.ts",
     "mentorCapAdminActions.ts",
     "mentorSchoolVerificationReviewActions.ts",
     // PR-8: 질문 첨부 뷰어의 서명 URL 재요청(읽기 전용 · DB 쓰기 없음) — 쓰기 액션이 아니다

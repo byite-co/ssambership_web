@@ -190,6 +190,9 @@ test("ConfirmSubmitButton: 버튼 교체형 — formAction/name/value/form 보�
  */
 const PR2_CONFIRM_IMPORTERS = [
   "components/admin/MentorApprovalDecisionBar.tsx",
+  // PR-2b: 보류(stateChange + 메모 프리셋) · 보류 해제 · 승인 취소(critical) · 반려 되돌리기
+  "components/admin/MentorApprovalHoldBar.tsx",
+  "components/admin/MentorApprovalStatusControls.tsx",
   "components/admin/MentorApprovalReviewPanel.tsx",
   // PR-3 환불 관리
   "components/admin/RefundDecisionButtons.tsx",

@@ -8,10 +8,12 @@
  *   2) 확인 다이얼로그가 열려 있으면 끈다 · Ctrl/Alt/Meta 조합 · IME 조합 중도 끈다.
  *   3) 승인·반려·재제출 키(A/R/D)는 트리거 버튼을 click 해 **확인 모달을 열 뿐** 실행하지 않는다.
  *      (`ConfirmSubmitButton` 의 트리거 onClick 은 preventDefault 후 다이얼로그를 연다 — 제출은 확인 뒤 requestSubmit 만.)
+ *   4) PR-2b: 보류 키(H)도 같은 규칙 — 보류 버튼을 click 해 메모 모달만 연다.
  */
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { DOCUMENT_VIEWER_FULLSCREEN_EVENT } from "@/lib/admin/documentViewerModel";
+import { MENTOR_HOLD_BUTTON_IDS } from "@/lib/admin/mentorApprovalHold";
 import {
   MENTOR_APPROVAL_SHORTCUTS,
   MENTOR_DECISION_BUTTON_IDS,
@@ -97,6 +99,13 @@ export function MentorApprovalShortcuts(props: Props) {
           openDecisionDialog(id);
           return;
         }
+        case "openHold": {
+          if (!canDecide) return;
+          e.preventDefault();
+          // 보류도 메모 모달만 연다 — 메모(프리셋 또는 직접 입력) 확인 뒤에만 제출된다.
+          openDecisionDialog(MENTOR_HOLD_BUTTON_IDS.hold);
+          return;
+        }
         default:
           return;
       }
@@ -129,7 +138,7 @@ export function MentorApprovalShortcuts(props: Props) {
           </span>
         );
       })}
-      <span className="ml-auto text-slate-400">입력 중에는 단축키가 꺼집니다 · A/R/D 는 확인 창만 엽니다</span>
+      <span className="ml-auto text-slate-400">입력 중에는 단축키가 꺼집니다 · A/R/D/H 는 확인 창만 엽니다</span>
     </footer>
   );
 }

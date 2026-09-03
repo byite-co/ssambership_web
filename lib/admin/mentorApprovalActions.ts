@@ -9,6 +9,7 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { MENTOR_PENDING_STATUS_VALUES_FOR_IN } from "@/lib/admin/mentorApprovalConstants";
 import { logAdminAction } from "@/lib/admin/adminActionLog";
+import { mentorApprovalAlreadyProcessedUrl } from "@/lib/admin/mentorApprovalActionUrls";
 
 const PATH = "/admin/mentor-approval";
 const TABLE = "mentor_profiles";
@@ -89,7 +90,8 @@ export async function approveMentorApplicationAction(formData: FormData) {
     redirect(errUrl(safeActionMsg(errorMsg)));
   }
   if (!touched) {
-    redirect(errUrl(safeActionMsg("이미 처리되었거나 승인 대기 상태가 아닙니다.")));
+    // PR-2b §2-3: 게이트에 걸리면 일반 실패가 아니라 `이미 처리됨 — 09-03 14:20 박운영 승인` 을 감사 로그에서 읽어 보여준다.
+    redirect(await mentorApprovalAlreadyProcessedUrl(mentorUserId));
   }
 
   const session = await createClient();
@@ -120,7 +122,8 @@ export async function rejectMentorApplicationAction(formData: FormData) {
     redirect(errUrl(safeActionMsg(errorMsg)));
   }
   if (!touched) {
-    redirect(errUrl(safeActionMsg("이미 처리되었거나 승인 대기 상태가 아닙니다.")));
+    // PR-2b §2-3: 게이트에 걸리면 일반 실패가 아니라 `이미 처리됨 — 09-03 14:20 박운영 승인` 을 감사 로그에서 읽어 보여준다.
+    redirect(await mentorApprovalAlreadyProcessedUrl(mentorUserId));
   }
 
   const session = await createClient();
@@ -151,7 +154,7 @@ export async function requestMentorDocumentsAction(formData: FormData) {
 
   const { touched, errorMsg } = await runMentorProfileUpdate(mentorUserId, STATUS_COLUMN, patch);
   if (errorMsg) redirect(errUrl(safeActionMsg(errorMsg)));
-  if (!touched) redirect(errUrl(safeActionMsg("처리할 수 없는 상태입니다.")));
+  if (!touched) redirect(await mentorApprovalAlreadyProcessedUrl(mentorUserId));
 
   const session = await createClient();
   await logAdminAction(session, {
