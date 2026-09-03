@@ -6,9 +6,11 @@ import {
   COMMUNITY_CONTENT_TABLES,
   COMMUNITY_CONTENT_TAB_VALUES,
   buildCommunityContentSearchOr,
+  communityContentDeletedBy,
   communityContentEffectiveStatus,
   communityContentSummaryText,
   communityContentTabFilter,
+  type CommunityContentDeletedBy,
   type CommunityContentStatus,
   type CommunityContentTab,
   type CommunityContentType,
@@ -20,14 +22,15 @@ import { mentorProfilesAdminReadClient } from "@/lib/admin/mentorProfilesAdminRe
  *
  * - 콘텐츠 행은 관리자 읽기 클라이언트(service_role 우선 · 세션 폴백 — `mentorProfilesAdminReadClient`)로 읽는다(이관 전과 같은 우회 · RLS 정책 추가는 DB 작업).
  * - 삭제됨 탭 = `deleted_at IS NOT NULL` · 게시·숨김 탭은 `deleted_at IS NULL` 을 함께 건다 — 글·숏폼·댓글 전부(DB-2 SQL 194 소프트 삭제 · PR-W2).
+ * - `deleted_by` 도 읽어 누가 지웠는지(`작성자 삭제` / `관리자 삭제`)를 행에 싣는다(PR-W3 · DB-3 SQL 196 `soft_delete_own_content` — 판정은 `communityContentDeletedBy`).
  *   관리자 읽기라 삭제 행도 읽히므로 탭 필터가 `deleted_at` 판정을 반드시 건다(소스 트립와이어: communitySoftDeleteReadPaths.contract.test).
  * - 신고 건수는 `content_reports.target_id` 를 페이지의 id 집합으로 한 번에 센다(대상 유형 무관 — target_id 는 uuid 라 유일).
  * - 정렬은 `created_at desc`(최신 위). 페이징은 서버 `.range`.
  */
 
-const POST_COLUMNS = "id, author_id, author_label, author_role, title, body, category, status, deleted_at, created_at, updated_at";
-const SHORTFORM_COLUMNS = "id, author_id, author_label, author_role, title, description, category, status, deleted_at, created_at, updated_at";
-const COMMENT_COLUMNS = "id, author_id, author_label, post_type, post_id, body, status, deleted_at, created_at, updated_at";
+const POST_COLUMNS = "id, author_id, author_label, author_role, title, body, category, status, deleted_at, created_at, updated_at, deleted_by";
+const SHORTFORM_COLUMNS = "id, author_id, creator_id, author_label, author_role, title, description, category, status, deleted_at, created_at, updated_at, deleted_by";
+const COMMENT_COLUMNS = "id, author_id, author_label, post_type, post_id, body, status, deleted_at, created_at, updated_at, deleted_by";
 const USER_COLUMNS = "id, full_name, nickname, email";
 /** 신고 건수 집계 행 상한 — 페이지 25행 × 신고 다수. */
 const REPORT_ROW_LIMIT = 2000;
@@ -46,6 +49,8 @@ export type CommunityContentListItem = {
   status: CommunityContentStatus;
   rawStatus: string;
   deletedAt: string | null;
+  /** 삭제 주체 — 작성자 본인(RPC) / 관리자(콘솔) / 기록 없음(null) */
+  deletedBy: CommunityContentDeletedBy | null;
   reportCount: number;
   createdAt: string | null;
   /** 댓글만 — 소속 글 */
@@ -143,6 +148,7 @@ function toItem(type: CommunityContentType, row: Row, names: ReadonlyMap<string,
     status: communityContentEffectiveStatus(type, row.status, deletedAt),
     rawStatus: str(row.status),
     deletedAt,
+    deletedBy: communityContentDeletedBy({ deletedAt, deletedBy: row.deleted_by, authorId, creatorId: type === "shortforms" ? row.creator_id : null }),
     reportCount: reports.get(id) ?? 0,
     createdAt: strOrNull(row.created_at),
     postType: type === "comments" ? strOrNull(row.post_type) : null,

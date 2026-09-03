@@ -110,6 +110,38 @@ export function communityContentEffectiveStatus(type: CommunityContentType, rawS
 
 export const COMMUNITY_CONTENT_DELETED_LABEL = "삭제됨";
 
+// ── 누가 지웠나 — deleted_by 판정(PR-W3 · DB-3 SQL 196) ────────────────────────
+
+export type CommunityContentDeletedBy = "author" | "admin";
+
+/** 삭제 주체 배지 — 작성자 본인(`soft_delete_own_content` · deleted_by = author_id / 숏폼은 creator_id 도 본인)이면 `작성자 삭제` · 그 외 계정이면 `관리자 삭제`. */
+export const COMMUNITY_CONTENT_DELETED_BY_LABELS: Readonly<Record<CommunityContentDeletedBy, string>> = {
+  author: "작성자 삭제",
+  admin: "관리자 삭제",
+};
+
+function idOf(v: unknown): string {
+  return typeof v === "string" ? v.trim() : "";
+}
+
+/**
+ * `deleted_by` → 삭제 주체. 삭제 행(deleted_at)이 아니거나 deleted_by 가 비어 있으면(194 이전 삭제 · F6 글 삭제 등 기록 없음) null.
+ * 작성자 판정은 RPC 의 "본인" 정의와 같다 — author_id, 숏폼은 creator_id 도.
+ */
+export function communityContentDeletedBy(row: { deletedAt: unknown; deletedBy: unknown; authorId: unknown; creatorId?: unknown }): CommunityContentDeletedBy | null {
+  if (!hasValue(row.deletedAt)) return null;
+  const by = idOf(row.deletedBy);
+  if (!by) return null;
+  const author = idOf(row.authorId);
+  const creator = idOf(row.creatorId);
+  if ((author && by === author) || (creator && by === creator)) return "author";
+  return "admin";
+}
+
+export function communityContentDeletedByLabel(kind: CommunityContentDeletedBy | null): string | null {
+  return kind ? COMMUNITY_CONTENT_DELETED_BY_LABELS[kind] : null;
+}
+
 /** 상태 배지 라벨 — 삭제됨은 화면 고유(CHECK 가 deleted 를 막아 사전에 없다) · 나머지는 종류별 사전 라벨. */
 export function communityContentStatusLabel(type: CommunityContentType, status: CommunityContentStatus): string {
   if (status === "deleted") return COMMUNITY_CONTENT_DELETED_LABEL;

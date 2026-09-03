@@ -6,7 +6,9 @@
  * - 이 관리자가 지금 보고 있는 지원자(`selectedMentorId`)를 `{ adminId, adminName, mentorId, since }` 로 track 한다.
  *   지원자가 바뀌면 같은 presence 키(adminId)로 다시 track(교체) · 선택이 없으면 untrack · 창을 닫으면 Presence 가 지운다.
  * - 다른 관리자들의 상태는 `sync` 이벤트마다 `presenceState()` 를 평탄화해 컨텍스트로 내려준다(목록 배지 · 상세 안내 · 확인 모달 한 줄).
- * - 채널 구독이 실패하면(`CHANNEL_ERROR`·`TIMED_OUT` — Realtime 비활성·private 전용 설정 등) 조용히 `unavailable` 로 내려간다.
+ * - PR-W3(DB-3 SQL 197): 채널은 **private** 이다 — join 시 Realtime 이 `realtime.messages` RLS(admin:* 토픽은 is_admin())를 이 사용자의 JWT 로
+ *   평가한다. 구독 전에 `supabase.realtime.setAuth()` 로 현재 세션 토큰을 넘긴다(없으면 anon 키로 join 해 거부된다).
+ * - 채널 구독이 실패하면(`CHANNEL_ERROR`·`TIMED_OUT` — Realtime 비활성·정책 미적용·비관리자 등) 조용히 `unavailable` 로 내려간다.
  * - **잠금은 없다.** 이 컨텍스트는 표시 전용이며 결정 버튼의 활성 여부에 관여하지 않는다(담당자가 자리를 비워도 처리할 수 있어야 한다).
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -83,25 +85,36 @@ export function MentorApprovalPresenceProvider({ adminId, adminName, selectedMen
   useEffect(() => {
     if (!adminId) return;
     const supabase = createClient();
-    const channel = supabase.channel(MENTOR_APPROVAL_PRESENCE_CHANNEL, { config: { presence: { key: adminId } } });
+    let cancelled = false;
+    const channel = supabase.channel(MENTOR_APPROVAL_PRESENCE_CHANNEL, { config: { presence: { key: adminId }, private: true } });
     channelRef.current = channel;
     channel.on("presence", { event: "sync" }, () => {
       setViewers(flattenPresenceState(channel.presenceState(), adminId));
     });
-    channel.subscribe((state) => {
-      const s = String(state);
-      if (s === "SUBSCRIBED") {
-        subscribedRef.current = true;
-        setStatus("ready");
-        void trackRef.current();
-      } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") {
-        subscribedRef.current = false;
-        setStatus("unavailable");
-      } else if (s === "CLOSED") {
-        subscribedRef.current = false;
-      }
-    });
+    // private 채널 인가는 JWT 로 판정된다 — 구독 전에 현재 세션 토큰을 Realtime 에 넘긴다(setAuth 실패 = unavailable, 잠금 없음).
+    supabase.realtime
+      .setAuth()
+      .then(() => {
+        if (cancelled) return;
+        channel.subscribe((state) => {
+          const s = String(state);
+          if (s === "SUBSCRIBED") {
+            subscribedRef.current = true;
+            setStatus("ready");
+            void trackRef.current();
+          } else if (s === "CHANNEL_ERROR" || s === "TIMED_OUT") {
+            subscribedRef.current = false;
+            setStatus("unavailable");
+          } else if (s === "CLOSED") {
+            subscribedRef.current = false;
+          }
+        });
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("unavailable");
+      });
     return () => {
+      cancelled = true;
       subscribedRef.current = false;
       channelRef.current = null;
       setViewers([]);

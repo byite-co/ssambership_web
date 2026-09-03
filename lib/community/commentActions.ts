@@ -5,6 +5,7 @@ import { revalidateCommunityPaths } from "@/lib/community/communityRevalidate";
 import { getServerAuthUser } from "@/lib/auth/getCurrentUser";
 import { createClient } from "@/lib/supabase/server";
 import { insertCommunityComment } from "@/lib/community/communityMutations";
+import { SOFT_DELETE_OWN_CONTENT_RPC, buildSoftDeleteOwnContentArgs } from "@/lib/community/softDeleteOwnContent";
 import { assertAccountActive } from "@/lib/auth/accountStatus";
 import { TRUST_SAFETY_COMMUNITY_ERROR_CODE, sanitizeTrustSafetyText } from "@/lib/safety/trustSafetyText";
 
@@ -83,9 +84,9 @@ export async function submitCommunityCommentAction(formData: FormData) {
 }
 
 /**
- * 숏폼 댓글 삭제(작성자 전용) — D-CM-8. 숏폼 댓글은 `community_comments` 정본에 저장되고
- * 정본 삭제 RPC `community_comment_soft_delete_self`(소유·계정 게이트·moderation 유지·멱등 재삭제)
- * 가 있는데도 삭제 액션·UI 가 없어 작성자가 자기 댓글을 지울 방법이 없었다. RPC 를 그대로 호출하고
+ * 숏폼 댓글 삭제(작성자 전용) — D-CM-8 → PR-W3(DB-3 SQL 196). 숏폼 댓글은 `community_comments` 정본에 저장된다.
+ * 웹은 작성자 삭제 3경로를 정본 RPC `soft_delete_own_content('shortform_comment', id)` 하나로 통일한다(소유·계정 게이트·
+ * moderation 유지·멱등 재삭제 — 구 `community_comment_soft_delete_self` 와 같은 판정 · 그 RPC 는 앱 계약이라 DB 에 그대로 남는다).
  * 실패는 무음으로 삼키지 않고 오류 쿼리스트링으로 표면화한다(게시판 댓글 삭제와 동일 계약).
  */
 export async function deleteShortformCommentAction(formData: FormData) {
@@ -102,7 +103,7 @@ export async function deleteShortformCommentAction(formData: FormData) {
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.rpc("community_comment_soft_delete_self", { p_comment_id: commentId });
+  const { error } = await supabase.rpc(SOFT_DELETE_OWN_CONTENT_RPC, buildSoftDeleteOwnContentArgs("shortform_comment", commentId));
   if (error) {
     redirect(buildCommentRedirect(returnPath, "delete"));
   }

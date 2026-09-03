@@ -53,10 +53,15 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 109본 pack(생성기 108 + PR60 1) 기준
-# (tables=84 functions=226 policies=175 buckets=13)이며, PG16 스크래치 재생 실측
-# (scripts/verify/local_db2_batch_check.sh [7])과 일치한다.
-# (프로덕션 원장은 106본 — 20260903200100~200300 미적용 상태다.)
+# 기대치는 112본 pack(생성기 111 + PR60 1) 기준
+# (tables=84 functions=228 policies=175 buckets=13)이며, PG16 스크래치 재생 실측
+# (scripts/verify/local_db3_batch_check.sh [7])과 일치한다.
+# (프로덕션 원장은 109본 — 20260903230100~230300 미적용 상태다. DB-1·DB-2 6본은 2026-09-03 적용 완료.)
+# 109본→112본(DB-3 운영 DB 정리 배치 · 2026-09-03) 델타:
+#   functions +2 = soft_delete_own_content (20260903230100 — 작성자 본인 소프트 삭제 RPC)
+#                + ugc_block_hard_delete (20260903230300 — 세 표 BEFORE DELETE 트리거 함수)
+#   policies  불변 — 20260903230200 의 정책 2종은 realtime.messages(realtime 스키마)에 붙는다.
+#                public 정책 수는 세지 않는 스키마라 175 그대로(realtime 정책은 아래 [4b]에서 따로 센다).
 # 106본→109본(DB-2 운영 DB 정리 배치 · 2026-09-03) 델타:
 #   tables    -1 = school_tier_mappings DROP (20260903200300)
 #   functions +1 = comments_sync_deleted_flag (20260903200200 — school_tier_suggest·RPC·
@@ -124,10 +129,14 @@ count_check(){ # count_check <label> <expected> <sql>
 }
 count_check tables 84 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
-count_check functions 226 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+count_check functions 228 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
 count_check policies 175 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"
+
+echo "=== [4b] realtime.messages 정책 (20260903230200 — admin:* 토픽 관리자 전용 2종)"
+count_check realtime_messages_policies 2 "select count(*) from pg_policies where schemaname='realtime' and tablename='messages'
+                                          and policyname in ('realtime_admin_topic_select','realtime_admin_topic_insert')"
 
 echo "=== [5] M13 trigger function ACL (anon/authenticated EXECUTE 불가)"
 q "select p.proname||'|'||coalesce(p.proacl::text,'(null)')

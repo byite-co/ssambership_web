@@ -49,6 +49,8 @@
 > **개정 2026-09-03 (DB-1 캡 구조):** 오너 확정으로 cap 가중치 1.0/2.5/4.5 → **1.0/2.25/4.75**, 멘토 한도 기본 28 → **50** (`supabase/sql/190_cap_structure_limit_50_weights.sql`, pack `20260903100100`). 정본은 DB 함수이며 `mentor_plans.cap_weight` 는 그 함수값을 따르는 참조 컬럼이다. 같은 배치에서 학교 인증 규칙(자동 판정 = `pending` 잠정, 관리자 확정 = `reviewed_by` 채움 · SQL 192)과 분쟁 분배 수수료(정산 행 `fee_rate` · SQL 191)를 함께 정본화했다.
 >
 > **개정 2026-09-03 (DB-2 등급 정정·소프트 삭제):** 오너 확정으로 학교 등급 자동 판정 폴백을 `미분류` → **`그외`**로 바꾸고(`미분류`는 대학명을 못 읽은 경우만 — `school_tier_suggest()` · SQL 193), 확정된 등급도 관리자가 같은 확정 RPC(`approve_mentor_school_verification_admin`)로 **정정**할 수 있게 했다(이전 등급·확정자는 `admin_action_logs` `school_tier_corrected`). 숏폼 · 숏폼 댓글 · 게시판 댓글(`shortform_posts` · `community_comments` · `comments`)은 게시판 글과 같은 **소프트 삭제(`deleted_at` · `deleted_by`)** 로 통일한다(SQL 194 · anon/authenticated 읽기 정책·뷰·RPC 에 `deleted_at IS NULL` · 하드 DELETE 차단 트리거는 오너 결정으로 두지 않는다). `school_tier_mappings` 는 제거(SQL 195). 적용 전 미분류 확정 19건은 `그외`로 일괄 정정.
+>
+> **개정 2026-09-03 (DB-3 작성자 삭제·Realtime·하드 DELETE 차단):** 작성자 본인 삭제는 SECURITY DEFINER RPC `soft_delete_own_content(p_kind, p_id)` 하나로 통일한다(SQL 196 · p_kind `shortform` / `shortform_comment` / `board_comment` / `board_post` · `deleted_by` = 작성자 · 감사 로그 없음 — 관리자 화면은 `작성자 삭제`/`관리자 삭제` 배지). 게시판 댓글 본인 삭제(구 직접 `is_deleted = true` UPDATE)는 RLS 가 새 행을 거부해 실제로 동작하지 않던 결함이며 이 RPC 로 처음 동작한다. 작성자 복원 RPC 는 두지 않는다(복원은 관리자만). Realtime `admin:*` 토픽은 `realtime.messages` RLS 로 관리자만(SQL 197 · PR-2b Presence 채널은 `private: true`). 숏폼·게시판 댓글·숏폼 댓글의 **하드 DELETE 는 트리거로 차단**(SQL 198 · anon/authenticated 거부 · service_role/postgres 통과 — 웹·앱 어느 쪽도 세 표에 직접 DELETE 를 쓰지 않음을 확인한 뒤 도입). 앱 저장소는 읽기만 했다(앱의 숏폼 댓글 삭제는 기존 `community_comment_soft_delete_self` 그대로 · DB 에 유지).
 
 ## 라우트 구조 (실제)
 
@@ -103,11 +105,11 @@
 | `question_threads` | `room_id`, `title`, `status`, workflow 필드 |
 | `question_messages` | `thread_id`, `body`, `author_id` |
 | `connection_notes` | room FK, `body`, `status` |
-| `comments` / `community_comments` | 게시판 댓글 정본 / 레거시·숏폼 댓글 — `deleted_at`·`deleted_by` (소프트 삭제 · DB-2) · `comments.is_deleted` = 숨김 OR 삭제 |
+| `comments` / `community_comments` | 게시판 댓글 정본 / 레거시·숏폼 댓글 — `deleted_at`·`deleted_by` (소프트 삭제 · DB-2) · `comments.is_deleted` = 숨김 OR 삭제 · 본인 삭제 `soft_delete_own_content` · 하드 DELETE 차단(DB-3) |
 | `cash_wallets` | `balance_cents` (minor = 원×100) |
 | `cash_ledger` | `delta_cents`, append-only |
 | `custom_request_orders` | `mentor_id`, `title`, `status` |
-| `shortform_posts` | `video_url`, `thumbnail_url`, `category`, `deleted_at`·`deleted_by` (소프트 삭제 · DB-2) |
+| `shortform_posts` | `video_url`, `thumbnail_url`, `category`, `deleted_at`·`deleted_by` (소프트 삭제 · DB-2) · 하드 DELETE 차단(DB-3) |
 | `content_reports` | 관리자 검수 큐 |
 
 ## Storage 버킷 (public = false 필수)

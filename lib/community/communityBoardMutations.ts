@@ -4,6 +4,7 @@ import {
   type CommunityPostCategorySlug,
 } from "@/lib/community/communityBoardConstants";
 import { callApiWebV1Rpc } from "@/lib/apiWebV1/rpc";
+import { SOFT_DELETE_OWN_CONTENT_RPC, buildSoftDeleteOwnContentArgs, softDeleteOwnContentErrorCode } from "@/lib/community/softDeleteOwnContent";
 
 /**
  * S2-2 전환 W2(C5): 게시글 쓰기 정본 — F4/F5/F6 (계약 §7 · §14 · §17 #8).
@@ -209,22 +210,20 @@ export async function insertBoardComment(
 }
 
 /**
- * \uB313\uAE00 soft-delete(\uC791\uC131\uC790 \uC804\uC6A9). \uAD6C \uAD6C\uD604\uC740 0\uD589 UPDATE(\uD0C0\uC778 \uB313\uAE00\u00B7\uBE44\uC874\uC7AC id)\uB3C4 ok:true \uB85C \uC131\uACF5
- * \uC704\uC7A5\uD588\uB2E4(D-CM-6). `.select()` \uB85C \uC2E4\uC81C \uAC31\uC2E0\uB41C \uD589\uC744 \uBC1B\uC544 0\uD589\uC774\uBA74 \uC2E4\uD328("not_found")\uB85C \uBC18\uD658\uD55C\uB2E4.
+ * 댓글 soft-delete(작성자 전용) — PR-W3(DB-3 SQL 196): 정본 RPC `soft_delete_own_content('board_comment', id)` 단일 경로.
+ * 구 구현(`UPDATE comments SET is_deleted = true … RETURNING id` · D-CM-6)은 UPDATE 의 새 행이 SELECT 정책
+ * (is_deleted = false AND deleted_at IS NULL)을 통과하지 못해 RLS 가 항상 거부했다 — 게시판 댓글 본인 삭제가 실제로는 동작하지 않던 결함.
+ * RPC 가 소유(auth.uid())·계정 게이트·moderation·멱등을 판정하고 deleted_at/deleted_by 만 기록한다(is_deleted 는 DB 동기화 트리거 ·
+ * 본문 보존 · 감사 로그 없음). 실패는 코드로 돌려주고 액션이 commentError 로 표면화한다(성공 위장 금지).
  */
 export async function softDeleteBoardComment(
   supabase: SupabaseClient,
   userId: string,
   commentId: string
 ): Promise<{ ok: true } | { ok: false; error: string }> {
-  const { data, error } = await supabase
-    .from("comments")
-    .update({ is_deleted: true, content: "\uC0AD\uC81C\uB41C \uB313\uAE00\uC785\uB2C8\uB2E4." })
-    .eq("id", commentId)
-    .eq("author_id", userId)
-    .select("id");
-  if (error) return { ok: false, error: error.message };
-  if (!data || data.length === 0) return { ok: false, error: "not_found" };
+  void userId; // RPC 가 auth.uid() 로 작성자를 판정한다(작성자 인자 전달 금지)
+  const { error } = await supabase.rpc(SOFT_DELETE_OWN_CONTENT_RPC, buildSoftDeleteOwnContentArgs("board_comment", commentId));
+  if (error) return { ok: false, error: softDeleteOwnContentErrorCode(error.message) };
   return { ok: true };
 }
 
