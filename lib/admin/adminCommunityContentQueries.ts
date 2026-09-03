@@ -7,7 +7,6 @@ import {
   COMMUNITY_CONTENT_TAB_VALUES,
   buildCommunityContentSearchOr,
   communityContentEffectiveStatus,
-  communityContentHasDeletedRows,
   communityContentSummaryText,
   communityContentTabFilter,
   type CommunityContentStatus,
@@ -20,14 +19,15 @@ import { mentorProfilesAdminReadClient } from "@/lib/admin/mentorProfilesAdminRe
  * 커뮤니티 관리 목록(PR-11 §1-1) 서버 조회 — 종류(글·숏폼·댓글)별 한 테이블 · 상태 탭 · 검색(제목·본문·작성자) · 신고 건수.
  *
  * - 콘텐츠 행은 관리자 읽기 클라이언트(service_role 우선 · 세션 폴백 — `mentorProfilesAdminReadClient`)로 읽는다(이관 전과 같은 우회 · RLS 정책 추가는 DB 작업).
- * - 삭제됨 탭 = `deleted_at IS NOT NULL`(게시판 글만 컬럼이 있다) · 게시·숨김 탭은 `deleted_at IS NULL` 을 함께 건다. 숏폼·댓글은 하드 DELETE 라 삭제됨 탭이 항상 0.
+ * - 삭제됨 탭 = `deleted_at IS NOT NULL` · 게시·숨김 탭은 `deleted_at IS NULL` 을 함께 건다 — 글·숏폼·댓글 전부(DB-2 SQL 194 소프트 삭제 · PR-W2).
+ *   관리자 읽기라 삭제 행도 읽히므로 탭 필터가 `deleted_at` 판정을 반드시 건다(소스 트립와이어: communitySoftDeleteReadPaths.contract.test).
  * - 신고 건수는 `content_reports.target_id` 를 페이지의 id 집합으로 한 번에 센다(대상 유형 무관 — target_id 는 uuid 라 유일).
  * - 정렬은 `created_at desc`(최신 위). 페이징은 서버 `.range`.
  */
 
 const POST_COLUMNS = "id, author_id, author_label, author_role, title, body, category, status, deleted_at, created_at, updated_at";
-const SHORTFORM_COLUMNS = "id, author_id, author_label, author_role, title, description, category, status, created_at, updated_at";
-const COMMENT_COLUMNS = "id, author_id, author_label, post_type, post_id, body, status, created_at, updated_at";
+const SHORTFORM_COLUMNS = "id, author_id, author_label, author_role, title, description, category, status, deleted_at, created_at, updated_at";
+const COMMENT_COLUMNS = "id, author_id, author_label, post_type, post_id, body, status, deleted_at, created_at, updated_at";
 const USER_COLUMNS = "id, full_name, nickname, email";
 /** 신고 건수 집계 행 상한 — 페이지 25행 × 신고 다수. */
 const REPORT_ROW_LIMIT = 2000;
@@ -122,10 +122,8 @@ function applyScope(q: PgQuery, type: CommunityContentType, args: { tab: Communi
   let r = q;
   const filter = communityContentTabFilter(type, args.tab);
   if (filter.status) r = r.eq("status", filter.status);
-  if (communityContentHasDeletedRows(type)) {
-    if (filter.deleted === "only") r = r.not("deleted_at", "is", null);
-    else if (filter.deleted === "exclude") r = r.is("deleted_at", null);
-  }
+  if (filter.deleted === "only") r = r.not("deleted_at", "is", null);
+  else if (filter.deleted === "exclude") r = r.is("deleted_at", null);
   if (args.term) r = r.or(buildCommunityContentSearchOr(type, args.term, args.authorIds));
   return r;
 }
@@ -133,7 +131,7 @@ function applyScope(q: PgQuery, type: CommunityContentType, args: { tab: Communi
 function toItem(type: CommunityContentType, row: Row, names: ReadonlyMap<string, string>, reports: ReadonlyMap<string, number>): CommunityContentListItem {
   const id = str(row.id);
   const authorId = str(row.author_id);
-  const deletedAt = communityContentHasDeletedRows(type) ? strOrNull(row.deleted_at) : null;
+  const deletedAt = strOrNull(row.deleted_at);
   const authorLabel = strOrNull(row.author_label);
   return {
     id,
@@ -163,9 +161,6 @@ export async function loadCommunityContentList(
   const from = Math.max(0, (args.page - 1) * args.pageSize);
   const to = from + args.pageSize - 1;
   const scope = { tab: args.tab, term, authorIds };
-
-  // 하드 DELETE 종류의 삭제됨 탭은 행이 남지 않는다 — 조회 없이 0.
-  if (args.tab === "deleted" && !communityContentHasDeletedRows(args.type)) return { rows: [], totalCount: 0, error: null };
 
   const r = await applyScope(readDb.from(table).select(columnsFor(args.type), { count: "exact" }), args.type, scope)
     .order("created_at", { ascending: false })
@@ -198,7 +193,6 @@ export async function countCommunityContentTabs(supabase: SupabaseClient, type: 
   const out = { published: 0, hidden: 0, deleted: 0, all: 0 } as CommunityContentTabCounts;
   await Promise.all(
     COMMUNITY_CONTENT_TAB_VALUES.map(async (tab) => {
-      if (tab === "deleted" && !communityContentHasDeletedRows(type)) return;
       const { count, error } = await applyScope(readDb.from(table).select("id", { count: "exact", head: true }), type, { tab, term: "", authorIds: [] });
       if (error) {
         console.error(`[countCommunityContentTabs] ${table}.${tab}:`, error.message);

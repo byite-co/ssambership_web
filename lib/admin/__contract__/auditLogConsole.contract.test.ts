@@ -165,9 +165,9 @@ test("사전: 템플릿 계열의 값 집합은 소스와 같다(review · refun
   for (const v of ["created", "updated", "activated", "deactivated"]) for (const r of ["notice", "promotion"]) assert.ok(ADMIN_ACTION_TYPE_LABELS[`notice_${v}_${r}`], `${v}/${r}`);
 });
 
-test("사전: 계열 16 · 항목 72(고정 38 + 전개 34 — PR-13 question_export 추가) · 모든 항목에 계열·한글 라벨 · 금지 문구 없음 · 미등재는 '기타 조치'(코드값 노출 금지)", () => {
+test("사전: 계열 16 · 항목 76(고정 42 + 전개 34 — PR-2b 멘토 보류·해제·승인 취소·반려 되돌리기 4종 + PR-13 question_export 추가) · 모든 항목에 계열·한글 라벨 · 금지 문구 없음 · 미등재는 '기타 조치'(코드값 노출 금지)", () => {
   assert.equal(ADMIN_ACTION_GROUPS.length, 16);
-  assert.equal(ADMIN_ACTION_TYPE_KEYS.length, 72);
+  assert.equal(ADMIN_ACTION_TYPE_KEYS.length, 76);
   const groupKeys = new Set(ADMIN_ACTION_GROUPS.map((g) => g.key));
   for (const key of ADMIN_ACTION_TYPE_KEYS) {
     const e = ADMIN_ACTION_TYPE_LABELS[key];

@@ -28,6 +28,18 @@ import {
   type SchoolTierReviewState,
 } from "@/lib/admin/mentorSchoolTierReview";
 import { MENTOR_DECISION_ACTION_TYPES } from "@/lib/admin/mentorApprovalDecision";
+import {
+  MENTOR_APPROVAL_HISTORY_ACTION_TYPES,
+  MENTOR_HOLD_ACTION_TYPE,
+  REVOKE_BLOCKING_SUBSCRIPTION_STATUSES,
+  buildAlreadyProcessedText,
+  isMentorApprovalRevoked,
+  isMentorOnHold,
+  mentorDecisionUndoKind,
+  summarizeMentorDecisionsToday,
+  type MentorDecisionUndoKind,
+  type MentorDecisionsTodaySummary,
+} from "@/lib/admin/mentorApprovalHold";
 import { describeStudentIdDocument } from "@/lib/admin/mentorApprovalDocuments";
 import type { DocumentViewerSource } from "@/lib/admin/documentViewerModel";
 import { loadMentorCapUsage, type MentorCapUsage } from "@/lib/subscribe/mentorCapService";
@@ -42,6 +54,9 @@ import { kstDayString } from "@/lib/utils/kstTime";
  * - `identity_verifications` 는 RLS 정책 0개 테이블 → service_role 로만 읽는다. 키가 없으면 "없음" 으로
  *   속이지 않고 `identityError` 로 판정 불가를 드러낸다(fail-closed).
  * - 정원(cap)은 PR-1b 의 DB RPC 결과(`loadMentorCapUsage`)를 그대로 넘긴다 — TS 계산 없음.
+ * - PR-2b: "마지막 처리" 는 결정 3종 + 보류 2종 + 되돌리기 2종(`MENTOR_APPROVAL_HISTORY_ACTION_TYPES`)을 본다. 보류 메모는
+ *   `admin_action_logs.detail` 에서 읽고(`admin_case_notes` 는 분쟁·신고만 받는다), 활성 구독 수는 `subscriptions` head count(service_role)다 —
+ *   집계 실패는 0 이 아니라 null(승인 취소를 막는 쪽 · fail-closed). "오늘 내가 처리한 건" 은 `admin_id = 나 AND 오늘(KST)` 집계 그대로다.
  */
 
 export const MENTOR_PROFILE_LIST_COLUMNS = "user_id, university_name, department_name, verification_status, created_at";
@@ -91,6 +106,10 @@ export type MentorApprovalQueueItem = {
   appliedAt: string | null;
   status: string;
   identity: MentorIdentityReviewKind | null;
+  /** 마지막 처리(결정·보류·되돌리기) action_type. 없으면 null */
+  lastActionType: string | null;
+  /** 대기 상태이면서 마지막 처리가 승인 취소 → `승인 취소됨` 배지 */
+  revoked: boolean;
 };
 
 export type MentorApprovalQueueResult = {
@@ -106,6 +125,13 @@ export type MentorApprovalLastDecision = {
   actionType: string;
   createdAt: string;
   adminName: string | null;
+};
+
+/** 보류 중인 건의 상단 표시 — 메모 · 보류한 관리자 · 시각(마지막 `mentor_hold` 감사 로그) */
+export type MentorApprovalHoldInfo = {
+  note: string;
+  adminName: string | null;
+  createdAt: string | null;
 };
 
 export type MentorApprovalDetail = {
@@ -128,6 +154,12 @@ export type MentorApprovalDetail = {
   /** 같은 대학에서 오늘(KST) 가입한 멘토 수. 조회 실패 null */
   sameSchoolTodayCount: number | null;
   lastDecision: MentorApprovalLastDecision | null;
+  /** 대기 상태이면서 마지막 처리가 승인 취소 → `승인 취소됨` 배지 */
+  revoked: boolean;
+  /** `on_hold` 일 때만 — 메모·보류한 관리자·시각. 로그가 없으면 메모 빈 문자열 */
+  hold: MentorApprovalHoldInfo | null;
+  /** `approved` 일 때만 센다(승인 취소 차단 판정). 그 외 null · 집계 실패도 null(판정 불가 → 취소 불가) */
+  activeSubscriptionCount: number | null;
 };
 
 function str(v: unknown): string {
@@ -300,12 +332,14 @@ export async function loadMentorApprovalQueue(
   const users = await loadUsersByIds(db, ids);
   const nameById = new Map<string, string>();
   for (const id of ids) nameById.set(id, str(users.get(id)?.full_name));
-  const identity = await loadIdentityKinds(ids, nameById);
+  const [identity, lastHistory] = await Promise.all([loadIdentityKinds(ids, nameById), loadLastHistoryByIds(db, ids)]);
 
   return {
     rows: rows.map((r) => {
       const id = str(r.user_id);
       const user = users.get(id) ?? null;
+      const status = str(r.verification_status);
+      const lastActionType = lastHistory.get(id)?.actionType ?? null;
       return {
         mentorUserId: id,
         name: displayNameOf(user, { university_name: str(r.university_name) }),
@@ -313,8 +347,10 @@ export async function loadMentorApprovalQueue(
         university: str(r.university_name),
         department: str(r.department_name),
         appliedAt: typeof r.created_at === "string" ? r.created_at : null,
-        status: str(r.verification_status),
+        status,
         identity: identity.byId.get(id) ?? null,
+        lastActionType,
+        revoked: isMentorApprovalRevoked({ status, lastActionType }),
       };
     }),
     totalCount,
@@ -367,13 +403,24 @@ async function loadSchoolTierRows(db: SupabaseClient, mentorUserId: string): Pro
   return (data as unknown as SchoolTierReviewRowLite[] | null) ?? [];
 }
 
-async function loadLastDecision(db: SupabaseClient, mentorUserId: string): Promise<{ actionType: string; createdAt: string; adminId: string | null } | null> {
+type HistoryLogRow = { actionType: string; createdAt: string; adminId: string | null; detail: Record<string, unknown> | null };
+
+function toHistoryLogRow(raw: Row): HistoryLogRow | null {
+  const actionType = str(raw.action_type);
+  const createdAt = typeof raw.created_at === "string" ? raw.created_at : "";
+  if (!actionType || !createdAt) return null;
+  const detail = raw.detail && typeof raw.detail === "object" && !Array.isArray(raw.detail) ? (raw.detail as Record<string, unknown>) : null;
+  return { actionType, createdAt, adminId: str(raw.admin_id) || null, detail };
+}
+
+/** 마지막 처리(결정 3종 + 보류 2종 + 되돌리기 2종) — "이미 처리됨" 배너·`승인 취소됨` 배지·보류 메모의 재료. */
+async function loadLastDecision(db: SupabaseClient, mentorUserId: string, actionTypes: readonly string[] = MENTOR_APPROVAL_HISTORY_ACTION_TYPES): Promise<HistoryLogRow | null> {
   const { data, error } = await db
     .from("admin_action_logs")
-    .select("action_type, admin_id, created_at")
+    .select("action_type, admin_id, created_at, detail")
     .eq("target_type", "mentor_profile")
     .eq("target_id", mentorUserId)
-    .in("action_type", [...MENTOR_DECISION_ACTION_TYPES])
+    .in("action_type", [...actionTypes])
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -381,9 +428,101 @@ async function loadLastDecision(db: SupabaseClient, mentorUserId: string): Promi
     console.error("[loadMentorApprovalDetail] admin_action_logs 조회 실패:", error.message);
     return null;
   }
-  const row = data as { action_type?: string; admin_id?: string | null; created_at?: string } | null;
-  if (!row?.action_type || !row.created_at) return null;
-  return { actionType: row.action_type, createdAt: row.created_at, adminId: row.admin_id ?? null };
+  return data ? toHistoryLogRow(data as Row) : null;
+}
+
+/** 페이지 행들의 마지막 처리 — 한 번에 읽어 id 별 최신 1건만 남긴다(25행 × 처리 몇 건이면 상한 안). */
+const HISTORY_BATCH_LIMIT = 400;
+async function loadLastHistoryByIds(db: SupabaseClient, ids: readonly string[]): Promise<Map<string, HistoryLogRow>> {
+  const out = new Map<string, HistoryLogRow>();
+  if (!ids.length) return out;
+  const { data, error } = await db
+    .from("admin_action_logs")
+    .select("target_id, action_type, admin_id, created_at, detail")
+    .eq("target_type", "mentor_profile")
+    .in("target_id", [...ids])
+    .in("action_type", [...MENTOR_APPROVAL_HISTORY_ACTION_TYPES])
+    .order("created_at", { ascending: false })
+    .limit(HISTORY_BATCH_LIMIT);
+  if (error) {
+    console.error("[loadMentorApprovalQueue] admin_action_logs 조회 실패:", error.message);
+    return out;
+  }
+  for (const raw of (data as Row[] | null) ?? []) {
+    const id = str(raw.target_id);
+    if (!id || out.has(id)) continue;
+    const row = toHistoryLogRow(raw);
+    if (row) out.set(id, row);
+  }
+  return out;
+}
+
+function holdNoteOf(detail: Record<string, unknown> | null): string {
+  if (!detail) return "";
+  for (const key of ["note", "reason"]) {
+    const v = detail[key];
+    if (typeof v === "string" && v.trim()) return v.trim();
+  }
+  return "";
+}
+
+/**
+ * 멘토의 끝나지 않은 구독 수(active · cancel_scheduled · past_due) — 승인 취소 차단 판정. service_role 로 읽는다(학생 RLS 는 본인 쌍만).
+ * 키 부재·조회 실패는 null(0 으로 위장하지 않는다 → 화면·서버 모두 취소를 막는다).
+ */
+export async function countMentorActiveSubscriptions(mentorUserId: string): Promise<number | null> {
+  const id = str(mentorUserId);
+  if (!id) return null;
+  const admin = serviceRoleOrNull();
+  if (!admin) return null;
+  const { count, error } = await admin
+    .from("subscriptions")
+    .select("id", { count: "exact", head: true })
+    .eq("mentor_id", id)
+    .in("status", [...REVOKE_BLOCKING_SUBSCRIPTION_STATUSES]);
+  if (error) {
+    console.error("[countMentorActiveSubscriptions]", error.message);
+    return null;
+  }
+  return count ?? 0;
+}
+
+async function countActiveSubscriptionsByMentor(mentorIds: readonly string[]): Promise<Map<string, number | null>> {
+  const out = new Map<string, number | null>();
+  const ids = [...new Set(mentorIds.filter(Boolean))];
+  if (!ids.length) return out;
+  const admin = serviceRoleOrNull();
+  if (!admin) {
+    for (const id of ids) out.set(id, null);
+    return out;
+  }
+  const { data, error } = await admin.from("subscriptions").select("mentor_id").in("mentor_id", ids).in("status", [...REVOKE_BLOCKING_SUBSCRIPTION_STATUSES]).limit(2000);
+  if (error) {
+    console.error("[countActiveSubscriptionsByMentor]", error.message);
+    for (const id of ids) out.set(id, null);
+    return out;
+  }
+  for (const id of ids) out.set(id, 0);
+  for (const row of (data as Row[] | null) ?? []) {
+    const id = str(row.mentor_id);
+    if (id) out.set(id, (out.get(id) ?? 0) + 1);
+  }
+  return out;
+}
+
+/** `.in(...)` 게이트에 걸린 액션이 보여줄 한 줄 — `09-03 14:20 박운영 승인`. 기록이 없으면 null. */
+export async function describeMentorAlreadyProcessed(supabase: SupabaseClient, mentorUserId: string): Promise<string | null> {
+  const db = mentorProfilesAdminReadClient(supabase);
+  const id = str(mentorUserId);
+  if (!id) return null;
+  const last = await loadLastDecision(db, id);
+  if (!last) return null;
+  const names = await loadUsersByIds(db, [last.adminId ?? ""]);
+  return buildAlreadyProcessedText({
+    createdAt: last.createdAt,
+    adminName: last.adminId ? displayNameOf(names.get(last.adminId) ?? null) : null,
+    actionType: last.actionType,
+  });
 }
 
 async function countSameSchoolToday(db: SupabaseClient, universityName: string): Promise<number | null> {
@@ -422,18 +561,21 @@ export async function loadMentorApprovalDetail(supabase: SupabaseClient, mentorU
   const registeredName = str(user?.full_name);
 
   const studentIdRef = str(profile.student_id_image_url);
-  const [identity, schoolRows, cap, lastDecision, sameSchoolTodayCount, studentIdDocument] = await Promise.all([
+  const status = str(profile.verification_status);
+  const [identity, schoolRows, cap, lastDecision, sameSchoolTodayCount, studentIdDocument, holdLog, activeSubscriptionCount] = await Promise.all([
     loadIdentityReview(id, registeredName),
     loadSchoolTierRows(db, id),
     loadMentorCapUsage(id),
     loadLastDecision(db, id),
     countSameSchoolToday(db, str(profile.university_name)),
     studentIdRef ? describeStudentIdDocument(db, studentIdRef) : Promise.resolve(null),
+    isMentorOnHold(status) ? loadLastDecision(db, id, [MENTOR_HOLD_ACTION_TYPE]) : Promise.resolve(null),
+    status === "approved" ? countMentorActiveSubscriptions(id) : Promise.resolve(null),
   ]);
 
   const schoolTier = resolveSchoolTierReviewState(pickSchoolTierReviewRow(schoolRows));
   const schoolDocRef = str(schoolTier.row?.document_storage_ref);
-  const lookupIds = [schoolTier.row?.reviewed_by ?? "", lastDecision?.adminId ?? ""].filter(Boolean);
+  const lookupIds = [schoolTier.row?.reviewed_by ?? "", lastDecision?.adminId ?? "", holdLog?.adminId ?? ""].filter(Boolean);
   const [schoolDocument, lookups] = await Promise.all([
     schoolDocRef ? describeStudentIdDocument(db, schoolDocRef) : Promise.resolve(null),
     loadUsersByIds(db, lookupIds),
@@ -444,7 +586,7 @@ export async function loadMentorApprovalDetail(supabase: SupabaseClient, mentorU
     profile,
     user,
     displayName: displayNameOf(user, profile),
-    status: str(profile.verification_status),
+    status,
     decidable: isMentorApprovalDecidable(profile.verification_status),
     identity: identity.review,
     identityError: identity.error,
@@ -461,7 +603,100 @@ export async function loadMentorApprovalDetail(supabase: SupabaseClient, mentorU
           adminName: lastDecision.adminId ? displayNameOf(lookups.get(lastDecision.adminId) ?? null) : null,
         }
       : null,
+    revoked: isMentorApprovalRevoked({ status, lastActionType: lastDecision?.actionType ?? null }),
+    hold: isMentorOnHold(status)
+      ? {
+          note: holdNoteOf(holdLog?.detail ?? null),
+          adminName: holdLog?.adminId ? displayNameOf(lookups.get(holdLog.adminId) ?? null) : null,
+          createdAt: holdLog?.createdAt ?? null,
+        }
+      : null,
+    activeSubscriptionCount,
   };
+}
+
+// ── 오늘 내가 처리한 건(PR-2b §3-3) ──────────────────────────────────────────
+
+export type MentorDecisionTodayRow = {
+  logId: string;
+  actionType: string;
+  createdAt: string;
+  mentorUserId: string;
+  mentorName: string;
+  /** 지금의 verification_status(프로필이 없으면 "") */
+  currentStatus: string;
+  reason: string | null;
+  /** 그 처리가 만든 상태에 멘토가 아직 있을 때만 — 승인→승인 취소 · 반려→반려 되돌리기 · 보류→보류 해제 */
+  undo: MentorDecisionUndoKind | null;
+  /** undo = revoke 일 때 승인 취소 차단 판정(null = 판정 불가 → 막는다) */
+  activeSubscriptionCount: number | null;
+};
+
+export type MentorDecisionsTodayResult = {
+  rows: MentorDecisionTodayRow[];
+  summary: MentorDecisionsTodaySummary;
+  error: string | null;
+};
+
+const MY_DECISIONS_TODAY_LIMIT = 200;
+
+/** 오늘(KST) 이 관리자가 처리한 건 — `admin_action_logs` 의 `admin_id = 나` 집계 그대로(건수 = 감사 로그). */
+export async function loadMyMentorDecisionsToday(supabase: SupabaseClient, adminId: string): Promise<MentorDecisionsTodayResult> {
+  const db = mentorProfilesAdminReadClient(supabase);
+  const me = str(adminId);
+  const empty = summarizeMentorDecisionsToday([]);
+  if (!me) return { rows: [], summary: empty, error: null };
+  const { data, error } = await db
+    .from("admin_action_logs")
+    .select("id, action_type, target_id, created_at, detail")
+    .eq("admin_id", me)
+    .eq("target_type", "mentor_profile")
+    .in("action_type", [...MENTOR_APPROVAL_HISTORY_ACTION_TYPES])
+    .gte("created_at", kstTodayStartIso())
+    .order("created_at", { ascending: false })
+    .limit(MY_DECISIONS_TODAY_LIMIT);
+  if (error) {
+    console.error("[loadMyMentorDecisionsToday]", error.message);
+    return { rows: [], summary: empty, error: error.message };
+  }
+  const logs = ((data as Row[] | null) ?? [])
+    .map((raw) => ({ logId: str(raw.id), mentorUserId: str(raw.target_id), row: toHistoryLogRow(raw) }))
+    .filter((x): x is { logId: string; mentorUserId: string; row: HistoryLogRow } => Boolean(x.logId && x.mentorUserId && x.row));
+  const mentorIds = [...new Set(logs.map((l) => l.mentorUserId))];
+  const [users, statuses] = await Promise.all([loadUsersByIds(db, mentorIds), loadVerificationStatusByIds(db, mentorIds)]);
+  const approvedIds = mentorIds.filter((id) => statuses.get(id) === "approved");
+  const activeByMentor = await countActiveSubscriptionsByMentor(approvedIds);
+  const rows: MentorDecisionTodayRow[] = logs.map(({ logId, mentorUserId, row }) => {
+    const currentStatus = statuses.get(mentorUserId) ?? "";
+    const undo = mentorDecisionUndoKind(row.actionType, currentStatus);
+    return {
+      logId,
+      actionType: row.actionType,
+      createdAt: row.createdAt,
+      mentorUserId,
+      mentorName: displayNameOf(users.get(mentorUserId) ?? null),
+      currentStatus,
+      reason: holdNoteOf(row.detail) || null,
+      undo,
+      activeSubscriptionCount: undo === "revoke" ? (activeByMentor.get(mentorUserId) ?? null) : null,
+    };
+  });
+  return { rows, summary: summarizeMentorDecisionsToday(rows), error: null };
+}
+
+async function loadVerificationStatusByIds(db: SupabaseClient, ids: readonly string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (!ids.length) return out;
+  const { data, error } = await db.from("mentor_profiles").select("user_id, verification_status").in("user_id", [...ids]);
+  if (error) {
+    console.error("[loadMyMentorDecisionsToday] mentor_profiles 조회 실패:", error.message);
+    return out;
+  }
+  for (const row of (data as Row[] | null) ?? []) {
+    const id = str(row.user_id);
+    if (id) out.set(id, str(row.verification_status));
+  }
+  return out;
 }
 
 /** 오늘(KST) 승인·반려·재제출 처리 건수 — 대기 0건 빈 상태에 함께 보인다. 실패 null. */

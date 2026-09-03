@@ -56,11 +56,13 @@ const DICTIONARY = {
    * CHECK 없음 — 이 사전이 유일한 허용 목록(지시서 §3). 라벨은 멘토 승인 목록(M1·M2) 기준.
    * PR-2 정합(오너 확정): 재제출 요청 값은 코드가 실제로 쓰는 `under_review`(requestMentorDocumentsAction)다.
    * 데이터 정본이 추정으로 적었던 `resubmit_required` 는 이 컬럼에 쓰는 코드가 없어(학교 인증·학적 변경 테이블 전용 값) 제거했다.
+   * PR-2b: `on_hold`(보류) 등재 — 관리자 내부 상태. `holdMentorApplicationAction` 이 쓰고, 멘토 화면은 `검토 중` 으로 보여준다.
    */
   "mentor_profiles.verification_status": {
     unsubmitted: { label: "미제출", tone: "neutral" },
     pending: { label: "승인 대기", tone: "warning" },
     under_review: { label: "재제출 요청", tone: "warning" },
+    on_hold: { label: "보류", tone: "info" },
     approved: { label: "승인 완료", tone: "success" },
     rejected: { label: "반려", tone: "danger", risk: "medium" },
   },

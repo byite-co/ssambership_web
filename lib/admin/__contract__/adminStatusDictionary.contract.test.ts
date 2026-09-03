@@ -51,7 +51,8 @@ const FIXTURE: Record<
   },
   "mentor_profiles.verification_status": {
     // CHECK 없음 — 지시서 §3 허용 목록. PR-2 정합: 재제출 값은 코드가 쓰는 under_review(resubmit_required 는 이 컬럼 미사용 → 제거)
-    values: ["pending", "approved", "rejected", "under_review", "unsubmitted"],
+    // PR-2b: on_hold(보류 — holdMentorApplicationAction 이 쓰는 관리자 내부 상태) 등재
+    values: ["pending", "approved", "rejected", "under_review", "on_hold", "unsubmitted"],
     inventory: false,
   },
   "disputes.status": {
@@ -247,7 +248,7 @@ for (const [key, fx] of Object.entries(FIXTURE)) {
   }
 }
 
-test("mentor_profiles.verification_status: DB 에 CHECK 가 없다 → 사전이 유일한 허용 목록(5값)", () => {
+test("mentor_profiles.verification_status: DB 에 CHECK 가 없다 → 사전이 유일한 허용 목록(6값 — PR-2b on_hold 포함)", () => {
   assert.equal(checkValuesFromInventory("mentor_profiles", "verification_status"), null);
   assert.ok(read(BASELINE).includes("verification_status text not null default 'pending',"), "baseline 인라인 CHECK 없음");
   assert.deepEqual(sorted(adminStatusAllowedValues("mentor_profiles", "verification_status")), sorted([
@@ -255,8 +256,10 @@ test("mentor_profiles.verification_status: DB 에 CHECK 가 없다 → 사전이
     "approved",
     "rejected",
     "under_review",
+    "on_hold",
     "unsubmitted",
   ]));
+  assert.equal(resolveAdminStatus("mentor_profiles", "verification_status", "on_hold").label, "보류");
 });
 
 test("mentor_profiles.verification_status: 재제출 요청 값은 코드가 실제로 쓰는 under_review 다(requestMentorDocumentsAction) — resubmit_required 는 이 컬럼에 쓰는 코드가 없어 미등재", () => {

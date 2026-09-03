@@ -4,11 +4,12 @@
  * - 종류 탭 키는 `type`(extra 파라미터 — 글 `posts` · 숏폼 `shortforms` · 댓글 `comments`, 구 URL 값 그대로)이라 `status` 전용 공용
  *   `AdminDataTable.Tabs` 를 쓰지 않고 화면이 직접 그린다(PR-7 방식 · prop 추가 0). 상태 탭(`status`)은 공용 `AdminDataTable.Tabs`.
  * - 상태 사전: `community_posts.status`(draft·published·hidden) · `shortform_posts.status`(같음) · `community_comments.status`(visible·hidden).
- *   **`deleted` 는 CHECK 가 막는다** — 삭제됨은 `deleted_at IS NOT NULL`(게시판 글만 있는 컬럼)로 판정한다. 숏폼·댓글은 하드 DELETE 라 삭제됨 탭이 항상 0.
- * - 댓글 탭은 `community_comments` 하나다 — 게시판 댓글 정본(`comments`)과 브리지(SQL 163·164)로 양방향 동기(status ↔ is_deleted)라 게시판·숏폼 댓글을 모두 담는다.
- * - 조치 등급: 숨김·복원 = stateChange(`복구할 수 있습니다`) · 삭제 = destructive(대상 ID 앞 8자 재입력) + `숨김으로 대신하기`(PR-5 와 같은 부품).
- *   삭제 방식은 `communityModerationCore.applyContentModeration` 그대로다(바꾸지 않는다): 게시판 글 soft-delete(deleted_at) → 복구 가능 ·
- *   숏폼·댓글 하드 DELETE → 복구 불가. summary 첫 줄이 그 사실을 종류별로 말한다.
+ *   **`deleted` 는 CHECK 가 막는다** — 삭제됨은 `deleted_at IS NOT NULL` 로 판정한다(DB-2 SQL 194 부터 글·숏폼·댓글 전부 컬럼이 있다).
+ * - 댓글 탭은 `community_comments` 하나다 — 게시판 댓글 정본(`comments`)과 브리지(SQL 163·164·194)로 양방향 동기(status·deleted_at ↔ is_deleted·deleted_at)라
+ *   게시판·숏폼 댓글을 모두 담는다.
+ * - 조치 등급: 숨김·복원·삭제 전부 stateChange(한 줄 확인 · `복구할 수 있습니다`). 삭제는 `communityModerationCore.applyContentModeration` 의 소프트 삭제
+ *   (deleted_at/deleted_by UPDATE · 하드 DELETE 경로 0 — PR-W2)라 재입력 없이 확인하고, 삭제된 행은 삭제됨 탭에서 복원한다.
+ *   삭제 모달의 `숨김으로 대신하기`(PR-5 와 같은 부품)는 그대로 둔다.
  * - 서버 액션(`communityModerationActions`)이 읽는 필드명(`targetId` · `reason`)은 바꾸지 않는다. `returnTo` 는 이 화면으로 돌아오기 위한 선택 필드.
  *
  * node --test 계약 테스트가 직접 import 하므로 React·`@/` import 를 두지 않는다.
@@ -124,7 +125,7 @@ export const COMMUNITY_CONTENT_STATUS_TONES: Readonly<Record<CommunityContentSta
   draft: "neutral",
 };
 
-/** 탭 → 서버 필터. `status` 는 컬럼 값(없으면 필터 없음) · `deleted` 는 `deleted_at` 조건. */
+/** 탭 → 서버 필터. `status` 는 컬럼 값(없으면 필터 없음) · `deleted` 는 `deleted_at` 조건(세 종류 공통). */
 export type CommunityContentTabFilter = { status: string | null; deleted: "only" | "exclude" | "any" };
 
 export function communityContentTabFilter(type: CommunityContentType, tab: CommunityContentTab): CommunityContentTabFilter {
@@ -140,33 +141,14 @@ export function communityContentTabFilter(type: CommunityContentType, tab: Commu
   }
 }
 
-/** `deleted_at` 컬럼이 있는 종류(게시판 글)만 삭제됨 탭에 행이 남는다 — 하드 DELETE 종류는 항상 0. */
-export function communityContentHasDeletedRows(type: CommunityContentType): boolean {
-  return type === "posts";
-}
+// ── 삭제 방식 · 확인 모달 문구 — 소프트 삭제 통일(PR-W2 · DB-2 SQL 194) ─────────────────
 
-// ── 삭제 방식 · 확인 모달 문구 ────────────────────────────────────────────────
+/** 삭제 조치가 실제로 하는 일 — 세 종류(+게시판 댓글 정본) 전부 `deleted_at`/`deleted_by` UPDATE(`applyContentModeration`). 하드 DELETE 경로 없음. */
+export const COMMUNITY_CONTENT_DELETE_EFFECT_LABEL = "소프트 삭제(복구 가능)";
 
-/** 삭제 조치가 실제로 하는 일 — `applyContentModeration` 의 분기와 1:1(게시판 글만 soft-delete) */
-export type CommunityContentDeleteEffect = "soft_delete" | "hard_delete";
-
-export function communityContentDeleteEffect(type: CommunityContentType): CommunityContentDeleteEffect {
-  return type === "posts" ? "soft_delete" : "hard_delete";
-}
-
-export const COMMUNITY_CONTENT_DELETE_EFFECT_LABELS: Readonly<Record<CommunityContentDeleteEffect, string>> = {
-  soft_delete: "소프트 삭제(복구 가능)",
-  hard_delete: "영구 삭제(복구 불가)",
-};
-
-/** 하드 DELETE 모달의 첫 줄(굵게) */
-export const COMMUNITY_CONTENT_HARD_DELETE_BANNER = "복구 불가";
-
-/** 삭제 확인 summary — 게시판 글은 `삭제 후 복구할 수 있습니다` · 숏폼·댓글은 첫 줄 `복구 불가` + `영구 삭제됩니다. 복구할 수 없습니다`. */
+/** 삭제 확인 summary — 모든 종류 `삭제 후 복구할 수 있습니다`(삭제됨 탭에서 복원). */
 export function buildCommunityContentDeleteSummary(type: CommunityContentType): string {
-  const kind = COMMUNITY_CONTENT_KIND_LABELS[type];
-  if (communityContentDeleteEffect(type) === "soft_delete") return `이 ${kind}을 삭제합니다. 삭제 후 복구할 수 있습니다.`;
-  return `${COMMUNITY_CONTENT_HARD_DELETE_BANNER} — 이 ${kind}은 영구 삭제됩니다. 복구할 수 없습니다.`;
+  return `이 ${COMMUNITY_CONTENT_KIND_LABELS[type]}을 삭제합니다. 삭제 후 복구할 수 있습니다.`;
 }
 
 export function buildCommunityContentHideSummary(type: CommunityContentType): string {
@@ -179,12 +161,6 @@ export function buildCommunityContentRestoreSummary(type: CommunityContentType, 
   return `이 ${kind}을 다시 게시합니다.`;
 }
 
-/** destructive 재입력 문자열 — 대상 ID 앞 8자(PR-5 와 같은 길이). */
-export const COMMUNITY_CONTENT_CONFIRM_TEXT_LENGTH = 8;
-export function communityContentDeleteConfirmText(targetId: string): string {
-  return String(targetId ?? "").trim().slice(0, COMMUNITY_CONTENT_CONFIRM_TEXT_LENGTH);
-}
-
 // ── 조치 — 서버 액션이 읽는 필드명 · 등급 ──────────────────────────────────────
 
 export const COMMUNITY_CONTENT_TARGET_ID_FIELD = "targetId";
@@ -192,17 +168,18 @@ export const COMMUNITY_CONTENT_REASON_FIELD = "reason";
 export const COMMUNITY_CONTENT_RETURN_TO_FIELD = "returnTo";
 
 export type CommunityContentActionKey = "hidden" | "restored" | "deleted";
-export type CommunityContentActionLevel = "stateChange" | "destructive";
+/** 세 조치 전부 stateChange(한 줄 확인) — 삭제도 소프트 삭제라 되돌릴 수 있다(PR-W2 · 재입력 없음). */
+export type CommunityContentActionLevel = "stateChange";
 
 export const COMMUNITY_CONTENT_ACTIONS: Readonly<
   Record<CommunityContentActionKey, { level: CommunityContentActionLevel; label: string; dialogTitle: string; confirmLabel: string; pendingLabel: string }>
 > = {
   hidden: { level: "stateChange", label: "숨김", dialogTitle: "콘텐츠 숨김", confirmLabel: "숨김", pendingLabel: "숨기는 중…" },
   restored: { level: "stateChange", label: "복원", dialogTitle: "콘텐츠 복원", confirmLabel: "복원", pendingLabel: "복원 중…" },
-  deleted: { level: "destructive", label: "삭제", dialogTitle: "콘텐츠 삭제 — 되돌릴 수 없는 작업", confirmLabel: "삭제", pendingLabel: "삭제 중…" },
+  deleted: { level: "stateChange", label: "삭제", dialogTitle: "콘텐츠 삭제", confirmLabel: "삭제", pendingLabel: "삭제 중…" },
 };
 
-/** 유효 상태별 가능한 조치 — 삭제된 행은 복원만(게시판 글만 남는다) · 임시 저장은 삭제만. */
+/** 유효 상태별 가능한 조치 — 삭제된 행은 복원만(삭제됨 탭 · 세 종류 공통) · 임시 저장은 삭제만. */
 export function communityContentAvailableActions(status: CommunityContentStatus): CommunityContentActionKey[] {
   switch (status) {
     case "published":

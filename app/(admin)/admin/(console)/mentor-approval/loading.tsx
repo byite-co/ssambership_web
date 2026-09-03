@@ -11,7 +11,7 @@ export default function AdminMentorApprovalLoading() {
           <div className="h-4 w-24 animate-pulse rounded bg-slate-200" />
           <div className="mt-3 h-8 animate-pulse rounded-lg bg-slate-100" />
           <div className="mt-2 flex gap-1">
-            {Array.from({ length: 5 }).map((_, i) => (
+            {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="h-6 w-12 animate-pulse rounded-lg bg-slate-100" />
             ))}
           </div>

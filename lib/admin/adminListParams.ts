@@ -31,9 +31,9 @@ export const ADMIN_LIST_RESERVED_KEYS: readonly string[] = ["q", "search", "stat
 /**
  * 1회성 플래시·결과 통지 키 — 서버 액션 `redirect("…?ok=|error=")` 가 붙이는 값.
  * 탭/검색/페이지 링크에 따라다니면 안 되므로 `extra` 에서 제외한다.
- * (실사용 키: `app/(admin)/**` 의 `sp.ok`·`sp.error`·`sp.capOk`·`sp.capError`)
+ * (실사용 키: `app/(admin)/**` 의 `sp.ok`·`sp.error`·`sp.capOk`·`sp.capError` · PR-2b 멘토 승인의 `sp.already`)
  */
-export const ADMIN_LIST_TRANSIENT_KEYS: readonly string[] = ["ok", "error", "capOk", "capError"];
+export const ADMIN_LIST_TRANSIENT_KEYS: readonly string[] = ["ok", "error", "capOk", "capError", "already"];
 
 /** extra 파라미터 상한 — 임의 쿼리 문자열이 hidden input 수백 개로 번지는 것을 막는다. */
 export const MAX_EXTRA_PARAM_KEYS = 16;

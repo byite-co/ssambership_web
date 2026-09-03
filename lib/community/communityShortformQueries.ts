@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { canAuthorViewHiddenDetail } from "@/lib/community/communityModerationVisibility";
+import { canAuthorViewHiddenDetail, resolveCommunityVisibility } from "@/lib/community/communityModerationVisibility";
 import type { ShortformCategorySlug } from "@/lib/community/communityShortformConstants";
 import {
   collectAuthorIdsNeedingLookup,
@@ -138,6 +138,8 @@ function buildShortformFeedQuery(
   // 분기에서는 아예 생략돼 작성자 본인 draft/hidden 이 공개 피드로 새어 나갔다). 레거시 null
   // status 행은 공개로 간주하던 기존 동작을 보존하려고 `status IS NULL` 도 함께 허용한다.
   q = q.or("status.eq.published,status.is.null");
+  // PR-W2(DB-2 SQL 194): 소프트 삭제된 숏폼은 피드에서 뺀다 — 비관리자에게는 RLS 가 이미 가리지만 관리자 세션도 같은 공개 피드를 본다.
+  q = q.is("deleted_at", null);
   q = q.limit(opts.limit);
   if (opts.category && opts.category !== "all") q = q.eq("category", opts.category);
   return q;
@@ -182,6 +184,10 @@ export async function getShortformDetail(
   if (error) return { item: null, row: null, error: error.message };
   if (!data) return { item: null, row: null, error: null };
   const row = data as Row;
+  // 소프트 삭제(deleted_at · SQL 194)된 숏폼은 누구에게도 상세를 열지 않는다 — 비관리자에게는 RLS 가 이미 가리고, 관리자 세션에는 여기서 not-found 로 닫는다(PR-W2).
+  if (resolveCommunityVisibility(row) === "deleted") {
+    return { item: null, row: null, error: null };
+  }
   // 타인·비로그인에게는 기존 not-found 그대로. 작성자 본인만 행이 유지된다.
   if (row.status === "hidden" && !canAuthorViewHiddenDetail(row, viewerId)) {
     return { item: null, row, error: null };
