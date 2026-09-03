@@ -1,94 +1,83 @@
-import { PageScaffold } from "@/components/shell/PageScaffold";
-import { AdminStatusBadge } from "@/components/admin/AdminStatusBadge";
-import { AdminReviewsTable } from "@/components/admin/AdminReviewsTable";
-import { AdminRecordTable } from "@/components/admin/AdminRecordTable";
-import { createClient } from "@/lib/supabase/server";
-import { fetchAdminUsersDisplayByIds, loadAdminReviewsPage } from "@/lib/admin/adminQueries";
-import { mentorProfilesAdminReadClient } from "@/lib/admin/mentorProfilesAdminRead";
+import Link from "next/link";
+import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
+import { ReviewQueueList } from "@/components/admin/ReviewQueueList";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
+import { parseAdminListParams, type AdminListParams } from "@/lib/admin/adminListParams";
+import { countReviewTabs, loadReviewArchiveList, loadReviewList } from "@/lib/admin/adminReviewQueries";
+import { CONTENT_REPORT_BASE_PATH } from "@/lib/admin/contentReportConsole";
+import { REVIEW_DEFAULT_PAGE_SIZE, REVIEW_DEFAULT_TAB, REVIEW_DELETE_UNAVAILABLE_NOTE, resolveReviewTab, reviewFlashOkMessage, reviewTabIsArchive } from "@/lib/admin/reviewConsole";
+import { createClient } from "@/lib/supabase/server";
 
 type PageProps = { searchParams?: Promise<Record<string, string | string[] | undefined>> };
 
+const ACTION_LINK = "rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-extrabold text-slate-700 hover:bg-slate-50";
+
+function pick(value: string | string[] | undefined): string {
+  if (typeof value === "string") return value.trim();
+  if (Array.isArray(value) && typeof value[0] === "string") return value[0].trim();
+  return "";
+}
+
+/**
+ * 관리자 · 리뷰 관리(PR-11 §2 · 패턴 A). `AdminPageLayout` + `AdminDataTable` 위에 있다.
+ *
+ * 쿼리: `status`(탭 — 공개 · 숨김 · 블라인드 · 격리 · 전체(기본)) · `q`(멘토·작성자·내용) · `page`. 전부 서버 조회.
+ * 격리 탭은 보관함(`reviews_quarantine_archive` · `reviews_duplicates_archive`)을 읽는다. 조치는 리뷰 상세(`/admin/reviews/[reviewId]`)에서만 한다.
+ * (admin)/layout.tsx + (console)/layout.tsx 의 이중 requireRole("admin") 가드 아래에 있다.
+ */
 export default async function AdminReviewsPage(props: PageProps) {
   const sp = (await props.searchParams) ?? {};
-  const errParam = sp.error;
-  const okParam = sp.ok;
-  const flashErrRaw = typeof errParam === "string" ? errParam : Array.isArray(errParam) ? errParam[0] : null;
-  const flashOkRaw = typeof okParam === "string" ? okParam : Array.isArray(okParam) ? okParam[0] : null;
-  const flashErr = flashErrRaw ? (toAdminDisplayError(flashErrRaw, "reviews") ?? "처리에 실패했습니다.") : null;
-  const flashOk =
-    flashOkRaw === "hide"
-      ? "리뷰를 숨김 처리했습니다."
-      : flashOkRaw === "restore"
-        ? "리뷰를 복원했습니다."
-        : flashOkRaw === "blind"
-          ? "리뷰를 블라인드 처리했습니다."
-          : flashOkRaw === "review"
-            ? "검토 완료로 표시했습니다."
-            : null;
+  const rawParams = parseAdminListParams(sp, { defaultPageSize: REVIEW_DEFAULT_PAGE_SIZE, defaultStatus: REVIEW_DEFAULT_TAB });
+  const tab = resolveReviewTab(rawParams.status);
+  const params: AdminListParams = { ...rawParams, status: tab, extra: {} };
+
+  const flashOk = reviewFlashOkMessage(pick(sp.ok));
+  const flashErrRaw = pick(sp.error) || null;
+  const flashErr = flashErrRaw ? (toAdminDisplayError(flashErrRaw, "reviews") ?? "처리에 실패했습니다. 잠시 후 다시 시도해 주세요.") : null;
 
   const supabase = await createClient();
-  const { list, meta } = await loadAdminReviewsPage(supabase, 50);
-  // [보안 주석] service_role로 RLS 우회
-  // 이 페이지는 (admin)/layout.tsx + (admin)/(console)/layout.tsx
-  // 이중 requireRole("admin") 가드로 보호됨.
-  // service_role 사용은 관리자 업무상 의도된 것임.
-  const readDb = mentorProfilesAdminReadClient(supabase);
-  const userIds = new Set<string>();
-  if (meta) {
-    for (const r of list.rows) {
-      const row = r as Record<string, unknown>;
-      if (meta.authorColumn && row[meta.authorColumn] != null) {
-        const s = String(row[meta.authorColumn]).trim();
-        if (s) userIds.add(s);
-      }
-      if (meta.mentorColumn && row[meta.mentorColumn] != null) {
-        const s = String(row[meta.mentorColumn]).trim();
-        if (s) userIds.add(s);
-      }
-    }
-  }
-  const userById = await fetchAdminUsersDisplayByIds(readDb, [...userIds]);
+  const archive = reviewTabIsArchive(tab);
+  const [list, archiveList, counts] = await Promise.all([
+    archive ? Promise.resolve({ rows: [], totalCount: 0, error: null }) : loadReviewList(supabase, { tab, search: params.search, page: params.page, pageSize: params.pageSize }),
+    archive ? loadReviewArchiveList({ search: params.search, page: params.page, pageSize: params.pageSize }) : Promise.resolve({ rows: [], totalCount: 0, error: null }),
+    countReviewTabs(supabase),
+  ]);
 
   return (
-    <PageScaffold
-      hideFooterPlaceholderCards
-      eyebrow="관리자 / 리뷰"
+    <AdminPageLayout
       title="리뷰 관리"
-      description="멘토 리뷰를 조회·조치합니다. 숨김과 블라인드는 공개 화면에서 모두 비노출되지만, 운영 기록상 구분됩니다. 기술적인 오류 메시지는 표시하지 않습니다."
-      ctas={[
-        { href: "/admin/reports", label: "신고 관리", tone: "slate" },
-        { href: "/admin/disputes", label: "분쟁 관리", tone: "slate" },
-        { href: "/admin", label: "대시보드", tone: "blue" },
-      ]}
-      sections={[
-        {
-          title: "노출·검토",
-          body:
-            "숨김 — 리뷰를 공개 화면과 공개 집계에서 제외합니다. (스팸, 테스트, 중복, 무관한 리뷰 등 노출하지 않을 리뷰) 블라인드 — 민감하거나 위반 가능성이 있는 리뷰를 공개 화면에서 제외하고 블라인드 상태로 기록합니다. (개인정보, 욕설, 외부 연락처, 정책 위반 가능 리뷰. 현재 버전에서도 공개 화면에서는 비노출입니다.) 검토 완료 — 현재 노출 상태를 유지한 채 검토 완료로 표시합니다. 조치 버튼은 저장소 설정에 따라 표시되지 않을 수 있습니다.",
-          status: meta ? "connected" : "skeleton",
-        },
-        { title: "알림", body: "조치가 끝나면 이 화면 상단에 짧은 안내가 표시됩니다.", status: "connected" },
-      ]}
-      emptyState=""
-      loadingState=""
-      errorState=""
-      dataPoints={[]}
+      description={`멘토 리뷰를 찾아 숨김·블라인드·복원·검토 완료를 결정합니다. 숨김과 블라인드는 공개 화면에서 모두 비노출이지만 운영 기록상 구분됩니다. ${REVIEW_DELETE_UNAVAILABLE_NOTE}`}
+      actions={
+        <>
+          <Link href={CONTENT_REPORT_BASE_PATH} className={ACTION_LINK} prefetch={false}>
+            콘텐츠 검수(신고)
+          </Link>
+          <Link href="/admin/disputes" className={ACTION_LINK} prefetch={false}>
+            신고·분쟁
+          </Link>
+        </>
+      }
     >
-      <div className="space-y-4">
-        {flashOk ? (
-          <p className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-3 text-sm font-semibold text-emerald-950">{flashOk}</p>
-        ) : null}
-        {flashErr ? (
-          <p className="rounded-2xl border border-red-200 bg-red-50/80 p-3 text-sm font-semibold text-red-950">{flashErr}</p>
-        ) : null}
+      {flashOk ? (
+        <p role="status" className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">
+          {flashOk}
+        </p>
+      ) : null}
+      {flashErr ? (
+        <p role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-900">
+          처리 실패 — {flashErr}
+        </p>
+      ) : null}
 
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-sm font-extrabold text-slate-800">리뷰 목록</span>
-          <AdminStatusBadge result={list} hint="전체 리뷰 중 생성일 최신순 최대 50건" />
-        </div>
-        {meta ? <AdminReviewsTable list={list} meta={meta} userById={userById} /> : <AdminRecordTable result={list} errorDisplayContext="reviews" />}
-      </div>
-    </PageScaffold>
+      <ReviewQueueList
+        items={list.rows}
+        archiveItems={archiveList.rows}
+        params={params}
+        tab={tab}
+        counts={counts}
+        totalCount={archive ? archiveList.totalCount : list.totalCount}
+        error={archive ? archiveList.error : list.error}
+      />
+    </AdminPageLayout>
   );
 }

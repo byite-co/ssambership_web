@@ -5,7 +5,7 @@ export const ADMIN_CONSOLE_NAV = [
   { href: "/admin/users", label: "계정 관리", icon: "mentor" },
   { href: "/admin/mentor-activity", label: "멘토 활동", icon: "mentor" },
   { href: "/admin/academic-record-changes", label: "학적변경 요청", icon: "mentor" },
-  { href: "/admin/school-classifications", label: "분류 관리", icon: "settings" },
+  { href: "/admin/school-classifications", label: "등급 분류", icon: "settings" },
   { href: "/admin/moderation", label: "콘텐츠 검수", icon: "moderation" },
   { href: "/admin/community-content", label: "커뮤니티 관리", icon: "moderation" },
   { href: "/admin/reviews", label: "리뷰 관리", icon: "reviews" },

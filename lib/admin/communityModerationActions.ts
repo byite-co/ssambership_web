@@ -19,19 +19,26 @@ import {
   type ModerationIntent,
   type ModerationTargetType,
 } from "@/lib/admin/communityModerationCore";
+import { COMMUNITY_CONTENT_BASE_PATH, isSafeCommunityContentReturnTo } from "@/lib/admin/communityContentConsole";
 
-const DIRECT_PATH = "/admin/community-content";
+const DIRECT_PATH = COMMUNITY_CONTENT_BASE_PATH;
 
 function textFromForm(v: FormDataEntryValue | null): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
-function errUrl(msg: string) {
-  return `${DIRECT_PATH}?error=${encodeURIComponent(msg)}`;
+/** 복귀 경로(PR-11): 폼의 `returnTo`(종류·탭·검색이 실린 목록 URL)가 이 화면 안이면 거기로, 아니면 목록 첫 화면으로. 플래시는 쿼리에 덧붙인다. */
+function withFlash(returnTo: string, key: "ok" | "error", value: string) {
+  const base = isSafeCommunityContentReturnTo(returnTo) ? returnTo : DIRECT_PATH;
+  return `${base}${base.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(value)}`;
 }
 
-function okUrl(intent: ModerationIntent, type: ModerationTargetType) {
-  return `${DIRECT_PATH}?ok=${encodeURIComponent(`${type}_${intent}`)}`;
+function errUrl(msg: string, returnTo = "") {
+  return withFlash(returnTo, "error", msg);
+}
+
+function okUrl(intent: ModerationIntent, type: ModerationTargetType, returnTo = "") {
+  return withFlash(returnTo, "ok", `${type}_${intent}`);
 }
 
 /**
@@ -54,10 +61,11 @@ async function runDirectModeration(args: {
   targetId: string;
   intent: ModerationIntent;
   reason: string;
+  returnTo: string;
 }) {
   const { user } = await requireRole("admin");
   if (!args.targetId) {
-    redirect(errUrl("대상 콘텐츠를 식별할 수 없습니다."));
+    redirect(errUrl("대상 콘텐츠를 식별할 수 없습니다.", args.returnTo));
   }
 
   const result = await applyContentModeration({
@@ -66,7 +74,7 @@ async function runDirectModeration(args: {
     intent: args.intent,
   });
   if (!result.ok) {
-    redirect(errUrl(`처리 실패: ${result.error}`));
+    redirect(errUrl(`처리 실패: ${result.error}`, args.returnTo));
   }
 
   const session = await createClient();
@@ -87,7 +95,7 @@ async function runDirectModeration(args: {
     postId: moderationPostIdFor(args.targetType, args.targetId),
     extraPaths: [DIRECT_PATH],
   });
-  redirect(okUrl(args.intent, args.targetType));
+  redirect(okUrl(args.intent, args.targetType, args.returnTo));
 }
 
 export async function directHideCommunityPostAction(formData: FormData) {
@@ -96,6 +104,7 @@ export async function directHideCommunityPostAction(formData: FormData) {
     targetId: textFromForm(formData.get("targetId")),
     intent: "hidden",
     reason: textFromForm(formData.get("reason")),
+    returnTo: textFromForm(formData.get("returnTo")),
   });
 }
 
@@ -105,6 +114,7 @@ export async function directDeleteCommunityPostAction(formData: FormData) {
     targetId: textFromForm(formData.get("targetId")),
     intent: "deleted",
     reason: textFromForm(formData.get("reason")),
+    returnTo: textFromForm(formData.get("returnTo")),
   });
 }
 
@@ -114,6 +124,7 @@ export async function directRestoreCommunityPostAction(formData: FormData) {
     targetId: textFromForm(formData.get("targetId")),
     intent: "restored",
     reason: textFromForm(formData.get("reason")),
+    returnTo: textFromForm(formData.get("returnTo")),
   });
 }
 
@@ -123,6 +134,7 @@ export async function directHideShortformAction(formData: FormData) {
     targetId: textFromForm(formData.get("targetId")),
     intent: "hidden",
     reason: textFromForm(formData.get("reason")),
+    returnTo: textFromForm(formData.get("returnTo")),
   });
 }
 
@@ -132,6 +144,7 @@ export async function directDeleteShortformAction(formData: FormData) {
     targetId: textFromForm(formData.get("targetId")),
     intent: "deleted",
     reason: textFromForm(formData.get("reason")),
+    returnTo: textFromForm(formData.get("returnTo")),
   });
 }
 
@@ -141,6 +154,7 @@ export async function directRestoreShortformAction(formData: FormData) {
     targetId: textFromForm(formData.get("targetId")),
     intent: "restored",
     reason: textFromForm(formData.get("reason")),
+    returnTo: textFromForm(formData.get("returnTo")),
   });
 }
 
@@ -150,6 +164,7 @@ export async function directHideCommentAction(formData: FormData) {
     targetId: textFromForm(formData.get("targetId")),
     intent: "hidden",
     reason: textFromForm(formData.get("reason")),
+    returnTo: textFromForm(formData.get("returnTo")),
   });
 }
 
@@ -159,6 +174,7 @@ export async function directDeleteCommentAction(formData: FormData) {
     targetId: textFromForm(formData.get("targetId")),
     intent: "deleted",
     reason: textFromForm(formData.get("reason")),
+    returnTo: textFromForm(formData.get("returnTo")),
   });
 }
 
@@ -168,6 +184,7 @@ export async function directRestoreCommentAction(formData: FormData) {
     targetId: textFromForm(formData.get("targetId")),
     intent: "restored",
     reason: textFromForm(formData.get("reason")),
+    returnTo: textFromForm(formData.get("returnTo")),
   });
 }
 
@@ -177,6 +194,7 @@ export async function directHideBoardCommentAction(formData: FormData) {
     targetId: textFromForm(formData.get("targetId")),
     intent: "hidden",
     reason: textFromForm(formData.get("reason")),
+    returnTo: textFromForm(formData.get("returnTo")),
   });
 }
 
@@ -186,6 +204,7 @@ export async function directDeleteBoardCommentAction(formData: FormData) {
     targetId: textFromForm(formData.get("targetId")),
     intent: "deleted",
     reason: textFromForm(formData.get("reason")),
+    returnTo: textFromForm(formData.get("returnTo")),
   });
 }
 
@@ -195,5 +214,6 @@ export async function directRestoreBoardCommentAction(formData: FormData) {
     targetId: textFromForm(formData.get("targetId")),
     intent: "restored",
     reason: textFromForm(formData.get("reason")),
+    returnTo: textFromForm(formData.get("returnTo")),
   });
 }
