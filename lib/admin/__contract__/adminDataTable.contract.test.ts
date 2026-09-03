@@ -66,6 +66,10 @@ const DISPUTE_LIST = "components/admin/DisputeQueueList.tsx";
 const ADMIN_DATA_TABLE_IMPORTERS = [MENTOR_LIST, REFUND_PAGINATION, REFUND_TOOLBAR, REPORT_LIST, ACADEMIC_LIST, ORDER_TOOLBAR, ORDER_PAGE, DISPUTE_LIST,
   // PR-7 계정 목록(페이지네이션 조각만 — 역할 탭은 status 키가 아니라 화면이 직접 그린다)
   "components/admin/AccountListTable.tsx",
+  // PR-8 질문 드릴다운 — 상태 탭이 없는 단순 목록이라 페이지네이션 조각만(개별질문 탭 · 구독 멘토/담당 학생 탭 · 멘토별 화면 질문 탭). prop 추가 0
+  "components/admin/AccountIndividualQuestionsTab.tsx",
+  "components/admin/AccountRoomsTab.tsx",
+  "components/admin/QuestionRoomThreadList.tsx",
 ];
 
 function spFrom(url: string): Record<string, string | string[] | undefined> {
@@ -195,7 +199,7 @@ test("AdminDataTable 은 Server Component 이고 Counts · Tabs · Pagination �
   assert.ok(!/from "react"|from "@\//.test(pure), "순수 모듈은 React·@/ import 없음(node --test 직접 import)");
 });
 
-test("이관 범위: AdminDataTable 을 import 하는 관리자 파일은 멘토 승인 목록·환불 툴바·환불 페이지네이션 + PR-5 세 화면(신고 목록·학적 변경 목록·맞춤의뢰 툴바·페이지) + PR-6 분쟁 목록 + PR-7 계정 목록뿐이다", () => {
+test("이관 범위: AdminDataTable 을 import 하는 관리자 파일은 멘토 승인 목록·환불 툴바·환불 페이지네이션 + PR-5 세 화면(신고 목록·학적 변경 목록·맞춤의뢰 툴바·페이지) + PR-6 분쟁 목록 + PR-7 계정 목록 + PR-8 질문 드릴다운 목록 3곳뿐이다", () => {
   const files = [...walk(join(ROOT, "app", "(admin)"), []), ...walk(join(ROOT, "components", "admin"), [])];
   const importers = files
     .filter((f) => !/components\/admin\/AdminDataTable\.tsx$/.test(f))

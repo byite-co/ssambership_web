@@ -2,14 +2,19 @@ import Link from "next/link";
 import { AccountActionPanel } from "@/components/admin/AccountActionPanel";
 import { AccountActionLogList } from "@/components/admin/AccountActionLogList";
 import { AccountDetailHeader } from "@/components/admin/AccountDetailHeader";
-import { AccountDeferredTabNotice, AccountDetailTabs } from "@/components/admin/AccountDetailTabs";
+import { AccountDetailTabs } from "@/components/admin/AccountDetailTabs";
+import { AccountIndividualQuestionsTab } from "@/components/admin/AccountIndividualQuestionsTab";
 import { AccountMentorTab } from "@/components/admin/AccountMentorTab";
+import { AccountRoomsTab } from "@/components/admin/AccountRoomsTab";
 import { AccountStudentTab } from "@/components/admin/AccountStudentTab";
 import { AdminPageLayout } from "@/components/admin/AdminPageLayout";
 import { EmptyState } from "@/components/common/EmptyState";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
+import { parseAdminListParams } from "@/lib/admin/adminListParams";
+import { QUESTION_DRILLDOWN_PAGE_SIZE } from "@/lib/admin/questionDrilldownConsole";
+import { loadIndividualQuestionsForAccount, loadRoomsForAccount } from "@/lib/admin/questionDrilldownQueries";
 import {
   ACCOUNT_ACTION_LOG_MORE,
   ACCOUNT_ACTION_LOG_MORE_PARAM,
@@ -18,7 +23,6 @@ import {
   ACCOUNT_CAP_OK_MESSAGE,
   ACCOUNT_DETAIL_TAB_PARAM,
   accountDetailFlashOkMessage,
-  accountDetailTabsForRole,
   accountDetailUserActionsAvailable,
   buildAccountDetailUrl,
   resolveAccountDetailTab,
@@ -47,7 +51,8 @@ function suspendUntilLabels(now = Date.now()): Record<"7d" | "30d", string> {
 /**
  * 관리자 · 계정 상세(PR-7 §2 · 패턴 B) — 한 사람에 대한 단일 진실 화면.
  *
- * 헤더(신원 블록 = PR-2 컴포넌트 · 상태축 계정·승인 둘) + 조치 패널(경고·정지·차단 — 관리자 계정은 없음) + 역할별 탭(멘토·학생·관리자 / PR-8 자리).
+ * 헤더(신원 블록 = PR-2 컴포넌트 · 상태축 계정·승인 둘) + 조치 패널(경고·정지·차단 — 관리자 계정은 없음) + 역할별 탭
+ * (멘토·학생·관리자 + PR-8 드릴다운: 학생 [개별질문]·[구독 멘토] · 멘토 [담당 학생]·[개별질문 답변] — 질문·방 목록은 `questionDrilldownQueries`, 페이지네이션은 공용 조각).
  * 읽기는 전부 service_role, 쓰기는 기존 액션만. 플래시: `?ok=`(경고·정지) · `?capOk=1`/`?capError=`(정원 조정) · `?error=`.
  * (admin)/layout.tsx + (console)/layout.tsx 의 이중 requireRole("admin") 가드 아래에 있다.
  */
@@ -94,15 +99,22 @@ export default async function AdminAccountDetailPage(props: Props) {
 
   const role = base.user.role;
   const tab = resolveAccountDetailTab(role, pick(sp[ACCOUNT_DETAIL_TAB_PARAM]));
-  const tabDef = accountDetailTabsForRole(role).find((t) => t.value === tab)!;
   const logsMore = pick(sp[ACCOUNT_ACTION_LOG_MORE_PARAM]) === "all";
   const logsLimit = logsMore ? ACCOUNT_ACTION_LOG_MORE : ACCOUNT_ACTION_LOG_PAGE;
 
+  // PR-8 드릴다운 탭의 페이지네이션 — `tab` 은 extra 로 보존되어 이전/다음 링크가 탭을 잃지 않는다.
+  const listParams = parseAdminListParams(sp, { defaultPageSize: QUESTION_DRILLDOWN_PAGE_SIZE });
+  const drilldownRole = role === "mentor" ? "mentor" : role === "student" ? "student" : null;
+  const individualTab = (role === "student" && tab === "individual") || (role === "mentor" && tab === "answers");
+  const roomsTab = (role === "student" && tab === "mentors") || (role === "mentor" && tab === "students");
+
   const supabase = await createClient();
-  const [logs, mentorSection, studentSection] = await Promise.all([
+  const [logs, mentorSection, studentSection, individualList, roomList] = await Promise.all([
     loadAccountActionLogs(db, id, { by: role === "admin" ? "admin" : "target", limit: logsLimit }),
     role === "mentor" && tab === "mentor" ? loadMentorAccountSection(supabase, db, id) : Promise.resolve(null),
     role === "student" && tab === "student" ? loadStudentAccountSection(db, base.user) : Promise.resolve(null),
+    drilldownRole && individualTab ? loadIndividualQuestionsForAccount(db, { role: drilldownRole, userId: id, page: listParams.page, pageSize: listParams.pageSize }) : Promise.resolve(null),
+    drilldownRole && roomsTab ? loadRoomsForAccount(db, { role: drilldownRole, userId: id, page: listParams.page, pageSize: listParams.pageSize }) : Promise.resolve(null),
   ]);
   const logsMoreHref = !logsMore && logs.totalCount != null && logs.totalCount > logs.rows.length ? buildAccountDetailUrl(id, { tab, logs: "all" }) : null;
   const actionsAvailable = accountDetailUserActionsAvailable(role);
@@ -155,8 +167,10 @@ export default async function AdminAccountDetailPage(props: Props) {
 
       <AccountDetailTabs userId={id} role={role} active={tab} />
 
-      {tabDef.deferred ? (
-        <AccountDeferredTabNotice label={tabDef.label} />
+      {drilldownRole && individualTab && individualList ? (
+        <AccountIndividualQuestionsTab variant={drilldownRole} userId={id} list={individualList} params={listParams} />
+      ) : drilldownRole && roomsTab && roomList ? (
+        <AccountRoomsTab variant={drilldownRole} userId={id} list={roomList} params={listParams} />
       ) : role === "mentor" ? (
         <AccountMentorTab userId={id} displayName={base.displayName} section={mentorSection} logs={logs} logsMoreHref={logsMoreHref} />
       ) : role === "student" && studentSection ? (

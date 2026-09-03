@@ -37,6 +37,11 @@ export type DocumentViewerProps = {
   initialSource?: DocumentViewerSource | null;
   /** F 단축키(window 이벤트)로 전체화면을 토글할지 — 한 화면에 뷰어가 여럿이면 보이는 하나만 true */
   listenFullscreenShortcut?: boolean;
+  /**
+   * 서명 URL 재요청 — 기본은 학생증 서류 액션(`refreshStudentIdDocumentAction`, student-id-images 버킷 전용).
+   * 다른 비공개 버킷(PR-8 질문 첨부·필기 주석)은 자기 허용 목록을 가진 읽기 전용 서버 액션을 넘긴다. 뷰어의 만료·재시도 흐름은 같다.
+   */
+  refreshSource?: (storedRef: string) => Promise<DocumentViewerSource>;
   className?: string;
 };
 
@@ -67,7 +72,7 @@ const toolButton =
   "inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-slate-600 bg-slate-800 px-2 text-xs font-bold text-slate-100 transition hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40";
 
 export function DocumentViewer(props: DocumentViewerProps) {
-  const { storagePath, fileSizeBytes, alt, initialSource = null, listenFullscreenShortcut = false, className } = props;
+  const { storagePath, fileSizeBytes, alt, initialSource = null, listenFullscreenShortcut = false, refreshSource, className } = props;
 
   const [source, setSource] = useState<DocumentViewerSource | null>(initialSource);
   const [phase, setPhase] = useState<Phase>(initialSource?.signedUrl ? "loading" : initialSource ? "error" : "loading");
@@ -90,7 +95,7 @@ export function DocumentViewer(props: DocumentViewerProps) {
     setRefreshing(true);
     setErrorText(null);
     try {
-      const next = await refreshStudentIdDocumentAction(storagePath);
+      const next = refreshSource ? await refreshSource(storagePath) : await refreshStudentIdDocumentAction(storagePath);
       if (!mounted.current) return;
       setSource(next);
       if (next.signedUrl) {
@@ -106,7 +111,7 @@ export function DocumentViewer(props: DocumentViewerProps) {
     } finally {
       if (mounted.current) setRefreshing(false);
     }
-  }, [storagePath]);
+  }, [storagePath, refreshSource]);
 
   // 서버가 소스를 주지 않았으면 마운트 시 발급한다(오류로 온 소스는 그대로 실패 상태로 보여 재시도를 맡긴다).
   // effect 본문에서 동기 setState 를 피하기 위해 다음 틱에 요청한다(react-hooks/set-state-in-effect).
