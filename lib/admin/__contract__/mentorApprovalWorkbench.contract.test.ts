@@ -58,7 +58,10 @@ import {
   stepDocumentZoom,
 } from "../documentViewerModel.ts";
 import {
+  SCHOOL_TIER_LOCKING_BLOCKERS,
+  SCHOOL_TIER_PROVISIONAL_STATUS,
   SCHOOL_TIER_RPC_REVIEWABLE_STATUSES,
+  isSchoolTierLockingBlocker,
   pickSchoolTierReviewRow,
   resolveSchoolTierReviewState,
   schoolTierConfirmBlockerMessage,
@@ -440,21 +443,55 @@ test("reviewed_by NULL → 자동 판정·미확정, NOT NULL → 확정됨 · �
   assert.equal(none.suggestedTier, "미분류");
 });
 
-test("확정 RPC 전제: pending/resubmit_required + 서류 있음만 확정 가능 — 트리거 자동 행(approved·서류 없음)은 두 blocker 로 잠긴다", () => {
+test("PR-2c 잠금 조건: pending · resubmit_required · 잠정 approved(reviewed_by NULL) 는 서류 없이도 확정 가능 — 서류 없음은 경고만(SQL 192 B-3 규칙)", () => {
   assert.deepEqual([...SCHOOL_TIER_RPC_REVIEWABLE_STATUSES], ["pending", "resubmit_required"]);
-  const autoRow = resolveSchoolTierReviewState(tierRow({}));
-  assert.deepEqual(autoRow.blockers, ["not_reviewable_status", "document_missing"]);
-  assert.equal(autoRow.confirmable, false);
-  const ok = resolveSchoolTierReviewState(tierRow({ status: "pending", document_storage_ref: "student-id-images/u/school-verifications/a.pdf" }));
+  assert.equal(SCHOOL_TIER_PROVISIONAL_STATUS, "approved");
+  assert.deepEqual([...SCHOOL_TIER_LOCKING_BLOCKERS], ["not_reviewable_status", "already_confirmed"]);
+  assert.equal(isSchoolTierLockingBlocker("document_missing"), false, "서류 없음은 잠금 사유가 아니다");
+  const DOC = "student-id-images/u/school-verifications/a.pdf";
+  // 서류 없는 pending · resubmit_required → 확정 버튼 활성 · 경고 1건
+  for (const status of ["pending", "resubmit_required"]) {
+    const s = resolveSchoolTierReviewState(tierRow({ status }));
+    assert.equal(s.confirmable, true, status);
+    assert.deepEqual(s.blockers, ["document_missing"], status);
+  }
+  // 서류 없는 잠정 approved(reviewed_by NULL · 트리거 자동 행) → 활성 · 경고 1건(구 잠금 폐기)
+  const provisional = resolveSchoolTierReviewState(tierRow({}));
+  assert.equal(provisional.mode, "auto");
+  assert.equal(provisional.confirmable, true);
+  assert.deepEqual(provisional.blockers, ["document_missing"]);
+  // 서류 있는 pending → 활성 · 사유 0
+  const ok = resolveSchoolTierReviewState(tierRow({ status: "pending", document_storage_ref: DOC }));
   assert.equal(ok.confirmable, true);
   assert.deepEqual(ok.blockers, []);
-  assert.ok(schoolTierConfirmBlockerMessage("not_reviewable_status", "approved").includes("approve_mentor_school_verification_admin"));
-  assert.ok(schoolTierConfirmBlockerMessage("document_missing").includes("DOCUMENT_REF_MISSING"));
-  // RPC 174 본문: reviewed_by · reviewed_at 을 채운다(중단 조건 아님) — SQL 원문으로 고정
+  // approved + reviewed_by NOT NULL → 잠김(이미 확정) — 서류가 있어도
+  const confirmed = resolveSchoolTierReviewState(tierRow({ reviewed_by: "admin-uuid", document_storage_ref: DOC }));
+  assert.equal(confirmed.mode, "confirmed");
+  assert.equal(confirmed.confirmable, false);
+  assert.deepEqual(confirmed.blockers, ["already_confirmed"]);
+  assert.equal(resolveSchoolTierReviewState(tierRow({ reviewed_by: "   " })).confirmable, true, "공백 reviewed_by 는 NULL 취급(배지 기준과 동일)");
+  // rejected · superseded → 잠김 — 서류가 있어도
+  for (const status of ["rejected", "superseded"]) {
+    const s = resolveSchoolTierReviewState(tierRow({ status, document_storage_ref: DOC }));
+    assert.equal(s.confirmable, false, status);
+    assert.deepEqual(s.blockers, ["not_reviewable_status"], status);
+    assert.deepEqual(resolveSchoolTierReviewState(tierRow({ status })).blockers, ["not_reviewable_status", "document_missing"], `${status} · 서류 없음`);
+  }
+  // 문구: 잠금 사유는 RPC 이름 · 경고는 "확정할 수 있다"(옛 DOCUMENT_REF_MISSING 거부 문구 폐기)
+  assert.ok(schoolTierConfirmBlockerMessage("not_reviewable_status", "rejected").includes("approve_mentor_school_verification_admin"));
+  assert.ok(schoolTierConfirmBlockerMessage("not_reviewable_status", "rejected").includes("'rejected'"));
+  assert.ok(schoolTierConfirmBlockerMessage("already_confirmed").includes("이미 관리자가 확정한 행"));
+  const warn = schoolTierConfirmBlockerMessage("document_missing");
+  assert.ok(warn.includes("제출된 학교 인증 서류가 없습니다") && warn.includes("서류 없이도 확정할 수 있습니다"), "서류 없음 경고 문구");
+  assert.ok(!warn.includes("DOCUMENT_REF_MISSING") && !warn.includes("거부"), "옛 거부 문구 폐기");
+  // 화면 배선: 경고도 같은 목록(data-school-tier-blockers)으로 렌더 — 잠금은 confirmable 만 본다(PR-2 화면 불변)
+  const panel = stripComments(read(PANEL));
+  assert.ok(panel.includes("schoolTier.blockers.map((b) =>") && panel.includes("schoolTierConfirmBlockerMessage(b, schoolTier.row?.status)"), "사유·경고 목록 렌더");
+  assert.ok(panel.includes("disabled={!schoolTier.confirmable}") && !panel.includes("document_missing"), "잠금은 confirmable 만 · 화면이 서류 유무로 따로 잠그지 않는다");
+  // RPC 는 reviewed_by · reviewed_at 을 채운다(174 · 192 공통) — SQL 원문으로 고정.
+  // 174 의 status·서류 제한은 #116(SQL 192)이 대체하므로 더 이상 화면 계약으로 고정하지 않는다.
   const sql = read("supabase/sql/174_mentor_school_verification_approval_canon.sql");
   assert.ok(sql.includes("reviewed_by = v_admin,") && sql.includes("reviewed_at = now(),"), "RPC 가 reviewed_by·reviewed_at 을 채운다");
-  assert.ok(sql.includes("if v_row.status not in ('pending', 'resubmit_required') then"), "RPC 는 pending·resubmit_required 만 받는다");
-  assert.ok(sql.includes("raise exception 'DOCUMENT_REF_MISSING'"), "RPC 는 서류 없는 행을 거부한다");
 });
 
 test("행 선택: approved 우선 → 심사 대상 최신 → 최신", () => {
