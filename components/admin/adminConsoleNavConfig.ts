@@ -16,8 +16,8 @@ export const ADMIN_CONSOLE_NAV = [
   { href: "/admin/refunds", label: "환불 관리", icon: "refunds" },
   { href: "/admin/settlements", label: "정산 관리", icon: "refunds" },
   { href: "/admin/sla", label: "SLA 대시보드", icon: "dashboard" },
-  { href: "/admin/notices", label: "이벤트 관리", icon: "events" },
-  { href: "/admin/audit-logs", label: "활동 로그", icon: "logs" },
+  { href: "/admin/notices", label: "공지·이벤트", icon: "events" },
+  { href: "/admin/audit-logs", label: "감사 로그", icon: "logs" },
   { href: "/admin/settings", label: "시스템 설정", icon: "settings" },
 ] as const;
 

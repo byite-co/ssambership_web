@@ -1,187 +1,90 @@
-import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
-import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
+import "server-only";
 
-const NOTICE_LIST_FAIL = "공지 목록을 불러올 수 없습니다.";
-const PROMO_LIST_FAIL = "프로모션 목록을 불러올 수 없습니다.";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { rangeForPage, type AdminListParams } from "@/lib/admin/adminListParams";
+import {
+  NOTICE_TYPE_TAB_VALUES,
+  normalizeNoticeSearchTerm,
+  parseNoticeRow,
+  parsePromotionRow,
+  type NoticeListItem,
+  type NoticeTypeTab,
+  type PromotionListItem,
+} from "@/lib/admin/noticeConsole";
+
+/**
+ * 관리자 · 공지·이벤트(PR-10 §1) 서버 조회 — 세션 클라이언트(`app_notices_select` · `promotion_campaigns_select` 가 관리자 전체 조회를 허용한다).
+ * 유형 탭 · 제목 검색 · 페이지 전부 서버. 이 모듈에는 쓰기가 없다(쓰기는 `adminNoticesActions` → `adminNoticesMutations`).
+ */
 
 const TABLE_NOTICE = "app_notices" as const;
 const TABLE_PROMOTION = "promotion_campaigns" as const;
+const NOTICE_COLUMNS = "id, title, body, type, target, display_mode, is_active, starts_at, ends_at, created_at, updated_at";
+const PROMOTION_COLUMNS = "id, title, is_active, starts_at, ends_at, created_at";
+/** 탭 건수 집계 상한 — 공지는 소량(현행 5건)이라 한 번에 읽어 센다 */
+const COUNT_SCAN_LIMIT = 1000;
 
 type Row = Record<string, unknown>;
 
-function fmt(e: PostgrestError | null): string | null {
-  return e ? e.message : null;
+export type NoticeListResult = { rows: NoticeListItem[]; totalCount: number; error: string | null };
+export type NoticeTabCounts = { tabs: Record<NoticeTypeTab, number>; active: number };
+export type PromotionListResult = { rows: PromotionListItem[]; error: string | null };
+
+function isRangeNotSatisfiable(error: { message?: string; code?: string } | null): boolean {
+  if (!error) return false;
+  return String(error.code ?? "") === "PGRST103" || /range not satisfiable|invalid range/i.test(String(error.message ?? ""));
 }
 
-/** 폼 placeholder용(고정 스키마; DB 프로브 없음) */
-export const ADMIN_NOTICES_FORM_HINTS = {
-  title: "title",
-  body: "body",
-  type: "type",
-  target: "target",
-  start: "starts_at",
-  end: "ends_at",
-  active: "is_active",
-} as const;
-
-const NOTICE_TYPE_LABEL: Record<string, string> = {
-  notice: "공지",
-  event: "이벤트",
-  maintenance: "점검",
-  update: "업데이트",
-};
-
-function formatTs(v: unknown): string {
-  // TZ-FIX R2 #27: UTC ISO slice 절단 → KST 고정 표기 위임 (저장 수정 #2와 동시 배포).
-  return formatKoDateTimeKst(v);
-}
-
-function pickTargetCell(r: Row): string {
-  const v = r.target ?? r.target_screen ?? r.target_path ?? r.placement;
-  if (v === null || v === undefined || String(v).trim() === "") return "—";
-  return String(v);
-}
-
-function pickTitleCell(r: Row): string {
-  const v = r.title ?? r.name ?? r.headline;
-  if (v === null || v === undefined) return "—";
-  const s = String(v);
-  if (!s.length) return "—";
-  return s.length > 80 ? s.slice(0, 80) + "…" : s;
-}
-
-function pickStartEnd(r: Row): { start: string; end: string } {
-  const start = r.starts_at ?? r.start_at ?? r.valid_from ?? r.active_from;
-  const end = r.ends_at ?? r.end_at ?? r.valid_to ?? r.active_to;
-  return { start: formatTs(start), end: formatTs(end) };
-}
-
-function exposureFromRow(r: Row): { label: string; isOn: boolean } {
-  const v = r.is_active;
-  if (typeof v === "boolean") {
-    return { label: v ? "표시 중" : "숨김", isOn: v };
+export async function loadNoticeList(supabase: SupabaseClient, params: AdminListParams, tab: NoticeTypeTab): Promise<NoticeListResult> {
+  const term = normalizeNoticeSearchTerm(params.search);
+  const { from, to } = rangeForPage(params);
+  let q = supabase.from(TABLE_NOTICE).select(NOTICE_COLUMNS, { count: "exact" });
+  if (tab !== "all") q = q.eq("type", tab);
+  if (term) q = q.ilike("title", `%${term}%`);
+  const { data, error, count } = await q.order("created_at", { ascending: false }).range(from, to);
+  if (error) {
+    if (isRangeNotSatisfiable(error)) return { rows: [], totalCount: count ?? 0, error: null };
+    console.error("[adminNotices] app_notices 조회 실패:", error.message);
+    return { rows: [], totalCount: 0, error: error.message };
   }
-  return { label: "숨김", isOn: false };
+  const rows = ((data as Row[] | null) ?? []).map(parseNoticeRow).filter((x): x is NoticeListItem => Boolean(x));
+  return { rows, totalCount: count ?? rows.length, error: null };
 }
 
-function periodLabel(start: string, end: string): string {
-  if (start === "—" && end === "—") return "기간 미설정";
-  if (start === "—") return `~ ${end}`;
-  if (end === "—") return `${start} ~`;
-  return `${start} ~ ${end}`;
+export async function countNoticeTabs(supabase: SupabaseClient): Promise<NoticeTabCounts> {
+  const tabs = Object.fromEntries(NOTICE_TYPE_TAB_VALUES.map((v) => [v, 0])) as Record<NoticeTypeTab, number>;
+  const { data, error } = await supabase.from(TABLE_NOTICE).select("type, is_active").limit(COUNT_SCAN_LIMIT);
+  if (error) {
+    console.error("[adminNotices] 탭 건수 집계 실패:", error.message);
+    return { tabs, active: 0 };
+  }
+  let active = 0;
+  for (const row of (data as Row[] | null) ?? []) {
+    const type = String(row.type ?? "").trim();
+    tabs.all += 1;
+    if ((NOTICE_TYPE_TAB_VALUES as readonly string[]).includes(type)) tabs[type as NoticeTypeTab] += 1;
+    if (row.is_active === true) active += 1;
+  }
+  return { tabs, active };
 }
 
-export type NoticeListSection = {
-  name: "notices" | "promotions";
-  table: string;
-  error: string | null;
-  rows: Row[];
-};
-
-export type NoticeListRow = {
-  id: string;
-  title: string;
-  typeLabel: string;
-  target: string;
-  periodLabel: string;
-  exposure: { label: string; isOn: boolean };
-  createdLabel: string;
-  _raw: Row;
-  _source: "notices" | "promotions";
-};
-
-function mapNoticeRows(rows: Row[]): NoticeListRow[] {
-  return rows.map((r) => {
-    const id = String(r.id ?? "");
-    const { start, end } = pickStartEnd(r);
-    const rawType = String(r.type ?? "notice").toLowerCase();
-    return {
-      id,
-      title: pickTitleCell(r),
-      typeLabel: NOTICE_TYPE_LABEL[rawType] ?? rawType,
-      target: pickTargetCell(r),
-      periodLabel: periodLabel(start, end),
-      exposure: exposureFromRow(r),
-      createdLabel: formatTs(r.created_at),
-      _raw: r,
-      _source: "notices",
-    };
-  });
+export async function loadNoticeById(supabase: SupabaseClient, id: string): Promise<NoticeListItem | null> {
+  const key = String(id ?? "").trim();
+  if (!key) return null;
+  const { data, error } = await supabase.from(TABLE_NOTICE).select(NOTICE_COLUMNS).eq("id", key).maybeSingle();
+  if (error) {
+    console.error("[adminNotices] app_notices 단건 조회 실패:", error.message);
+    return null;
+  }
+  return parseNoticeRow((data as Row | null) ?? null);
 }
 
-function mapPromoRows(rows: Row[]): NoticeListRow[] {
-  return rows.map((r) => {
-    const id = String(r.id ?? "");
-    const { start, end } = pickStartEnd(r);
-    return {
-      id,
-      title: pickTitleCell(r),
-      typeLabel: "프로모션",
-      target: pickTargetCell(r),
-      periodLabel: periodLabel(start, end),
-      exposure: exposureFromRow(r),
-      createdLabel: formatTs(r.created_at),
-      _raw: r,
-      _source: "promotions",
-    };
-  });
-}
-
-async function loadNoticeTable(
-  supabase: SupabaseClient,
-  limit: number
-): Promise<{ rows: Row[]; error: string | null }> {
-  const { data, error } = await supabase
-    .from(TABLE_NOTICE)
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) return { rows: [], error: fmt(error) };
-  return { rows: (data as Row[]) ?? [], error: null };
-}
-
-async function loadPromoTable(
-  supabase: SupabaseClient,
-  limit: number
-): Promise<{ rows: Row[]; error: string | null }> {
-  const { data, error } = await supabase
-    .from(TABLE_PROMOTION)
-    .select("*")
-    .order("created_at", { ascending: false })
-    .limit(limit);
-  if (error) return { rows: [], error: fmt(error) };
-  return { rows: (data as Row[]) ?? [], error: null };
-}
-
-export async function loadAdminNoticesPage(supabase: SupabaseClient, listLimit = 50): Promise<{
-  noticeSection: NoticeListSection;
-  promoSection: NoticeListSection;
-  mappedNotices: NoticeListRow[];
-  mappedPromos: NoticeListRow[];
-  listErrors: string[];
-}> {
-  const listErrors: string[] = [];
-
-  const n = await loadNoticeTable(supabase, listLimit);
-  if (n.error) listErrors.push(NOTICE_LIST_FAIL);
-  const noticeSection: NoticeListSection = {
-    name: "notices",
-    table: TABLE_NOTICE,
-    error: n.error,
-    rows: n.error ? [] : n.rows,
-  };
-
-  const p = await loadPromoTable(supabase, listLimit);
-  if (p.error) listErrors.push(PROMO_LIST_FAIL);
-  const promoSection: NoticeListSection = {
-    name: "promotions",
-    table: TABLE_PROMOTION,
-    error: p.error,
-    rows: p.error ? [] : p.rows,
-  };
-
-  const mappedNotices = mapNoticeRows(noticeSection.rows);
-  const mappedPromos = mapPromoRows(promoSection.rows);
-
-  return { noticeSection, promoSection, mappedNotices, mappedPromos, listErrors };
+export async function loadPromotionList(supabase: SupabaseClient, limit = 50): Promise<PromotionListResult> {
+  const { data, error } = await supabase.from(TABLE_PROMOTION).select(PROMOTION_COLUMNS).order("created_at", { ascending: false }).limit(limit);
+  if (error) {
+    console.error("[adminNotices] promotion_campaigns 조회 실패:", error.message);
+    return { rows: [], error: error.message };
+  }
+  const rows = ((data as Row[] | null) ?? []).map(parsePromotionRow).filter((x): x is PromotionListItem => Boolean(x));
+  return { rows, error: null };
 }

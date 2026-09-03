@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import type { NoticeDisplayMode, NoticeTarget, NoticeType } from "@/lib/admin/noticeConsole";
 
 const TABLE_NOTICE = "app_notices" as const;
 const TABLE_PROMOTION = "promotion_campaigns" as const;
@@ -15,11 +16,30 @@ function toTimestamptzOrNull(raw: string): string | null {
   return t;
 }
 
-export type AdminNoticeInsertInput = {
-  resource: "notice" | "promotion";
+function idFromRow(data: unknown): string | null {
+  return data && typeof (data as { id?: unknown }).id === "string" ? (data as { id: string }).id : null;
+}
+
+export type AdminPromotionInsertInput = {
+  resource: "promotion";
   title: string;
   body: string;
+  /** 프로모션은 구 폼의 자유 문자열 그대로(실사용 0 — 삭제는 오너 결정 후) */
   target: string;
+  start: string;
+  end: string;
+  active: boolean;
+  actorUserId: string | null;
+};
+
+/** PR-10: 공지는 `type` · `target`(사전 3값) · `display_mode`(page·popup) 를 함께 저장한다. 이미지 첨부 컬럼은 없다(DB 보류). */
+export type AdminNoticeInsertInput = {
+  resource: "notice";
+  title: string;
+  body: string;
+  type: NoticeType;
+  target: NoticeTarget;
+  displayMode: NoticeDisplayMode;
   start: string;
   end: string;
   active: boolean;
@@ -28,7 +48,7 @@ export type AdminNoticeInsertInput = {
 
 export async function insertAdminNoticeDraft(
   supabase: SupabaseClient,
-  input: AdminNoticeInsertInput
+  input: AdminNoticeInsertInput | AdminPromotionInsertInput
 ): Promise<{ ok: true; id: string } | { ok: false; error: string }> {
   const uid = input.actorUserId;
   const startsAt = toTimestamptzOrNull(input.start);
@@ -50,7 +70,7 @@ export async function insertAdminNoticeDraft(
       .select("id")
       .single();
     if (error) return { ok: false, error: error.message };
-    const id = data && typeof (data as { id?: unknown }).id === "string" ? (data as { id: string }).id : null;
+    const id = idFromRow(data);
     if (!id) return { ok: false, error: "저장 후 식별자를 확인할 수 없습니다." };
     return { ok: true, id };
   }
@@ -60,8 +80,9 @@ export async function insertAdminNoticeDraft(
     .insert({
       title: input.title,
       body: input.body,
-      type: "notice",
-      target: input.target.trim() || null,
+      type: input.type,
+      target: input.target,
+      display_mode: input.displayMode,
       is_active: input.active,
       starts_at: startsAt,
       ends_at: endsAt,
@@ -72,9 +93,36 @@ export async function insertAdminNoticeDraft(
     .single();
 
   if (error) return { ok: false, error: error.message };
-  const id = data && typeof (data as { id?: unknown }).id === "string" ? (data as { id: string }).id : null;
+  const id = idFromRow(data);
   if (!id) return { ok: false, error: "저장 후 식별자를 확인할 수 없습니다." };
   return { ok: true, id };
+}
+
+export type AdminNoticeUpdateInput = Omit<AdminNoticeInsertInput, "resource"> & { id: string };
+
+/** 공지 수정(PR-10 §1-3) — `app_notices_update_admin` RLS(관리자) 아래에서 같은 열을 갱신한다. */
+export async function updateAdminNotice(
+  supabase: SupabaseClient,
+  input: AdminNoticeUpdateInput
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const { data, error } = await supabase
+    .from(TABLE_NOTICE)
+    .update({
+      title: input.title,
+      body: input.body,
+      type: input.type,
+      target: input.target,
+      display_mode: input.displayMode,
+      is_active: input.active,
+      starts_at: toTimestamptzOrNull(input.start),
+      ends_at: toTimestamptzOrNull(input.end),
+      updated_by: input.actorUserId,
+    })
+    .eq("id", input.id)
+    .select("id");
+  if (error) return { ok: false, error: error.message };
+  if (!data?.length) return { ok: false, error: "대상을 찾을 수 없습니다." };
+  return { ok: true };
 }
 
 export async function setAdminNoticeActive(

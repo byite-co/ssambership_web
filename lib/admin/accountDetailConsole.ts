@@ -18,6 +18,7 @@
  * node --test 계약 테스트가 직접 import 하므로 React·`@/` import 를 두지 않는다.
  */
 import { buildAdminDataTableUrl, type AdminDataTableTab } from "./adminDataTable.ts";
+import { resolveAdminActionType } from "./adminActionTypeLabels.ts";
 import type { AdminListParams } from "./adminListParams.ts";
 import {
   ACCOUNT_SANCTION_CODES,
@@ -508,25 +509,12 @@ export const ACCOUNT_ACTION_LOG_PAGE = 20;
 export const ACCOUNT_ACTION_LOG_MORE = 100;
 export const ACCOUNT_ACTION_LOG_MORE_PARAM = "logs";
 
-const ACCOUNT_ACTION_LOG_LABELS: Readonly<Record<string, string>> = {
-  account_status_change: "계정 상태 변경",
-  user_warning_issued: "경고 발급",
-  mentor_cap_limit_update: "정원 조정",
-  mentor_approve: "멘토 승인",
-  mentor_reject: "멘토 반려",
-  mentor_request_documents: "서류 재제출 요청",
-  mentor_termination_finalized: "멘토 활동 종료 확정",
-  mentor_abandonment_hold_approved: "이탈 정산 보류 승인",
-  mentor_settlement_hold_released: "정산 보류 해제",
-  refund_approve: "환불 승인",
-  refund_reject: "환불 반려",
-  question_body_viewed: "질문 본문 열람",
-};
-
+/** 액션 라벨은 감사 로그 액션 사전(`adminActionTypeLabels` — PR-10)에 위임한다. 미등재 값은 원시 값 그대로(계정 상세 처리 이력 계약). */
 export function accountActionLogLabel(actionType: string | null | undefined): string {
   const a = String(actionType ?? "").trim();
   if (!a) return "처리";
-  return ACCOUNT_ACTION_LOG_LABELS[a] ?? a;
+  const resolved = resolveAdminActionType(a);
+  return resolved.known ? resolved.label : a;
 }
 
 /** 감사 로그 detail 에서 사유로 볼 만한 값 하나 — 액션마다 키가 다르다(reason · rejectionReason · adminNote · note). */

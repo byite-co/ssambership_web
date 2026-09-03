@@ -19,6 +19,7 @@
 import type { AdminListParams } from "./adminListParams.ts";
 import { ADMIN_LIST_SEARCH_USER_ID_LIMIT, buildAdminDataTableUrl } from "./adminDataTable.ts";
 import { resolveAdminStatus } from "./adminStatusDictionary.ts";
+import { adminActionLabel, adminActionTypesForGroup } from "./adminActionTypeLabels.ts";
 import { ADMIN_CONFIRM_REASON_MIN_LENGTH } from "./adminConfirmPolicy.ts";
 import { settlementFeeRateLabel } from "../payout/settlementFeeRate.ts";
 import {
@@ -587,20 +588,13 @@ export function formatDisputeLedgerDelta(deltaCents: unknown): string {
   return `${n < 0 ? "-" : "+"}${wonValue.toLocaleString("ko-KR")}원`;
 }
 
-/** `admin_action_logs.action_type` → 처리 이력 표기(분쟁 액션이 남기는 값). 모르는 값은 원시 값. */
-export const DISPUTE_ACTION_LOG_LABELS: Readonly<Record<string, string>> = {
-  dispute_under_review: "검토 시작",
-  dispute_resolved: "해결(종결)",
-  dispute_dismissed: "기각",
-  dispute_note_created: "케이스 노트",
-  dispute_custom_order_split: "예치금 분배",
-  dispute_hold: "보류",
-  dispute_complete: "해결(보류 건 완료)",
-  dispute_7d: `제재 · ${disputeStatusLabel("sanction_7d")}`,
-  dispute_30d: `제재 · ${disputeStatusLabel("sanction_30d")}`,
-  dispute_permanent: `제재 · ${disputeStatusLabel("sanction_permanent")}`,
-  dispute_bulk_status: "일괄 상태 변경",
-};
+/**
+ * `admin_action_logs.action_type` → 처리 이력 표기(분쟁 액션이 남기는 값). PR-10 부터 감사 로그 액션 사전(`adminActionTypeLabels`)의
+ * 분쟁 계열에서 파생한다 — 라벨은 한 곳. 모르는 값은 원시 값.
+ */
+export const DISPUTE_ACTION_LOG_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
+  adminActionTypesForGroup("dispute").map((actionType) => [actionType, adminActionLabel(actionType)])
+);
 
 export function disputeActionLogLabel(actionType: string | null | undefined): string {
   const a = String(actionType ?? "").trim();

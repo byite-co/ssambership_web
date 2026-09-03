@@ -19,8 +19,8 @@ const MENU_MAP: Array<{ href: string; label: string; mustInclude?: string[]; may
   { href: "/admin/disputes", label: "신고·분쟁", mustInclude: ["local-seed-rich"] },
   // refunds 페이지는 reason을 노출하지 않음 — 금액으로 확인 (4,000,000원 IQ refund + 5,499,999원 sub refund)
   { href: "/admin/refunds", label: "환불·정산", mustInclude: ["4,000,000원", "5,499,999원"] },
-  { href: "/admin/notices", label: "이벤트 관리" },
-  { href: "/admin/audit-logs", label: "활동 로그" },
+  { href: "/admin/notices", label: "공지·이벤트" },
+  { href: "/admin/audit-logs", label: "감사 로그" },
   { href: "/admin/settings", label: "시스템 설정" },
   { href: "/admin/reports", label: "신고 목록 (보조)", mustInclude: ["local-seed-rich"] },
   { href: "/admin/refunds-settlement", label: "환불·정산 통합", mayInclude: ["환불", "정산"] },
