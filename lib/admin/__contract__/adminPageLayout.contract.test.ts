@@ -101,9 +101,16 @@ const PR2_LAYOUT_PILL_IMPORTERS = [
   "app/(admin)/admin/(console)/disputes/[id]/page.tsx",
   "components/admin/DisputeQueueTable.tsx",
   "components/admin/ContentReportTargetUserPanel.tsx",
+  // PR-7 계정 목록·계정 상세 허브
+  "app/(admin)/admin/(console)/users/page.tsx",
+  "app/(admin)/admin/(console)/users/[id]/page.tsx",
+  "components/admin/AccountListTable.tsx",
+  "components/admin/AccountDetailHeader.tsx",
+  "components/admin/AccountMentorTab.tsx",
+  "components/admin/AccountStudentTab.tsx",
 ];
 
-test("이관 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)·PR-5 세 화면·PR-6 분쟁 화면뿐이다", () => {
+test("이관 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자 파일은 멘토 승인 작업대(PR-2)·환불 화면(PR-3)·PR-5 세 화면·PR-6 분쟁 화면·PR-7 계정 화면뿐이다", () => {
   const files = [...walk(join(ROOT, "app", "(admin)"), []), ...walk(join(ROOT, "components", "admin"), [])];
   const importers = files
     .filter((f) => !/components\/admin\/(AdminPageLayout|AdminStatusPill)\.tsx$/.test(f))
@@ -113,10 +120,11 @@ test("이관 범위: AdminPageLayout/AdminStatusPill 을 import 하는 관리자
   assert.deepEqual(importers, [...PR2_LAYOUT_PILL_IMPORTERS].sort());
 });
 
-test("PageScaffold 를 쓰는 관리자 화면은 9곳이다(PR-3 환불 목록·상세 2화면 · PR-5 신고 상세·맞춤의뢰 주문 2화면 · PR-6 분쟁 상세 1화면 이관, 나머지 그대로)", () => {
+test("PageScaffold 를 쓰는 관리자 화면은 7곳이다(PR-3 환불 목록·상세 2화면 · PR-5 신고 상세·맞춤의뢰 주문 2화면 · PR-6 분쟁 상세 1화면 · PR-7 계정 목록 + 구 멘토 승인 상세(리다이렉트) 2화면 이관, 나머지 그대로)", () => {
   const files = walk(join(ROOT, "app", "(admin)"), []);
   const users = files.filter((f) => readFileSync(f, "utf8").includes("<PageScaffold")).map((f) => f.slice(ROOT.length + 1).replace(/\\/g, "/"));
-  assert.equal(users.length, 9, users.join("\n"));
+  assert.equal(users.length, 7, users.join("\n"));
+  assert.ok(!users.some((f) => /\/users\/|\/mentor-approvals\//.test(f)), "PR-7 계정 목록·상세와 구 멘토 승인 상세(리다이렉트)는 PageScaffold 를 쓰지 않는다");
   assert.ok(!users.some((f) => /\/disputes\//.test(f)), "PR-6 분쟁 목록·상세는 PageScaffold 를 쓰지 않는다");
   assert.ok(!users.some((f) => /\/refunds\//.test(f)), "환불 목록·상세는 PageScaffold 를 쓰지 않는다");
   assert.ok(!users.some((f) => /\/(moderation|reports|academic-record-changes|custom-request-orders)\//.test(f)), "PR-5 세 화면(+신고 상세)은 PageScaffold 를 쓰지 않는다");

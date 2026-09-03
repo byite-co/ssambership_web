@@ -11,6 +11,7 @@ import Link from "next/link";
 import { AdminDataTable } from "@/components/admin/AdminDataTable";
 import { AdminStatusPill } from "@/components/admin/AdminStatusPill";
 import { EmptyState } from "@/components/common/EmptyState";
+import { accountDetailPath } from "@/lib/admin/accountDetailConsole";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { splitAdminListBasePath, type AdminListParams } from "@/lib/admin/adminListParams";
 import {
@@ -158,7 +159,13 @@ export function ContentReportQueueList({ items, params, tab, counts, totalCount,
                       {item.targetLabel}
                     </td>
                     <td className="max-w-[160px] truncate px-3 py-3 align-top text-slate-800" title={item.reporterId || undefined}>
-                      {item.reporterName}
+                      {item.reporterId ? (
+                        <Link href={accountDetailPath(item.reporterId)} className="hover:underline" prefetch={false}>
+                          {item.reporterName}
+                        </Link>
+                      ) : (
+                        item.reporterName
+                      )}
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 align-top text-xs tabular-nums text-slate-600">{formatKoDateTimeKst(item.createdAt)}</td>
                     <td className="whitespace-nowrap px-3 py-3 align-top">

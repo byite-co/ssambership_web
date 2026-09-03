@@ -130,6 +130,12 @@ const DIRECT_ACCESS_EXEMPT: Record<string, string> = {
     "관리자 분쟁 화면 조회(PR-6 — 당사자 표시명·역할 + 당사자 이름·이메일 검색 users 조인. mentorProfilesAdminReadClient: 서비스 롤 우선/세션 폴백 · 이중 requireRole admin 가드 뒤, users_admin_select_all 로 읽힘)",
   "lib/admin/contentReportTargetUserQueries.ts":
     "관리자 신고 상세 신고당한 사용자 블록(PR-6 — 작성자 1행: 역할·상태·가입일. 증거 조회와 같은 클라이언트(서비스 롤 우선/세션 폴백) · requireRole admin 뒤, users_admin_select_all 로 읽힘)",
+  "lib/admin/accountListQueries.ts":
+    "관리자 계정 목록(PR-7 — 서비스 롤 전용: users 역할·상태·본인인증 필터 + 이름·닉네임·이메일 검색 · mentor_profiles 승인 상태 배지. 이중 requireRole admin 가드 뒤)",
+  "lib/admin/accountDetailQueries.ts":
+    "관리자 계정 상세 공통(PR-7 — 서비스 롤 전용: users 1행 + 처리자·관련자 표시명. 이중 requireRole admin 가드 뒤)",
+  "lib/admin/accountMentorQueries.ts":
+    "관리자 계정 상세 멘토 탭(PR-7 — 서비스 롤 전용: mentor_profiles 1행(프로필·정산 계좌·활동 상태). 이중 requireRole admin 가드 뒤)",
   "lib/community/communityAuthorLabels.ts":
     "알려진 열화(범위 밖): 타인 행은 RLS 0행 → 폴백 라벨. 학생 nickname 은 어떤 뷰에도 없어 마이그레이션 필요",
   "app/(student)/settings/blocks/page.tsx":

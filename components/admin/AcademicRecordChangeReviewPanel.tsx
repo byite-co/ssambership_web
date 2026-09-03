@@ -11,8 +11,10 @@
  *   (이관 전 화면의 입력 유지 · 액션이 읽는 `approvedUniversityName`). 반려·재제출 = stateChange + 사유 프리셋(칩 클릭 = 확인 · `rejectReason`).
  * - 클라이언트 컴포넌트인 이유는 확정 학교명 입력 하나다(summary 가 입력값을 따라간다). 데이터는 전부 서버가 넘긴다.
  */
+import Link from "next/link";
 import { useState } from "react";
 import { AdminStatusPill } from "@/components/admin/AdminStatusPill";
+import { accountDetailPath } from "@/lib/admin/accountDetailConsole";
 import { ConfirmSubmitButton } from "@/components/admin/ConfirmSubmitButton";
 import { DocumentViewer } from "@/components/admin/DocumentViewer";
 import { StatusBadge } from "@/components/design-system/StatusBadge";
@@ -105,7 +107,11 @@ export function AcademicRecordChangeReviewPanel({ detail, flashError }: Props) {
         <div className="border-b border-slate-100 px-4 py-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div className="min-w-0">
-              <h2 className="truncate text-base font-black text-slate-900">{detail.mentorName}</h2>
+              <h2 className="truncate text-base font-black text-slate-900">
+                <Link href={accountDetailPath(detail.mentorId)} className="hover:underline" prefetch={false} title="계정 상세">
+                  {detail.mentorName}
+                </Link>
+              </h2>
               <p className="truncate text-xs text-slate-500">{detail.mentorEmail ?? "이메일 없음"} · 요청 {formatKoDateTimeKst(detail.createdAt)}</p>
             </div>
             <AdminStatusPill table="mentor_academic_record_change_requests" column="status" value={detail.status} size="sm" className="shrink-0" />

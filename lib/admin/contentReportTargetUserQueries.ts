@@ -34,7 +34,8 @@ async function countActiveWarnings(client: SupabaseClient, userId: string): Prom
   return count ?? 0;
 }
 
-async function authorContentIds(client: SupabaseClient, authorId: string): Promise<string[]> {
+/** 작성자의 글·숏폼·댓글 id — 이전 신고 건수 집계용. PR-7 계정 상세(학생 탭 "신고당한 건")도 재사용한다. */
+export async function loadAuthorContentIds(client: SupabaseClient, authorId: string): Promise<string[]> {
   const tables = ["community_posts", "shortform_posts", "comments", "community_comments"] as const;
   const results = await Promise.all(
     tables.map(async (table) => {
@@ -50,7 +51,7 @@ async function authorContentIds(client: SupabaseClient, authorId: string): Promi
 }
 
 async function countPreviousReports(client: SupabaseClient, authorId: string, excludeReportId: string): Promise<number | null> {
-  const ids = await authorContentIds(client, authorId);
+  const ids = await loadAuthorContentIds(client, authorId);
   if (!ids.length) return 0;
   let q = client.from("content_reports").select("id", { count: "exact", head: true }).in("target_id", ids);
   if (excludeReportId) q = q.neq("id", excludeReportId);

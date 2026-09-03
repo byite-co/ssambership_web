@@ -3,7 +3,9 @@
  * (멘토) 담당 학생 수. Server Component — 데이터는 `loadContentReportTargetUser` 가 만든다.
  * 작성자를 알 수 없는 신고(미지원 유형·삭제된 콘텐츠·조회 실패)는 그 사실을 보이고 조치 버튼을 두지 않는다.
  */
+import Link from "next/link";
 import { AdminStatusPill } from "@/components/admin/AdminStatusPill";
+import { accountDetailPath } from "@/lib/admin/accountDetailConsole";
 import { ACCOUNT_WARNING_AUTO_SUSPEND_THRESHOLD } from "@/lib/admin/accountSanctionPolicy";
 import type { ContentReportTargetUser } from "@/lib/admin/contentReportSanctionConsole";
 import { formatKoreanDate } from "@/lib/utils/formatDisplay";
@@ -49,7 +51,9 @@ export function ContentReportTargetUserPanel({ user, authorKnown }: Props) {
       </div>
       <dl className="mt-3 grid gap-3 text-sm sm:grid-cols-3">
         <Cell label="이름">
-          {user.name}
+          <Link href={accountDetailPath(user.id)} className="hover:underline" prefetch={false} title="계정 상세">
+            {user.name}
+          </Link>
           {user.email ? <span className="ml-1 text-xs font-medium text-slate-500">{user.email}</span> : null}
           <p className="mt-0.5 font-mono text-[10px] font-normal text-slate-400" title={user.id}>
             {user.id.slice(0, 12)}…

@@ -10,9 +10,11 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { AdminStatusPill } from "@/components/admin/AdminStatusPill";
 import { ConfirmSubmitButton } from "@/components/admin/ConfirmSubmitButton";
+import { IdentityReviewBlock } from "@/components/admin/IdentityReviewBlock";
 import { MentorApprovalDecisionBar } from "@/components/admin/MentorApprovalDecisionBar";
 import { StatusBadge } from "@/components/design-system/StatusBadge";
 import { EmptyState } from "@/components/common/EmptyState";
+import { accountDetailPath } from "@/lib/admin/accountDetailConsole";
 import { adminStatusAllowedValues, resolveAdminStatus } from "@/lib/admin/adminStatusDictionary";
 import {
   buildMentorApproveSummary,
@@ -22,13 +24,7 @@ import {
   mentorDecisionResultLabel,
   sameSchoolTodayWarning,
 } from "@/lib/admin/mentorApprovalDecision";
-import {
-  IDENTITY_UNVERIFIED_WARNING,
-  identityPhoneDisplay,
-  identityReviewLabel,
-  identityReviewTone,
-  isIdentityUnverified,
-} from "@/lib/admin/mentorIdentityReview";
+import { identityReviewLabel, identityReviewTone } from "@/lib/admin/mentorIdentityReview";
 import { SCHOOL_TIER_BADGE_AUTO, SCHOOL_TIER_BADGE_CONFIRMED_PREFIX, schoolTierConfirmBlockerMessage } from "@/lib/admin/mentorSchoolTierReview";
 import { approveMentorSchoolVerificationAction } from "@/lib/admin/mentorSchoolVerificationReviewActions";
 import type { MentorApprovalDetail } from "@/lib/admin/mentorApprovalWorkbenchQueries";
@@ -94,7 +90,6 @@ export function MentorApprovalReviewPanel(props: Props) {
     ? resolveAdminStatus("mentor_school_verifications", "verified_major_category", schoolTier.suggestedCategory).label
     : "—";
   const identityKind = identity?.kind ?? "none";
-  const unverified = isIdentityUnverified(identityKind);
   const sameSchoolWarning = sameSchoolTodayWarning(detail.sameSchoolTodayCount);
   const subjects = Array.isArray(profile.teaching_subjects) ? profile.teaching_subjects.filter(Boolean) : [];
   const approveSummary = buildMentorApproveSummary({
@@ -113,7 +108,11 @@ export function MentorApprovalReviewPanel(props: Props) {
         <div className="border-b border-slate-100 px-4 py-3">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <h2 className="truncate text-base font-black text-slate-900">{detail.displayName}</h2>
+              <h2 className="truncate text-base font-black text-slate-900">
+                <Link href={accountDetailPath(detail.mentorUserId)} className="hover:underline" prefetch={false} title="계정 상세">
+                  {detail.displayName}
+                </Link>
+              </h2>
               <p className="truncate text-xs text-slate-500">{user?.email ?? "이메일 없음"}</p>
             </div>
             <AdminStatusPill table="mentor_profiles" column="verification_status" value={detail.status} size="sm" className="shrink-0" />
@@ -140,33 +139,8 @@ export function MentorApprovalReviewPanel(props: Props) {
           title="신원"
           aside={identity ? <StatusBadge label={identityReviewLabel(identity.kind)} tone={identityReviewTone(identity.kind)} size="sm" /> : null}
         >
-          {identityError ? (
-            <p className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-900">{identityError}</p>
-          ) : identity ? (
-            <dl className="divide-y divide-slate-50" data-identity-kind={identity.kind}>
-              <Row label="가입 이름">{identity.registeredName || "—"}</Row>
-              <Row label="인증 실명">
-                {identity.verified ? (
-                  <span className={identity.kind === "mismatch" ? "text-red-700" : undefined}>{identity.verifiedName ?? "—"}</span>
-                ) : (
-                  <span className="text-slate-400">{identityReviewLabel(identity.kind)}</span>
-                )}
-              </Row>
-              <Row label="전화번호">{identity.verified ? identityPhoneDisplay(identity.phoneRegistered) : "—"}</Row>
-              <Row label="생년월일">{identity.verified ? formatKoreanDate(identity.birthdate) : "—"}</Row>
-              <Row label="인증 완료">{identity.verified ? formatKoDateTimeKst(identity.verifiedAt) : "—"}</Row>
-            </dl>
-          ) : null}
-          {identity && !identityError && unverified ? (
-            <p className="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] font-bold text-amber-900" role="status">
-              {IDENTITY_UNVERIFIED_WARNING}
-            </p>
-          ) : null}
-          {identity?.kind === "mismatch" ? (
-            <p className="mt-2 rounded-xl border-2 border-red-400 bg-red-50 px-3 py-2 text-[11px] font-bold text-red-800" role="alert">
-              가입 이름과 본인인증 실명이 다릅니다. 서류의 이름과 대조해 주세요.
-            </p>
-          ) : null}
+          {/* PR-7: 신원 블록은 계정 상세 헤더와 같은 컴포넌트(IdentityReviewBlock) — 렌더 결과는 PR-2 와 같다 */}
+          <IdentityReviewBlock identity={identity} identityError={identityError} />
         </Section>
 
         {/* ② 자격 */}

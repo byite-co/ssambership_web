@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useState, type ReactNode } from "react";
 import { AdminStatusPill } from "@/components/admin/AdminStatusPill";
 import { ConfirmSubmitButton } from "@/components/admin/ConfirmSubmitButton";
+import { accountDetailPath } from "@/lib/admin/accountDetailConsole";
 import { bulkUpdateDisputesAction } from "@/lib/admin/bulkActions";
 import {
   DISPUTE_ACTIONS,
@@ -127,10 +128,22 @@ export function DisputeQueueTable({ items }: Props) {
                     </p>
                   </td>
                   <td className="max-w-[160px] truncate px-3 py-3 align-top font-bold text-slate-800" title={item.studentId ?? undefined}>
-                    {item.studentName}
+                    {item.studentId ? (
+                      <Link href={accountDetailPath(item.studentId)} className="hover:underline" prefetch={false}>
+                        {item.studentName}
+                      </Link>
+                    ) : (
+                      item.studentName
+                    )}
                   </td>
                   <td className="max-w-[160px] truncate px-3 py-3 align-top font-bold text-slate-800" title={item.mentorId ?? undefined}>
-                    {item.mentorName}
+                    {item.mentorId ? (
+                      <Link href={accountDetailPath(item.mentorId)} className="hover:underline" prefetch={false}>
+                        {item.mentorName}
+                      </Link>
+                    ) : (
+                      item.mentorName
+                    )}
                   </td>
                   <td className="whitespace-nowrap px-3 py-3 align-top text-xs font-bold text-slate-700">{item.kindLabel}</td>
                   <td className="whitespace-nowrap px-3 py-3 align-top text-xs tabular-nums text-slate-600">{item.createdAtLabel}</td>

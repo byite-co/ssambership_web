@@ -63,7 +63,10 @@ const ORDER_PAGE = "app/(admin)/admin/(console)/custom-request-orders/page.tsx";
 const DISPUTE_LIST = "components/admin/DisputeQueueList.tsx";
 
 /** 이 부품을 쓰는 화면 — 새 화면을 이관할 때 이 목록을 갱신한다(PR-2 멘토 승인 · PR-3 환불 · PR-5 세 화면 · PR-6 분쟁 목록). */
-const ADMIN_DATA_TABLE_IMPORTERS = [MENTOR_LIST, REFUND_PAGINATION, REFUND_TOOLBAR, REPORT_LIST, ACADEMIC_LIST, ORDER_TOOLBAR, ORDER_PAGE, DISPUTE_LIST];
+const ADMIN_DATA_TABLE_IMPORTERS = [MENTOR_LIST, REFUND_PAGINATION, REFUND_TOOLBAR, REPORT_LIST, ACADEMIC_LIST, ORDER_TOOLBAR, ORDER_PAGE, DISPUTE_LIST,
+  // PR-7 계정 목록(페이지네이션 조각만 — 역할 탭은 status 키가 아니라 화면이 직접 그린다)
+  "components/admin/AccountListTable.tsx",
+];
 
 function spFrom(url: string): Record<string, string | string[] | undefined> {
   const u = new URL(url, "https://ssambership.local");
@@ -192,7 +195,7 @@ test("AdminDataTable 은 Server Component 이고 Counts · Tabs · Pagination �
   assert.ok(!/from "react"|from "@\//.test(pure), "순수 모듈은 React·@/ import 없음(node --test 직접 import)");
 });
 
-test("이관 범위: AdminDataTable 을 import 하는 관리자 파일은 멘토 승인 목록·환불 툴바·환불 페이지네이션 + PR-5 세 화면(신고 목록·학적 변경 목록·맞춤의뢰 툴바·페이지) + PR-6 분쟁 목록뿐이다", () => {
+test("이관 범위: AdminDataTable 을 import 하는 관리자 파일은 멘토 승인 목록·환불 툴바·환불 페이지네이션 + PR-5 세 화면(신고 목록·학적 변경 목록·맞춤의뢰 툴바·페이지) + PR-6 분쟁 목록 + PR-7 계정 목록뿐이다", () => {
   const files = [...walk(join(ROOT, "app", "(admin)"), []), ...walk(join(ROOT, "components", "admin"), [])];
   const importers = files
     .filter((f) => !/components\/admin\/AdminDataTable\.tsx$/.test(f))
