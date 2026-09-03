@@ -13,6 +13,7 @@ import {
   type AdminTodoCard,
   type AdminTodoCountsInput,
 } from "@/lib/admin/adminDashboardConsole";
+import { countAccountDeletionStalled } from "@/lib/admin/accountDeletionQueries";
 import { loadAuditLogList } from "@/lib/admin/auditLogQueries";
 import type { AuditLogItem } from "@/lib/admin/auditLogConsole";
 import { countContentReportTabs } from "@/lib/admin/contentReportQueueQueries";
@@ -30,7 +31,8 @@ import { countTopupTabs } from "@/lib/admin/topupConsoleQueries";
  *
  * "오늘 할 일" 8칸은 각 화면이 쓰는 건수 함수를 **그대로 호출**한다(건수 로직 재작성 금지 — 지시서 절대 원칙 3):
  *   승인 대기 `countMentorApprovalTabs` · 미처리 신고 `countContentReportTabs` · 환불 요청 `countRefundTabs` · 분쟁 `countDisputeTabs` ·
- *   충전 대기 `countTopupTabs` · 미답변 질문/이탈 의심 `loadMentorActivityList`(전체 탭 · 상한 500 = 멘토 활동 화면과 같은 집계).
+ *   충전 대기 `countTopupTabs` · 미답변 질문/이탈 의심 `loadMentorActivityList`(전체 탭 · 상한 500 = 멘토 활동 화면과 같은 집계) ·
+ *   탈퇴 멈춤 `countAccountDeletionStalled`(PR-13 — 탈퇴 요청 화면의 `멈춤` 과 같은 판정 함수).
  * 화면 탭이 없는 값(미확정 등급 · 현황 5개)만 이 모듈이 head count 로 센다 — 실패는 0 으로 위장하지 않고 null(`—`)로 남긴다.
  * 최근 활동은 감사 로그 화면의 `loadAuditLogList` 를 10건 · 열람 제외 기본으로 호출한다.
  *
@@ -89,7 +91,7 @@ export async function loadAdminDashboardData(supabase: SupabaseClient, opts: { s
   const readDb = mentorProfilesAdminReadClient(supabase);
   const errors: string[] = [];
 
-  const [mentorApproval, contentReport, refund, dispute, topup, mentorActivity, schoolTierUnconfirmed, roleCounts, activeSubscriptions, weeklySignups, payoutMissing, activity] =
+  const [mentorApproval, contentReport, refund, dispute, topup, mentorActivity, schoolTierUnconfirmed, roleCounts, activeSubscriptions, weeklySignups, payoutMissing, activity, deletionStalled] =
     await Promise.all([
       countMentorApprovalTabs(supabase),
       countContentReportTabs(supabase),
@@ -104,10 +106,12 @@ export async function loadAdminDashboardData(supabase: SupabaseClient, opts: { s
       countUsersCreatedSince(readDb, kstWeekStartIso(now)),
       countMentorsWithoutPayoutAccount(readDb),
       loadAuditLogList(supabase, { search: "", status: "", page: 1, pageSize: ADMIN_DASHBOARD_ACTIVITY_LIMIT, extra: {} }, adminDashboardActivityFilters(opts.showViews), now.toISOString()),
+      countAccountDeletionStalled(now.toISOString()),
     ]);
 
   if (mentorActivity.list.error) errors.push(`미답변 질문·이탈 의심: ${mentorActivity.list.error}`);
   if (schoolTierUnconfirmed === null) errors.push("미확정 등급 건수를 불러오지 못했습니다.");
+  if (deletionStalled === null) errors.push("탈퇴 멈춤 건수를 불러오지 못했습니다.");
 
   const todoInput: AdminTodoCountsInput = {
     mentorApproval: { pending: mentorApproval.pending },
@@ -120,6 +124,7 @@ export async function loadAdminDashboardData(supabase: SupabaseClient, opts: { s
     refund: { pending: refund.pending },
     dispute: { open: dispute.open, under_review: dispute.under_review },
     topup: { pending: topup.pending },
+    accountDeletion: { stalled: deletionStalled ?? 0 },
   };
 
   return {

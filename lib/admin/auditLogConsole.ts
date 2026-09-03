@@ -162,6 +162,7 @@ const TARGET_TYPE_LABELS: Readonly<Record<string, string>> = {
   payout_run: "정산 실행",
   question_thread: "질문",
   individual_question: "개별 질문",
+  question_room: "질문방",
   app_notice: "공지",
   promotion_campaign: "프로모션",
   cash_topup_package: "충전 패키지",
@@ -216,6 +217,8 @@ export function auditLogTargetHref(targetType: string | null | undefined, target
       return id ? `/admin/question-threads/${encodeURIComponent(id)}` : null;
     case "individual_question":
       return id ? `/admin/individual-questions/${encodeURIComponent(id)}` : null;
+    case "question_room":
+      return id ? `/admin/question-rooms/${encodeURIComponent(id)}` : null;
     case "app_notice":
       return id ? `/admin/notices?edit=${encodeURIComponent(id)}#notice-editor` : "/admin/notices";
     case "promotion_campaign":

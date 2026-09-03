@@ -80,6 +80,9 @@ const ADMIN_DATA_TABLE_IMPORTERS = [MENTOR_LIST, REFUND_PAGINATION, REFUND_TOOLB
   "components/admin/CommunityContentList.tsx",
   "components/admin/ReviewQueueList.tsx",
   "components/admin/MentorActivityList.tsx",
+  // PR-13 탈퇴 요청 현황(탭·페이지네이션 — 조회 전용)
+  "components/admin/AccountDeletionQueueToolbar.tsx",
+  "components/admin/AccountDeletionQueueTable.tsx",
 ];
 
 function spFrom(url: string): Record<string, string | string[] | undefined> {
@@ -209,7 +212,7 @@ test("AdminDataTable 은 Server Component 이고 Counts · Tabs · Pagination �
   assert.ok(!/from "react"|from "@\//.test(pure), "순수 모듈은 React·@/ import 없음(node --test 직접 import)");
 });
 
-test("이관 범위: AdminDataTable 을 import 하는 관리자 파일은 멘토 승인 목록·환불 툴바·환불 페이지네이션 + PR-5 세 화면(신고 목록·학적 변경 목록·맞춤의뢰 툴바·페이지) + PR-6 분쟁 목록 + PR-7 계정 목록 + PR-8 질문 드릴다운 목록 3곳 + PR-9 충전 관리 툴바·표 + PR-10 공지·감사 로그 표 + PR-11 커뮤니티·리뷰·멘토 활동 목록뿐이다", () => {
+test("이관 범위: AdminDataTable 을 import 하는 관리자 파일은 멘토 승인 목록·환불 툴바·환불 페이지네이션 + PR-5 세 화면(신고 목록·학적 변경 목록·맞춤의뢰 툴바·페이지) + PR-6 분쟁 목록 + PR-7 계정 목록 + PR-8 질문 드릴다운 목록 3곳 + PR-9 충전 관리 툴바·표 + PR-10 공지·감사 로그 표 + PR-11 커뮤니티·리뷰·멘토 활동 목록 + PR-13 탈퇴 요청 툴바·표뿐이다", () => {
   const files = [...walk(join(ROOT, "app", "(admin)"), []), ...walk(join(ROOT, "components", "admin"), [])];
   const importers = files
     .filter((f) => !/components\/admin\/AdminDataTable\.tsx$/.test(f))

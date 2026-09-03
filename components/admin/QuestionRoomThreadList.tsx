@@ -1,10 +1,12 @@
 /**
  * 멘토별 화면 — [질문] 탭(§3): 제목 · 상태 · 질문일시 · 첫 답변까지(미답변은 경과 + 톤) · 왕복(메시지 수) · 확인(`confirmed_at`) · 오답노트·숙달 배지. Server Component.
  * 행의 제목 → 질문 상세(§4). 공용 `AdminDataTable.Pagination` 만 쓴다(상태 탭 없음).
+ * PR-13 §2: 상단 `내보내기`(`QuestionExportButton`) — 이 방의 질문을 CSV 로(방 단위 · 같은 조건). 감사 로그 1건.
  */
 import Link from "next/link";
 import { AdminDataTable } from "@/components/admin/AdminDataTable";
 import { AdminStatusPill } from "@/components/admin/AdminStatusPill";
+import { QuestionExportButton } from "@/components/admin/QuestionExportButton";
 import { EmptyState } from "@/components/common/EmptyState";
 import { StatusBadge } from "@/components/design-system/StatusBadge";
 import type { AdminListParams } from "@/lib/admin/adminListParams";
@@ -30,9 +32,13 @@ const ELAPSED_CLASS = {
 export function QuestionRoomThreadList({ roomId, list, params, returnTo }: Props) {
   return (
     <section className="space-y-3" aria-label="질문 목록" data-question-room-threads={roomId}>
-      <p className="text-xs font-bold text-slate-600" aria-live="polite">
-        전체 <span className="tabular-nums text-slate-900">{list.totalCount.toLocaleString("ko-KR")}</span>건
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs font-bold text-slate-600" aria-live="polite">
+          전체 <span className="tabular-nums text-slate-900">{list.totalCount.toLocaleString("ko-KR")}</span>건
+        </p>
+        {/* PR-13 §2: 이 방의 질문(같은 조건)을 CSV 로 — 감사 로그 기록 */}
+        {!list.error ? <QuestionExportButton scope={{ kind: "room_threads", id: roomId }} totalCount={list.totalCount} /> : null}
+      </div>
       {list.error ? (
         <div role="alert" className="rounded-2xl border border-red-200 bg-red-50/60 p-5 text-sm text-red-950">
           <p className="font-bold">{list.error}</p>

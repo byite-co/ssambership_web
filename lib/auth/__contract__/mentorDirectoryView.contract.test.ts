@@ -153,6 +153,8 @@ const DIRECT_ACCESS_EXEMPT: Record<string, string> = {
     "관리자 계정 상세 공통(PR-7 — 서비스 롤 전용: users 1행 + 처리자·관련자 표시명. 이중 requireRole admin 가드 뒤)",
   "lib/admin/accountMentorQueries.ts":
     "관리자 계정 상세 멘토 탭(PR-7 — 서비스 롤 전용: mentor_profiles 1행(프로필·정산 계좌·활동 상태). 이중 requireRole admin 가드 뒤)",
+  "lib/admin/accountDeletionQueries.ts":
+    "PR-13 탈퇴 요청 현황 — 관리자 전용 service_role 읽기: 요청자 표시명·역할(users — 익명화 행은 `(삭제 처리됨)` 으로 접는다). 이중 requireRole admin 가드 뒤 · 쓰기 없음 · 공개 경로 호출부 없음",
   "lib/admin/questionDrilldownQueries.ts":
     "관리자 질문·연결노트 드릴다운(PR-8 — 서비스 롤 전용: users 실명·닉네임·역할(학생 실명 · 멘토 닉네임 규칙) + mentor_profiles.teaching_subjects(방 목록 과목). 이중 requireRole admin 가드 뒤)",
   "lib/community/communityAuthorLabels.ts":

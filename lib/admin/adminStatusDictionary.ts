@@ -300,6 +300,23 @@ const DICTIONARY = {
     visible: { label: "게시", tone: "success" },
     hidden: { label: "숨김", tone: "warning" },
   },
+
+  /**
+   * CHECK account_deletion_jobs_state_check (151 create table 인라인 · 인벤토리 등재) — 9값. PR-13 탈퇴 요청 현황이 쓴다.
+   * 사전 표기(지시서 §1-2): 대기 · 잠금 · 삭제 중 · 파일 삭제됨 · 마무리 · 인증 해제 · 완료 · 취소 · 실패.
+   * 활성 6값(pending~auth_soft_deleted)은 `lib/account/accountDeletionJobStates.ts`(SQL 175 미러)와 같은 집합이다.
+   */
+  "account_deletion_jobs.state": {
+    pending: { label: "대기", tone: "warning" },
+    locked: { label: "잠금", tone: "info" },
+    purging: { label: "삭제 중", tone: "info" },
+    storage_purged: { label: "파일 삭제됨", tone: "info" },
+    finalized: { label: "마무리", tone: "info" },
+    auth_soft_deleted: { label: "인증 해제", tone: "info" },
+    completed: { label: "완료", tone: "success", risk: "high" },
+    canceled: { label: "취소", tone: "neutral" },
+    failed: { label: "실패", tone: "danger" },
+  },
 } as const;
 
 export type AdminStatusDictionaryKey = keyof typeof DICTIONARY;
