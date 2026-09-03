@@ -232,6 +232,23 @@ const DICTIONARY = {
     page: { label: "목록 노출", tone: "neutral" },
     popup: { label: "팝업 노출", tone: "info" },
   },
+
+  /**
+   * CHECK 인라인(20260830100100 paysync_invoices) — 4값. PR-9 충전 관리 탭·행 배지가 쓴다(대기 · 완료 · 만료 · 취소).
+   * 08-04 인벤토리 이후(08-30) 신설 테이블 — 계약 테스트는 마이그레이션 SQL 로만 대조한다.
+   */
+  "paysync_invoices.status": {
+    pending: { label: "대기", tone: "warning" },
+    paid: { label: "완료", tone: "success", risk: "high" },
+    expired: { label: "만료", tone: "neutral" },
+    canceled: { label: "취소", tone: "neutral" },
+  },
+
+  /** CHECK payout_runs_status_check (baseline 106) — 2값. PR-9 정산 지급 이력 탭이 쓴다. */
+  "payout_runs.status": {
+    executing: { label: "실행 중", tone: "info" },
+    completed: { label: "완료", tone: "success", risk: "high" },
+  },
 } as const;
 
 export type AdminStatusDictionaryKey = keyof typeof DICTIONARY;

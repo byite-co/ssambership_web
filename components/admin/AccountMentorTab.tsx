@@ -36,6 +36,7 @@ import { approveMentorSchoolVerificationAction } from "@/lib/admin/mentorSchoolV
 import { formatCashKrw, formatKoreanDate } from "@/lib/utils/formatDisplay";
 import { formatKoDateTimeKst } from "@/lib/utils/kstTime";
 import { cn } from "@/lib/utils/cn";
+import { settlementMentorTabPath } from "@/lib/admin/settlementConsole";
 
 type Props = {
   userId: string;
@@ -369,6 +370,12 @@ export function AccountMentorTab({ userId, displayName, section, logs, logsMoreH
             {MENTOR_PAYOUT_MISSING_WARNING} — 멘토가 프로필 관리에서 계좌를 등록해야 정산이 지급됩니다.
           </p>
         )}
+        {/* PR-9: 이 멘토의 정산 항목 전체(구독·개별질문·맞춤의뢰)는 정산 관리 멘토별 탭에서 */}
+        <p className="mt-3">
+          <Link href={settlementMentorTabPath(userId)} className="text-xs font-extrabold text-blue-700 hover:underline" prefetch={false} data-settlement-mentor-link>
+            정산 항목 보기 →
+          </Link>
+        </p>
       </Section>
 
       {/* 받은 리뷰 */}
