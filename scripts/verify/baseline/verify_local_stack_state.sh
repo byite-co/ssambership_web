@@ -53,10 +53,16 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 106본 pack(생성기 105 + PR60 1) 기준
-# (tables=85 functions=225 policies=176 buckets=13)이며, PG16 스크래치 재생 실측
-# (scripts/verify/local_db1_batch_check.sh [7])과 일치한다.
-# (프로덕션 원장은 103본 — 20260903100100~100300 미적용 상태다.)
+# 기대치는 109본 pack(생성기 108 + PR60 1) 기준
+# (tables=84 functions=227 policies=175 buckets=13)이며, PG16 스크래치 재생 실측
+# (scripts/verify/local_db2_batch_check.sh [7])과 일치한다.
+# (프로덕션 원장은 106본 — 20260903200100~200300 미적용 상태다.)
+# 106본→109본(DB-2 운영 DB 정리 배치 · 2026-09-03) 델타:
+#   tables    -1 = school_tier_mappings DROP (20260903200300)
+#   functions +2 = comments_sync_deleted_flag + ugc_block_hard_delete (20260903200200 —
+#                school_tier_suggest·RPC·브리지·가드·RPC 4종은 본문 치환이라 카운트 불변)
+#   policies  -1 = school_tier_mappings_admin_all 이 테이블과 함께 사라짐 (20260903200300 —
+#                20260903200200 의 SELECT 정책 3종은 같은 이름으로 재생성이라 불변)
 # 103본→106본(DB-1 운영 DB 정리 배치 · 2026-09-03) 델타:
 #   functions +3 = school_tier_suggest + major_category_suggest
 #                + school_verification_reassess_on_academic_change (20260903100300)
@@ -116,11 +122,11 @@ count_check(){ # count_check <label> <expected> <sql>
   echo "$1=$got" >> "$EV/structure_counts.txt"
   [ "$got" = "$2" ] && say "$1=$got" || bad "$1=$got — PG16 replay 실측 기대치 $2 와 다르다"
 }
-count_check tables 85 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
+count_check tables 84 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
-count_check functions 225 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+count_check functions 227 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
-count_check policies 176 "select count(*) from pg_policies where schemaname='public'"
+count_check policies 175 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"
 
 echo "=== [5] M13 trigger function ACL (anon/authenticated EXECUTE 불가)"

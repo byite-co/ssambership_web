@@ -47,6 +47,8 @@
 > **개정 2026-07-18 (권장가 하향):** 오너 확정으로 권장가를 라이트 29,900 · 스탠다드 84,900 · 프리미엄 174,900으로 변경(구 55,000/114,900/249,900 폐기). min은 권장가와 동일하게 하향, max와 카탈로그 표시가(프리미엄 179,000→174,900)도 정합화. 멘토 가격 저장 시 밴드를 서버에서 강제한다(경고만 하던 구 동작 폐기).
 >
 > **개정 2026-09-03 (DB-1 캡 구조):** 오너 확정으로 cap 가중치 1.0/2.5/4.5 → **1.0/2.25/4.75**, 멘토 한도 기본 28 → **50** (`supabase/sql/190_cap_structure_limit_50_weights.sql`, pack `20260903100100`). 정본은 DB 함수이며 `mentor_plans.cap_weight` 는 그 함수값을 따르는 참조 컬럼이다. 같은 배치에서 학교 인증 규칙(자동 판정 = `pending` 잠정, 관리자 확정 = `reviewed_by` 채움 · SQL 192)과 분쟁 분배 수수료(정산 행 `fee_rate` · SQL 191)를 함께 정본화했다.
+>
+> **개정 2026-09-03 (DB-2 등급 정정·소프트 삭제):** 오너 확정으로 학교 등급 자동 판정 폴백을 `미분류` → **`그외`**로 바꾸고(`미분류`는 대학명을 못 읽은 경우만 — `school_tier_suggest()` · SQL 193), 확정된 등급도 관리자가 같은 확정 RPC(`approve_mentor_school_verification_admin`)로 **정정**할 수 있게 했다(이전 등급·확정자는 `admin_action_logs` `school_tier_corrected`). 숏폼 · 숏폼 댓글 · 게시판 댓글(`shortform_posts` · `community_comments` · `comments`)은 게시판 글과 같은 **소프트 삭제(`deleted_at` · `deleted_by`)** 로 통일하고 하드 DELETE 를 트리거로 거부한다(SQL 194 · anon/authenticated 읽기 정책·뷰·RPC 에 `deleted_at IS NULL`). `school_tier_mappings` 는 제거(SQL 195). 적용 전 미분류 확정 19건은 `그외`로 일괄 정정.
 
 ## 라우트 구조 (실제)
 
@@ -100,10 +102,11 @@
 | `question_threads` | `room_id`, `title`, `status`, workflow 필드 |
 | `question_messages` | `thread_id`, `body`, `author_id` |
 | `connection_notes` | room FK, `body`, `status` |
+| `comments` / `community_comments` | 게시판 댓글 정본 / 레거시·숏폼 댓글 — `deleted_at`·`deleted_by` (소프트 삭제 · DB-2) · `comments.is_deleted` = 숨김 OR 삭제 |
 | `cash_wallets` | `balance_cents` (minor = 원×100) |
 | `cash_ledger` | `delta_cents`, append-only |
 | `custom_request_orders` | `mentor_id`, `title`, `status` |
-| `shortform_posts` | `video_url`, `thumbnail_url`, `category` |
+| `shortform_posts` | `video_url`, `thumbnail_url`, `category`, `deleted_at`·`deleted_by` (소프트 삭제 · DB-2) |
 | `content_reports` | 관리자 검수 큐 |
 
 ## Storage 버킷 (public = false 필수)

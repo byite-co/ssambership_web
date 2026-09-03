@@ -46,7 +46,8 @@
 | `mentor_profiles` | RLS enabled. 본인 select/insert/update. anon table select 정책 없음. 공개 읽기는 078 v2 whitelist RPC만 사용. | `001_initial_auth_profile.sql`, `078_p0_public_mentor_read_rpc_v2.sql` |
 | `mentor_school_verifications` | RLS enabled. 멘토 본인 pending 제출/수정, 관리자 select/update. anon 직접 접근 없음. | `077_mentor_school_verification.sql` |
 | `school_tier_catalog` | RLS enabled. active row는 anon/authenticated read, write는 admin. | `079_b_classification_catalog.sql` |
-| `school_tier_mappings` | RLS enabled. authenticated/admin read/write 경계. anon 직접 mapping select 없음. | `079_b_classification_catalog.sql` |
+| `school_tier_mappings` | **제거됨(DB-2 C · 2026-09-03)** — 행 0 · 참조 0 이라 DROP. 롤백 시 079 정의(RLS · admin_all 정책 · GRANT)로 재생성. | `079_b_classification_catalog.sql` → `195_drop_school_tier_mappings.sql` |
+| `shortform_posts` / `comments` / `community_comments` | RLS enabled. anon/authenticated SELECT 정책(`sf_select_published` · `comments_select_visible` · `community_comments_select_visible`)에 `deleted_at IS NULL`. 관리자(`is_admin()`)는 삭제 행도 읽음. 하드 DELETE 는 트리거(`ugc_block_hard_delete`)가 거부 — 삭제는 `deleted_at`/`deleted_by`. | `194_community_soft_delete_deleted_at.sql` |
 | `major_category_catalog` | RLS enabled if applied. classification catalog와 같은 감사 대상. | `079_b_classification_catalog.sql` |
 | `shortform_reactions` | RLS enabled. 자기 reaction select/insert/delete. | `082_community_shortform_likes.sql` |
 
