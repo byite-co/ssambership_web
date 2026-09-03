@@ -84,6 +84,8 @@ const PR2_LAYOUT_PILL_IMPORTERS = [
   "app/(admin)/admin/(console)/mentor-approval/page.tsx",
   "components/admin/MentorApprovalQueueList.tsx",
   "components/admin/MentorApprovalReviewPanel.tsx",
+  // PR-2b: 오늘 내가 처리한 건(현재 상태 배지)
+  "components/admin/MentorApprovalTodayPanel.tsx",
   // PR-3 환불 관리
   "app/(admin)/admin/(console)/refunds/page.tsx",
   "app/(admin)/admin/(console)/refunds/[id]/page.tsx",

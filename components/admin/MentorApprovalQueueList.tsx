@@ -7,10 +7,12 @@
  * - 선택 행은 `mentor` 키로 싣되, 탭·검색·페이지 링크에는 싣지 않는다(params.extra 에서 제거된 채 넘어온다).
  * - 상단 `대기 N / 전체 M` · 상태 탭 · 하단 `첫–끝 / 필터 후 건수` 는 공용 `AdminDataTable`(PR-4) 조각을 쓴다.
  *   검색 form 과 지원자 카드(행)는 이 화면 고유다(300px 사이드바에 맞춘 배치).
+ * - PR-2b: `보류` 탭 · 대기 행의 `승인 취소됨` 배지(마지막 처리가 승인 취소) · 다른 관리자가 열고 있으면 `박운영 심사 중`(Presence, 클라이언트 섬).
  */
 import Link from "next/link";
 import { AdminDataTable } from "@/components/admin/AdminDataTable";
 import { AdminStatusPill } from "@/components/admin/AdminStatusPill";
+import { MentorApprovalPresenceBadge } from "@/components/admin/MentorApprovalPresenceBadge";
 import { StatusBadge } from "@/components/design-system/StatusBadge";
 import { EmptyState } from "@/components/common/EmptyState";
 import { splitAdminListBasePath, type AdminListParams } from "@/lib/admin/adminListParams";
@@ -22,6 +24,7 @@ import {
   buildMentorApprovalListUrl,
   type MentorApprovalTab,
 } from "@/lib/admin/mentorApprovalQueue";
+import { MENTOR_APPROVAL_REVOKED_BADGE } from "@/lib/admin/mentorApprovalHold";
 import { identityListBadgeLabel, identityReviewTone } from "@/lib/admin/mentorIdentityReview";
 import type { MentorApprovalQueueItem, MentorApprovalTabCounts } from "@/lib/admin/mentorApprovalWorkbenchQueries";
 import { formatKoreanDate } from "@/lib/utils/formatDisplay";
@@ -114,18 +117,24 @@ export function MentorApprovalQueueList(props: Props) {
               >
                 <div className="flex items-start justify-between gap-2">
                   <p className="min-w-0 truncate text-sm font-extrabold text-slate-900">{item.name}</p>
-                  <AdminStatusPill table="mentor_profiles" column="verification_status" value={item.status} size="sm" className="shrink-0" />
+                  <span className="flex shrink-0 items-center gap-1">
+                    {item.revoked ? <StatusBadge label={MENTOR_APPROVAL_REVOKED_BADGE} tone="danger" size="sm" /> : null}
+                    <AdminStatusPill table="mentor_profiles" column="verification_status" value={item.status} size="sm" className="shrink-0" />
+                  </span>
                 </div>
                 <p className="mt-0.5 truncate text-xs text-slate-600">
                   {[item.university, item.department].filter(Boolean).join(" · ") || "학교 미입력"}
                 </p>
                 <div className="mt-1.5 flex items-center justify-between gap-2">
                   <span className="text-[11px] tabular-nums text-slate-500">신청 {formatKoreanDate(item.appliedAt)}</span>
-                  {item.identity ? (
-                    <StatusBadge label={identityListBadgeLabel(item.identity)} tone={identityReviewTone(item.identity)} size="sm" />
-                  ) : (
-                    <StatusBadge label="인증 확인 불가" tone="neutral" size="sm" />
-                  )}
+                  <span className="flex items-center gap-1">
+                    <MentorApprovalPresenceBadge mentorId={item.mentorUserId} />
+                    {item.identity ? (
+                      <StatusBadge label={identityListBadgeLabel(item.identity)} tone={identityReviewTone(item.identity)} size="sm" />
+                    ) : (
+                      <StatusBadge label="인증 확인 불가" tone="neutral" size="sm" />
+                    )}
+                  </span>
                 </div>
               </Link>
             </li>

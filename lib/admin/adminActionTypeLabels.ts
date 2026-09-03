@@ -132,6 +132,11 @@ const FIXED: Record<string, AdminActionTypeEntry> = {
   mentor_approve: entry("멘토 승인", "mentor_approval"),
   mentor_reject: entry("멘토 반려", "mentor_approval"),
   mentor_request_documents: entry("서류 재제출 요청", "mentor_approval"),
+  // 멘토 승인 PR-2b(mentorApprovalHoldActions.ts · mentorApprovalRevokeActions.ts)
+  mentor_hold: entry("멘토 보류", "mentor_approval"),
+  mentor_hold_release: entry("멘토 보류 해제", "mentor_approval"),
+  mentor_approval_revoked: entry("멘토 승인 취소", "mentor_approval"),
+  mentor_rejection_reverted: entry("멘토 반려 되돌리기", "mentor_approval"),
   // 학교 인증(mentorSchoolVerificationReviewActions.ts · DB-1 SQL 192 배치)
   mentor_school_verification_approve: entry("학교 인증 승인", "school_verification"),
   mentor_school_verification_reject: entry("학교 인증 반려", "school_verification"),

@@ -8,10 +8,13 @@
  * - "대기 건이 항상 위": 전체 탭은 대기 부분과 나머지 부분을 **서버에서** 두 range 로 이어 붙인다.
  *   그 range 산술 `splitPendingFirstRange` · 진행 표시 · `status=all` 유지 링크 · 검색어 정규화는 PR-4 에서
  *   `adminDataTable.ts`(공용 정본)로 옮겼고, 이 모듈은 화면 이름으로 다시 내보낸다(계약 테스트·조회 모듈이 이 이름을 쓴다).
+ * - PR-2b: `보류` 탭(`on_hold`). 보류 건은 대기 탭·"다음 대기 건" 이동·대시보드 대기 건수에서 빠진다 — `on_hold` 는 액션 `.in(...)`
+ *   집합(`MENTOR_PENDING_STATUS_VALUES_FOR_IN`)에 들어가지 않으므로 대기 판정·결정 가능 판정 어디에도 걸리지 않는다(H1 불변).
  *
  * node --test 계약 테스트가 직접 import 하므로 React·`@/` import 를 두지 않는다.
  */
 import { MENTOR_PENDING_STATUS_VALUES_FOR_IN } from "./mentorApprovalConstants.ts";
+import { MENTOR_HOLD_STATUS } from "./mentorApprovalHold.ts";
 import type { AdminListParams } from "./adminListParams.ts";
 import { ADMIN_LIST_SEARCH_USER_ID_LIMIT, buildAdminDataTableUrl } from "./adminDataTable.ts";
 
@@ -30,7 +33,7 @@ export const MENTOR_APPROVAL_BASE_PATH = "/admin/mentor-approval";
 export const MENTOR_APPROVAL_SELECTED_PARAM = "mentor";
 export const MENTOR_APPROVAL_DEFAULT_PAGE_SIZE = 25;
 
-export const MENTOR_APPROVAL_TAB_VALUES = ["pending", "approved", "rejected", "under_review", "all"] as const;
+export const MENTOR_APPROVAL_TAB_VALUES = ["pending", "approved", "rejected", "under_review", "on_hold", "all"] as const;
 export type MentorApprovalTab = (typeof MENTOR_APPROVAL_TAB_VALUES)[number];
 export const MENTOR_APPROVAL_DEFAULT_TAB: MentorApprovalTab = "pending";
 
@@ -39,8 +42,12 @@ export const MENTOR_APPROVAL_TABS: readonly { value: MentorApprovalTab; label: s
   { value: "approved", label: "승인" },
   { value: "rejected", label: "반려" },
   { value: "under_review", label: "재제출" },
+  { value: "on_hold", label: "보류" },
   { value: "all", label: "전체" },
 ];
+
+/** 보류 탭 — PR-2b `holdMentorApplicationAction` 이 쓰는 값 하나. 대기 집합 밖이라 대기 탭·자동 이동과 겹치지 않는다. */
+export const MENTOR_APPROVAL_HOLD_STATUSES: readonly string[] = [MENTOR_HOLD_STATUS];
 
 /** 재제출 탭 — `requestMentorDocumentsAction` 이 쓰는 값 `under_review`(상태 사전과 동일. 오너 확정: 코드가 쓰는 값이 정답). */
 export const MENTOR_APPROVAL_RESUBMIT_STATUSES: readonly string[] = ["under_review"];
@@ -71,6 +78,8 @@ export function mentorApprovalTabStatuses(tab: MentorApprovalTab): readonly stri
       return ["rejected"];
     case "under_review":
       return MENTOR_APPROVAL_RESUBMIT_STATUSES;
+    case "on_hold":
+      return MENTOR_APPROVAL_HOLD_STATUSES;
     case "all":
     default:
       return null;
