@@ -20,10 +20,6 @@ export type { AdminSettlementListItem, AdminSettlementSummary } from "@/lib/admi
 
 type Row = Record<string, unknown>;
 
-function fmt(e: PostgrestError | null): string | null {
-  return e ? e.message : null;
-}
-
 // W4(C10): firstReadableAdminTable(후보 테이블 순회 helper) 삭제 — 전 호출부(대시보드 감사
 // 카운트·리뷰 조치/상세·환불 상세·분쟁 목록/상세) 정본 단일 조회로 전환 완료, 활성 호출자 0.
 
@@ -712,20 +708,6 @@ export async function countAdminAcademicRecordChangesByStatus(
   return out;
 }
 
-export async function loadAdminReviewsList(supabase: SupabaseClient, limit = 50): Promise<AdminListResult> {
-  // W4(C10): reviews 고정(mentor_reviews/mentor_review 는 phantom) + created_at desc 고정 정렬 —
-  // 테이블·정렬 컬럼 프로빙 제거(187 baseline 실측). 에러는 rows 빈 채로 error 에 그대로 표면화.
-  const table = "reviews";
-  const { data, error } = await supabase.from(table).select("*").order("created_at", { ascending: false }).limit(limit);
-  return {
-    table,
-    sourceNote: "최근 생성된 항목부터 표시합니다.",
-    rows: error ? [] : (((data as Row[] | null) ?? [])),
-    error: fmt(error),
-    keyHints: { status: "is_hidden" },
-  };
-}
-
 /** 리뷰 관리 조치용 컬럼 매핑(액션·표시 공통)
  *  W4(C10): reviews.is_hidden·is_blinded·moderation_state 실존(187 baseline 실측) — 후보 컬럼 프로빙을
  *  상수 플랜으로 정본화. 외부 호출부(adminReviewActions) 시그니처 유지를 위해 async export 형태는 유지. */
@@ -753,32 +735,6 @@ export async function probeAdminReviewAuditColumnNames(
   _table: string
 ): Promise<AdminReviewAuditColumnNames> {
   return { moderationState: "moderation_state", moderatedAt: "moderated_at", moderatedBy: "moderated_by" };
-}
-
-export type AdminReviewsPageMeta = {
-  table: string;
-  authorColumn: string | null;
-  ratingColumn: string | null;
-  bodyColumn: string | null;
-  mentorColumn: string | null;
-  plan: AdminReviewModerationPlan;
-};
-
-export async function loadAdminReviewsPage(
-  supabase: SupabaseClient,
-  limit = 50
-): Promise<{ list: AdminListResult; meta: AdminReviewsPageMeta | null }> {
-  const list = await loadAdminReviewsList(supabase, limit);
-  if (!list.table) {
-    return { list, meta: null };
-  }
-  const table = list.table;
-  // W4(C10): reviews.author_id·rating·body·mentor_id 고정(123_reviews_converge 가 legacy 후보 컬럼 제거) — 컬럼 프로빙 삭제.
-  const plan = await probeAdminReviewModerationPlan(supabase, table);
-  return {
-    list,
-    meta: { table, authorColumn: "author_id", ratingColumn: "rating", bodyColumn: "body", mentorColumn: "mentor_id", plan },
-  };
 }
 
 const COSI_TABLE = "custom_order_settlement_items" as const;

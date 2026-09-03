@@ -120,7 +120,14 @@ const DIRECT_ACCESS_EXEMPT: Record<string, string> = {
   "lib/admin/adminDashboardExtended.ts": "관리자 대시보드 집계(admin 클라이언트)",
   "lib/admin/refundConsoleQueries.ts":
     "관리자 환불 화면 조회(PR-3 — 서비스 롤 우선/세션 폴백 · 요청자·처리자·멘토 표시명 + 요청자 이름·이메일 검색 users 조인 · 이중 requireRole admin 가드 뒤, users_admin_select_all 로 읽힘)",
-  "lib/admin/mentorActivityQueries.ts": "관리자 활동 이벤트 조회(admin 클라이언트 — 멘토 표시명)",
+  "lib/admin/mentorActivityQueries.ts":
+    "PR-11 멘토 활동 — 관리자 전용 service_role 읽기: 승인 멘토 전원(mentor_profiles 활동 상태·이탈 플래그) + 표시명·닉네임 검색(users). 이중 requireRole admin 가드 뒤 · 공개 경로 호출부 없음",
+  "lib/admin/adminCommunityContentQueries.ts":
+    "PR-11 커뮤니티 관리 — 작성자 표시명 + 작성자 이름·닉네임·이메일 검색 users 조인. mentorProfilesAdminReadClient: 서비스 롤 우선/세션 폴백 · 이중 requireRole admin 가드 뒤, users_admin_select_all 로 읽힘",
+  "lib/admin/adminReviewQueries.ts":
+    "PR-11 리뷰 관리 — 멘토·작성자·처리자 표시명 + 멘토·작성자 이름·닉네임·이메일 검색 users 조인. mentorProfilesAdminReadClient: 서비스 롤 우선/세션 폴백 · 이중 requireRole admin 가드 뒤",
+  "lib/admin/schoolClassificationQueries.ts":
+    "PR-11 등급 분류 — 미분류 멘토의 입력 대학명·학과(mentor_profiles) 읽기. mentorProfilesAdminReadClient: 서비스 롤 우선/세션 폴백 · 이중 requireRole admin 가드 뒤 · 쓰기 없음",
   "lib/admin/contentReportQueueQueries.ts":
     "관리자 콘텐츠 검수 목록(PR-5 — 신고자 표시명 + 신고자 이름·이메일 검색 users 조인. mentorProfilesAdminReadClient: 서비스 롤 우선/세션 폴백 · 이중 requireRole admin 가드 뒤, users_admin_select_all 로 읽힘)",
   "lib/admin/academicRecordChangeQueries.ts":

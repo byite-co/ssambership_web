@@ -260,6 +260,44 @@ const DICTIONARY = {
     executing: { label: "실행 중", tone: "info" },
     completed: { label: "완료", tone: "success", risk: "high" },
   },
+
+  /**
+   * CHECK 없음(123_reviews_converge `moderation_state text not null default 'visible'`) — **이 사전이 유일한 허용 목록**이다.
+   * 값 4종은 `adminReviewActions` 가 쓰는 것 전부(setModerationState visible·hidden·blinded + reviewDone enum reviewed). PR-11 리뷰 관리 등재.
+   * 화면 표시는 `is_blinded` > `is_hidden` > `moderation_state` 순으로 접은 유효 상태(`reviewConsole.reviewEffectiveState`)에 이 라벨을 쓴다.
+   */
+  "reviews.moderation_state": {
+    visible: { label: "공개", tone: "success" },
+    hidden: { label: "숨김", tone: "warning" },
+    blinded: { label: "블라인드", tone: "danger" },
+    reviewed: { label: "검토 완료", tone: "info" },
+  },
+
+  /**
+   * CHECK 2개의 교집합(037 `community_posts_status_chk` 3값 · 구 `community_posts_status_check` 4값 — `deleted` 는 3값 쪽이 막는다) — 3값.
+   * 삭제됨은 status 가 아니라 `deleted_at IS NOT NULL`(147 soft-delete)로 판정한다. PR-11 커뮤니티 관리 등재.
+   */
+  "community_posts.status": {
+    draft: { label: "임시", tone: "neutral" },
+    published: { label: "게시", tone: "success" },
+    hidden: { label: "숨김", tone: "warning" },
+  },
+
+  /** CHECK shortform_posts_status_chk (038) — 3값. 숏폼은 soft-delete 컬럼이 없다(관리자 삭제 = 하드 DELETE). */
+  "shortform_posts.status": {
+    draft: { label: "임시", tone: "neutral" },
+    published: { label: "게시", tone: "success" },
+    hidden: { label: "숨김", tone: "warning" },
+  },
+
+  /**
+   * CHECK 2개의 교집합(016 `community_comments_status_chk` 2값 · 20260803 `community_comments_status_check` 3값 — `deleted` 는 2값 쪽이 막는다) — 2값.
+   * 게시판 댓글 정본(`comments.is_deleted`)과 브리지(163·164)로 양방향 동기(visible ↔ false · hidden ↔ true).
+   */
+  "community_comments.status": {
+    visible: { label: "게시", tone: "success" },
+    hidden: { label: "숨김", tone: "warning" },
+  },
 } as const;
 
 export type AdminStatusDictionaryKey = keyof typeof DICTIONARY;

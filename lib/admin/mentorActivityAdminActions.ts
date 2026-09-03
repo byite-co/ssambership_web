@@ -30,6 +30,7 @@ async function loadEvent(admin: ReturnType<typeof createServiceRoleClient>, even
 export async function approveMentorAbandonmentHoldAction(formData: FormData) {
   const { user } = await requireRole("admin");
   const eventId = textFromForm(formData.get("eventId"));
+  const reason = textFromForm(formData.get("reason"));
   if (!eventId) redirect(back("error", "이벤트를 식별할 수 없습니다."));
 
   // D-AD-4: service role 없으면 fail-closed(한글 안내) — 미가공 500 방지.
@@ -50,7 +51,7 @@ export async function approveMentorAbandonmentHoldAction(formData: FormData) {
     actionType: "mentor_abandonment_hold_approved",
     targetType: "mentor_activity_event",
     targetId: eventId,
-    detail: { mentor_id: ev.mentor_id },
+    detail: { mentor_id: ev.mentor_id, reason: reason || null },
   });
   revalidatePath(PATH);
   redirect(back("ok", "정산 보류를 확정했습니다."));
@@ -60,6 +61,7 @@ export async function approveMentorAbandonmentHoldAction(formData: FormData) {
 export async function releaseMentorSettlementHoldAction(formData: FormData) {
   const { user } = await requireRole("admin");
   const eventId = textFromForm(formData.get("eventId"));
+  const reason = textFromForm(formData.get("reason"));
   if (!eventId) redirect(back("error", "이벤트를 식별할 수 없습니다."));
 
   // D-AD-4: service role 없으면 fail-closed(한글 안내).
@@ -101,7 +103,7 @@ export async function releaseMentorSettlementHoldAction(formData: FormData) {
     actionType: "mentor_settlement_hold_released",
     targetType: "mentor_activity_event",
     targetId: eventId,
-    detail: { mentor_id: ev.mentor_id, restored: restoredCount },
+    detail: { mentor_id: ev.mentor_id, restored: restoredCount, reason: reason || null },
   });
   revalidatePath(PATH);
   redirect(back("ok", `정산 보류를 해제(구제)했습니다. ${restoredCount}건 복원.`));
@@ -111,6 +113,7 @@ export async function releaseMentorSettlementHoldAction(formData: FormData) {
 export async function finalizeMentorTerminationAdminAction(formData: FormData) {
   const { user } = await requireRole("admin");
   const mentorId = textFromForm(formData.get("mentorId"));
+  const reason = textFromForm(formData.get("reason"));
   if (!mentorId) redirect(back("error", "멘토를 식별할 수 없습니다."));
 
   // D-AD-4: service role 없으면 fail-closed(한글 안내).
@@ -125,7 +128,7 @@ export async function finalizeMentorTerminationAdminAction(formData: FormData) {
     actionType: "mentor_termination_finalized",
     targetType: "user",
     targetId: mentorId,
-    detail: res.summary ?? {},
+    detail: { ...(res.summary ?? {}), reason: reason || null },
   });
   revalidatePath(PATH);
   redirect(back("ok", `활동 종료를 정리했습니다. 환불 ${res.summary?.refundsCreated ?? 0}건 생성.`));

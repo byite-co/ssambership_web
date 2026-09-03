@@ -138,6 +138,26 @@ const FIXTURE: Record<
     values: ["pending", "paid", "expired", "canceled"],
     inventory: false,
   },
+  "reviews.moderation_state": {
+    // PR-11 리뷰 관리 — CHECK 없음(123 `moderation_state text not null default 'visible'`) → 사전이 유일 허용 목록. 값은 adminReviewActions 가 쓰는 4종(아래 전용 테스트가 소스 대조).
+    values: ["visible", "hidden", "blinded", "reviewed"],
+    inventory: false,
+  },
+  "community_posts.status": {
+    // PR-11 커뮤니티 관리 — CHECK 2개(037 `_chk` 3값 · 구 `_check` 4값)의 교집합. 인벤토리 파서는 CHECK 1개를 전제하므로 아래 전용 테스트가 교집합으로 대조한다.
+    values: ["draft", "published", "hidden"],
+    inventory: false,
+  },
+  "shortform_posts.status": {
+    values: ["draft", "published", "hidden"],
+    constraint: { name: "shortform_posts_status_chk", file: BASELINE },
+    inventory: true,
+  },
+  "community_comments.status": {
+    // PR-11 — CHECK 2개(016 `_chk` 2값 · 20260803 `_check` 3값)의 교집합. 아래 전용 테스트가 교집합으로 대조한다.
+    values: ["visible", "hidden"],
+    inventory: false,
+  },
   "payout_runs.status": {
     // PR-9 정산 지급 이력 — baseline 106 create table 인라인 CHECK(인벤토리 payout_runs_status_check).
     values: ["executing", "completed"],
@@ -192,7 +212,7 @@ function checkValuesFromInventory(table: string, column: string): string[] | nul
 
 // ── ① 사전 == 픽스처 ───────────────────────────────────────────────────────────
 
-test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼 + PR-2 학교 등급·계열 2개 + PR-5 학적 변경·맞춤의뢰 주문 2개 + PR-8 질문 스레드 상태·숙달 2개 + PR-9 충전 주문·지급 실행 2개 + PR-10 공지 대상 1개)", () => {
+test("사전 키 집합 == 픽스처 키 집합(지시서 §3 '반드시 포함할 것' 11개 컬럼 + PR-2 학교 등급·계열 2개 + PR-5 학적 변경·맞춤의뢰 주문 2개 + PR-8 질문 스레드 상태·숙달 2개 + PR-9 충전 주문·지급 실행 2개 + PR-10 공지 대상 1개 + PR-11 리뷰 상태·커뮤니티 3테이블 상태 4개)", () => {
   assert.deepEqual(sorted(ADMIN_STATUS_DICTIONARY_KEYS), sorted(Object.keys(FIXTURE)));
 });
 
@@ -402,4 +422,34 @@ test("AdminStatusPill: 사전(resolveAdminStatus) 경유 · DS StatusBadge 로 �
 test("사전 모듈은 React·@/ import 없이 node 에서 단독 로드된다(계약 테스트 전제)", () => {
   const src = read("lib/admin/adminStatusDictionary.ts");
   assert.ok(!/^import /m.test(src), "사전은 import 없는 순수 모듈이어야 한다");
+});
+
+// ── PR-11: 리뷰 상태(CHECK 없음) · 커뮤니티 상태(CHECK 2개 교집합) ─────────────
+
+/** 같은 컬럼에 CHECK 가 여러 개면 실제 허용 집합은 교집합이다(한쪽이 막는 값은 못 쓴다). */
+function checkValuesIntersectionFromInventory(table: string, column: string): string[] | null {
+  const rows = inventory.filter(
+    (r) => r.schema === "public" && r.table === table && r.contype === "c" && new RegExp(`\\(${column} = ANY \\(ARRAY\\[`).test(r.definition)
+  );
+  if (rows.length === 0) return null;
+  const sets = rows.map((r) => new Set(quotedLiterals(r.definition)));
+  return [...sets[0]].filter((v) => sets.every((s) => s.has(v)));
+}
+
+test("reviews.moderation_state: DB 에 CHECK 가 없다 → 사전이 유일한 허용 목록(4값) · 값은 adminReviewActions 가 실제로 쓰는 것 전부", () => {
+  assert.equal(checkValuesFromInventory("reviews", "moderation_state"), null);
+  const actions = read("lib/admin/adminReviewActions.ts");
+  for (const v of ["hidden", "visible", "blinded"]) assert.ok(actions.includes(`setModerationState(patch, audit, "${v}")`), `액션이 쓰는 값 ${v}`);
+  assert.ok(read("lib/admin/adminQueries.ts").includes('reviewDone: { column: "moderation_state", kind: "enum", enumValue: "reviewed" }'), "검토 완료 값 reviewed");
+  assert.deepEqual(["visible", "hidden", "blinded", "reviewed"].map((v) => resolveAdminStatus("reviews", "moderation_state", v).label), ["공개", "숨김", "블라인드", "검토 완료"]);
+});
+
+test("community_posts.status · community_comments.status: CHECK 가 2개라 교집합이 허용 집합 — deleted 는 막힌다(삭제됨은 deleted_at 판정)", () => {
+  assert.deepEqual(sorted(checkValuesIntersectionFromInventory("community_posts", "status") ?? []), sorted(["draft", "published", "hidden"]));
+  assert.deepEqual(sorted(checkValuesIntersectionFromInventory("community_comments", "status") ?? []), sorted(["visible", "hidden"]));
+  assert.ok(!adminStatusAllowedValues("community_posts", "status").includes("deleted"));
+  assert.ok(!adminStatusAllowedValues("community_comments", "status").includes("deleted"));
+  assert.ok(read(BASELINE).includes("check (status in ('draft', 'published', 'hidden'))") || read(BASELINE).includes("check (status in ('draft','published','hidden'))"), "037/038 CHECK 원문");
+  assert.deepEqual(["published", "hidden", "draft"].map((v) => resolveAdminStatus("community_posts", "status", v).label), ["게시", "숨김", "임시"]);
+  assert.deepEqual(["visible", "hidden"].map((v) => resolveAdminStatus("community_comments", "status", v).label), ["게시", "숨김"]);
 });

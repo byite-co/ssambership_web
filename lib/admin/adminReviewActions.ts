@@ -14,8 +14,9 @@ import {
   type AdminReviewAuditColumnNames,
 } from "@/lib/admin/adminQueries";
 import type { AdminReviewModerationPlan } from "@/lib/admin/reviewLabels";
+import { REVIEW_BASE_PATH, isSafeReviewReturnTo } from "@/lib/admin/reviewConsole";
 
-const PATH = "/admin/reviews";
+const PATH = REVIEW_BASE_PATH;
 
 // W4(C10): 리뷰 정본 테이블은 public.reviews 뿐(mentor_reviews/mentor_review — 187 baseline 부재).
 // 구 REVIEW_TABLE_CANDIDATES 프로빙(firstReadableAdminTable) 제거.
@@ -27,14 +28,18 @@ function textFromForm(v: FormDataEntryValue | null): string {
   return typeof v === "string" ? v.trim() : "";
 }
 
-function errUrl(msg: string) {
-  const q = new URLSearchParams();
-  q.set("error", msg);
-  return `${PATH}?${q.toString()}`;
+/** 복귀 경로(PR-11): 폼의 `returnTo`(리뷰 상세·목록)가 리뷰 화면 안이면 거기로, 아니면 목록으로. 플래시는 쿼리에 덧붙인다. */
+function withFlash(returnTo: string, key: "ok" | "error", value: string) {
+  const base = isSafeReviewReturnTo(returnTo) ? returnTo : PATH;
+  return `${base}${base.includes("?") ? "&" : "?"}${key}=${encodeURIComponent(value)}`;
 }
 
-function okUrl(kind: string) {
-  return `${PATH}?ok=${encodeURIComponent(kind)}`;
+function errUrl(msg: string, returnTo = "") {
+  return withFlash(returnTo, "error", msg);
+}
+
+function okUrl(kind: string, returnTo = "") {
+  return withFlash(returnTo, "ok", kind);
 }
 
 function safeMsg(raw: string | null | undefined): string {
@@ -96,12 +101,13 @@ export async function moderateAdminReviewAction(formData: FormData) {
   const adminUserId = user.id;
   const reviewId = textFromForm(formData.get("reviewId"));
   const action = textFromForm(formData.get("action")).toLowerCase();
+  const returnTo = textFromForm(formData.get("returnTo"));
 
   if (!reviewId) {
-    redirect(errUrl(safeMsg("리뷰를 식별할 수 없습니다.")));
+    redirect(errUrl(safeMsg("리뷰를 식별할 수 없습니다."), returnTo));
   }
   if (!ACTION_SET.has(action)) {
-    redirect(errUrl(safeMsg("허용되지 않은 조치입니다.")));
+    redirect(errUrl(safeMsg("허용되지 않은 조치입니다."), returnTo));
   }
 
   let admin: SupabaseClient;
@@ -119,7 +125,7 @@ export async function moderateAdminReviewAction(formData: FormData) {
 
   if (action === "hide") {
     if (!plan.hide) {
-      redirect(errUrl(safeMsg("숨김 처리에 필요한 항목이 스키마에 없습니다.")));
+      redirect(errUrl(safeMsg("숨김 처리에 필요한 항목이 스키마에 없습니다."), returnTo));
     }
     applyHiddenSemantic(patch, plan, true);
     if (plan.blind) patch[plan.blind.column] = false;
@@ -127,7 +133,7 @@ export async function moderateAdminReviewAction(formData: FormData) {
     applyModerationAuditFields(patch, audit, adminUserId);
   } else if (action === "restore") {
     if (!plan.hide && !plan.blind) {
-      redirect(errUrl(safeMsg("복원에 필요한 항목이 스키마에 없습니다.")));
+      redirect(errUrl(safeMsg("복원에 필요한 항목이 스키마에 없습니다."), returnTo));
     }
     if (plan.blind) patch[plan.blind.column] = false;
     applyHiddenSemantic(patch, plan, false);
@@ -135,7 +141,7 @@ export async function moderateAdminReviewAction(formData: FormData) {
     applyModerationAuditFields(patch, audit, adminUserId);
   } else if (action === "blind") {
     if (!plan.blind) {
-      redirect(errUrl(safeMsg("블라인드 처리에 필요한 항목이 스키마에 없습니다.")));
+      redirect(errUrl(safeMsg("블라인드 처리에 필요한 항목이 스키마에 없습니다."), returnTo));
     }
     patch[plan.blind.column] = true;
     applyHiddenSemantic(patch, plan, false);
@@ -143,7 +149,7 @@ export async function moderateAdminReviewAction(formData: FormData) {
     applyModerationAuditFields(patch, audit, adminUserId);
   } else if (action === "review") {
     if (!plan.reviewDone) {
-      redirect(errUrl(safeMsg("검토 완료 표시에 필요한 항목이 스키마에 없습니다.")));
+      redirect(errUrl(safeMsg("검토 완료 표시에 필요한 항목이 스키마에 없습니다."), returnTo));
     }
     if (plan.reviewDone.kind === "timestamp") {
       patch[plan.reviewDone.column] = new Date().toISOString();
@@ -155,10 +161,10 @@ export async function moderateAdminReviewAction(formData: FormData) {
 
   const { touched, errorMsg } = await runReviewUpdate(table, reviewId, patch);
   if (errorMsg) {
-    redirect(errUrl(safeMsg(errorMsg)));
+    redirect(errUrl(safeMsg(errorMsg), returnTo));
   }
   if (!touched) {
-    redirect(errUrl(safeMsg("대상 리뷰를 찾지 못했거나 이미 동일한 상태입니다.")));
+    redirect(errUrl(safeMsg("대상 리뷰를 찾지 못했거나 이미 동일한 상태입니다."), returnTo));
   }
 
   const session = await createClient();
@@ -171,6 +177,7 @@ export async function moderateAdminReviewAction(formData: FormData) {
   });
 
   revalidatePath(PATH);
+  revalidatePath(`${PATH}/${reviewId}`);
   revalidatePath("/admin");
-  redirect(okUrl(action === "review" ? "review" : action));
+  redirect(okUrl(action === "review" ? "review" : action, returnTo));
 }
