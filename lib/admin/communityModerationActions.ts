@@ -2,10 +2,11 @@
 
 /**
  * 관리자 직접 모더레이션 server actions — 신고가 없어도 재량으로
- * community_posts / shortform_posts / community_comments 처리.
+ * community_posts / shortform_posts / community_comments / comments 처리.
  *
  * 동일 처리 헬퍼(`applyContentModeration`) 는 신고-경유 액션도 사용 →
- * 두 경로 결과 일관.
+ * 두 경로 결과 일관. PR-W2: 삭제 액션은 하드 DELETE 가 아니라 소프트 삭제(deleted_at=now() · deleted_by=조치 관리자)이고,
+ * 복원 액션은 숨김 해제와 삭제 해제(deleted_at NULL)를 함께 한다(삭제됨 탭의 복원 버튼 = 같은 액션).
  */
 
 import { redirect } from "next/navigation";
@@ -72,6 +73,7 @@ async function runDirectModeration(args: {
     targetType: args.targetType,
     targetId: args.targetId,
     intent: args.intent,
+    actorId: user.id,
   });
   if (!result.ok) {
     redirect(errUrl(`처리 실패: ${result.error}`, args.returnTo));

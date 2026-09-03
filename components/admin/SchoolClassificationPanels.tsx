@@ -1,6 +1,7 @@
 /**
- * 등급 분류 화면(PR-11 §3 · PR-W1 정정)의 섹션 부품 — 미분류 멘토 목록(맨 위 · 행별 `등급 정정` 폼) · 등급별 분포 · 판정 규칙(DB 트리거의 LIKE 패턴 표) ·
- * 카탈로그(읽기 전용) · 학교명 매핑(읽기 전용) · 캠퍼스 표기 멘토. 전부 Server Component.
+ * 등급 분류 화면(PR-11 §3 · PR-W1 정정 · PR-W2)의 섹션 부품 — 미분류 멘토 목록(맨 위 · 행별 `등급 정정` 폼) · 등급별 분포 · 판정 규칙(DB 트리거의 LIKE 패턴 표 ·
+ * 폴백 그외 · 대학명 없음 미분류 — SQL 193) · 카탈로그(읽기 전용) · 캠퍼스 표기 멘토. 전부 Server Component.
+ * 학교명 매핑 표 섹션은 DB-2 SQL 195(테이블 DROP)에 맞춰 PR-W2 에서 내렸다.
  * 유일한 폼은 미분류 행의 등급 정정이며 기존 확정 RPC 액션(`approveMentorSchoolVerificationAction`)을 그대로 쓴다(새 쓰기 경로 0 · stateChange).
  * 그 밖의 편집 폼은 없다(§0-B 실측에 따라 판정에 영향 없는 편집을 내놓지 않는다).
  */
@@ -18,8 +19,6 @@ import {
   MAJOR_CATEGORY_LIKE_RULES,
   MAJOR_CATEGORY_VALUES,
   SCHOOL_CATALOG_FIXED_NOTICE,
-  SCHOOL_MAPPING_EMPTY_LABEL,
-  SCHOOL_MAPPING_READONLY_NOTE,
   SCHOOL_RULE_HARDCODED_NOTICE,
   SCHOOL_RULE_SOURCE,
   SCHOOL_TIER_CORRECTION_BUTTON_LABEL,
@@ -30,6 +29,7 @@ import {
   SCHOOL_TIER_CORRECTION_PENDING_LABEL,
   SCHOOL_TIER_CORRECTION_TARGET,
   SCHOOL_TIER_CORRECTION_UNAVAILABLE_LABEL,
+  SCHOOL_TIER_LIKE_BLANK_RESULT,
   SCHOOL_TIER_LIKE_FALLBACK,
   SCHOOL_TIER_LIKE_RULES,
   SCHOOL_TIER_VALUES,
@@ -43,7 +43,7 @@ import {
   type SchoolTierDistributionRow,
   type UnclassifiedMentorItem,
 } from "@/lib/admin/schoolClassificationConsole";
-import type { ClassificationOption, SchoolTierMappingRow } from "@/lib/mentor/schoolClassificationCatalog";
+import type { ClassificationOption } from "@/lib/mentor/schoolClassificationCatalog";
 import { formatKoreanDate } from "@/lib/utils/formatDisplay";
 import { cn } from "@/lib/utils/cn";
 
@@ -166,7 +166,7 @@ export function SchoolClassificationRulesTable() {
     <section className={CARD} data-school-rules>
       <SectionHeader
         title="판정 규칙(DB 트리거)"
-        hint={`${SCHOOL_RULE_SOURCE.trigger} → ${SCHOOL_RULE_SOURCE.tierFunction}() · ${SCHOOL_RULE_SOURCE.majorFunction}() — ${SCHOOL_RULE_SOURCE.migration}`}
+        hint={`${SCHOOL_RULE_SOURCE.trigger} → ${SCHOOL_RULE_SOURCE.tierFunction}() — ${SCHOOL_RULE_SOURCE.tierMigration} · ${SCHOOL_RULE_SOURCE.majorFunction}() — ${SCHOOL_RULE_SOURCE.migration}`}
       />
       <p className="mt-3 rounded-xl border border-blue-100 bg-blue-50/60 px-3 py-2 text-xs font-bold text-slate-800" data-school-rules-notice>
         {SCHOOL_RULE_HARDCODED_NOTICE}
@@ -190,7 +190,13 @@ export function SchoolClassificationRulesTable() {
                   </td>
                 </tr>
               ))}
-              <tr className="border-t border-slate-100">
+              <tr className="border-t border-slate-100" data-school-rule-blank>
+                <td className={cn(TD, "text-slate-500")}>대학명 없음(NULL · 공백)</td>
+                <td className={TD}>
+                  <AdminStatusPill table={SCHOOL_VERIFICATION_TABLE} column="school_tier" value={SCHOOL_TIER_LIKE_BLANK_RESULT} size="sm" />
+                </td>
+              </tr>
+              <tr className="border-t border-slate-100" data-school-rule-fallback>
                 <td className={cn(TD, "text-slate-500")}>그 외</td>
                 <td className={TD}>
                   <AdminStatusPill table={SCHOOL_VERIFICATION_TABLE} column="school_tier" value={SCHOOL_TIER_LIKE_FALLBACK} size="sm" />
@@ -260,44 +266,6 @@ export function SchoolClassificationCatalog({ schoolTiers, majorCategories }: { 
         <CatalogList title={`학교 등급 (${SCHOOL_TIER_VALUES.length})`} values={SCHOOL_TIER_VALUES} column="school_tier" options={schoolTiers} />
         <CatalogList title={`전공 계열 (${MAJOR_CATEGORY_VALUES.length})`} values={MAJOR_CATEGORY_VALUES} column="verified_major_category" options={majorCategories} />
       </div>
-    </section>
-  );
-}
-
-/** 학교명 → 학교군 매핑 — 읽기 전용(§8-3: 판정에 영향 없는 편집을 가능해 보이게 하지 않는다). */
-export function SchoolClassificationMappingTable({ rows, error }: { rows: SchoolTierMappingRow[]; error: string | null }) {
-  return (
-    <section className={CARD} data-school-mappings>
-      <SectionHeader title="학교명 → 학교군 매핑(읽기 전용)" count={rows.length} hint={SCHOOL_MAPPING_READONLY_NOTE} />
-      {error ? <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">매핑 표를 불러오지 못했습니다.</p> : null}
-      {rows.length === 0 ? (
-        <p className="mt-3 rounded-xl border border-dashed border-slate-200 py-6 text-center text-sm font-semibold text-slate-500">{SCHOOL_MAPPING_EMPTY_LABEL}</p>
-      ) : (
-        <div className="mt-3 overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead className="bg-slate-50/60">
-              <tr>
-                <th className={TH}>학교명</th>
-                <th className={TH}>학교군</th>
-                <th className={TH}>메모</th>
-                <th className={TH}>활성</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((m) => (
-                <tr key={m.id} className="border-t border-slate-100">
-                  <td className={TD}>{m.school_name}</td>
-                  <td className={TD}>
-                    <AdminStatusPill table={SCHOOL_VERIFICATION_TABLE} column="school_tier" value={m.school_tier_code} size="sm" />
-                  </td>
-                  <td className={TD}>{m.note ?? "—"}</td>
-                  <td className={TD}>{m.is_active ? "활성" : "비활성"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </section>
   );
 }

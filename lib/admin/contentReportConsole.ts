@@ -5,11 +5,10 @@
  *   **코드가 실제로 쓰는 6종**만이다. `rejected` 는 어떤 액션도 쓰지 않아(adminReportActions·communityReportActions 실측)
  *   탭에서 뺐다 — 전체 탭 건수에는 포함된다. **탭 라벨은 상태 사전(`content_reports.status`)의 라벨 그대로**(전체 탭만 화면 고유).
  * - 오래된 신고가 위(`created_at asc`). 미처리(pending·reviewing) 건의 경과 시간이 24시간을 넘으면 주의색, 48시간을 넘으면 위험색.
- * - 조치 등급: 검토 중·처리 완료·기각·숨김·복구 = stateChange(한 줄 확인) · 삭제 = destructive(대상 ID 재입력).
- *   삭제 모달에는 안전한 대안 `숨김으로 대신하기` 버튼을 함께 둔다.
- * - 삭제 방식은 `communityModerationCore.applyContentModeration` 그대로다(바꾸지 않는다):
- *   게시판 글(community_post)은 soft-delete(deleted_at) → 복구 가능 · 숏폼·댓글은 하드 DELETE → 복구 불가(8/30 실사).
- *   summary 는 그 사실을 대상 종류별로 명시한다.
+ * - 조치 등급: 검토 중·처리 완료·기각·숨김·복구·삭제 전부 stateChange(한 줄 확인). 삭제 모달에는 대안 `숨김으로 대신하기` 버튼을 함께 둔다.
+ * - 삭제 방식은 `communityModerationCore.applyContentModeration` 의 소프트 삭제다(PR-W2 · DB-2 SQL 194):
+ *   게시판 글·숏폼·댓글 전부 deleted_at/deleted_by UPDATE → 복구 가능(커뮤니티 관리 삭제됨 탭 · 신고 상세의 콘텐츠 복구). 하드 DELETE 경로 0.
+ *   summary 는 `삭제 후 복구할 수 있습니다` 로 통일하고, 미지원 유형만 '신고 상태만 변경' 을 말한다.
  * - 서버 액션(`updateContentReportStatusAction` · `updateContentReportModerationAction`)이 읽는 필드명
  *   (`reportId` · `nextStatus` · `intent` · `note`)은 바꾸지 않는다. DB 쓰기 불변.
  *
@@ -98,13 +97,11 @@ export function contentReportTargetLabel(targetType: string | null | undefined):
   return "기타";
 }
 
-/** 삭제 조치가 실제로 하는 일 — `applyContentModeration` 의 분기와 1:1 */
-export type ContentReportDeleteEffect = "soft_delete" | "hard_delete" | "report_only";
+/** 삭제 조치가 실제로 하는 일 — `applyContentModeration` 과 1:1: 지원 유형 4종 전부 소프트 삭제(deleted_at/deleted_by) · 미지원은 신고 상태만. */
+export type ContentReportDeleteEffect = "soft_delete" | "report_only";
 
 export function contentReportDeleteEffect(kind: ContentReportTargetKind): ContentReportDeleteEffect {
-  if (kind === "community_post") return "soft_delete";
-  if (kind === "shortform_post" || kind === "community_comment" || kind === "board_comment") return "hard_delete";
-  return "report_only";
+  return kind ? "soft_delete" : "report_only";
 }
 
 function kindLabel(kind: ContentReportTargetKind): string {
@@ -116,11 +113,9 @@ function kindLabel(kind: ContentReportTargetKind): string {
 
 export const CONTENT_REPORT_UNSUPPORTED_TARGET_NOTE = "지원되지 않는 대상 유형이라 콘텐츠는 바뀌지 않습니다.";
 
-/** 삭제 확인 summary — 대상 종류별 복구 가능 여부를 명시한다(게시판 글 복구 가능 · 숏폼·댓글 복구 불가). */
+/** 삭제 확인 summary — 지원 유형은 전부 `삭제 후 복구할 수 있습니다`(소프트 삭제) · 미지원 유형은 신고 상태만. */
 export function buildContentReportDeleteSummary(kind: ContentReportTargetKind): string {
-  const effect = contentReportDeleteEffect(kind);
-  if (effect === "soft_delete") return `이 ${kindLabel(kind)}을 삭제합니다. 게시판 글은 소프트 삭제라 관리자가 복구할 수 있습니다.`;
-  if (effect === "hard_delete") return `이 ${kindLabel(kind)}을 영구 삭제합니다. 복구할 수 없습니다.`;
+  if (contentReportDeleteEffect(kind) === "soft_delete") return `이 ${kindLabel(kind)}을 삭제합니다. 삭제 후 복구할 수 있습니다.`;
   return `${CONTENT_REPORT_UNSUPPORTED_TARGET_NOTE} 신고만 '삭제 처리' 상태가 됩니다.`;
 }
 
@@ -142,14 +137,6 @@ export function buildContentReportStatusSummary(next: ContentReportNextStatus): 
   return "이 신고를 기각합니다. 콘텐츠는 바뀌지 않습니다.";
 }
 
-/** destructive 재입력 문자열 — 대상 ID 앞 8자(UUID 전체 타이핑은 주의 환기가 아니라 벌이다). 대상 ID 가 없으면 신고 ID 로. */
-export const CONTENT_REPORT_CONFIRM_TEXT_LENGTH = 8;
-export function contentReportDeleteConfirmText(targetId: string | null | undefined, reportId: string): string {
-  const t = String(targetId ?? "").trim();
-  const base = t || String(reportId ?? "").trim();
-  return base.slice(0, CONTENT_REPORT_CONFIRM_TEXT_LENGTH);
-}
-
 // ── 조치 목록 — 서버 액션이 읽는 필드명·등급 ──────────────────────────────────
 
 export const CONTENT_REPORT_REPORT_ID_FIELD = "reportId";
@@ -158,7 +145,8 @@ export const CONTENT_REPORT_INTENT_FIELD = "intent";
 export const CONTENT_REPORT_NOTE_FIELD = "note";
 
 export type ContentReportActionKey = "reviewing" | "resolved" | "dismissed" | "hidden" | "restored" | "deleted";
-export type ContentReportActionLevel = "stateChange" | "destructive";
+/** 여섯 조치 전부 stateChange — 삭제도 소프트 삭제라 되돌릴 수 있다(PR-W2 · 재입력 없음). */
+export type ContentReportActionLevel = "stateChange";
 
 export const CONTENT_REPORT_ACTIONS: Readonly<
   Record<ContentReportActionKey, { level: ContentReportActionLevel; label: string; dialogTitle: string; confirmLabel: string; pendingLabel: string }>
@@ -168,7 +156,7 @@ export const CONTENT_REPORT_ACTIONS: Readonly<
   dismissed: { level: "stateChange", label: "기각", dialogTitle: "신고 기각", confirmLabel: "기각", pendingLabel: "처리 중…" },
   hidden: { level: "stateChange", label: "콘텐츠 숨김", dialogTitle: "콘텐츠 숨김", confirmLabel: "숨김", pendingLabel: "숨기는 중…" },
   restored: { level: "stateChange", label: "콘텐츠 복구", dialogTitle: "콘텐츠 복구", confirmLabel: "복구", pendingLabel: "복구 중…" },
-  deleted: { level: "destructive", label: "콘텐츠 삭제", dialogTitle: "콘텐츠 삭제 — 되돌릴 수 없는 작업", confirmLabel: "삭제", pendingLabel: "삭제 중…" },
+  deleted: { level: "stateChange", label: "콘텐츠 삭제", dialogTitle: "콘텐츠 삭제", confirmLabel: "삭제", pendingLabel: "삭제 중…" },
 };
 
 /** 삭제 모달 안의 안전한 대안 버튼이 클릭할 트리거 버튼 id */
@@ -238,7 +226,7 @@ export const CONTENT_REPORT_EMPTY_STATE = {
   stepsTitle: "신고가 들어오면 이렇게 처리합니다",
   steps: [
     "대상 콘텐츠와 신고 사유를 확인합니다",
-    "숨김(복구 가능) · 경고 · 정지 · 삭제(복구 불가) 중 하나를 고릅니다",
+    "숨김(복구 가능) · 경고 · 정지 · 삭제(복구 가능) 중 하나를 고릅니다",
     "처리 결과가 신고자에게 전달됩니다",
   ],
 } as const;

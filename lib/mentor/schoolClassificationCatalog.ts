@@ -23,16 +23,6 @@ export type SchoolClassificationCatalogs = {
   errors: string[];
 };
 
-export type SchoolTierMappingRow = {
-  id: string;
-  school_name: string;
-  school_tier_code: SchoolTier;
-  note: string | null;
-  is_active: boolean;
-  created_at: string | null;
-  updated_at: string | null;
-};
-
 type CatalogRow = Record<string, unknown>;
 
 export function isSchoolTier(value: string): value is SchoolTier {
@@ -132,63 +122,6 @@ export async function loadSchoolClassificationCatalogs(
     source,
     errors: [schoolTiers.error, majorCategories.error].filter((error): error is string => Boolean(error)),
   };
-}
-
-function mapSchoolTierMapping(row: CatalogRow): SchoolTierMappingRow | null {
-  const id = typeof row.id === "string" ? row.id : "";
-  const schoolName = typeof row.school_name === "string" ? row.school_name.trim() : "";
-  const tier = typeof row.school_tier_code === "string" ? row.school_tier_code.trim() : "";
-  if (!id || !schoolName || !isSchoolTier(tier)) return null;
-  return {
-    id,
-    school_name: schoolName,
-    school_tier_code: tier,
-    note: typeof row.note === "string" ? row.note : null,
-    is_active: typeof row.is_active === "boolean" ? row.is_active : true,
-    created_at: typeof row.created_at === "string" ? row.created_at : null,
-    updated_at: typeof row.updated_at === "string" ? row.updated_at : null,
-  };
-}
-
-export async function loadSchoolTierMappings(
-  supabase: SupabaseClient,
-  opts?: { includeInactive?: boolean }
-): Promise<{ rows: SchoolTierMappingRow[]; error: string | null }> {
-  let query = supabase
-    .from("school_tier_mappings")
-    .select("id, school_name, school_tier_code, note, is_active, created_at, updated_at")
-    .order("school_name", { ascending: true });
-
-  if (opts?.includeInactive !== true) {
-    query = query.eq("is_active", true);
-  }
-
-  const { data, error } = await query;
-  if (error) {
-    return { rows: [], error: error.message };
-  }
-
-  return {
-    rows: ((data as CatalogRow[] | null) ?? [])
-      .map(mapSchoolTierMapping)
-      .filter((row): row is SchoolTierMappingRow => row != null),
-    error: null,
-  };
-}
-
-function normalizeSchoolName(value: string): string {
-  return value.normalize("NFKC").replace(/\s+/g, "").toLowerCase();
-}
-
-export function findSchoolTierMappingForSchool(
-  mappings: SchoolTierMappingRow[],
-  schoolName: string | null | undefined
-): SchoolTierMappingRow | null {
-  const normalized = normalizeSchoolName(String(schoolName ?? ""));
-  if (!normalized) return null;
-  return (
-    mappings.find((mapping) => mapping.is_active && normalizeSchoolName(mapping.school_name) === normalized) ?? null
-  );
 }
 
 export function applySchoolClassificationLabels(

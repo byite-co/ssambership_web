@@ -52,7 +52,14 @@ function str(row: Row, key: string): string | null {
  * content_reports 의 target_type/target_id 로 실제 콘텐츠를 조회하고
  * 이미지·영상은 표시용 signed URL 로 변환한다. 조회 실패는 kind 로 구분해
  * 페이지가 신고 처리 자체를 막지 않도록 한다.
+ *
+ * 소프트 삭제(DB-2 SQL 194 · PR-W2)된 콘텐츠도 증거로 읽는다(service_role 우선 · 194 SELECT 정책은 관리자에게 삭제 행을 보여준다) —
+ * `deleted_at` 이 있으면 status 를 'deleted' 로 넘겨 화면이 '삭제됨' 배지를 그린다(삭제가 숨김보다 강하다).
  */
+
+function evidenceStatus(row: Row, fallback: string | null): string | null {
+  return str(row, "deleted_at") ? "deleted" : fallback;
+}
 export async function loadAdminReportEvidence(
   supabase: SupabaseClient,
   targetTypeRaw: string | null | undefined,
@@ -71,7 +78,7 @@ export async function loadAdminReportEvidence(
   if (targetType === "community_post") {
     const { data, error } = await supabase
       .from("community_posts")
-      .select("id, title, body, content, status, author_id, created_at, image_urls")
+      .select("id, title, body, content, status, deleted_at, author_id, created_at, image_urls")
       .eq("id", targetId)
       .maybeSingle();
     if (error) return { kind: "error", message: error.message };
@@ -83,7 +90,7 @@ export async function loadAdminReportEvidence(
       kind: "community_post",
       title: str(row, "title"),
       body: str(row, "body") ?? str(row, "content"),
-      status: str(row, "status"),
+      status: evidenceStatus(row, str(row, "status")),
       authorId: str(row, "author_id"),
       createdAt: str(row, "created_at"),
       imageUrls,
@@ -93,7 +100,7 @@ export async function loadAdminReportEvidence(
   if (targetType === "shortform_post") {
     const { data, error } = await supabase
       .from("shortform_posts")
-      .select("id, title, description, body, status, author_id, created_at, video_url, thumbnail_url")
+      .select("id, title, description, body, status, deleted_at, author_id, created_at, video_url, thumbnail_url")
       .eq("id", targetId)
       .maybeSingle();
     if (error) return { kind: "error", message: error.message };
@@ -103,7 +110,7 @@ export async function loadAdminReportEvidence(
       kind: "shortform_post",
       title: str(row, "title"),
       body: str(row, "description") ?? str(row, "body"),
-      status: str(row, "status"),
+      status: evidenceStatus(row, str(row, "status")),
       authorId: str(row, "author_id"),
       createdAt: str(row, "created_at"),
       videoUrl: await resolveShortformVideoUrl(supabase, str(row, "video_url")),
@@ -114,7 +121,7 @@ export async function loadAdminReportEvidence(
   // 댓글 — 레거시(community_comments)와 게시판 v2(comments)를 모두 시도한다.
   const legacy = await supabase
     .from("community_comments")
-    .select("id, body, status, author_id, post_id, created_at")
+    .select("id, body, status, deleted_at, author_id, post_id, created_at")
     .eq("id", targetId)
     .maybeSingle();
   if (legacy.data) {
@@ -122,7 +129,7 @@ export async function loadAdminReportEvidence(
     return {
       kind: "community_comment",
       body: str(row, "body"),
-      status: str(row, "status"),
+      status: evidenceStatus(row, str(row, "status")),
       authorId: str(row, "author_id"),
       createdAt: str(row, "created_at"),
       postId: str(row, "post_id"),
@@ -130,7 +137,7 @@ export async function loadAdminReportEvidence(
   }
   const board = await supabase
     .from("comments")
-    .select("id, content, is_deleted, author_id, post_id, created_at")
+    .select("id, content, is_deleted, deleted_at, author_id, post_id, created_at")
     .eq("id", targetId)
     .maybeSingle();
   if (board.data) {
@@ -138,7 +145,7 @@ export async function loadAdminReportEvidence(
     return {
       kind: "board_comment",
       body: str(row, "content"),
-      status: row.is_deleted === true ? "hidden" : "visible",
+      status: evidenceStatus(row, row.is_deleted === true ? "hidden" : "visible"),
       authorId: str(row, "author_id"),
       createdAt: str(row, "created_at"),
       postId: str(row, "post_id"),

@@ -71,8 +71,11 @@ function EvidenceSection({ evidence }: { evidence: AdminReportEvidence }) {
     );
   }
 
+  // 소프트 삭제(deleted_at · PR-W2)된 콘텐츠는 '삭제됨' — 관리자는 이 화면에서 '콘텐츠 복구' 로 되돌릴 수 있다.
   const statusBadge =
-    evidence.status === "hidden" ? (
+    evidence.status === "deleted" ? (
+      <span className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-bold text-red-800" data-content-report-evidence-deleted>삭제됨</span>
+    ) : evidence.status === "hidden" ? (
       <span className="rounded-lg border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-bold text-amber-800">숨김</span>
     ) : (
       <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">

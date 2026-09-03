@@ -1,10 +1,11 @@
-// 계약 테스트: 커뮤니티 관리 화면(PR-11 §1) — 종류 탭 · 상태 탭(deleted_at 판정) · 조치 4종 확인 절차(종류별 삭제 방식) · 숨김으로 대신하기 · 빈 상태 · 플래시.
+// 계약 테스트: 커뮤니티 관리 화면(PR-11 §1 · PR-W2 소프트 삭제 통일) — 종류 탭 · 상태 탭(deleted_at 판정 · 세 종류 전부) · 조치 3종 확인 절차(전부 stateChange) ·
+// 숨김으로 대신하기 · 빈 상태 · 플래시.
 // 실행: node --test --experimental-strip-types lib/admin/__contract__/communityContentConsole.contract.test.ts
 //
 // .tsx 는 node --test 로 import 할 수 없으므로(strip-types 는 JSX 미지원):
-//   ① 순수 규칙(종류 3 · 상태 탭 4 · 유효 상태 · 삭제 효과/summary · 재입력 · 조치 가용성 · 링크 · 검색 or() · 플래시 · 빈 상태)은 직접 검증한다
+//   ① 순수 규칙(종류 3 · 상태 탭 4 · 유효 상태 · 삭제 효과/summary(소프트 삭제) · 재입력 없음 · 조치 가용성 · 링크 · 검색 or() · 플래시 · 빈 상태)은 직접 검증한다
 //   ② 렌더·배선 규칙은 소스 스캔 tripwire 로 고정한다(PageScaffold 미사용 · AdminPageLayout/AdminDataTable/AdminStatusPill · 조치 부품 등급 ·
-//      삭제 모달 `숨김으로 대신하기` · 서버 액션·DB 쓰기 불변 · 숏폼·댓글 하드 DELETE 그대로 · 조회 전용)
+//      삭제 모달 `숨김으로 대신하기` · 서버 액션·필드명 불변 · 코어는 소프트 삭제(하드 DELETE 0 · DB-2 SQL 194) · 조회 전용)
 
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -19,15 +20,14 @@ import { CONTENT_REPORT_HIDE_INSTEAD_LABEL } from "../contentReportConsole.ts";
 import {
   COMMUNITY_CONTENT_ACTIONS,
   COMMUNITY_CONTENT_BASE_PATH,
-  COMMUNITY_CONTENT_CONFIRM_TEXT_LENGTH,
   COMMUNITY_CONTENT_DEFAULT_PAGE_SIZE,
   COMMUNITY_CONTENT_DEFAULT_TAB,
   COMMUNITY_CONTENT_DEFAULT_TYPE,
   COMMUNITY_CONTENT_DELETED_LABEL,
-  COMMUNITY_CONTENT_DELETE_EFFECT_LABELS,
+  COMMUNITY_CONTENT_DELETE_EFFECT_LABEL,
   COMMUNITY_CONTENT_EMPTY_STATE,
-  COMMUNITY_CONTENT_HARD_DELETE_BANNER,
   COMMUNITY_CONTENT_HIDE_INSTEAD_LABEL,
+  COMMUNITY_CONTENT_KIND_LABELS,
   COMMUNITY_CONTENT_REASON_FIELD,
   COMMUNITY_CONTENT_RETURN_TO_FIELD,
   COMMUNITY_CONTENT_TABLES,
@@ -46,12 +46,9 @@ import {
   buildCommunityContentTypeTabUrl,
   communityContentActionButtonId,
   communityContentAvailableActions,
-  communityContentDeleteConfirmText,
-  communityContentDeleteEffect,
   communityContentEffectiveStatus,
   communityContentEmptyVariant,
   communityContentFlashOkMessage,
-  communityContentHasDeletedRows,
   communityContentPublicPath,
   communityContentPublishedValue,
   communityContentReportsUrl,
@@ -133,64 +130,60 @@ test("유효 상태: deleted_at 이 있으면 삭제됨(status 무관) · hidden
   assert.equal(communityContentStatusLabel("shortforms", "draft"), "임시");
 });
 
-test("탭 → 서버 필터: 게시·숨김은 deleted_at IS NULL 을 함께 · 삭제됨은 deleted_at IS NOT NULL · 전체는 조건 없음 · 하드 DELETE 종류는 삭제됨 행이 없다", () => {
+test("탭 → 서버 필터: 게시·숨김은 deleted_at IS NULL 을 함께 · 삭제됨은 deleted_at IS NOT NULL · 전체는 조건 없음 — 세 종류 공통(PR-W2)", () => {
   assert.deepEqual(communityContentTabFilter("posts", "published"), { status: "published", deleted: "exclude" });
   assert.deepEqual(communityContentTabFilter("comments", "published"), { status: "visible", deleted: "exclude" });
   assert.deepEqual(communityContentTabFilter("posts", "hidden"), { status: "hidden", deleted: "exclude" });
   assert.deepEqual(communityContentTabFilter("posts", "deleted"), { status: null, deleted: "only" });
   assert.deepEqual(communityContentTabFilter("posts", "all"), { status: null, deleted: "any" });
-  assert.equal(communityContentHasDeletedRows("posts"), true);
-  assert.equal(communityContentHasDeletedRows("shortforms"), false);
-  assert.equal(communityContentHasDeletedRows("comments"), false);
+  for (const t of TYPES) assert.deepEqual(communityContentTabFilter(t, "deleted"), { status: null, deleted: "only" }, `${t}: 삭제됨 탭은 종류 무관`);
 });
 
 // ── 삭제 방식 · summary · 재입력 ─────────────────────────────────────────────
 
-test("삭제 효과 = applyContentModeration 분기 그대로: 게시판 글 soft-delete(복구 가능) · 숏폼·댓글 하드 DELETE(복구 불가) — 삭제 방식은 바꾸지 않았다", () => {
-  assert.equal(communityContentDeleteEffect("posts"), "soft_delete");
-  assert.equal(communityContentDeleteEffect("shortforms"), "hard_delete");
-  assert.equal(communityContentDeleteEffect("comments"), "hard_delete");
-  assert.deepEqual(COMMUNITY_CONTENT_DELETE_EFFECT_LABELS, { soft_delete: "소프트 삭제(복구 가능)", hard_delete: "영구 삭제(복구 불가)" });
+test("삭제 효과 = applyContentModeration 그대로: 세 종류 전부 소프트 삭제(deleted_at/deleted_by UPDATE · 멱등 · 복구 가능) — 하드 DELETE 경로 0(PR-W2 · DB-2 SQL 194)", () => {
+  assert.equal(COMMUNITY_CONTENT_DELETE_EFFECT_LABEL, "소프트 삭제(복구 가능)");
   const core = stripComments(read(MODERATION_CORE));
-  assert.ok(core.includes('if (targetType === "community_post") {') && core.includes(".update({ deleted_at: new Date().toISOString() })"), "게시판 글 soft-delete");
-  assert.ok(core.includes('.delete().eq("id", targetId)'), "그 외 하드 DELETE — 바꾸지 않았다(soft-delete 전환은 DB-2)");
+  assert.ok(core.includes(".update({ deleted_at: new Date().toISOString(), deleted_by: actorId })") && core.includes('.is("deleted_at", null)'), "소프트 삭제 UPDATE(이미 삭제된 행은 건너뜀)");
+  assert.ok(!core.includes(".delete("), "하드 DELETE 없음");
+  assert.ok(!core.includes('if (targetType === "community_post") {'), "종류별 삭제 분기 없음 — 네 테이블 공통");
+  assert.ok(core.includes("statusPatch.deleted_at = null") && core.includes("statusPatch.deleted_by = null"), "복원 = deleted_at/deleted_by 해제(글·숏폼·댓글)");
+  assert.ok(core.includes("{ is_deleted: false, deleted_at: null, deleted_by: null }"), "게시판 댓글 정본(comments) 복원도 deleted_at 해제");
+  assert.ok(core.includes("actorId: string;"), "조치한 관리자 id 가 deleted_by");
 });
 
-test("삭제 summary: 게시판 글 `삭제 후 복구할 수 있습니다` · 숏폼·댓글 첫 줄 `복구 불가` + `영구 삭제됩니다. 복구할 수 없습니다` · 숨김 `복구할 수 있습니다` · 복원 문구", () => {
-  assert.equal(buildCommunityContentDeleteSummary("posts"), "이 게시판 글을 삭제합니다. 삭제 후 복구할 수 있습니다.");
-  for (const t of ["shortforms", "comments"] as const) {
-    const s = buildCommunityContentDeleteSummary(t);
-    assert.ok(s.startsWith(COMMUNITY_CONTENT_HARD_DELETE_BANNER), `${t}: 첫 줄 복구 불가`);
-    assert.ok(s.includes("영구 삭제됩니다. 복구할 수 없습니다"), t);
-    assert.ok(!s.includes("복구할 수 있습니다"), `${t}: 복구 가능 문구 금지`);
-  }
-  assert.equal(COMMUNITY_CONTENT_HARD_DELETE_BANNER, "복구 불가");
+test("삭제 summary: 모든 종류 `삭제 후 복구할 수 있습니다` · 복구 불가·영구 삭제 문구 0 · 숨김 `복구할 수 있습니다` · 복원 문구(삭제된 행 = 다시 게시)", () => {
+  for (const t of TYPES) assert.equal(buildCommunityContentDeleteSummary(t), `이 ${COMMUNITY_CONTENT_KIND_LABELS[t]}을 삭제합니다. 삭제 후 복구할 수 있습니다.`);
+  const pure = stripComments(read(CONSOLE));
+  for (const banned of ["복구 불가", "영구 삭제", "복구할 수 없습니다", "되돌릴 수 없는"]) assert.ok(!pure.includes(banned), `복구 불가 문구 폐기: ${banned}`);
   for (const t of TYPES) assert.ok(buildCommunityContentHideSummary(t).endsWith("숨깁니다. 복구할 수 있습니다."), t);
   assert.equal(buildCommunityContentRestoreSummary("posts", "deleted"), "삭제된 게시판 글을 복구합니다. 다시 게시 상태가 됩니다.");
+  assert.equal(buildCommunityContentRestoreSummary("shortforms", "deleted"), "삭제된 숏폼을 복구합니다. 다시 게시 상태가 됩니다.");
+  assert.equal(buildCommunityContentRestoreSummary("comments", "deleted"), "삭제된 댓글을 복구합니다. 다시 게시 상태가 됩니다.");
   assert.equal(buildCommunityContentRestoreSummary("comments", "hidden"), "이 댓글을 다시 게시합니다.");
 });
 
-test("destructive 재입력 = 대상 ID 앞 8자(모든 종류) — 정책상 불일치면 확인 불가", () => {
-  assert.equal(COMMUNITY_CONTENT_CONFIRM_TEXT_LENGTH, 8);
-  assert.equal(communityContentDeleteConfirmText(UUID), "11111111");
-  const req = resolveAdminConfirmRequirements({ level: "destructive", confirmText: communityContentDeleteConfirmText(UUID) });
-  assert.equal(req.confirmText, "11111111");
-  assert.equal(evaluateAdminConfirm(req, { reason: "", typedConfirmText: "1111111" }).ok, false);
-  assert.equal(evaluateAdminConfirm(req, { reason: "", typedConfirmText: "11111111" }).ok, true);
+test("삭제는 재입력 없음(PR-W2): stateChange 요구 사항에 confirmText 가 없다 · 순수 모듈에 재입력 헬퍼 없음", () => {
+  const req = resolveAdminConfirmRequirements({ level: COMMUNITY_CONTENT_ACTIONS.deleted.level, confirmText: UUID.slice(0, 8) });
+  assert.equal(req.needsDialog, true);
+  assert.equal(req.confirmText, null, "stateChange 는 confirmText 를 받아도 재입력 단계를 만들지 않는다");
+  assert.equal(evaluateAdminConfirm(req, { reason: "", typedConfirmText: "" }).ok, true);
+  assert.ok(!stripComments(read(CONSOLE)).includes("ConfirmText"), "재입력 헬퍼 삭제");
 });
 
 // ── 조치 ────────────────────────────────────────────────────────────────────
 
-test("조치 3종 등급: 숨김·복원 stateChange · 삭제 destructive · 상태별 가용 조치 · 행마다 다른 버튼 id · 숨김 대안 라벨은 PR-5 와 같다 · 필드명 불변", () => {
+test("조치 3종 등급: 숨김·복원·삭제 전부 stateChange(PR-W2 — 삭제도 복구 가능) · 상태별 가용 조치(삭제된 행은 복원만 — 세 종류) · 행마다 다른 버튼 id · 숨김 대안 라벨은 PR-5 와 같다 · 필드명 불변", () => {
   assert.deepEqual(Object.keys(COMMUNITY_CONTENT_ACTIONS), ["hidden", "restored", "deleted"]);
   assert.equal(COMMUNITY_CONTENT_ACTIONS.hidden.level, "stateChange");
   assert.equal(COMMUNITY_CONTENT_ACTIONS.restored.level, "stateChange");
-  assert.equal(COMMUNITY_CONTENT_ACTIONS.deleted.level, "destructive");
+  assert.equal(COMMUNITY_CONTENT_ACTIONS.deleted.level, "stateChange");
+  assert.equal(COMMUNITY_CONTENT_ACTIONS.deleted.dialogTitle, "콘텐츠 삭제");
   for (const a of Object.values(COMMUNITY_CONTENT_ACTIONS)) assert.equal(resolveAdminConfirmRequirements({ level: a.level, confirmText: "x" }).needsDialog, true);
   assert.deepEqual(communityContentAvailableActions("published"), ["hidden", "deleted"]);
   assert.deepEqual(communityContentAvailableActions("hidden"), ["restored", "deleted"]);
   assert.deepEqual(communityContentAvailableActions("draft"), ["deleted"]);
-  assert.deepEqual(communityContentAvailableActions("deleted"), ["restored"], "삭제된 행(게시판 글만 남는다)은 복원만");
+  assert.deepEqual(communityContentAvailableActions("deleted"), ["restored"], "삭제된 행은 복원만(삭제됨 탭 · 세 종류)");
   assert.notEqual(communityContentActionButtonId("hidden", "a"), communityContentActionButtonId("hidden", "b"));
   assert.notEqual(communityContentActionButtonId("hidden", "a"), communityContentActionButtonId("deleted", "a"));
   assert.equal(COMMUNITY_CONTENT_HIDE_INSTEAD_LABEL, CONTENT_REPORT_HIDE_INSTEAD_LABEL);
@@ -289,17 +282,16 @@ test("목록 부품: Server Component · 종류 탭은 화면 렌더(type) · �
   assert.ok(!/style=\{/.test(src) && !/alert\(/.test(src));
 });
 
-test("조치 부품: 'use client' · ConfirmSubmitButton 두 갈래(destructive 1 · stateChange 1) · 삭제는 confirmText + 종류별 summary + 삭제 방식 재표시 + 하드 DELETE 배너 + 숨김으로 대신하기(숨김 모달만 연다) · 기존 서버 액션 9개 · 필드명 상수", () => {
+test("조치 부품: 'use client' · ConfirmSubmitButton 두 갈래(전부 stateChange · destructive 0) · 삭제는 재입력 없이 summary + 삭제 방식(소프트 삭제) 재표시 + 숨김으로 대신하기(숨김 모달만 연다) · 하드 DELETE 배너 없음 · 기존 서버 액션 9개 · 필드명 상수", () => {
   const src = stripComments(read(ACTIONS_UI));
   assert.ok(src.startsWith('"use client"'));
   assert.equal((src.match(/<ConfirmSubmitButton\b/g) ?? []).length, 2);
-  assert.equal((src.match(/level="destructive"/g) ?? []).length, 1);
-  assert.equal((src.match(/level="stateChange"/g) ?? []).length, 1);
+  assert.equal((src.match(/level="destructive"/g) ?? []).length, 0, "PR-W2: 삭제도 stateChange");
+  assert.equal((src.match(/level="stateChange"/g) ?? []).length, 2);
   assert.ok(!/level="(critical|immediate)"/.test(src));
-  assert.ok(src.includes("confirmText={communityContentDeleteConfirmText(targetId)}") && src.includes("summary={buildCommunityContentDeleteSummary(type)}"));
-  assert.ok(src.includes('{ label: "삭제 방식", value: COMMUNITY_CONTENT_DELETE_EFFECT_LABELS[effect] }'), "삭제 방식 재표시");
-  assert.ok(src.includes("data-community-content-hard-delete-banner") && src.includes("{COMMUNITY_CONTENT_HARD_DELETE_BANNER} — 영구 삭제됩니다. 복구할 수 없습니다."), "하드 DELETE 배너(굵게)");
-  assert.ok(src.includes('effect === "hard_delete" ? (') , "배너는 하드 DELETE 종류에만");
+  assert.ok(!src.includes("confirmText=") && src.includes("summary={buildCommunityContentDeleteSummary(type)}"), "재입력 없음");
+  assert.ok(src.includes('{ label: "삭제 방식", value: COMMUNITY_CONTENT_DELETE_EFFECT_LABEL }'), "삭제 방식 재표시(소프트 삭제)");
+  assert.ok(!src.includes("hard-delete-banner") && !src.includes("복구할 수 없습니다") && !src.includes("영구 삭제"), "하드 DELETE 배너·문구 없음");
   assert.ok(src.includes("{COMMUNITY_CONTENT_HIDE_INSTEAD_LABEL}") && src.includes("data-community-content-hide-instead"));
   assert.ok(src.includes('document.getElementById(communityContentActionButtonId("hidden", targetId))?.click()'), "대안 클릭 = 같은 행의 숨김 확인 모달 열기");
   assert.ok(!src.includes("requestSubmit") && !src.includes("AdminConfirmDialog"));
@@ -311,17 +303,19 @@ test("조치 부품: 'use client' · ConfirmSubmitButton 두 갈래(destructive 
   assert.ok(src.includes("name={COMMUNITY_CONTENT_TARGET_ID_FIELD}") && src.includes("name={COMMUNITY_CONTENT_RETURN_TO_FIELD}"));
 });
 
-test("서버 액션·조회: returnTo 는 이 화면 안으로만 · 필드명 targetId/reason 불변 · 코어 삭제 분기 불변 · 조회 모듈은 select 만(deleted_at 판정) · 구 조회 함수 삭제", () => {
+test("서버 액션·조회: returnTo 는 이 화면 안으로만 · 필드명 targetId/reason 불변 · 코어에 조치 관리자 id 전달(deleted_by) · 조회 모듈은 select 만(세 종류 deleted_at 판정) · 구 조회 함수 삭제", () => {
   const actions = stripComments(read(SERVER_ACTIONS));
   assert.ok(actions.includes("isSafeCommunityContentReturnTo(returnTo)"), "복귀 경로 검증");
   assert.equal((actions.match(/returnTo: textFromForm\(formData\.get\("returnTo"\)\)/g) ?? []).length, 12, "12개 액션 전부 returnTo 를 읽는다");
   assert.equal((actions.match(/reason: textFromForm\(formData\.get\("reason"\)\)/g) ?? []).length, 12);
   assert.ok(actions.includes("applyContentModeration({") && actions.includes("actionType: `community_${args.intent}_${args.targetType}`"), "코어·감사 로그 그대로");
+  assert.ok(actions.includes("actorId: user.id,"), "삭제 시 deleted_by = 조치한 관리자");
   const q = stripComments(read(QUERIES));
   assert.ok(!/\.(insert|update|upsert|delete|rpc)\(/.test(q), "조회 전용");
   assert.ok(q.includes('r.not("deleted_at", "is", null)') && q.includes('r.is("deleted_at", null)'), "삭제됨 = deleted_at 판정");
+  assert.equal((q.match(/status, deleted_at, created_at/g) ?? []).length, 3, "글·숏폼·댓글 컬럼 목록 전부 deleted_at 을 읽는다");
+  assert.ok(!q.includes("communityContentHasDeletedRows") && !q.includes('tab === "deleted" &&'), "종류별 삭제됨 탭 특례 없음(세 종류 공통)");
   assert.ok(q.includes("mentorProfilesAdminReadClient(supabase)") && q.includes('.from("content_reports").select("target_id").in("target_id", unique)'), "신고 건수 집계");
-  assert.ok(q.includes('if (args.tab === "deleted" && !communityContentHasDeletedRows(args.type)) return { rows: [], totalCount: 0, error: null };'), "하드 DELETE 종류의 삭제됨 탭은 조회 없이 0");
   assert.ok(!q.includes("loadAdminCommunityPostsListPaged") && !q.includes("countAdminCommunityByStatus"), "구 조회 함수 삭제");
   const pure = stripComments(read(CONSOLE));
   assert.ok(!/from "react"|from "@\//.test(pure), "순수 모듈은 React·@/ import 없음");

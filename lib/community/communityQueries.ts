@@ -193,6 +193,8 @@ export async function loadCommunityComments(
     .eq("post_type", postType)
     .eq("post_id", postId)
     .eq("status", "visible")
+    // PR-W2(DB-2 SQL 194): 소프트 삭제된 댓글 제외 — RLS 와 같은 판정을 쿼리에도 명시(관리자 세션 포함).
+    .is("deleted_at", null)
     .order("created_at", { ascending: true });
 
   if (error) {

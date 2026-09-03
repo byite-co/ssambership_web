@@ -1,15 +1,15 @@
 /**
- * 관리자 · 등급 분류 화면(PR-11 §3 · PR-W1 정정)의 순수 규칙 — 카탈로그(읽기 전용) · 판정 규칙 표(DB 트리거의 LIKE 패턴) · 매핑 표(읽기 전용) ·
+ * 관리자 · 등급 분류 화면(PR-11 §3 · PR-W1 정정 · PR-W2)의 순수 규칙 — 카탈로그(읽기 전용) · 판정 규칙 표(DB 트리거의 LIKE 패턴) ·
  * 등급별 분포 · 미분류 멘토 목록 + 등급 정정(같은 확정 RPC) · 정정 경로 안내.
  *
- * §0-B 실측(DB-1 SQL 192 · 운영 DB 2026-09-03):
+ * §0-B 실측(DB-1 SQL 192 · DB-2 SQL 193/195 적용 완료 · 운영 DB 2026-09-03):
  *   1. 트리거 `trg_auto_school_verification` → `auto_school_verification()` → `school_tier_suggest(university_name)` 는 **LIKE 패턴 하드코딩**이다.
- *      `school_tier_mappings` 를 읽는 함수·트리거·RPC 는 없다(읽는 코드 0 · 행 0). → 매핑 표를 편집해도 판정이 바뀌지 않으므로 화면은 읽기 전용이고
- *      트리거의 패턴 자체를 표로 보여준다(`SCHOOL_TIER_LIKE_RULES` — 계약 테스트가 SQL 192 원문과 대조한다).
+ *      폴백은 DB-2 SQL 193 부터 **그외**(대학명이 NULL·공백이면 미분류). 트리거의 패턴 자체를 표로 보여준다(`SCHOOL_TIER_LIKE_RULES` —
+ *      계약 테스트가 SQL 193(school_tier_suggest)·192(major_category_suggest) 원문과 대조한다). 학교명 매핑 표는 읽는 코드 0 · 행 0 이라
+ *      SQL 195 로 제거됐다 — 화면 섹션·로더·액션도 PR-W2 에서 내렸다.
  *   2. 확정된 행(`approved` + `reviewed_by NOT NULL`)의 정정은 확정 RPC `approve_mentor_school_verification_admin` **한 경로**다(PR-W1 · DB-2 SQL 193 A-2:
  *      approved 는 reviewed_by 유무와 무관하게 허용 · 정정 시 이전 등급·확정자를 감사 로그에 남긴다). 반려·재제출 액션은 여전히 pending·resubmit_required 만 갱신한다.
  *      → 미분류 목록의 `등급 정정` 버튼은 같은 RPC 액션(`approveMentorSchoolVerificationAction`)으로 등급을 '그외'(새 폴백)로 넘긴다(새 쓰기 경로 0).
- *      DB-2(193) 적용 전에는 옛 RPC(192)가 확정된 행을 NOT_REVIEWABLE 로 거절한다(처리 실패 표시 · 데이터 불변 — 오너 허용 구간).
  *
  * 여기의 LIKE 표·판정 헬퍼는 **표시 전용**이다(정본은 DB 함수 · TS 사본으로 판정하지 않는다).
  * node --test 계약 테스트가 직접 import 하므로 React·`@/` import 를 두지 않는다.
@@ -39,11 +39,11 @@ export function majorCategoryLabel(category: string | null | undefined): string 
   return resolveAdminStatus(SCHOOL_VERIFICATION_TABLE, "verified_major_category", category).label;
 }
 
-// ── 판정 규칙 — SQL 192 `school_tier_suggest` · `major_category_suggest` 의 LIKE 패턴(표시용 사본) ───
+// ── 판정 규칙 — SQL 193 `school_tier_suggest` · SQL 192 `major_category_suggest` 의 LIKE 패턴(표시용 사본) ───
 
 export type SchoolLikeRule = { pattern: string; result: string };
 
-/** `school_tier_suggest(p_university_name)` — 접두 LIKE(`x%`). 순서 = CASE 순서. 어느 것도 아니면 미분류. */
+/** `school_tier_suggest(p_university_name)` — 접두 LIKE(`x%`). 순서 = CASE 순서. 대학명이 NULL·공백이면 미분류, 어느 것도 아니면 그외(SQL 193). */
 export const SCHOOL_TIER_LIKE_RULES: readonly SchoolLikeRule[] = [
   { pattern: "서울대%", result: "서연고" },
   { pattern: "연세대%", result: "서연고" },
@@ -59,7 +59,9 @@ export const SCHOOL_TIER_LIKE_RULES: readonly SchoolLikeRule[] = [
   { pattern: "동국대%", result: "건동홍" },
   { pattern: "홍익대%", result: "건동홍" },
 ];
-export const SCHOOL_TIER_LIKE_FALLBACK = SCHOOL_TIER_UNCLASSIFIED;
+export const SCHOOL_TIER_LIKE_FALLBACK = SCHOOL_TIER_OTHER;
+/** 대학명이 NULL·공백일 때(대학명을 못 읽은 경우만) — SQL 193 첫 분기 */
+export const SCHOOL_TIER_LIKE_BLANK_RESULT = SCHOOL_TIER_UNCLASSIFIED;
 
 /** `major_category_suggest(p_department_name)` — 포함 LIKE(`%x%`). 순서 = CASE 순서. 어느 것도 아니면 기타. */
 export const MAJOR_CATEGORY_LIKE_RULES: readonly SchoolLikeRule[] = [
@@ -107,12 +109,13 @@ export const SCHOOL_RULE_SOURCE = {
   majorFunction: "major_category_suggest",
   trigger: "trg_auto_school_verification",
   reassessTrigger: "trg_school_verification_reassess_on_academic_change",
+  /** 트리거 · major_category_suggest · school_tier_suggest 원본 정의 */
   migration: "supabase/sql/192_school_verification_provisional_rule.sql",
+  /** school_tier_suggest 현행 정의(폴백 그외 · NULL/공백 미분류) */
+  tierMigration: "supabase/sql/193_school_tier_fallback_other_and_correction.sql",
 } as const;
 
 export const SCHOOL_RULE_HARDCODED_NOTICE = "판정 규칙은 DB 트리거에 고정돼 있습니다. 이 표를 수정해도 판정이 바뀌지 않습니다.";
-export const SCHOOL_MAPPING_READONLY_NOTE =
-  "학교명 → 학교군 매핑(school_tier_mappings)은 트리거·RPC·화면 어디서도 읽지 않습니다(읽는 코드 0). 표는 읽기 전용이며 트리거 연동은 DB-2 항목입니다.";
 
 /** SQL LIKE 흉내 — 앞·뒤 `%` 만 지원(192 의 패턴이 그 둘뿐이다). 표시용. */
 export function matchSqlLike(value: string | null | undefined, pattern: string): boolean {
@@ -127,8 +130,9 @@ export function matchSqlLike(value: string | null | undefined, pattern: string):
   return v === core;
 }
 
-/** 표시용 판정(정본은 DB `school_tier_suggest`). null·빈 값은 미분류. */
+/** 표시용 판정(정본은 DB `school_tier_suggest` · SQL 193). NULL·공백은 미분류(대학명을 못 읽은 경우) · 규칙 밖 대학은 그외. */
 export function schoolTierByLikeRules(universityName: string | null | undefined): string {
+  if (!String(universityName ?? "").trim()) return SCHOOL_TIER_LIKE_BLANK_RESULT;
   for (const rule of SCHOOL_TIER_LIKE_RULES) if (matchSqlLike(universityName, rule.pattern)) return rule.result;
   return SCHOOL_TIER_LIKE_FALLBACK;
 }
@@ -147,7 +151,7 @@ export const SCHOOL_TIER_CORRECTION_DIALOG_TITLE = "학교 등급 정정";
 export const SCHOOL_TIER_CORRECTION_PENDING_LABEL = "정정 중…";
 export const SCHOOL_TIER_CORRECTION_NOTE = "확정된 등급도 정정할 수 있습니다.";
 export const SCHOOL_TIER_CORRECTION_DETAIL =
-  "정정은 확정 RPC approve_mentor_school_verification_admin 과 같은 경로입니다 — 등급을 '그외'로 바꾸고 reviewed_by·reviewed_at 을 새로 기록하며 이전 등급·확정자는 감사 로그(school_tier_corrected)에 남습니다. 다른 등급으로 바꾸려면 계정 상세(멘토 탭)에서 정정하세요. DB-2(SQL 193) 적용 전에는 확정된 행의 정정이 NOT_REVIEWABLE 로 거절됩니다(처리 실패 표시 · 데이터 불변).";
+  "정정은 확정 RPC approve_mentor_school_verification_admin 과 같은 경로입니다 — 등급을 '그외'로 바꾸고 reviewed_by·reviewed_at 을 새로 기록하며 이전 등급·확정자는 감사 로그(school_tier_corrected)에 남습니다. 다른 등급으로 바꾸려면 계정 상세(멘토 탭)에서 정정하세요.";
 /** 학교·학과·계열이 비어 RPC 가 INVALID_INPUT 으로 거절할 행 — 버튼 대신 안내 */
 export const SCHOOL_TIER_CORRECTION_UNAVAILABLE_LABEL = "학교·학과 미입력 — 계정 상세에서 정정";
 
@@ -239,8 +243,6 @@ export const SCHOOL_UNCLASSIFIED_EMPTY_STATE = {
   title: "미분류 멘토가 없습니다",
   description: "확정된 학교 등급이 전부 서연고·서성한·중경외시·건동홍·그외 중 하나입니다.",
 } as const;
-
-export const SCHOOL_MAPPING_EMPTY_LABEL = "등록된 학교군 매핑이 없습니다.";
 
 // ── 분교 확인(§3-2) — 트리거 접두 LIKE 는 `연세대%` 가 `연세대학교 미래캠퍼스` 도 서연고로 잡는다 ────
 
