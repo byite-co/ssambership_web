@@ -53,9 +53,16 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 103본 pack(생성기 102 + PR60 1) 기준
-# (tables=85 functions=222 policies=176 buckets=13)이며, PG17 CLI 재생 실측과
-# 일치한다. (프로덕션 원장은 102본 — 20260831100100 미적용 상태다.)
+# 기대치는 106본 pack(생성기 105 + PR60 1) 기준
+# (tables=85 functions=225 policies=176 buckets=13)이며, PG16 스크래치 재생 실측
+# (scripts/verify/local_db1_batch_check.sh [7])과 일치한다.
+# (프로덕션 원장은 103본 — 20260903100100~100300 미적용 상태다.)
+# 103본→106본(DB-1 운영 DB 정리 배치 · 2026-09-03) 델타:
+#   functions +3 = school_tier_suggest + major_category_suggest
+#                + school_verification_reassess_on_academic_change (20260903100300)
+#                (tmp_auto_school_verification → auto_school_verification 은 drop+create 라 카운트 불변.
+#                 20260903100100 은 함수 본문 치환·기본값·트리거 재생성, 20260903100200 은 본문 치환이라
+#                 위 4개 카운트를 바꾸지 않는다.)
 # 100본→103본(원장 화해 2본 역수입 + iM뱅크 allowlist) 델타:
 #   functions +1 = tmp_auto_school_verification (20260830150838 hotfix 역수입 —
 #                트리거 부착 자체는 카운트 불변)
@@ -111,7 +118,7 @@ count_check(){ # count_check <label> <expected> <sql>
 }
 count_check tables 85 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
-count_check functions 222 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+count_check functions 225 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
 count_check policies 176 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"
