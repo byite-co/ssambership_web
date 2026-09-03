@@ -9,6 +9,7 @@ import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { loadDisputeById } from "@/lib/disputes/disputeQueries";
+import { accountDetailPath } from "@/lib/admin/accountDetailConsole";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { loadAdminDisputeEscrowSplitPanelState } from "@/lib/admin/adminDisputeEscrowSplitQueries";
 import { loadAdminDisputeNotes } from "@/lib/admin/adminCaseNotes";
@@ -226,8 +227,24 @@ export default async function AdminDisputeDetailPage(props: PageProps) {
           <Section title="접수 주장" aside={<span className="text-[11px] font-semibold text-slate-500">제출 {submitterLabel} · {formatKoDateTimeKst(createdAt)}</span>}>
             <blockquote className="whitespace-pre-line rounded-xl bg-slate-50 px-3 py-2 text-sm text-slate-800">{str(row.body) ? `“${str(row.body)}”` : "접수 내용 없음"}</blockquote>
             <dl className="mt-3">
-              <RowLine label="학생">{student ? student.name : "—"}</RowLine>
-              <RowLine label="멘토">{mentor ? mentor.name : "—"}</RowLine>
+              <RowLine label="학생">
+                {student ? (
+                  <Link href={accountDetailPath(student.id)} className="hover:underline" prefetch={false} title="계정 상세">
+                    {student.name}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </RowLine>
+              <RowLine label="멘토">
+                {mentor ? (
+                  <Link href={accountDetailPath(mentor.id)} className="hover:underline" prefetch={false} title="계정 상세">
+                    {mentor.name}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </RowLine>
               {str(row.admin_note) ? <RowLine label="운영 메모(구 단일)">{str(row.admin_note)}</RowLine> : null}
             </dl>
             <p className="mt-3 text-[11px] leading-relaxed text-slate-500">

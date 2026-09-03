@@ -212,7 +212,8 @@ async function fetchRange(
   return { rows: [], count: 0, error: r.error.message };
 }
 
-async function loadIdentityKinds(
+/** 여러 사용자의 신원 판정(4상태) — PR-7 계정 목록의 본인인증 배지도 이 함수를 쓴다. */
+export async function loadIdentityKinds(
   ids: readonly string[],
   nameById: ReadonlyMap<string, string>
 ): Promise<{ byId: Map<string, MentorIdentityReviewKind>; error: string | null }> {
@@ -337,7 +338,8 @@ export async function countMentorApprovalTabs(supabase: SupabaseClient): Promise
 
 // ── 상세 ────────────────────────────────────────────────────────────────────
 
-async function loadIdentityReview(
+/** 한 사용자의 신원 판정 — PR-7 계정 상세 헤더(역할 무관)도 이 함수를 쓴다. */
+export async function loadIdentityReview(
   mentorUserId: string,
   registeredName: string
 ): Promise<{ review: MentorIdentityReview | null; error: string | null }> {

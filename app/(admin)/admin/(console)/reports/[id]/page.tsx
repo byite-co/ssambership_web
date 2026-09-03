@@ -7,6 +7,7 @@ import { ContentReportUserActionButtons } from "@/components/admin/ContentReport
 import { createClient } from "@/lib/supabase/server";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { requireRole } from "@/lib/auth/routeGuard";
+import { accountDetailPath } from "@/lib/admin/accountDetailConsole";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import { loadAdminReportEvidence, type AdminReportEvidence } from "@/lib/admin/adminReportEvidence";
 import { loadAdminReportNotes } from "@/lib/admin/adminCaseNotes";
@@ -200,6 +201,8 @@ export default async function AdminReportDetailPage(props: Props) {
   const reportNotes = row ? await loadAdminReportNotes(supabase, id) : null;
 
   const status = fieldStr(row, "status") ?? "";
+  // PR-7 §3: 신고자도 계정 상세로 — reporter_id(구 user_id) 가 있으면 링크.
+  const reporterId = fieldStr(row, "reporter_id") ?? fieldStr(row, "user_id");
   // 조치 모달 summary 용 — 서버 액션(applyContentModeration)과 같은 판정으로 대상 종류를 정한다(레거시 'comment' 는 null = 콘텐츠 불변).
   const targetType = fieldStr(row, "target_type");
   const targetKind = normalizeModerationTargetType(targetType);
@@ -251,7 +254,13 @@ export default async function AdminReportDetailPage(props: Props) {
               <div>
                 <dt className="text-xs font-black text-slate-500">신고자</dt>
                 <dd className="mt-0.5 font-mono text-xs text-slate-700">
-                  {fieldStr(row, "reporter_id") ?? fieldStr(row, "user_id") ?? "—"}
+                  {reporterId ? (
+                    <Link href={accountDetailPath(reporterId)} className="hover:underline" prefetch={false} title="계정 상세">
+                      {reporterId}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
                 </dd>
               </div>
               <div>

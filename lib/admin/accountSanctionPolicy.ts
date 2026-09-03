@@ -22,21 +22,27 @@ export const ACCOUNT_STATUS_ACTIONS_DEFAULT_PATH = "/admin/users";
 export const ACCOUNT_STATUS_RETURN_TO_FIELD = "returnTo";
 const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
+/** 경고·정지 액션이 돌아갈 수 있는 상세 경로 — 신고 상세(PR-6) · 계정 상세(PR-7). `<uuid>` 한 조각만 받는다. */
+const ACCOUNT_STATUS_RETURN_TO_DETAIL_PREFIXES: readonly string[] = ["/admin/reports", "/admin/users"];
+
 /**
- * 경고·정지 액션이 돌아갈 경로(PR-6 2번째 커밋 · PR-3 `resolveRefundReturnPath` 와 같은 방식) — 계정 관리(기본) 또는 신고 상세
- * `/admin/reports/<uuid>` 만 허용한다(open redirect 방지). 그 외 값은 계정 관리로.
+ * 경고·정지 액션이 돌아갈 경로(PR-6 2번째 커밋 · PR-3 `resolveRefundReturnPath` 와 같은 방식) — 계정 관리(기본), 신고 상세
+ * `/admin/reports/<uuid>`, 계정 상세 `/admin/users/<uuid>`(PR-7)만 허용한다(open redirect 방지). 그 외 값은 계정 관리로.
  */
 export function resolveAccountStatusReturnPath(raw: string | null | undefined): string {
   const s = typeof raw === "string" ? raw.trim() : "";
   if (!s || s === ACCOUNT_STATUS_ACTIONS_DEFAULT_PATH) return ACCOUNT_STATUS_ACTIONS_DEFAULT_PATH;
-  const m = /^\/admin\/reports\/([^/?#]+)$/.exec(s);
-  if (m) {
+  for (const prefix of ACCOUNT_STATUS_RETURN_TO_DETAIL_PREFIXES) {
+    if (!s.startsWith(`${prefix}/`)) continue;
+    const rest = s.slice(prefix.length + 1);
+    if (!rest || /[/?#]/.test(rest)) break;
     try {
-      const id = decodeURIComponent(m[1]);
-      if (UUID_PATTERN.test(id)) return `/admin/reports/${id}`;
+      const id = decodeURIComponent(rest);
+      if (UUID_PATTERN.test(id)) return `${prefix}/${id}`;
     } catch {
       /* 잘못된 인코딩 → 기본 경로 */
     }
+    break;
   }
   return ACCOUNT_STATUS_ACTIONS_DEFAULT_PATH;
 }

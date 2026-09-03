@@ -7,6 +7,7 @@ import { RefundPgManualWarning } from "@/components/admin/RefundPgManualWarning"
 import { EmptyState } from "@/components/common/EmptyState";
 import { createClient } from "@/lib/supabase/server";
 import { requireRole } from "@/lib/auth/routeGuard";
+import { accountDetailPath } from "@/lib/admin/accountDetailConsole";
 import { toAdminDisplayError } from "@/lib/admin/adminDisplayError";
 import {
   REFUND_AMOUNT_UNSET_LABEL,
@@ -238,7 +239,9 @@ export default async function AdminRefundDetailPage(props: Props) {
             </blockquote>
             <dl className="mt-3">
               <Row label="요청자">
-                {detail.requesterName}
+                <Link href={accountDetailPath(detail.requesterId)} className="hover:underline" prefetch={false} title="계정 상세">
+                  {detail.requesterName}
+                </Link>
                 {detail.requesterEmail ? <span className="ml-1 text-xs font-medium text-slate-500">{detail.requesterEmail}</span> : null}
               </Row>
               <Row label="종류">{REFUND_KIND_LABELS[detail.kind]}</Row>
