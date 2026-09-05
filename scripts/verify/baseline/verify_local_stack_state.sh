@@ -53,10 +53,15 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 112본 pack(생성기 111 + PR60 1) 기준
+# 기대치는 118본 pack(생성기 117 + PR60 1) 기준
 # (tables=84 functions=228 policies=175 buckets=13)이며, PG16 스크래치 재생 실측
-# (scripts/verify/local_db3_batch_check.sh [7])과 일치한다.
-# (프로덕션 원장은 109본 — 20260903230100~230300 미적용 상태다. DB-1·DB-2 6본은 2026-09-03 적용 완료.)
+# (scripts/verify/local_db4_batch_check.sh [7])과 일치한다.
+# (프로덕션 원장은 112본 — 20260905100100~100600 미적용 상태다. DB-1·2·3 9본은 2026-09-03 적용 완료.)
+# 112본→118본(DB-4 `api_app_v1` 래퍼 배치 · 2026-09-05) 델타: 위 public 4개 카운트 **불변** —
+#   신규 객체는 전부 api_app_v1(함수 +10: subscribe_with_cash · subscription_cancel_at_period_end · subscription_cancel_undo ·
+#   refund_estimate · refund_request_create · mentor_activity_set · mentor_plan_active_set · user_profile_update_self_v2 ·
+#   mentor_student_id_document_set_self · create_individual_question_as_student_v2)와 core_private(함수 +1:
+#   subscription_refund_estimate_impl)에 만들어진다. 아래 [4c]에서 두 스키마 census 를 따로 센다(6→16 · 7→8).
 # 109본→112본(DB-3 운영 DB 정리 배치 · 2026-09-03) 델타:
 #   functions +2 = soft_delete_own_content (20260903230100 — 작성자 본인 소프트 삭제 RPC)
 #                + ugc_block_hard_delete (20260903230300 — 세 표 BEFORE DELETE 트리거 함수)
@@ -137,6 +142,20 @@ count_check buckets 13 "select count(*) from storage.buckets"
 echo "=== [4b] realtime.messages 정책 (20260903230200 — admin:* 토픽 관리자 전용 2종)"
 count_check realtime_messages_policies 2 "select count(*) from pg_policies where schemaname='realtime' and tablename='messages'
                                           and policyname in ('realtime_admin_topic_select','realtime_admin_topic_insert')"
+
+echo "=== [4c] api_app_v1 · core_private 함수 census (DB-4 20260905100100~100600 — 앱 래퍼 10 + 환불 impl 1)"
+count_check api_app_v1_functions 16 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='api_app_v1'"
+count_check core_private_functions 8 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='core_private'"
+q "select p.proname||'|anon='||has_function_privilege('anon',p.oid,'EXECUTE')::text
+     ||'|auth='||has_function_privilege('authenticated',p.oid,'EXECUTE')::text
+     ||'|svc='||has_function_privilege('service_role',p.oid,'EXECUTE')::text
+   from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+   where n.nspname='api_app_v1' order by 1" | tee "$EV/api_app_v1_fn_acl.txt"
+if grep -qE 'anon=true|svc=true' "$EV/api_app_v1_fn_acl.txt" || grep -qv 'auth=true' "$EV/api_app_v1_fn_acl.txt"; then
+  bad "api_app_v1 함수 ACL 은 authenticated 만이어야 한다(anon 0 · service_role 0)"
+else
+  say "api_app_v1 함수 16/16: authenticated 만 · anon/service_role 없음"
+fi
 
 echo "=== [5] M13 trigger function ACL (anon/authenticated EXECUTE 불가)"
 q "select p.proname||'|'||coalesce(p.proacl::text,'(null)')

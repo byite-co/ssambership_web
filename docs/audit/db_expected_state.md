@@ -30,6 +30,24 @@
 
 운영 DB에서 `anon` 또는 `authenticated`가 위 함수 중 하나라도 EXECUTE 가능하면 C-4/H-5 드리프트다. 특히 `073`은 코드와 실DB가 달랐던 기록을 보정하기 위한 파일이므로 `record_subscription_cash_debit` overload를 반드시 확인한다.
 
+## 1b. `api_app_v1` 앱 래퍼 기대상태 (DB-4 · 2026-09-05)
+
+앱(authenticated)이 service_role 전용 경로 대신 부르는 SECURITY DEFINER 래퍼다. 기대상태는 전부 `anon=false`, `authenticated=true`, `service_role=false` EXECUTE(M17 앱 계약 §3.3 — service_role 은 앱 공개 계약의 호출자가 아니다) · `search_path=''` · 핵심 로직은 기존 정본에 위임한다. 스키마 `api_app_v1` USAGE 는 authenticated 만.
+
+| 함수 | 위임 정본 | 근거 SQL |
+| --- | --- | --- |
+| `api_app_v1.subscribe_with_cash(uuid, text, text)` | `api_web_v1.subscription_checkout_confirm_v2`(F12 · service_role 전용 그대로) → 정본 `confirm_subscription_checkout` · `core_private.ensure_student_mentor_room` · initial billing event 는 웹 TS 와 같은 키로 SQL 수행 | `199_api_app_v1_subscribe_with_cash.sql` |
+| `api_app_v1.subscription_cancel_at_period_end(uuid)` · `subscription_cancel_undo(uuid)` | `subscriptions.cancel_at_period_end/cancel_requested_at` 본인 행(웹 액션 동일) | `199_api_app_v1_subscribe_with_cash.sql` |
+| `core_private.subscription_refund_estimate_impl(uuid, timestamptz)` | **외부 EXECUTE 0**(anon/authenticated/service_role 전부 false) — 별표 4 계산 정본(웹 TS 이식) | `200_api_app_v1_refund_request.sql` |
+| `api_app_v1.refund_estimate(uuid)` · `refund_request_create(uuid, text)` | 위 impl · `refunds` pending INSERT(`refund_ins` 관리자 전용 정책은 불변 — 래퍼가 SECDEF 로 우회) | `200_api_app_v1_refund_request.sql` |
+| `api_app_v1.mentor_activity_set(text, timestamptz, timestamptz, text)` | 웹 `mentorActivityService.ts` 규칙 이식(DB 코어 없음) · 알림은 158 트리거 | `201_api_app_v1_mentor_activity_set.sql` |
+| `api_app_v1.mentor_plan_active_set(text, boolean)` | `mentor_plans.is_active` 본인 행(F8 은 가격만 · 불변) | `202_api_app_v1_mentor_plan_active_set.sql` |
+| `api_app_v1.user_profile_update_self_v2(text, text, text)` | `core_private.user_profile_update_self_impl`(v1 시그니처 불변) + `users.student_status` | `203_api_app_v1_student_status_student_id_document.sql` |
+| `api_app_v1.mentor_student_id_document_set_self(text)` | `storage.objects` 소유 검증(139 동일) → `mentor_profiles.student_id_image_url` | `203_api_app_v1_student_status_student_id_document.sql` |
+| `api_app_v1.create_individual_question_as_student_v2(text, text, text, integer, uuid, text, text)` | 코어 `create_individual_question_with_hold_v2`(service_role 전용 그대로) · v1 `public.create_individual_question_as_student` 불변 | `204_api_app_v1_individual_question_create_v2.sql` |
+
+census 기대: `api_app_v1` 함수 16(M17 5 + 20260803162257 1 + DB-4 10) · `core_private` 8(7 + 1). public 함수/정책/테이블/버킷 수는 DB-4 로 변하지 않는다(`scripts/verify/baseline/verify_local_stack_state.sh` [4c]).
+
 ## 2. 민감 테이블 RLS 기대상태
 
 | 테이블 | 기대상태 | 근거 SQL |
