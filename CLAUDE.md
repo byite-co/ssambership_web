@@ -141,7 +141,7 @@ MCP `apply_migration`(또는 CLI 밖 직접 적용)으로 비상 hotfix를 DB에
 
 > 실제 사례: `20260808092007_account_deletion_server_cancel_window_30d` — 2026-08-08 소스 없이 원장에만 적용된 hotfix(탈퇴 취소 유예 30분→30일). 이 1본 포함 원장 4본 불일치로 `db-apply-pending`이 hard fail하며 DB 적용 경로 전체가 잠겼고, 2026-08-09 원장 화해 PR에서 역수입으로 해소했다.
 
-**md5 게이트·롤백 원문 규칙:** 마이그레이션의 `pg_get_functiondef` md5 게이트 기대값과 롤백용 원문은 스크래치 pack 재생본이 아니라 **운영 실측에서만** 뜬다 — 운영 함수 82개는 SQL Editor 적용본이라 prosrc 가 CRLF 이고 pack(LF) 재생 md5 와 다르다(2026-09-06 DB-5 apply 가 206 게이트에서 중단된 사례). 원문은 CRLF 그대로 심고(187·206 롤백 방식) 로컬 pre fixture 도 같은 바이트로 재시드한다.
+**md5 게이트·롤백 원문 규칙:** 마이그레이션의 `pg_get_functiondef` md5 게이트 기대값과 롤백용 원문은 스크래치 pack 재생본이 아니라 **운영 실측에서만** 뜬다 — 운영 함수 82개는 SQL Editor 적용본이라 prosrc 가 CRLF 이고 pack(LF) 재생 md5 와 다르다(2026-09-06 DB-5 apply 가 206 게이트에서 중단된 사례). 원문은 CRLF 그대로 심고(187·206 롤백 방식) 로컬 pre fixture 도 같은 바이트로 재시드하며, 게이트는 운영값을 정본으로 두되 pack(LF) 재생값도 함께 허용해야 CI 팩 재생(`db-migration-pack-verify`)·신규 환경이 통과한다.
 
 ## 코딩 규칙
 
