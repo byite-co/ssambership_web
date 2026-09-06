@@ -2,9 +2,11 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { AppReturnNotice } from "@/components/onboarding/AppReturnNotice";
 import { IdentityVerificationLauncher } from "@/components/onboarding/IdentityVerificationLauncher";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
-import { getPostLoginPath } from "@/lib/auth/getPostLoginPath";
+import { completeProfilePath, getPostLoginPath } from "@/lib/auth/getPostLoginPath";
+import { isProfileIncomplete } from "@/lib/auth/profileCompletion";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { getIdentityOnboardingState } from "@/lib/identity/service";
 
@@ -26,6 +28,9 @@ function firstParam(value: string | string[] | undefined): string | null {
 
 export default async function OnboardingGuardianPage(props: Props) {
   const sp = (await props.searchParams) ?? {};
+  // 웹 PR-2 §6: 앱 WebView 부트스트랩(target identity_verify · guardian_consent)이 `?src=app` 으로 연다 —
+  // 완료 시 홈으로 보내지 않고 "앱으로 돌아가기" 안내를 보여준다(딥링크는 A-4c).
+  const fromApp = firstParam(sp.src) === "app";
   const { user, profile } = await getServerUserWithProfile();
   if (!user) {
     redirect(`/login?next=${encodeURIComponent("/onboarding/guardian")}`);
@@ -33,18 +38,23 @@ export default async function OnboardingGuardianPage(props: Props) {
   if (!profile) {
     redirect("/login?error=profile");
   }
+  // DB-5(206): 프로필 완성 전엔 본인인증보다 완성이 먼저다(멘토 완성 → identity_verification 으로 돌아온다).
+  if (isProfileIncomplete(profile)) {
+    redirect(completeProfilePath({ next: "/onboarding/guardian" }));
+  }
   if (profile.role === "admin") {
     redirect(getPostLoginPath("admin"));
   }
 
   const admin = createServiceRoleClient();
   const state = await getIdentityOnboardingState(admin, user.id);
-  if (state.state === "verified") {
+  if (state.state === "verified" && !fromApp) {
     redirect(getPostLoginPath(profile.role));
   }
   if (state.state === "self_required") {
-    redirect("/onboarding/verify");
+    redirect(fromApp ? "/onboarding/verify?src=app" : "/onboarding/verify");
   }
+  const completedFromApp = state.state === "verified" && fromApp;
 
   return (
     <div className="flex min-h-[100dvh] flex-col bg-[#F9FAFB]">
@@ -52,7 +62,15 @@ export default async function OnboardingGuardianPage(props: Props) {
         <header className="mb-7 flex flex-col items-center text-center">
           <BrandLogo href="/" className="justify-center" />
         </header>
+        {completedFromApp ? (
+          <AppReturnNotice variant="done" title={"보호자 인증이 완료됐어요"} />
+        ) : (
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
+          {fromApp ? (
+            <div className="mb-4">
+              <AppReturnNotice variant="pending" />
+            </div>
+          ) : null}
           <h1 className="text-xl font-bold text-slate-900">보호자 인증이 필요해요</h1>
           <p className="mt-2 text-sm leading-relaxed text-slate-600">
             만 14세 미만 회원은 개인정보 보호법에 따라 보호자(법정대리인)의 동의가 필요해요. 보호자님의
@@ -89,6 +107,7 @@ export default async function OnboardingGuardianPage(props: Props) {
             </p>
           </div>
         </section>
+        )}
         <div className="mt-6 flex items-center justify-center gap-4 text-xs text-slate-500">
           <Link href="/legal/privacy" className="underline-offset-2 hover:underline">
             개인정보처리방침

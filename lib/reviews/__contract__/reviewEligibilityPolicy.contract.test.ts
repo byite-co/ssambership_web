@@ -1,259 +1,107 @@
-// 계약 테스트: 리뷰 자격 정책(관계 기준 B+C) — SQL 170 과의 판정 일치 + 편집 모드 진입 계약.
+// 계약 테스트: 리뷰 자격 정책 — SQL 208(`review_eligibility_self` · `check_review_eligibility` 와 동일 판정) 응답 해석 + 편집 모드 진입 계약.
 // 실행: node --test --experimental-strip-types lib/reviews/__contract__/reviewEligibilityPolicy.contract.test.ts
 //
-// ⚠️ 이 파일의 진리표는 **staging 실측 결과를 그대로 옮긴 것**이다
-//    (2026-07-25, supabase/sql/170 적용 후 check_review_eligibility 전수 호출).
-//    TS(UI 사전 판정)와 RPC(INSERT 정책 정본)가 어긋나면 화면은 "작성 가능"인데
-//    INSERT 가 막힌다. 상태 집합을 바꿀 때는 170 과 이 진리표를 함께 고친다.
+// ⚠️ 170 시절의 상태 집합 진리표(구독 7종·IQ 9종)는 폐기됐다 — 웹은 상태를 세지 않고 RPC 응답을 그대로 쓴다.
+//    이 파일이 고정하는 것은 (1) RPC 응답 → UI 판정 매핑 (2) 검사 순서(기존 후기 → 신규 자격)
+//    (3) 사유 문구 "현재 N/2" (4) INSERT 가 RLS 로 거부될 때의 오류 매핑 (5) 배선(RPC 호출·상태 집계 잔재 0).
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import {
-  ELIGIBLE_INDIVIDUAL_QUESTION_STATUSES,
-  ELIGIBLE_SUBSCRIPTION_STATUSES,
-  EXCLUDED_INDIVIDUAL_QUESTION_STATUSES,
-  EXCLUDED_SUBSCRIPTION_STATUSES,
   REVIEW_ELIGIBILITY_REASON,
-  decideReviewEligibility,
-  hasRelationshipEligibility,
-  individualQuestionMentorId,
-  isEligibleIndividualQuestionStatus,
-  isEligibleSubscriptionStatus,
+  REVIEW_ELIGIBILITY_RPC,
+  REVIEW_ELIGIBILITY_RPC_SCHEMA,
+  REVIEW_INSERT_DENIED_MESSAGE,
+  REVIEW_REQUIRED_PAID_COUNT,
+  decideReviewEligibilityFromRpc,
+  mapReviewInsertError,
 } from "../reviewEligibilityPolicy.ts";
 
-const MENTOR = "11111111-1111-1111-1111-111111111111";
-const OTHER_MENTOR = "22222222-2222-2222-2222-222222222222";
+const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
+const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-/** staging 실측 진리표 — 구독 상태 7종 (170 적용 후 RPC 반환값) */
-const SUBSCRIPTION_TRUTH: Record<string, boolean> = {
-  pending: false,
-  active: true,
-  past_due: false,
-  cancel_scheduled: true,
-  canceled: false,
-  expired: true,
-  refunded: false,
-};
-
-/** staging 실측 진리표 — 개별질문 상태 9종 */
-const IQ_TRUTH: Record<string, boolean> = {
-  escrowed: false,
-  assigned: false,
-  open: false,
-  claimed: false,
-  answered: true,
-  released: true,
-  expired: false,
-  refunded: false,
-  canceled: false,
-};
-
-function relEligible(input: {
-  subscriptions?: Array<Record<string, unknown>>;
-  individualQuestions?: Array<Record<string, unknown>>;
-  mentorId?: string;
-}): boolean {
-  return hasRelationshipEligibility({
-    mentorId: input.mentorId ?? MENTOR,
-    subscriptions: input.subscriptions ?? [],
-    individualQuestions: input.individualQuestions ?? [],
-  });
-}
-
-test("구독 상태 7종 전수 — SQL 170 실측 진리표와 일치", () => {
-  for (const [status, expected] of Object.entries(SUBSCRIPTION_TRUTH)) {
-    assert.equal(
-      relEligible({ subscriptions: [{ mentor_id: MENTOR, status }] }),
-      expected,
-      `subscription status=${status} 기대 ${expected}`
-    );
-  }
-  // 상태 집합이 실 enum 7종을 정확히 분할하는지
-  assert.equal(
-    ELIGIBLE_SUBSCRIPTION_STATUSES.length + EXCLUDED_SUBSCRIPTION_STATUSES.length,
-    Object.keys(SUBSCRIPTION_TRUTH).length
-  );
+test("RPC 이름·스키마·요구 횟수 — DB-5 보고서 §3 행과 1:1", () => {
+  assert.equal(REVIEW_ELIGIBILITY_RPC_SCHEMA, "api_app_v1");
+  assert.equal(REVIEW_ELIGIBILITY_RPC, "review_eligibility_self");
+  assert.equal(REVIEW_REQUIRED_PAID_COUNT, 2);
 });
 
-test("개별질문 상태 9종 전수 — SQL 170 실측 진리표와 일치", () => {
-  for (const [status, expected] of Object.entries(IQ_TRUTH)) {
-    assert.equal(
-      relEligible({ individualQuestions: [{ claimed_mentor_id: MENTOR, status }] }),
-      expected,
-      `iq status=${status} 기대 ${expected}`
-    );
-  }
-  assert.equal(
-    ELIGIBLE_INDIVIDUAL_QUESTION_STATUSES.length + EXCLUDED_INDIVIDUAL_QUESTION_STATUSES.length,
-    Object.keys(IQ_TRUTH).length
-  );
+test("OK → eligible · create · 사유 없음 (paid_count 그대로)", () => {
+  const r = decideReviewEligibilityFromRpc({ ok: true, eligible: true, reason: "OK", paid_count: 3, required_count: 2, existing_review_id: null, can_edit: false });
+  assert.deepEqual(r, { eligible: true, mode: "create", existingReviewId: null, canEdit: false, paidCount: 3, requiredCount: 2, reasonCode: "OK" });
 });
 
-test("멘토 식별 = coalesce(claimed, designated) — claim 우선", () => {
-  // designated 만 있으면 designated 사용
-  assert.equal(individualQuestionMentorId({ designated_mentor_id: MENTOR }), MENTOR);
-  // claimed 가 있으면 claimed 우선
-  assert.equal(
-    individualQuestionMentorId({ claimed_mentor_id: MENTOR, designated_mentor_id: OTHER_MENTOR }),
-    MENTOR
-  );
-  // 둘 다 없으면 null
-  assert.equal(individualQuestionMentorId({}), null);
-  assert.equal(individualQuestionMentorId({ claimed_mentor_id: null, designated_mentor_id: "" }), null);
-});
-
-test("claim 이 타 멘토면 designated 가 대상 멘토여도 자격 없음(실측 seq19 재현)", () => {
-  assert.equal(
-    relEligible({
-      individualQuestions: [
-        { claimed_mentor_id: OTHER_MENTOR, designated_mentor_id: MENTOR, status: "answered" },
-      ],
-    }),
-    false
-  );
-});
-
-test("designated 전용 경로도 자격 성립(실측 seq18 재현)", () => {
-  assert.equal(
-    relEligible({
-      individualQuestions: [{ claimed_mentor_id: null, designated_mentor_id: MENTOR, status: "answered" }],
-    }),
-    true
-  );
-});
-
-test("다른 멘토의 관계는 자격 근거가 되지 않는다", () => {
-  assert.equal(relEligible({ subscriptions: [{ mentor_id: OTHER_MENTOR, status: "active" }] }), false);
-  assert.equal(
-    relEligible({ individualQuestions: [{ claimed_mentor_id: OTHER_MENTOR, status: "released" }] }),
-    false
-  );
-});
-
-test("B 또는 C 중 하나만 성립해도 자격 있음", () => {
-  assert.equal(
-    relEligible({
-      subscriptions: [{ mentor_id: MENTOR, status: "canceled" }],
-      individualQuestions: [{ claimed_mentor_id: MENTOR, status: "released" }],
-    }),
-    true
-  );
-  assert.equal(
-    relEligible({
-      subscriptions: [{ mentor_id: MENTOR, status: "expired" }],
-      individualQuestions: [{ claimed_mentor_id: MENTOR, status: "refunded" }],
-    }),
-    true
-  );
-});
-
-test("29차 정정 회귀 방지: 'confirmed'·'completed' 는 실 enum 이 아니므로 자격 없음", () => {
-  for (const ghost of ["confirmed", "completed"]) {
-    assert.equal(isEligibleSubscriptionStatus(ghost), false, `subscription '${ghost}' 는 자격 아님`);
-    assert.equal(isEligibleIndividualQuestionStatus(ghost), false, `iq '${ghost}' 는 자격 아님`);
-  }
-});
-
-test("상태 정규화: 대소문자·앞뒤 공백 허용, 빈 값·null 은 자격 없음", () => {
-  assert.equal(isEligibleSubscriptionStatus("  ACTIVE "), true);
-  assert.equal(isEligibleIndividualQuestionStatus("Answered"), true);
-  assert.equal(isEligibleSubscriptionStatus(null), false);
-  assert.equal(isEligibleSubscriptionStatus(""), false);
-  assert.equal(isEligibleIndividualQuestionStatus(undefined), false);
-});
-
-test("mentorId 가 비면 어떤 관계도 자격이 되지 않는다", () => {
-  assert.equal(
-    hasRelationshipEligibility({
-      mentorId: "",
-      subscriptions: [{ mentor_id: MENTOR, status: "active" }],
-      individualQuestions: [],
-    }),
-    false
-  );
-});
-
-// ── 편집 모드 진입 계약 (§5-2 필수 테스트 5건) ────────────────────────────────
-
-test("① 관계 자격이 없어도 기존 후기가 있으면 edit 모드에 도달한다", () => {
-  // 구 구현은 결제 집계가 2 미만이면 그 자리에서 eligible:false 로 끊어
-  // 이미 후기를 쓴 학생이 편집 경로에 도달하지 못했다. 순서가 계약이다.
-  const r = decideReviewEligibility({
-    existingReview: { id: "rev-1", isHidden: false, isBlinded: false },
-    relationshipEligible: false,
-  });
-  assert.equal(r.eligible, true);
-  assert.equal(r.mode, "edit");
-  assert.equal(r.existingReviewId, "rev-1");
-  assert.equal(r.canEdit, true);
-});
-
-test("② 숨김 리뷰가 있으면 create 로 오판하지 않는다(edit + canEdit=false)", () => {
-  const r = decideReviewEligibility({
-    existingReview: { id: "rev-2", isHidden: true, isBlinded: false },
-    relationshipEligible: true,
-  });
-  assert.equal(r.mode, "edit");
-  assert.equal(r.existingReviewId, "rev-2");
-  assert.equal(r.canEdit, false);
-  assert.equal(r.reason, REVIEW_ELIGIBILITY_REASON.MODERATED);
-});
-
-test("③ 블라인드 리뷰가 있으면 create 로 오판하지 않는다(edit + canEdit=false)", () => {
-  const r = decideReviewEligibility({
-    existingReview: { id: "rev-3", isHidden: false, isBlinded: true },
-    relationshipEligible: true,
-  });
-  assert.equal(r.mode, "edit");
-  assert.equal(r.canEdit, false);
-  assert.equal(r.reason, REVIEW_ELIGIBILITY_REASON.MODERATED);
-});
-
-test("⑤ 기존 후기가 있으면 canEdit 값과 무관하게 항상 edit — 신규 POST 경로로 떨어지지 않는다", () => {
-  for (const [isHidden, isBlinded] of [
-    [false, false],
-    [true, false],
-    [false, true],
-    [true, true],
-  ] as const) {
-    const r = decideReviewEligibility({
-      existingReview: { id: "rev-x", isHidden, isBlinded },
-      relationshipEligible: false,
-    });
-    assert.equal(r.mode, "edit", `hidden=${isHidden} blinded=${isBlinded} 에서도 edit`);
-    assert.notEqual(r.mode, "create");
-    assert.equal(r.existingReviewId, "rev-x");
-  }
-});
-
-test("기존 후기가 없고 관계 자격도 없으면 eligible=false · mode=create", () => {
-  const r = decideReviewEligibility({ existingReview: null, relationshipEligible: false });
+test("NOT_ENOUGH_PAYMENTS → eligible=false · '같은 멘토에게 2회 결제하면 후기를 남길 수 있어요 (현재 N/2)'", () => {
+  const r = decideReviewEligibilityFromRpc({ ok: true, eligible: false, reason: "NOT_ENOUGH_PAYMENTS", paid_count: 1, required_count: 2, existing_review_id: null, can_edit: false });
   assert.equal(r.eligible, false);
   assert.equal(r.mode, "create");
-  assert.equal(r.existingReviewId, null);
-  assert.equal(r.reason, REVIEW_ELIGIBILITY_REASON.NO_RELATIONSHIP);
+  assert.equal(r.reason, "같은 멘토에게 2회 결제하면 후기를 남길 수 있어요 (현재 1/2)");
+  assert.equal(r.paidCount, 1);
+  // 결제 0회 · 응답에 required_count 가 없어도 2 로 폴백
+  const zero = decideReviewEligibilityFromRpc({ ok: true, eligible: false, reason: "NOT_ENOUGH_PAYMENTS", paid_count: 0 });
+  assert.equal(zero.reason, REVIEW_ELIGIBILITY_REASON.NOT_ENOUGH_PAYMENTS(0));
+  assert.equal(zero.requiredCount, 2);
 });
 
-test("기존 후기가 없고 관계 자격이 있으면 eligible=true · mode=create · 사유 없음", () => {
-  const r = decideReviewEligibility({ existingReview: null, relationshipEligible: true });
-  assert.equal(r.eligible, true);
-  assert.equal(r.mode, "create");
-  assert.equal(r.existingReviewId, null);
-  assert.equal(r.reason, undefined);
+test("① ALREADY_REVIEWED → 신규 자격과 무관하게 edit 모드(existing_review_id) · can_edit=false 면 MODERATED", () => {
+  const editable = decideReviewEligibilityFromRpc({ ok: true, eligible: false, reason: "ALREADY_REVIEWED", existing_review_id: "rev-1", can_edit: true, paid_count: null, required_count: 2 });
+  assert.equal(editable.eligible, true);
+  assert.equal(editable.mode, "edit");
+  assert.equal(editable.existingReviewId, "rev-1");
+  assert.equal(editable.canEdit, true);
+  assert.equal(editable.reason, undefined);
+
+  const moderated = decideReviewEligibilityFromRpc({ ok: true, eligible: false, reason: "ALREADY_REVIEWED", existing_review_id: "rev-2", can_edit: false });
+  assert.equal(moderated.mode, "edit");
+  assert.equal(moderated.canEdit, false);
+  assert.equal(moderated.reason, REVIEW_ELIGIBILITY_REASON.MODERATED);
+  assert.notEqual(moderated.mode, "create", "숨김·블라인드 후기를 create 로 오판하면 uq_reviews_mentor_author 23505");
 });
 
-test("빈 id 의 기존 후기는 존재하지 않는 것으로 취급한다", () => {
-  const r = decideReviewEligibility({
-    existingReview: { id: "", isHidden: false, isBlinded: false },
-    relationshipEligible: true,
-  });
-  assert.equal(r.mode, "create");
-  assert.equal(r.existingReviewId, null);
-});
-
-test("자격 사유 문구에 구 기준(2회 결제) 표현이 남아 있지 않다", () => {
-  for (const reason of Object.values(REVIEW_ELIGIBILITY_REASON)) {
-    assert.ok(!reason.includes("2회"), `구 기준 문구 잔존: ${reason}`);
-    assert.ok(!reason.includes("무료체험"), `구 기준 문구 잔존: ${reason}`);
+test("ok:false(MENTOR_NOT_FOUND · AUTH_REQUIRED) · RPC 오류 · 깨진 응답 → 판정 불가(무음 false 금지 — 사유 문구 있음)", () => {
+  const notFound = decideReviewEligibilityFromRpc({ ok: false, code: "MENTOR_NOT_FOUND" });
+  assert.equal(notFound.eligible, false);
+  assert.equal(notFound.reason, REVIEW_ELIGIBILITY_REASON.MENTOR_NOT_FOUND);
+  const auth = decideReviewEligibilityFromRpc({ ok: false, code: "AUTH_REQUIRED" });
+  assert.equal(auth.reason, REVIEW_ELIGIBILITY_REASON.AUTH_REQUIRED);
+  for (const bad of [null, undefined, "x", ["x"], { ok: true, reason: "ALREADY_REVIEWED", existing_review_id: "" }]) {
+    const r = decideReviewEligibilityFromRpc(bad);
+    assert.equal(r.eligible, false);
+    assert.equal(r.reason, REVIEW_ELIGIBILITY_REASON.LOOKUP_FAILED);
   }
+  const err = decideReviewEligibilityFromRpc({ ok: true, eligible: true }, { message: "permission denied for schema api_app_v1" });
+  assert.equal(err.reasonCode, "LOOKUP_FAILED");
+  assert.ok(!(err.reason ?? "").includes("permission"), "원문 비반영");
+});
+
+test("POST /api/reviews: INSERT 가 RLS(reviews_insert_student = 208 판정)로 거부되면 자격 부족 문구 · 유니크는 중복 문구 · 원문 비반영", () => {
+  assert.equal(mapReviewInsertError({ code: "42501", message: 'new row violates row-level security policy for table "reviews"' }), REVIEW_INSERT_DENIED_MESSAGE);
+  assert.equal(mapReviewInsertError({ message: "new row violates row-level security policy" }), REVIEW_INSERT_DENIED_MESSAGE);
+  assert.equal(mapReviewInsertError({ code: "23505", message: 'duplicate key value violates unique constraint "uq_reviews_mentor_author"' }), "이미 리뷰를 작성했습니다.");
+  assert.equal(mapReviewInsertError({ message: "connection refused" }), "리뷰 저장에 실패했습니다.");
+  assert.ok(!REVIEW_INSERT_DENIED_MESSAGE.includes("reviews_insert_student"));
+  assert.ok(REVIEW_INSERT_DENIED_MESSAGE.includes("2회"));
+});
+
+test("배선: checkReviewEligibility 는 review_eligibility_self 만 호출 · 170 상태 집합·직접 집계 잔재 0 · 문구 208", () => {
+  const io = read("lib/reviews/checkReviewEligibility.ts");
+  assert.ok(io.includes(".schema(REVIEW_ELIGIBILITY_RPC_SCHEMA)") && io.includes(".rpc(REVIEW_ELIGIBILITY_RPC,"), "RPC 호출 없음");
+  for (const forbidden of ['from("subscriptions")', 'from("individual_questions")', 'from("reviews")', 'from("subscription_billing_events")']) {
+    assert.ok(!io.includes(forbidden), `웹이 직접 집계한다: ${forbidden}`);
+  }
+  const policy = read("lib/reviews/reviewEligibilityPolicy.ts");
+  for (const forbidden of ["ELIGIBLE_SUBSCRIPTION_STATUSES", "ELIGIBLE_INDIVIDUAL_QUESTION_STATUSES", "hasRelationshipEligibility", "cancel_scheduled"]) {
+    assert.ok(!policy.includes(forbidden), `170 상태 집합 판정 코드 잔존: ${forbidden}`);
+  }
+  assert.ok(policy.includes("check_review_eligibility") && policy.includes("208"), "헤더 주석이 208 정본을 가리키지 않음");
+  const queries = read("lib/reviews/reviewQueries.ts");
+  assert.ok(queries.includes("mapReviewInsertError(error)"), "createReview 의 RLS 거부 매핑 미배선");
+  const modal = read("components/reviews/ReviewWriteModal.tsx");
+  assert.ok(modal.includes("REVIEW_ELIGIBILITY_REASON.NOT_ENOUGH_PAYMENTS("), "모달 기본 안내가 208 문구가 아님");
+  assert.ok(!modal.includes("개별 질문 이용 이력"), "구 170 문구 잔존");
+  const banner = read("components/reviews/ReviewEligibilityBanner.tsx");
+  assert.ok(banner.includes("회 결제하면 후기를 남길 수 있어요") && !banner.includes("개별 질문을 이용한 이력"), "배너 문구가 208 이 아님");
 });

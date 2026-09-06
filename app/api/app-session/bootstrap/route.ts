@@ -3,28 +3,29 @@ import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import type { CookieOptions } from "@supabase/ssr";
 import {
-  APP_SESSION_BOOTSTRAP_TARGETS,
   bootstrapProjectRefMatches,
+  bootstrapTargetRedirectPath,
+  bootstrapTargetRoleDecision,
   parseBootstrapBody,
 } from "@/lib/appSession/appSessionBootstrapCore";
-import {
-  assertAppSurfaceAccountActiveStrict,
-  strictMentorRoleDecision,
-} from "@/lib/appSession/appSurfaceAccountGate";
+import { assertAppSurfaceAccountActiveStrict } from "@/lib/appSession/appSurfaceAccountGate";
 import { hardenAppSurfaceCookieWrites } from "@/lib/appSession/appSurfaceCookies";
 import type { AppBridgeErrorCode } from "@/lib/appSession/appSurfacePaths";
 import { appBridgeErrorPath } from "@/lib/appSession/appSurfacePaths";
 import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
 
-// POST /api/app-session/bootstrap — 앱 WebView 세션 부트스트랩(단일 target: shortform_create).
+// POST /api/app-session/bootstrap — 앱 WebView 세션 부트스트랩
+// (target: shortform_create · identity_verify · guardian_consent — 웹 PR-2 §6 · 앱 A-4c 소비).
 //
 // 보안 계약:
 // - POST 전용(GET/PUT/PATCH/DELETE 405). Content-Type allowlist(form-urlencoded/json).
 // - 토큰은 body 로만 받고 URL·로그·응답 어디에도 싣지 않는다. Cache-Control: no-store.
 // - 앱 토큰의 발급 프로젝트 ref 와 웹 Supabase ref 가 일치해야 한다(교차 프로젝트 이식 차단).
 // - [쿠키 버퍼 불변식] setSession 이 쓰는 쿠키는 격리 버퍼(pendingCookies)에만 기록되고,
-//   getUser(실사용자)·계정 활성·mentor role·target 검증이 **전부** 통과한 성공 응답에만
+//   getUser(실사용자)·계정 활성·프로필 완성·target 별 역할 규칙 검증이 **전부** 통과한 성공 응답에만
 //   부착된다. 어떤 실패 응답에도 Set-Cookie 는 0개다(버퍼 폐기).
+// - target 별 역할 규칙: shortform_create = mentor(현행) · identity_verify = student·mentor 활성 계정 ·
+//   guardian_consent = student. 완성 전(profile_completed_at NULL) 계정은 세 target 모두 거부.
 // - redirect 대상은 전부 서버 상수(open redirect 0). 실패는 고정 브릿지 오류 페이지로.
 // - 쿠키 속성은 appSurfaceCookies 정본(HttpOnly/Secure/SameSite=Lax/Path=/)으로 강제하며,
 //   이후 앱 표면의 refresh 재발급·회전·삭제도 전용 클라이언트(appSurfaceServer)가 같은
@@ -109,16 +110,19 @@ export async function POST(request: Request) {
     if (userError || !data?.user) return errorRedirect(request.url, "bootstrap_failed");
 
     // 계정 게이트(strict·fail-closed: 행 없음/조회 오류/미지 status/유효 정지/banned/
-    // 삭제 write-block/RPC 실패 전부 거부) → mentor role 게이트. 어느 실패든 쿠키
+    // 삭제 write-block/RPC 실패 전부 거부) → 프로필 완성 + target 별 역할 게이트. 어느 실패든 쿠키
     // 버퍼는 부착 없이 폐기되고, 고정 오류 code 외 내부 상태는 반사하지 않는다.
     const acctGate = await assertAppSurfaceAccountActiveStrict(supabase, data.user.id);
     if (!acctGate.ok) return errorRedirect(request.url, "account_blocked");
     const { data: profile, error: profileError } = await getUserProfileById(supabase, data.user.id);
-    const roleDecision = strictMentorRoleDecision(profile, Boolean(profileError));
-    if (roleDecision === "profile_unavailable") return errorRedirect(request.url, "bootstrap_failed");
-    if (roleDecision === "not_mentor") return errorRedirect(request.url, "mentor_only");
+    const targetDecision = bootstrapTargetRoleDecision(parsed.target, profile, Boolean(profileError));
+    if (targetDecision === "profile_unavailable") return errorRedirect(request.url, "bootstrap_failed");
+    if (targetDecision === "profile_incomplete") return errorRedirect(request.url, "profile_incomplete");
+    if (targetDecision === "role_not_allowed") {
+      return errorRedirect(request.url, parsed.target === "shortform_create" ? "mentor_only" : "role_not_allowed");
+    }
 
-    const targetPath = APP_SESSION_BOOTSTRAP_TARGETS[parsed.target];
+    const targetPath = bootstrapTargetRedirectPath(parsed.target);
     const res = withNoStore(NextResponse.redirect(new URL(targetPath, request.url), 303));
     for (const { name, value, options } of hardenAppSurfaceCookieWrites(pendingCookies)) {
       res.cookies.set(name, value, options as CookieOptions);

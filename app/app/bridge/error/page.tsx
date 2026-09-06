@@ -16,6 +16,8 @@ const ERROR_MESSAGES: Record<AppBridgeErrorCode, string> = {
   account_blocked: "계정 상태를 확인해 주세요.",
   bootstrap_failed: "연결에 실패했어요. 앱에서 다시 시도해 주세요.",
   invalid_request: "잘못된 요청이에요. 앱에서 다시 시도해 주세요.",
+  role_not_allowed: "이 계정 유형에서는 이용할 수 없는 기능이에요.",
+  profile_incomplete: "프로필을 먼저 완성해 주세요. 앱에서 프로필 완성 후 다시 시도할 수 있어요.",
 };
 
 type Props = { searchParams?: Promise<Record<string, string | string[] | undefined>> };

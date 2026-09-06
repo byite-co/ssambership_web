@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { callApiWebV1Rpc } from "@/lib/apiWebV1/rpc";
 import { getMentorUserPublic } from "@/lib/auth/mentorPublicRead";
-import { transferReleasedIndividualQuestionsToRoom } from "@/lib/individualQuestion/transferIndividualQuestionsToRoom";
 import { fetchPlansForMentor } from "@/lib/mentor/publicMentorBundle";
 import { rowsFromSupabaseData } from "@/lib/qna/safeSelect";
 import { assignPlansByTier, type SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
@@ -597,14 +596,8 @@ export async function finalizeSubscriptionCheckout(
     });
   }
 
-  // 부가(best-effort): released 개별질문을 F12 정본 room 으로 이전. 실패해도 확정은 유지.
-  if (roomId) {
-    try {
-      await transferReleasedIndividualQuestionsToRoom(admin, { studentId, mentorId, roomId });
-    } catch (e) {
-      console.error("[finalizeSubscriptionCheckout] individual-question transfer failed (non-fatal)", e);
-    }
-  }
+  // 웹 PR-2 §5-2: 구독 확정 부수효과였던 "released 개별질문 → 질문방 이전"은 설계상 폐기됐다
+  // (기획서 §"IQ 이전 없음" 정본). 테이블 individual_question_transfers 와 정책은 DB-6 이 걷는다.
 
   return {
     ok: true,

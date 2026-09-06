@@ -23,6 +23,7 @@ export function HomeLanding(props: { data: HomeLandingData; profile: UserRow | n
   return (
     <PublicGuestLanding
       stats={props.data.publicStats}
+      planPriceStats={props.data.planPriceStats}
       heroCtas={heroCtas}
       loadError={props.data.loadError}
     />

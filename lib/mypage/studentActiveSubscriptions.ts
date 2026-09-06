@@ -20,7 +20,7 @@ import {
   weeklyQuestionResetLabel,
   type SubscriptionStatusTone,
 } from "@/lib/subscribe/subscriptionDisplay";
-import { formatCashFromCents } from "@/lib/subscribe/subscriptionRefundProration";
+import { formatCashFromCents } from "@/lib/subscribe/subscriptionRefundDisplay";
 import { API_WEB_V1_SCHEMA } from "@/lib/apiWebV1/rpc";
 
 type Row = Record<string, unknown>;

@@ -91,7 +91,9 @@ test("앱 표면 계정 게이트 배선: strict(fail-closed)가 bootstrap·페�
   const route = read("app/api/app-session/bootstrap/route.ts");
   assert.ok(route.includes("assertAppSurfaceAccountActiveStrict"), "bootstrap 이 strict 게이트 미사용");
   assert.ok(!route.includes("assertAccountActive("), "bootstrap 이 fail-open 가드로 회귀");
-  assert.ok(route.includes("strictMentorRoleDecision"), "bootstrap role 게이트 미배선");
+  // 웹 PR-2 §6: 단일 mentor 게이트 → target 별 역할 규칙(+ 완성 전 거부) 순수 판정으로 교체.
+  assert.ok(route.includes("bootstrapTargetRoleDecision"), "bootstrap target 별 역할 게이트 미배선");
+  assert.ok(route.includes('"profile_incomplete"'), "완성 전 계정 거부 코드 미배선");
 
   const page = read("app/app/community/shortform/new/page.tsx");
   assert.ok(page.includes("assertAppSurfaceAccountActiveStrict"), "앱 작성 표면이 strict 게이트 미사용");

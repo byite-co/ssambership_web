@@ -2,13 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   APP_SESSION_BOOTSTRAP_MAX_BODY_BYTES,
+  APP_SESSION_BOOTSTRAP_TARGET_ROLES,
   APP_SESSION_BOOTSTRAP_TARGETS,
   bootstrapBodyKindForContentType,
   bootstrapProjectRefMatches,
+  bootstrapTargetRedirectPath,
+  bootstrapTargetRoleDecision,
   isAppSessionBootstrapTarget,
   jwtProjectRef,
   parseBootstrapBody,
   supabaseProjectRefFromUrl,
+  type AppSessionBootstrapTarget,
 } from "../appSessionBootstrapCore.ts";
 import { APP_SHORTFORM_COMPOSE_PATH } from "../appSurfacePaths.ts";
 
@@ -78,11 +82,57 @@ test("invalid target 거부 — 결제·임의 target 은 enum 에 없다", () =
   assert.equal(isAppSessionBootstrapTarget("hasOwnProperty"), false);
 });
 
-test("target enum 은 단일(shortform_create)이고 redirect 는 앱 표면 상수 경로", () => {
-  assert.deepEqual(Object.keys(APP_SESSION_BOOTSTRAP_TARGETS), ["shortform_create"]);
+test("target enum 3개(shortform_create · identity_verify · guardian_consent) — 웹 PR-2 §6 · redirect 는 서버 상수 경로", () => {
+  assert.deepEqual(Object.keys(APP_SESSION_BOOTSTRAP_TARGETS), ["shortform_create", "identity_verify", "guardian_consent"]);
   assert.equal(APP_SESSION_BOOTSTRAP_TARGETS.shortform_create, "/app/community/shortform/new");
+  assert.equal(APP_SESSION_BOOTSTRAP_TARGETS.identity_verify, "/onboarding/verify");
+  assert.equal(APP_SESSION_BOOTSTRAP_TARGETS.guardian_consent, "/onboarding/guardian");
   // 리터럴 이중화 회귀 방지: appSurfacePaths 정본과 반드시 동일해야 한다.
   assert.equal(APP_SESSION_BOOTSTRAP_TARGETS.shortform_create, APP_SHORTFORM_COMPOSE_PATH);
+  for (const t of ["identity_verify", "guardian_consent"]) {
+    assert.equal(isAppSessionBootstrapTarget(t), true, t);
+    const r = parseBootstrapBody("application/x-www-form-urlencoded", formBody({ access_token: GOOD_JWT, refresh_token: "rt", target: t }));
+    assert.ok(r.ok && r.target === t, `${t} 파싱`);
+  }
+  // 온보딩 target 은 `?src=app` 을 붙여 "앱으로 돌아가기" 안내를 켠다 · 앱 표면 경로는 그대로.
+  assert.equal(bootstrapTargetRedirectPath("shortform_create"), "/app/community/shortform/new");
+  assert.equal(bootstrapTargetRedirectPath("identity_verify"), "/onboarding/verify?src=app");
+  assert.equal(bootstrapTargetRedirectPath("guardian_consent"), "/onboarding/guardian?src=app");
+});
+
+test("target 별 역할 규칙: shortform_create = mentor · identity_verify = student·mentor · guardian_consent = student · admin 0", () => {
+  assert.deepEqual(APP_SESSION_BOOTSTRAP_TARGET_ROLES, {
+    shortform_create: ["mentor"],
+    identity_verify: ["student", "mentor"],
+    guardian_consent: ["student"],
+  });
+  const DONE = "2026-09-06T00:00:00Z";
+  const table: Array<[AppSessionBootstrapTarget, string, ReturnType<typeof bootstrapTargetRoleDecision>]> = [
+    ["shortform_create", "mentor", "ok"],
+    ["shortform_create", "student", "role_not_allowed"],
+    ["shortform_create", "admin", "role_not_allowed"],
+    ["identity_verify", "student", "ok"],
+    ["identity_verify", "mentor", "ok"],
+    ["identity_verify", "admin", "role_not_allowed"],
+    ["guardian_consent", "student", "ok"],
+    ["guardian_consent", "mentor", "role_not_allowed"],
+    ["guardian_consent", "admin", "role_not_allowed"],
+  ];
+  for (const [target, role, expected] of table) {
+    assert.equal(bootstrapTargetRoleDecision(target, { role, profile_completed_at: DONE }, false), expected, `${target}/${role}`);
+  }
+  // 대소문자 위조 불가
+  assert.equal(bootstrapTargetRoleDecision("identity_verify", { role: "STUDENT", profile_completed_at: DONE }, false), "role_not_allowed");
+});
+
+test("완성 전 계정(profile_completed_at NULL · role NULL)은 세 target 모두 거부 · 조회 실패/행 없음은 확인 불가(거부)", () => {
+  for (const target of Object.keys(APP_SESSION_BOOTSTRAP_TARGETS) as AppSessionBootstrapTarget[]) {
+    assert.equal(bootstrapTargetRoleDecision(target, { role: null, profile_completed_at: null }, false), "profile_incomplete", target);
+    assert.equal(bootstrapTargetRoleDecision(target, { role: "student", profile_completed_at: null }, false), "profile_incomplete", `${target} 완성 시각 NULL`);
+    assert.equal(bootstrapTargetRoleDecision(target, { role: "mentor" }, false), "profile_incomplete", `${target} 완성 컬럼 미조회`);
+    assert.equal(bootstrapTargetRoleDecision(target, null, false), "profile_unavailable", `${target} 행 없음`);
+    assert.equal(bootstrapTargetRoleDecision(target, { role: "mentor", profile_completed_at: "2026-09-06T00:00:00Z" }, true), "profile_unavailable", `${target} 조회 오류`);
+  }
 });
 
 test("본문 크기 상한 초과 → body_too_large(413 크래시 대신 안전 종료)", () => {

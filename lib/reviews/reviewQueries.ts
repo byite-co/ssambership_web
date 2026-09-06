@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchMentorProfileForPublicMentor } from "@/lib/auth/mentorPublicRead";
 import { checkReviewEligibility } from "@/lib/reviews/checkReviewEligibility";
+import { mapReviewInsertError } from "@/lib/reviews/reviewEligibilityPolicy";
 import { formatGradeSubject, maskStudentName } from "@/lib/reviews/reviewDisplay";
 import { isPubliclyVisibleReview, mapReviewDbRow, type ReviewDbRow } from "@/lib/reviews/reviewRowMapper";
 import { applyReviewUpdate, decideReviewUpdateOutcome } from "@/lib/reviews/reviewUpdateResult";
@@ -217,10 +218,9 @@ export async function createReview(
   const { data, error } = await supabase.from("reviews").insert(insertRow).select("id").single();
 
   if (error) {
-    if (/unique|duplicate/i.test(error.message)) {
-      return { ok: false, error: "이미 리뷰를 작성했습니다." };
-    }
-    return { ok: false, error: "리뷰 저장에 실패했습니다." };
+    // 208: INSERT 정책 reviews_insert_student 가 같은 판정(결제 2회)을 강제한다 — RLS 거부는
+    // 자격 부족 문구로, 유니크 위반은 중복 문구로 매핑한다(원문 비반영).
+    return { ok: false, error: mapReviewInsertError(error) };
   }
 
   return { ok: true, id: String((data as { id: string }).id) };

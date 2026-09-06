@@ -2,6 +2,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { ArrowRight, CreditCard, MessageCircle, NotebookPen, Search, ShieldCheck, TrendingUp } from "lucide-react";
 import type { LandingPublicStats } from "@/lib/landing/landingPageQueries";
+import { planPriceGuidesByTier, type PlanPriceStatsByTier } from "@/lib/subscribe/planPriceStats";
 import { SUBSCRIBE_PLAN_CATALOG } from "@/lib/subscribe/subscribePlanCatalog";
 
 function formatLandingStatCount(n: number | null): string {
@@ -56,8 +57,15 @@ const DEFAULT_HERO_CTAS: HeroCtas = {
   secondary: { href: "/signup", label: "무료 체험 시작하기" },
 };
 
-export function PublicGuestLanding(props: { stats: LandingPublicStats; heroCtas?: HeroCtas; loadError?: boolean }) {
+export function PublicGuestLanding(props: {
+  stats: LandingPublicStats;
+  /** 웹 PR-2 §4: plan_price_stats — null 이면 카탈로그 표시가 폴백(안내 전용) */
+  planPriceStats?: PlanPriceStatsByTier | null;
+  heroCtas?: HeroCtas;
+  loadError?: boolean;
+}) {
   const STATS = buildStats(props.stats);
+  const priceGuides = planPriceGuidesByTier(props.planPriceStats ?? null);
   // 실수치가 없으면("준비 중") 통계 블록 전체를 숨김 — 빈 값 노출 방지
   const showStats = STATS.every((s) => s.value !== "준비 중");
   const heroCtas = props.heroCtas ?? DEFAULT_HERO_CTAS;
@@ -175,12 +183,13 @@ export function PublicGuestLanding(props: { stats: LandingPublicStats; heroCtas?
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <h2 className="text-center text-2xl font-black text-slate-900 sm:text-3xl">구독 플랜</h2>
           <p className="mx-auto mt-3 max-w-lg text-center text-sm font-medium text-slate-600">
-            학습량에 맞는 플랜을 선택하세요. 멘토별로 요금제 비용이 달라요.
+            학습량에 맞는 플랜을 선택하세요. 멘토별로 요금제 비용이 달라요. 아래 금액은 활동 중인 멘토들의 평균가예요.
           </p>
           <div className="mt-10 grid gap-6 md:grid-cols-3">
             {SUBSCRIBE_PLAN_CATALOG.map((plan) => {
               const benefits = PLAN_BENEFITS[plan.tier] ?? [];
               const isRec = Boolean(plan.recommend);
+              const guide = priceGuides[plan.tier];
               return (
                 <article
                   key={plan.tier}
@@ -196,8 +205,11 @@ export function PublicGuestLanding(props: { stats: LandingPublicStats; heroCtas?
                     </span>
                   ) : null}
                   <h3 className="text-lg font-black text-slate-900">{plan.label}</h3>
-                  <p className="mt-2 text-2xl font-black text-[#2563EB]">멘토 재량</p>
-                  <p className="mt-1 text-xs font-bold text-slate-500">{plan.weeklyLabel}</p>
+                  <p className="mt-2 text-2xl font-black text-[#2563EB]">{guide.label}</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">
+                    {plan.weeklyLabel}
+                    {guide.kind === "catalog" ? " · 멘토별 가격은 상세에서 확인" : " · 멘토별로 달라요"}
+                  </p>
                   <ul className="mt-5 flex-1 space-y-2 border-t border-slate-100 pt-5">
                     {benefits.map((b) => {
                       const isHighlight = b.startsWith("*") && b.endsWith("*");

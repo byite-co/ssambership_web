@@ -11,6 +11,7 @@ import { SignupStepBar } from "@/components/auth/SignupStepBar";
 import { StudentSignupForm, type StudentSignupFormValues } from "@/components/auth/StudentSignupForm";
 import { MentorSignupForm, type MentorSignupFormValues } from "@/components/auth/MentorSignupForm";
 import { SignupTrustBlock } from "@/components/auth/SignupTrustBlock";
+import { SocialLoginButtons } from "@/components/auth/SocialLoginButtons";
 import { buildSignupUserMetadata } from "@/lib/auth/buildSignupUserMetadata";
 import { uploadMentorStudentIdAfterSignUpAction } from "@/lib/auth/mentorSignupStudentIdAction";
 import { syncAfterSignUpWithSession } from "@/lib/auth/syncAfterSignUpSession";
@@ -533,6 +534,17 @@ function SignupPageContent() {
 
         {step === 1 ? (
             <div>
+              {/* 소셜 가입(카카오·구글·애플) — 가입 후 /complete-profile 에서 유형·기본 정보를 채운다.
+                  아래에서 유형을 먼저 고르면 그 값이 완성 화면 기본값(role_hint)으로 전달된다.
+                  이메일 가입 경로(메타 20키·트리거)는 그대로다. */}
+              <div className="mx-auto mb-8 w-full max-w-md">
+                <SocialLoginButtons
+                  roleHint={role}
+                  next={safeInternalNextPath(searchParams.get("next"))}
+                  disabled={loading}
+                  heading="소셜 계정으로 바로 시작하기"
+                />
+              </div>
               <h2 className="text-center text-2xl font-extrabold tracking-tight text-slate-900 sm:text-3xl">
                 어떤 유형으로 가입하시나요?
               </h2>

@@ -5,7 +5,14 @@ export type AppRole = "student" | "mentor" | "admin";
 
 export type UserRow = {
   id: string;
-  role: AppRole;
+  /**
+   * DB-5(206)부터 NULL 허용 — 소셜 가입 직후(프로필 완성 전) 행은 `role NULL · profile_completed_at NULL`.
+   * 완성된 행은 CHECK `users_role_required_when_completed` 로 반드시 역할을 가진다.
+   * 역할 분기 전에는 `isProfileIncomplete()`(lib/auth/profileCompletion) 로 완성 여부를 먼저 본다.
+   */
+  role: AppRole | null;
+  /** 프로필 완성 시각(DB-5 206). NULL = 완성 전(소셜 가입 직후·대시보드 생성 계정) → `/complete-profile`. */
+  profile_completed_at?: string | null;
   status: string;
   /** 정지 만료 시각(102 마이그레이션). suspended 전용, null=영구/미설정 */
   suspended_until?: string | null;

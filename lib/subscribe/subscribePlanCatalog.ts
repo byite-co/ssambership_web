@@ -10,7 +10,11 @@ export type SubscribePlanCatalogItem = {
   recommend?: boolean;
 };
 
-/** 보고서 잠금 구독 플랜 (1캐시 = 1원). DB plan_id는 런타임에 멘토 플랜 행에서 조회. */
+/**
+ * 보고서 잠금 구독 플랜 (1캐시 = 1원). DB plan_id는 런타임에 멘토 플랜 행에서 조회.
+ * `cashKrw` 는 카탈로그 **표시가**다 — 웹 PR-2 §4 부터 랜딩·구독 안내는 `plan_price_stats`(평균가)를 먼저 쓰고,
+ * 표본 0(금액 NULL)·로드 실패일 때만 이 값으로 폴백한다(`lib/subscribe/planPriceStats.ts`). 실차감액은 `mentor_plans` 행.
+ */
 export const SUBSCRIBE_PLAN_CATALOG: readonly SubscribePlanCatalogItem[] = [
   {
     tier: "limited",

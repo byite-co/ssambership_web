@@ -5,7 +5,10 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getUserProfileById } from "@/lib/auth/getCurrentProfile";
-import { resolvePostLoginPath, safeInternalNextPath } from "@/lib/auth/getPostLoginPath";
+import { completeProfilePath, resolvePostLoginPath, safeInternalNextPath } from "@/lib/auth/getPostLoginPath";
+import { isProfileIncomplete } from "@/lib/auth/profileCompletion";
+import { OAUTH_ERROR_QUERY } from "@/lib/auth/oauthCallbackCore";
+import { SocialLoginButtons } from "@/components/auth/SocialLoginButtons";
 import { mapSupabaseAuthError } from "@/lib/utils/mapSupabaseAuthError";
 import { mapDataErrorMessage } from "@/lib/utils/mapDataError";
 import type { AuthLoginRole } from "./loginRoleContent";
@@ -70,6 +73,8 @@ export function RoleLoginForm({
   const signupFollowUp = signupMessage === "signup-check-email" || signupMessage === "signup-check-email-doc";
   // 가입 화면의 학생증 서버 업로드가 실패한 경우에만 붙는 재제출 안내.
   const signupDocFollowUp = signupMessage === "signup-check-email-doc";
+  // 소셜 로그인 콜백 실패 복귀(`/login/<role>?error=oauth`) — 사유 원문은 URL 에 없다.
+  const oauthFailed = searchParams.get("error") === OAUTH_ERROR_QUERY;
   const [emailState, setEmailState] = useState("");
   const [passwordState, setPasswordState] = useState("");
   const email = emailProp ?? emailState;
@@ -159,6 +164,13 @@ export function RoleLoginForm({
       return;
     }
 
+    // DB-5(206): 프로필 완성 전 계정(role NULL · profile_completed_at NULL)은 역할 판정 대신 완성 화면으로.
+    if (isProfileIncomplete(profile)) {
+      setLoading(false);
+      window.location.assign(completeProfilePath({ roleHint: role, next: safeInternalNextPath(initialNext) }));
+      return;
+    }
+
     if (role === "mentor" && profile.role !== "mentor") {
       try {
         await supabase.auth.signOut();
@@ -230,6 +242,14 @@ export function RoleLoginForm({
           ) : null}
         </p>
       ) : null}
+      {oauthFailed && !error ? (
+        <p
+          className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:text-base"
+          role="alert"
+        >
+          소셜 로그인에 실패했어요. 다시 시도하거나 이메일로 로그인해 주세요.
+        </p>
+      ) : null}
       {error ? (
         <p
           className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 sm:text-base"
@@ -295,6 +315,8 @@ export function RoleLoginForm({
       <button type="submit" disabled={loading} className={ctaByRole[role]}>
         {loading ? "처리 중…" : submitLabel}
       </button>
+
+      <SocialLoginButtons roleHint={role} next={initialNext ?? null} disabled={disabled || loading} />
 
       {!hideRolePickerLink ? (
         <p className="text-center text-sm text-slate-600 sm:text-base">

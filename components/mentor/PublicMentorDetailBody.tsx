@@ -293,6 +293,8 @@ export function PublicMentorDetailBody(props: {
                   eligible={reviewEligibility?.eligible === true}
                   mode={reviewEligibility?.mode}
                   canEdit={reviewEligibility?.canEdit}
+                  paidCount={reviewEligibility?.paidCount}
+                  requiredCount={reviewEligibility?.requiredCount}
                 />
                 <ReviewWriteModal
                   mentorId={mentorId}

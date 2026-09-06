@@ -1,6 +1,14 @@
 /**
  * 구독 환불 추정 계산 — 학원법 시행령 별표4 분기형.
  *
+ * ⚠️ 웹 PR-2 §5-3(설계상 폐기): **학생 화면·학생 환불 신청 경로는 이 TS 계산을 쓰지 않는다.**
+ *    표시는 `api_app_v1.refund_estimate`, 생성은 `api_app_v1.refund_request_create`(DB-4 200 · SQL 정본
+ *    `core_private.subscription_refund_estimate_impl` · 앱 A-4b 와 같은 함수 · 같은 숫자) — `subscriptionRefundRpc.ts`.
+ *    이 모듈은 관리자 환불 콘솔(`lib/admin/refundConsole*.ts` · 이 PR 범위 밖)과 멘토 활동 종료 잔여 환불
+ *    (`lib/mentor/mentorActivityService.ts` · mentor_suspended 모드)의 소비처가 남아 있어 유지한다.
+ *    두 소비처를 SQL 정본으로 옮기는 것은 DB-6/관리자 PR 몫이며, 그때 이 모듈을 삭제한다.
+ *    학생 경로에 다시 import 하지 마라(계약 테스트 subscriptionRefundRpc 가 감시).
+ *
  * 모드:
  *  - "student_voluntary" (default): 학원법 별표4 적용
  *    · 이용 개시 전(usageStarted=false): 전액
@@ -13,15 +21,12 @@
  * 1개월 초과 결제(분기·연간) 대응은 현 monthly 모델 범위 밖이라 추후.
  */
 
-export type RefundMode = "student_voluntary" | "mentor_suspended";
+import { type RefundBracketReason } from "./subscriptionRefundDisplay.ts";
 
-export type RefundBracketReason =
-  | "before_usage" // 이용 개시 전 — 전액
-  | "lt_1_3" // 학생자발: 경과율 < 1/3 → 2/3 환불
-  | "lt_1_2" // 학생자발: 경과율 < 1/2 → 1/2 환불
-  | "ge_1_2" // 학생자발: 경과율 ≥ 1/2 → 환불 없음
-  | "mentor_remaining" // 멘토 사정: 남은 기간 일할비례
-  | "invalid"; // 입력값 부족 — 계산 불가
+export { formatCashFromCents, formatDateLabel, refundBracketLabelKo } from "./subscriptionRefundDisplay.ts";
+export type { RefundBracketReason } from "./subscriptionRefundDisplay.ts";
+
+export type RefundMode = "student_voluntary" | "mentor_suspended";
 
 export type ProratedRefundEstimate = {
   amountCents: number;
@@ -135,41 +140,4 @@ export function computeProratedRefundEstimate(args: {
     bracketReason: "ge_1_2",
     mode,
   };
-}
-
-export function formatCashFromCents(amountCents: number | null | undefined): string {
-  const cash = Math.max(0, Math.round((amountCents ?? 0) / 100));
-  return `${cash.toLocaleString("ko-KR")}캐시`;
-}
-
-export function formatDateLabel(value: string | null | undefined): string {
-  if (!value) return "일정 없음";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "일정 없음";
-  return new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  }).format(date);
-}
-
-/** 학원법 분기 결과를 사용자에게 보여줄 사유 문구. */
-export function refundBracketLabelKo(reason: RefundBracketReason): string {
-  switch (reason) {
-    case "before_usage":
-      return "이용 개시 전 — 전액 환불";
-    case "lt_1_3":
-      return "기간 1/3 미경과 — 결제액의 2/3 환불";
-    case "lt_1_2":
-      return "기간 1/2 미경과 — 결제액의 1/2 환불";
-    case "ge_1_2":
-      return "기간 1/2 경과 — 환불 가능 금액 없음";
-    case "mentor_remaining":
-      return "제공자 사정 — 남은 기간만큼 환불";
-    case "invalid":
-      return "환불 추정 불가";
-    default:
-      return "";
-  }
 }
