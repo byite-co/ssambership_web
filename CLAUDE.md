@@ -39,7 +39,7 @@
 - **질문방:** `mentor_student_rooms` → `question_threads` → `question_messages`
 - **연결노트:** room 단위 (`connection_notes`)
 - **커뮤니티:** 게시판(`community_posts`) / 숏폼(`shortform_posts`) 분리
-- **리뷰:** 동일 멘토 2회 연속 결제 성공 후
+- **리뷰:** 같은 멘토 구독 결제 성공 **누적 2회** 이상(`subscription_billing_events` succeeded · initial/renewal · 개별질문 결제 제외) — 정본 `check_review_eligibility`(SQL 208). 구 잠금값 "2회 연속"의 "연속"은 누적으로 해석 확정(DB-5 보고서 §2-4 · 오너 2026-09-06)
 - **캐시:** 1캐시 = 1원 · `balance_cents` ÷ 100
 
 > **개정 2026-07-12 (XV-PRICE 확정):** 요금제 잠금값을 현행 웹 코드 기준으로 정본화했다. 표기 "베이직"→**"라이트"**, 단일 고정가(구 55,000/114,900/249,900) 체계를 폐기하고 **카탈로그 표시가 + 멘토 가격 밴드** 2층 구조로 전환(구 고정가 3종은 밴드의 **권장가·실차감 폴백**으로 존속). 이 개정 이전 값을 인용한 문서(`docs/architecture/purpose-report/*` 각주 등)는 당시 감사 스냅샷으로 그대로 둔다.
