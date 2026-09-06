@@ -48,6 +48,27 @@
 
 census 기대: `api_app_v1` 함수 16(M17 5 + 20260803162257 1 + DB-4 10) · `core_private` 8(7 + 1). public 함수/정책/테이블/버킷 수는 DB-4 로 변하지 않는다(`scripts/verify/baseline/verify_local_stack_state.sh` [4c]).
 
+## 1c. DB-5 배포 전 서버 객체 기대상태 (2026-09-06)
+
+| 객체 | 기대 | 근거 SQL |
+| --- | --- | --- |
+| `public.plan_price_stats()` | SECURITY DEFINER · STABLE · search_path '' · `anon=true`, `authenticated=true`, `service_role=true` EXECUTE(비로그인 메인 · 집계 6열만 — 멘토별 단가 비노출) | `205_plan_price_stats.sql` |
+| `users.profile_completed_at` | timestamptz NULL 허용 · 기존 전원 `created_at` 백필 · NULL = 소셜 가입 후 완성 전 | `206_social_signup_profile_completion.sql` |
+| `users.role` | **NULL 허용**(NOT NULL 완화) + CHECK `users_role_required_when_completed (role is not null or profile_completed_at is null)` · `users_role_check`(student/mentor/admin) 유지 · 임시 역할값 없음 | `206` |
+| `public.handle_new_auth_user()` | `raw_user_meta_data ? 'app_role'` 없으면 소셜 경로(role NULL · 프로필 행 0) · 있으면 122 정규화 + `profile_completed_at = now()` · 본문은 `core_private.user_signup_provision_impl` 위임 | `206` |
+| `core_private.user_signup_provision_impl(uuid, text, text, text, text, text, text, date, boolean, boolean, boolean, text, text, text[], text, text, timestamptz)` | **외부 EXECUTE 0** — 트리거 두 경로 + `complete_profile` 공유 정본 | `206` |
+| `public.enforce_users_role_guard()` | 119 원문 + 완성 전(role NULL · profile_completed_at NULL) 행의 student/mentor 최초 부여만 추가 허용 | `206` |
+| `core_private.user_profile_update_self_impl(uuid, text, text)` | 20260803162257 D 원문 + `v_role is null` 명시 거부(ROLE_NOT_ALLOWED) · ACL 불변(외부 0) | `206` |
+| `public.user_profile_completed()` | SECURITY DEFINER · STABLE · `anon=true`, `authenticated=true` EXECUTE(정책 식에서 호출) | `206` |
+| 쓰기 정책 18종(`favorites_insert_own` · `ub_insert_own` · `content_reports_insert_reporter` · `fqu_insert_own` · `payments_insert_intent` · `ver_logs_insert_own` · `device_tokens_modify_own` · `notif_settings_modify_own` · `ai_drafts_insert_own` · `withdrawals_insert_self_requested` · `crp_insert` · `cra_insert` · `cro_insert` · 레거시 `학생만 의뢰 등록` · `멘토만 지원` · `당사자만 메시지 전송` · `멘토만 납품 업로드` · `관리자만 로그 기록`) | 원문 + `AND public.user_profile_completed()` · 이름·명령·역할·permissive 불변 · 정책 수 175 불변 | `206` |
+| `api_app_v1.complete_profile(text, text, date, boolean, boolean, text, text, text)` | `anon=false`, `authenticated=true`, `service_role=false` · SECDEF · search_path '' · impl 위임 · `user_consent_records` 미기록 | `206` |
+| `api_app_v1.create_individual_question_as_student_v3(text, text, text, integer, uuid, text, text, text, text, text)` | 204 와 동일 ACL(authenticated 만) · v2 본문 복제 + topic·자격 · 코어 v2 위임 · v1·v2 불변 | `207_api_app_v1_individual_question_create_v3.sql` |
+| `core_private.review_eligibility_impl(uuid, uuid)` | **외부 EXECUTE 0** · 결제 2회(누적) 판정 정본 | `208_review_eligibility_paid_twice.sql` |
+| `public.check_review_eligibility(uuid, uuid)` | 170 과 같은 시그니처·boolean·STABLE·SECDEF·ACL(anon 0 · authenticated) · 본문만 impl 위임 · 정책 `reviews_insert_student` 불변 | `208` |
+| `api_app_v1.review_eligibility_self(uuid)` | `anon=false`, `authenticated=true`, `service_role=false` | `208` |
+
+census 기대: `api_app_v1` 함수 19(16 + 3) · `core_private` 10(8 + 2) · public 함수 230(228 + `plan_price_stats` + `user_profile_completed`) · 정책 175 · 테이블 84 · 버킷 13 불변(`scripts/verify/baseline/verify_local_stack_state.sh` [4]·[4c]).
+
 ## 2. 민감 테이블 RLS 기대상태
 
 | 테이블 | 기대상태 | 근거 SQL |
