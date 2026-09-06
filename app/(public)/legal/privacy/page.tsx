@@ -12,7 +12,7 @@ export const metadata = {
   description: "쌤버십 개인정보처리방침입니다.",
 };
 
-// 소셜 로그인(카카오·구글·애플) 도입 고지 개정의 시행일 — 정본은 `lib/legal/socialLoginRevision.ts`(오너 확정 2026-09-13).
+// 소셜 로그인(카카오·구글·애플) 도입 고지 개정의 시행일 — 정본은 `lib/legal/socialLoginRevision.ts` 한 곳(이 파일에 날짜 리터럴을 두지 않는다).
 // 같은 상수를 `components/auth/SocialLoginButtons.tsx` 가 노출 게이트로 쓴다(시행일 전엔 버튼 미노출 · 제12조 7일 사전 공지).
 // ACTIVE 가 false(시행일 미확정)면 아래 소셜 로그인 관련 조항·개정 이력은 렌더되지 않고 직전 개정(2026-09-01) 상태 그대로 표시된다.
 // 동의 원장 버전(`MINOR_CONSENT_VERSION` · legal-placeholder-2026-06-20) 승격은 법무 확정 후 별도 작업.

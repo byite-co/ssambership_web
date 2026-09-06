@@ -48,6 +48,8 @@ test("배선: 방침 페이지는 공용 상수(라벨·ACTIVE)를 쓰고 로컬
   assert.ok(page.includes("const REVISION_SOCIAL_LOGIN_EFFECTIVE_DATE: string = SOCIAL_LOGIN_REVISION_EFFECTIVE_DATE_LABEL;"), "시행일 표기가 공용 라벨이 아님");
   assert.ok(!page.includes('REVISION_SOCIAL_LOGIN_EFFECTIVE_DATE: string = ""'), "오너 입력용 빈 문자열 상수가 되살아남");
   assert.ok(page.includes("const SOCIAL_LOGIN_REVISION_ACTIVE = SOCIAL_LOGIN_REVISION_ACTIVE_SHARED;"), "ACTIVE 스위치가 공용 값이 아님");
+  // 단일 소스: 소셜 개정 시행일 리터럴은 lib/legal/socialLoginRevision.ts 한 곳뿐(#133 의 직접 리터럴 방식 재유입 금지).
+  assert.ok(!page.includes("2026년 9월 13일") && !page.includes("2026-09-13"), "방침 페이지에 소셜 개정 시행일 리터럴이 남아 있다");
 });
 
 test("배선: 소셜 버튼은 게이트로 null 을 돌려준다 · 로그인 폼·가입 화면 배선은 그대로", () => {
