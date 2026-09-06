@@ -11,7 +11,7 @@ export const metadata = {
 // 소셜 로그인(카카오·구글·애플) 도입 고지 개정의 시행일 — **오너가 채운다**(시행일 = 소셜 로그인 버튼 공개일 이전 · 제12조 7일 사전 공지).
 // 빈 문자열이면 아래 소셜 로그인 관련 조항·개정 이력은 렌더되지 않고 직전 개정(2026-09-01) 상태 그대로 표시된다(초안 · 법무 확정 전).
 // 값 예: "2026년 9월 20일". 동의 원장 버전(`MINOR_CONSENT_VERSION` · legal-placeholder-2026-06-20) 승격은 법무 확정 후 별도 작업.
-const REVISION_SOCIAL_LOGIN_EFFECTIVE_DATE: string = "";
+const REVISION_SOCIAL_LOGIN_EFFECTIVE_DATE: string = "2026년 9월 13일";
 const SOCIAL_LOGIN_REVISION_ACTIVE = REVISION_SOCIAL_LOGIN_EFFECTIVE_DATE.trim() !== "";
 // 직전 개정(앱 푸시 알림 도입 고지)의 시행일 — 오너 확정(2026-08-27): 실가입자 없음(데모 계정만)에 따라 제12조 7일 사전 공지 기간 미적용.
 const REVISION_2026_09_01 = "2026년 9월 1일";
