@@ -8,10 +8,24 @@ export const metadata = {
   description: "쌤버십 개인정보처리방침입니다.",
 };
 
-// 본 개정(앱 푸시 알림 도입 고지)의 시행일 — 오너 확정(2026-08-27): 실가입자 없음(데모 계정만)에 따라 제12조 7일 사전 공지 기간 미적용.
-const REVISION_EFFECTIVE_DATE = "2026년 9월 1일";
-// 직전 개정(휴대폰 본인인증 도입) 시행일 — 제12조 이력 표기 전용.
+// 소셜 로그인(카카오·구글·애플) 도입 고지 개정의 시행일 — **오너가 채운다**(시행일 = 소셜 로그인 버튼 공개일 이전 · 제12조 7일 사전 공지).
+// 빈 문자열이면 아래 소셜 로그인 관련 조항·개정 이력은 렌더되지 않고 직전 개정(2026-09-01) 상태 그대로 표시된다(초안 · 법무 확정 전).
+// 값 예: "2026년 9월 20일". 동의 원장 버전(`MINOR_CONSENT_VERSION` · legal-placeholder-2026-06-20) 승격은 법무 확정 후 별도 작업.
+const REVISION_SOCIAL_LOGIN_EFFECTIVE_DATE: string = "";
+const SOCIAL_LOGIN_REVISION_ACTIVE = REVISION_SOCIAL_LOGIN_EFFECTIVE_DATE.trim() !== "";
+// 직전 개정(앱 푸시 알림 도입 고지)의 시행일 — 오너 확정(2026-08-27): 실가입자 없음(데모 계정만)에 따라 제12조 7일 사전 공지 기간 미적용.
+const REVISION_2026_09_01 = "2026년 9월 1일";
+// 그 전 개정(휴대폰 본인인증 도입) 시행일 — 제12조 이력 표기 전용.
 const REVISION_2026_08_25 = "2026년 8월 25일";
+// 현재 표시 시행일 — 소셜 로그인 개정 시행일이 채워지면 그 값, 아니면 직전 개정.
+const REVISION_EFFECTIVE_DATE = SOCIAL_LOGIN_REVISION_ACTIVE ? REVISION_SOCIAL_LOGIN_EFFECTIVE_DATE : REVISION_2026_09_01;
+
+/** 소셜 로그인 제공자별 제공 항목 (제1조 · 제4조 고지용). 사실관계 정본: DB-5 보고서 §2-5 · 4-4 지시서 §1. */
+const SOCIAL_LOGIN_PROVIDER_ROWS: ReadonlyArray<{ provider: string; items: string }> = [
+  { provider: "카카오", items: "계정 식별자, 닉네임, 이메일(이용자가 카카오 화면에서 제공에 동의한 경우에 한함)" },
+  { provider: "구글", items: "계정 식별자, 이름, 이메일, 프로필 사진 URL" },
+  { provider: "애플", items: "계정 식별자, 이름(최초 로그인 시 1회), 이메일 또는 애플이 발급하는 비공개 릴레이 주소" },
+];
 
 /** 제5조 ② 국외 이전 고지 표 (개인정보보호법 제28조의8 제1항 제3호). */
 const OVERSEAS_TRANSFER_ROWS: ReadonlyArray<{ item: string; content: ReactNode }> = [
@@ -63,7 +77,26 @@ export default function LegalPrivacyPage() {
         <p>회사는 서비스 제공을 위해 다음의 최소한의 개인정보를 수집합니다.</p>
         <LegalList
           items={[
-            <><strong>회원 공통(필수)</strong>: 이메일, 비밀번호(암호화 저장), 닉네임, 역할(학생/멘토), 서비스 이용기록</>,
+            SOCIAL_LOGIN_REVISION_ACTIVE ? (
+              <><strong>회원 공통(필수)</strong>: 이메일(소셜 로그인의 경우 제공자 설정 또는 이용자의 선택에 따라 수집되지 않을 수 있음), 비밀번호(이메일 가입 시 · 암호화 저장), 닉네임(표시명), 역할(학생/멘토), 생년월일, 서비스 이용기록</>
+            ) : (
+              <><strong>회원 공통(필수)</strong>: 이메일, 비밀번호(암호화 저장), 닉네임, 역할(학생/멘토), 서비스 이용기록</>
+            ),
+            ...(SOCIAL_LOGIN_REVISION_ACTIVE
+              ? [
+                  <>
+                    <strong>소셜 로그인 시(필수)</strong>: 이용자가 선택한 소셜 로그인 제공자로부터 제공받는 다음 항목 —{" "}
+                    {SOCIAL_LOGIN_PROVIDER_ROWS.map((row, index) => (
+                      <span key={row.provider}>
+                        {index > 0 ? " · " : ""}
+                        <strong>{row.provider}</strong>: {row.items}
+                      </span>
+                    ))}
+                    . 이메일은 제공자 설정 또는 이용자의 선택에 따라 수집되지 않을 수 있으며, 소셜 로그인으로 가입한 경우 비밀번호는
+                    수집하지 않습니다
+                  </>,
+                ]
+              : []),
             <><strong>학생(선택)</strong>: 학년 등 학습 지원에 필요한 정보</>,
             <><strong>멘토(필수)</strong>: 대학명·학과·담당 과목 등 프로필 정보, 재학 확인을 위한 학생증 이미지</>,
             <><strong>본인인증 시(필수)</strong>: 성명, 생년월일, 성별, 내·외국인 정보, 휴대폰번호, 이동통신사, 연계정보(CI), 중복가입확인정보(DI)</>,
@@ -77,6 +110,20 @@ export default function LegalPrivacyPage() {
           본인인증 정보는 본인확인기관인 NICE평가정보(주)의 휴대폰 본인확인 서비스를 통해 수집하며, 회사는 이용자가
           본인확인기관에서 인증을 완료하는 시점에 그 결과를 제공받습니다.
         </p>
+        {SOCIAL_LOGIN_REVISION_ACTIVE ? (
+          <>
+            <p>
+              <strong>수집 방법</strong>: 회사는 다음의 방법으로 개인정보를 수집합니다.
+            </p>
+            <LegalList
+              items={[
+                "회원가입 화면 및 프로필 완성 화면에서 이용자가 직접 입력(역할, 표시명, 생년월일, 학생의 학년 또는 멘토의 대학·학과)",
+                "소셜 로그인(OAuth) 과정에서 이용자가 제공자 화면에서 동의한 항목을 제공자로부터 전달받음 — 소셜 로그인으로 처음 가입한 이용자는 이어지는 프로필 완성 단계에서 위 항목을 직접 입력합니다",
+                "휴대폰 본인인증 결과의 수신, 결제·서비스 이용 과정에서의 자동 생성·수집",
+              ]}
+            />
+          </>
+        ) : null}
       </LegalSection>
 
       <LegalSection title="제2조 (개인정보의 수집·이용 목적)">
@@ -119,6 +166,12 @@ export default function LegalPrivacyPage() {
           지체 없이 파기합니다. 기기에서 앱을 삭제하거나 알림 수신을 거부한 경우 해당 토큰으로는 더 이상 알림이
           전송되지 않습니다.
         </p>
+        {SOCIAL_LOGIN_REVISION_ACTIVE ? (
+          <p>
+            소셜 로그인 제공자로부터 제공받은 계정 식별자 및 항목(제1조의 소셜 로그인 시 항목)은 회원 탈퇴 시 탈퇴 처리
+            과정에서 지체 없이 파기합니다. 다만 관계 법령에 따라 보존 의무가 있는 기록은 위 보존 기간을 따릅니다.
+          </p>
+        ) : null}
       </LegalSection>
 
       <LegalSection title="제4조 (개인정보의 제3자 제공)">
@@ -126,6 +179,34 @@ export default function LegalPrivacyPage() {
           회사는 이용자의 개인정보를 본 방침에서 고지한 범위를 넘어 제3자에게 제공하지 않습니다. 다만 이용자가 사전에
           동의한 경우 또는 법령에 따라 요구되는 경우에 한하여 제공할 수 있습니다.
         </p>
+        {SOCIAL_LOGIN_REVISION_ACTIVE ? (
+          <>
+            <p>
+              <strong>소셜 로그인 제공자</strong>: 소셜 로그인(카카오·구글·애플)은 이용자가 각 제공자의 화면에서 정보 제공에
+              동의하면 회사가 제공자로부터 제1조의 항목을 제공받는 방식이며, 회사가 이용자의 개인정보를 제공자에게 제공하거나
+              처리를 위탁하는 것이 아닙니다. 회사는 로그인 처리에 필요한 범위를 넘어 제공자와 개인정보를 주고받지 않으며,
+              제공자의 개인정보 처리는 각 제공자의 개인정보처리방침에 따릅니다.
+            </p>
+            <div className="overflow-x-auto">
+              <table className="mt-2 w-full min-w-[420px] border-collapse text-sm">
+                <thead>
+                  <tr className="border-b border-slate-300 text-left text-slate-600">
+                    <th className="py-2 pr-4 font-semibold">제공자</th>
+                    <th className="py-2 font-semibold">회사가 제공받는 항목</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {SOCIAL_LOGIN_PROVIDER_ROWS.map((row) => (
+                    <tr key={row.provider} className="border-b border-slate-100 align-top">
+                      <td className="py-2 pr-4 font-medium text-slate-800">{row.provider}</td>
+                      <td className="py-2 text-slate-600">{row.items}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        ) : null}
       </LegalSection>
 
       <LegalSection title="제5조 (개인정보 처리의 위탁)">
@@ -245,7 +326,12 @@ export default function LegalPrivacyPage() {
           items={[
             <>{COMPANY.effectiveDate}: 시행</>,
             <>{REVISION_2026_08_25}: 개정 시행 — 휴대폰 본인인증(NICE평가정보) 도입에 따라 수집 항목·이용 목적·처리 위탁·안전성 확보 조치 및 만 14세 미만 아동의 개인정보 조항을 정비</>,
-            <>{REVISION_EFFECTIVE_DATE}: 개정 시행 — 모바일 앱 푸시 알림(Firebase Cloud Messaging) 도입에 따라 수집 항목·이용 목적·보유기간·처리 위탁 및 국외 이전 고지, 이용자 권리·안전성 확보 조치를 보강</>,
+            <>{REVISION_2026_09_01}: 개정 시행 — 모바일 앱 푸시 알림(Firebase Cloud Messaging) 도입에 따라 수집 항목·이용 목적·보유기간·처리 위탁 및 국외 이전 고지, 이용자 권리·안전성 확보 조치를 보강</>,
+            ...(SOCIAL_LOGIN_REVISION_ACTIVE
+              ? [
+                  <>{REVISION_SOCIAL_LOGIN_EFFECTIVE_DATE}: 개정 시행 — 소셜 로그인(카카오·구글·애플) 도입에 따라 수집 항목·수집 방법, 소셜 로그인 제공자에 관한 고지(제4조) 및 보유·파기 조항을 정비</>,
+                ]
+              : []),
           ]}
         />
       </LegalSection>
