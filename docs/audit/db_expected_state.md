@@ -48,6 +48,32 @@
 
 census 기대: `api_app_v1` 함수 16(M17 5 + 20260803162257 1 + DB-4 10) · `core_private` 8(7 + 1). public 함수/정책/테이블/버킷 수는 DB-4 로 변하지 않는다(`scripts/verify/baseline/verify_local_stack_state.sh` [4c]).
 
+## 1c. DB-5 배포 전 서버 객체 기대상태 (2026-09-06)
+
+| 객체 | 기대 | 근거 SQL |
+| --- | --- | --- |
+| `public.plan_price_stats()` | SECURITY DEFINER · STABLE · search_path '' · `anon=true`, `authenticated=true`, `service_role=true` EXECUTE(비로그인 메인 · 집계 6열만 — 멘토별 단가 비노출) | `205_plan_price_stats.sql` |
+| `users.profile_completed_at` | timestamptz NULL 허용 · 기존 전원 `created_at` 백필 · NULL = 소셜 가입 후 완성 전 | `206_social_signup_profile_completion.sql` |
+| `users.role` | **NULL 허용**(NOT NULL 완화) + CHECK `users_role_required_when_completed (role is not null or profile_completed_at is null)` · `users_role_check`(student/mentor/admin) 유지 · 임시 역할값 없음 | `206` |
+| `public.handle_new_auth_user()` | `raw_user_meta_data ? 'app_role'` 없으면 소셜 경로(role NULL · 프로필 행 0) · 있으면 122 정규화 + `profile_completed_at = now()` · 본문은 `core_private.user_signup_provision_impl` 위임 | `206` |
+| `core_private.user_signup_provision_impl(uuid, text, text, text, text, text, text, date, boolean, boolean, boolean, text, text, text[], text, text, timestamptz, jsonb)` | **외부 EXECUTE 0** — 트리거 두 경로 + `complete_profile` 공유 정본 · 마지막 인자 `p_consent_meta` 가 NULL 이 아니면 동의 원장 impl 호출 | `206` |
+| `core_private.user_consent_signup_impl(uuid, jsonb, text)` | **외부 EXECUTE 0** — 동의 원장 정본(187 본문 인자화 · 멱등 키 `signup:<uid>:<type>:<version>`) · 프로비저닝 impl 과 187 트리거 함수가 공유 | `206`(후속 a) |
+| `public.handle_new_auth_user_consent_records()` | 187 헤더·속성 그대로(SECURITY DEFINER · search_path public) · 본문은 `core_private.user_consent_signup_impl` 위임(멱등 no-op) · 트리거 `zz_on_auth_user_created_consent_records` 부착 그대로 | `206`(후속 a) |
+| `public.enforce_users_role_guard()` | 119 원문 + 완성 전(role NULL · profile_completed_at NULL) 행의 student/mentor 최초 부여만 추가 허용 | `206` |
+| `core_private.user_profile_update_self_impl(uuid, text, text)` | 20260803162257 D 원문 + `v_role is null` 명시 거부(ROLE_NOT_ALLOWED) · ACL 불변(외부 0) | `206` |
+| `public.user_profile_completed()` | SECURITY DEFINER · STABLE · `anon=true`, `authenticated=true` EXECUTE(정책 식에서 호출) | `206` |
+| 쓰기 정책 18종(`favorites_insert_own` · `ub_insert_own` · `content_reports_insert_reporter` · `fqu_insert_own` · `payments_insert_intent` · `ver_logs_insert_own` · `device_tokens_modify_own` · `notif_settings_modify_own` · `ai_drafts_insert_own` · `withdrawals_insert_self_requested` · `crp_insert` · `cra_insert` · `cro_insert` · 레거시 `학생만 의뢰 등록` · `멘토만 지원` · `당사자만 메시지 전송` · `멘토만 납품 업로드` · `관리자만 로그 기록`) | 원문 + `AND public.user_profile_completed()` · 이름·명령·역할·permissive 불변 · 정책 수 175 불변 | `206` |
+| `api_app_v1.complete_profile(text, text, date, boolean, boolean, text, text, text)` | `anon=false`, `authenticated=true`, `service_role=false` · SECDEF · search_path '' · impl 위임 · 동의 원장 terms/privacy(+marketing) 행은 impl 경유(직접 INSERT 0) | `206` |
+| `core_private.account_blocked_state(uuid)` | **외부 EXECUTE 0** · STABLE · NULL = 허용 / banned · suspended · deleted · deletion_in_progress · status_unknown · row_missing | `207`(후속 b) |
+| `api_app_v1.create_individual_question_as_student_v2(text, text, text, integer, uuid, text, text)` | 204 시그니처·반환·ACL·오류 규약 그대로 + AUTH_REQUIRED 직후 `ACCOUNT_BLOCKED`(detail 상태값) 검사 1곳 | `207`(후속 b) |
+| `api_app_v1.create_individual_question_as_student_v3(text, text, text, integer, uuid, text, text, text, text, text)` | 204 와 동일 ACL(authenticated 만) · v2 본문 복제(계정 검사 포함) + topic·자격 · 코어 v2 위임 · v1 불변 | `207_api_app_v1_individual_question_create_v3.sql` |
+| `core_private.review_eligibility_impl(uuid, uuid)` | **외부 EXECUTE 0** · 결제 2회(누적) 판정 정본 | `208_review_eligibility_paid_twice.sql` |
+| `public.check_review_eligibility(uuid, uuid)` | 170 과 같은 시그니처·boolean·STABLE·SECDEF·ACL(anon 0 · authenticated) · 본문만 impl 위임 · 정책 `reviews_insert_student` 불변 | `208` |
+| `api_app_v1.review_eligibility_self(uuid)` | `anon=false`, `authenticated=true`, `service_role=false` | `208` |
+| `api_web_v1.user_marketing_consent_set_self(boolean)` | 20260803162257 G 시그니처·ACL(anon 0 · authenticated · service_role) 그대로 · 원장 INSERT 에 `idempotency_key`(`self_rpc:<uid>:marketing:<uuid>`) 명시 | `209_marketing_consent_idempotency_key.sql` |
+
+census 기대: `api_app_v1` 함수 19(16 + 3) · `core_private` 12(8 + 4: signup provision · consent · review · account gate) · public 함수 230(228 + `plan_price_stats` + `user_profile_completed`) · 정책 175 · 테이블 84 · 버킷 13 불변(`scripts/verify/baseline/verify_local_stack_state.sh` [4]·[4c]).
+
 ## 2. 민감 테이블 RLS 기대상태
 
 | 테이블 | 기대상태 | 근거 SQL |

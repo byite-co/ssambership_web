@@ -53,10 +53,20 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 118본 pack(생성기 117 + PR60 1) 기준
-# (tables=84 functions=228 policies=175 buckets=13)이며, PG16 스크래치 재생 실측
-# (scripts/verify/local_db4_batch_check.sh [7])과 일치한다.
-# (프로덕션 원장은 112본 — 20260905100100~100600 미적용 상태다. DB-1·2·3 9본은 2026-09-03 적용 완료.)
+# 기대치는 123본 pack(생성기 122 + PR60 1) 기준
+# (tables=84 functions=230 policies=175 buckets=13)이며, PG16 스크래치 재생 실측
+# (scripts/verify/local_db5_batch_check.sh [7])과 일치한다.
+# (프로덕션 원장은 118본 — 20260906100100~100500 미적용 상태다. DB-4 6본은 2026-09-05 적용 완료.)
+# 118본→123본(DB-5 배포 전 서버 객체 배치 + 후속 a·b·d · 2026-09-06) 델타:
+#   functions +2 = plan_price_stats (20260906100100 — 요금제 평균가 · anon/authenticated 읽기)
+#                + user_profile_completed (20260906100200 — 완성 전 사용자 RLS 조건 헬퍼)
+#   policies  불변 — 20260906100200 은 auth.uid() 만 보는 쓰기 정책 18종을 같은 이름으로 재생성(원문 + AND user_profile_completed()).
+#   (20260906100200 의 handle_new_auth_user·enforce_users_role_guard·core_private.user_profile_update_self_impl 은 본문 치환,
+#    users.profile_completed_at 컬럼·CHECK 추가는 위 4개 카운트를 바꾸지 않는다. 20260906100400 의 check_review_eligibility 도 본문 치환.)
+#   (20260906100200 후속 a 는 handle_new_auth_user_consent_records 본문 위임 치환, 20260906100300 후속 b 는 v2 본문 치환(계정 검사 1곳),
+#    20260906100500 후속 d 는 api_web_v1.user_marketing_consent_set_self 본문 치환 — 카운트 불변.)
+#   api_app_v1 +3(complete_profile · create_individual_question_as_student_v3 · review_eligibility_self) · core_private +4
+#   (user_signup_provision_impl · user_consent_signup_impl · review_eligibility_impl · account_blocked_state) — 아래 [4c] census 16→19 · 8→12.
 # 112본→118본(DB-4 `api_app_v1` 래퍼 배치 · 2026-09-05) 델타: 위 public 4개 카운트 **불변** —
 #   신규 객체는 전부 api_app_v1(함수 +10: subscribe_with_cash · subscription_cancel_at_period_end · subscription_cancel_undo ·
 #   refund_estimate · refund_request_create · mentor_activity_set · mentor_plan_active_set · user_profile_update_self_v2 ·
@@ -134,7 +144,7 @@ count_check(){ # count_check <label> <expected> <sql>
 }
 count_check tables 84 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
-count_check functions 228 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+count_check functions 230 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
 count_check policies 175 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"
@@ -143,9 +153,9 @@ echo "=== [4b] realtime.messages 정책 (20260903230200 — admin:* 토픽 관�
 count_check realtime_messages_policies 2 "select count(*) from pg_policies where schemaname='realtime' and tablename='messages'
                                           and policyname in ('realtime_admin_topic_select','realtime_admin_topic_insert')"
 
-echo "=== [4c] api_app_v1 · core_private 함수 census (DB-4 20260905100100~100600 — 앱 래퍼 10 + 환불 impl 1)"
-count_check api_app_v1_functions 16 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='api_app_v1'"
-count_check core_private_functions 8 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='core_private'"
+echo "=== [4c] api_app_v1 · core_private 함수 census (DB-4 20260905100100~100600 앱 래퍼 10 + 환불 impl 1 · DB-5 20260906100200/100300/100400 +3 · core_private impl +4)"
+count_check api_app_v1_functions 19 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='api_app_v1'"
+count_check core_private_functions 12 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='core_private'"
 q "select p.proname||'|anon='||has_function_privilege('anon',p.oid,'EXECUTE')::text
      ||'|auth='||has_function_privilege('authenticated',p.oid,'EXECUTE')::text
      ||'|svc='||has_function_privilege('service_role',p.oid,'EXECUTE')::text
@@ -154,7 +164,7 @@ q "select p.proname||'|anon='||has_function_privilege('anon',p.oid,'EXECUTE')::t
 if grep -qE 'anon=true|svc=true' "$EV/api_app_v1_fn_acl.txt" || grep -qv 'auth=true' "$EV/api_app_v1_fn_acl.txt"; then
   bad "api_app_v1 함수 ACL 은 authenticated 만이어야 한다(anon 0 · service_role 0)"
 else
-  say "api_app_v1 함수 16/16: authenticated 만 · anon/service_role 없음"
+  say "api_app_v1 함수 19/19: authenticated 만 · anon/service_role 없음"
 fi
 
 echo "=== [5] M13 trigger function ACL (anon/authenticated EXECUTE 불가)"
