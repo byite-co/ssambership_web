@@ -78,14 +78,16 @@ begin
   end if;
   -- 정책 수 스냅샷(자가 검증에서 불변 확인)
   create temp table db5_206_pre on commit drop as select count(*)::int as policies from pg_policies where schemaname = 'public';
-  -- 트리거·가드 본문 전제(라이브 = pack · 2026-09-06 실측 md5)
+  -- 트리거·가드 본문 전제(2026-09-06 운영 실측 md5). 119 가드는 운영 본문이 CRLF(SQL Editor 적용본 · 운영 함수 82개 동일)라 운영 실측값은
+  --   b0fe6f75… 이고(정본 · 2026-09-06 apply 가 pack 값만 기대하던 게이트에서 중단), pack 의 119(pre_ledger_baseline 번들 · LF)를 빈 DB 에 재생하면
+  --   702ddc29… 다(replace(E'\r\n', E'\n') 후 동일 = 본문 같고 줄바꿈만 상이). 둘 다 허용해야 운영 apply 와 팩 재생(CI db-migration-pack-verify · 신규 환경)이 함께 통과한다.
   select md5(pg_get_functiondef('public.handle_new_auth_user()'::regprocedure)) into v_md5;
   if v_md5 <> '297616fe4e28f0dbda3b24244763a917' then
     raise exception '206_GATE: handle_new_auth_user 본문 md5 불일치(122/20260717044250) — 현재 %', v_md5;
   end if;
   select md5(pg_get_functiondef('public.enforce_users_role_guard()'::regprocedure)) into v_md5;
-  if v_md5 <> '702ddc298e6892306e796cae22f60201' then
-    raise exception '206_GATE: enforce_users_role_guard 본문 md5 불일치(119) — 현재 %', v_md5;
+  if v_md5 not in ('b0fe6f758260c82ab3c342951cba6dc0', '702ddc298e6892306e796cae22f60201') then
+    raise exception '206_GATE: enforce_users_role_guard 본문 md5 불일치(119 · 운영 CRLF b0fe6f75… / pack LF 재생 702ddc29…) — 현재 %', v_md5;
   end if;
   select md5(pg_get_functiondef('public.handle_new_auth_user_consent_records()'::regprocedure)) into v_md5;
   if v_md5 <> 'abc7c96e8d5707a6d8324a75d4b14815' then

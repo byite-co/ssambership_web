@@ -12,6 +12,67 @@ create table if not exists db5_check.snapshot (key text primary key, val text);
 grant usage on schema db5_check to authenticated, anon;
 grant select on db5_check.snapshot to authenticated, anon;   -- post fixture 가 클라이언트 역할로도 스냅샷을 읽는다
 
+-- ── 119 role 가드 본문을 운영 실측 원문(CRLF)으로 재시드 ──
+-- pack 의 119 는 LF 로 재생돼 md5 702ddc298e6892306e796cae22f60201 이지만, 운영(2026-09-06 실측)은 SQL Editor 적용본이라 prosrc 의 모든 줄바꿈이 CRLF 다
+-- (md5 b0fe6f758260c82ab3c342951cba6dc0 · replace(E'\r\n', E'\n') 후 702ddc29… 로 본문 동일 · 운영 함수 82개가 같은 상태). 206 게이트와 롤백은 운영 바이트를
+-- 기준으로 하므로 로컬도 같은 바이트를 심어 게이트가 같은 값을 보게 한다. 아래 CREATE 는 206 롤백 ④ 와 바이트 동일(CRLF 보존 · 편집기 자동 변환 금지).
+do $$
+declare v_md5 text;
+begin
+  v_md5 := md5(pg_get_functiondef('public.enforce_users_role_guard()'::regprocedure));
+  if v_md5 <> '702ddc298e6892306e796cae22f60201' then
+    raise exception 'PRE: pack 119 가드 본문(LF) md5 가 702ddc29… 가 아니다 — 현재 %', v_md5;
+  end if;
+end $$;
+CREATE OR REPLACE FUNCTION public.enforce_users_role_guard()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  v_jwt_role text;
+begin
+  -- 트리거를 WHEN 절 없이 재생성해도 안전하도록 함수 안에서도 재확인
+  if new.role is distinct from old.role then
+    v_jwt_role := auth.jwt() ->> 'role';
+
+    if v_jwt_role = 'service_role' then
+      return new; -- 1) 서버(service key) 경유
+    end if;
+
+    if v_jwt_role is null then
+      return new; -- 2) JWT 없는 직접 DB 세션(SQL Editor·마이그레이션)
+    end if;
+
+    if exists (
+      select 1
+        from public.users u
+       where u.id = (select auth.uid())
+         and u.role = 'admin'
+    ) then
+      return new; -- 3) 관리자
+    end if;
+
+    raise exception 'ROLE_CHANGE_FORBIDDEN'
+      using errcode = '42501', -- insufficient_privilege
+            detail  = format('users.id=%s role %L -> %L', old.id, old.role, new.role),
+            hint    = 'role 변경은 service_role 또는 admin 만 가능합니다.';
+  end if;
+
+  return new;
+end;
+$function$;
+do $$
+declare v_md5 text;
+begin
+  v_md5 := md5(pg_get_functiondef('public.enforce_users_role_guard()'::regprocedure));
+  if v_md5 <> 'b0fe6f758260c82ab3c342951cba6dc0' then
+    raise exception 'PRE: 119 가드 CRLF 재시드 후 md5 가 운영 실측(b0fe6f75…)과 다르다 — 현재 %', v_md5;
+  end if;
+  raise notice 'PRE 119 가드 본문 재시드: pack LF 702ddc29… → 운영 CRLF %', v_md5;
+end $$;
+
 -- ── 사용자 (auth.users INSERT → handle_new_auth_user 가 public.users · mentor_profiles 를 만든다 · 전부 app_role 있는 이메일 경로) ──
 insert into auth.users (instance_id, id, aud, role, email, raw_user_meta_data, created_at, updated_at)
 select '00000000-0000-0000-0000-000000000000', id, 'authenticated', 'authenticated', email, meta::jsonb, now() - interval '30 days', now() - interval '30 days'
@@ -148,13 +209,13 @@ begin
     raise exception 'PRE: api_app_v1 16 · core_private 8 이 아니다(DB-4 미적용?)';
   end if;
   if (select val from db5_check.snapshot where key = 'fn_trigger') <> '297616fe4e28f0dbda3b24244763a917'
-     or (select val from db5_check.snapshot where key = 'fn_role_guard') <> '702ddc298e6892306e796cae22f60201'
+     or (select val from db5_check.snapshot where key = 'fn_role_guard') <> 'b0fe6f758260c82ab3c342951cba6dc0'
      or (select val from db5_check.snapshot where key = 'fn_review') <> '7f458145b70b0eb239a0c67f265a4c93'
      or (select val from db5_check.snapshot where key = 'fn_iq_v2') <> 'aa8c27d2dcaa1c9cbfe5ae852f1c2dcc'
      or (select val from db5_check.snapshot where key = 'fn_profile_impl') <> 'a0cb1b7f37b8195cc9ca370bfb5e90e7'
      or (select val from db5_check.snapshot where key = 'fn_consent_trigger') <> 'abc7c96e8d5707a6d8324a75d4b14815'
      or (select val from db5_check.snapshot where key = 'fn_marketing') <> '9a84375f8ae7662f0f20f5ac76a4d2c4' then
-    raise exception 'PRE: 트리거/가드/리뷰/v2 본문 md5 가 2026-09-06 운영 실측과 다르다';
+    raise exception 'PRE: 트리거/가드(운영 CRLF b0fe6f75…)/리뷰/v2 본문 md5 가 2026-09-06 운영 실측과 다르다';
   end if;
   if (select string_agg(plan_tier || '=' || amount_cents, ',' order by plan_tier) from public.mentor_plans where mentor_id = '00000000-0000-4000-8000-00000000d5a1') <> 'limited=2990000,premium=17490000,standard=8490000' then
     raise exception 'PRE: 승인 시드 플랜(166) 3 tier 권장가 불일치';
