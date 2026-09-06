@@ -155,10 +155,10 @@ export default async function CustomRequestOrderCompletePage(props: PageProps) {
   const mentorId = pickMentorIdFromOrderRow(order);
 
   let reviewEligible = false;
-  let reviewTooltip = "구독 또는 개별 질문 이용 이력이 있으면 작성 가능";
+  let reviewTooltip = "같은 멘토에게 2회 결제하면 작성 가능";
   if (mentorId) {
-    // 자격 판정은 checkReviewEligibility(=SQL 170 과 동일 기준) 하나만 쓴다.
-    // 구 기준의 `subscriptionCount < 2` 재판정은 폐기됐다 — 화면이 서버와 어긋나던 원인.
+    // 자격 판정은 checkReviewEligibility(=SQL 208 review_eligibility_self · check_review_eligibility 와 동일 판정) 하나만 쓴다.
+    // 화면 재판정(구독 상태 집계 등)은 두지 않는다 — 화면이 서버와 어긋나던 원인.
     const eligibility = await checkReviewEligibility(supabase, user.id, mentorId);
     reviewEligible = eligibility.eligible && (eligibility.mode !== "edit" || eligibility.canEdit);
     if (!reviewEligible) {

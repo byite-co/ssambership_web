@@ -1,5 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { countPublicMentors } from "@/lib/auth/mentorPublicRead";
+import type { PlanPriceStatsByTier } from "@/lib/subscribe/planPriceStats";
+import { loadPlanPriceStatsCached } from "@/lib/subscribe/planPriceStatsServer";
 
 export type LandingPublicStats = {
   mentorCount: number | null;
@@ -45,6 +47,11 @@ async function fetchLandingPublicStats(supabase: SupabaseClient): Promise<Landin
  */
 export type HomeLandingData = {
   publicStats: LandingPublicStats;
+  /**
+   * 웹 PR-2 §4: 요금제 카드 안내 금액 — `plan_price_stats`(DB-5 205 · 일 1회 캐시).
+   * null 이면 카탈로그 표시가 폴백. 안내 전용(결제 금액은 mentor_plans).
+   */
+  planPriceStats: PlanPriceStatsByTier | null;
   /** D-ST-4: 로드 실패 시 폴백 배너 노출 플래그 */
   loadError: boolean;
 };
@@ -60,11 +67,12 @@ export function emptyHomeLandingData(): HomeLandingData {
       shortformProbe: "fallback",
       boardProbe: "fallback",
     },
+    planPriceStats: null,
     loadError: true,
   };
 }
 
 export async function loadHomeLandingData(supabase: SupabaseClient): Promise<HomeLandingData> {
-  const publicStats = await fetchLandingPublicStats(supabase);
-  return { publicStats, loadError: false };
+  const [publicStats, planPriceStats] = await Promise.all([fetchLandingPublicStats(supabase), loadPlanPriceStatsCached()]);
+  return { publicStats, planPriceStats, loadError: false };
 }

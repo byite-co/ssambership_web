@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
-import type { ReviewEligibilityMode } from "@/lib/reviews/reviewEligibilityPolicy";
+import { REVIEW_ELIGIBILITY_REASON, type ReviewEligibilityMode } from "@/lib/reviews/reviewEligibilityPolicy";
 
 type Props = {
   mentorId: string;
@@ -42,9 +42,8 @@ function StarPicker(props: { value: number; onChange: (n: number) => void }) {
 export function ReviewWriteModal(props: Props) {
   const [open, setOpen] = useState(false);
   const [eligible, setEligible] = useState(props.initialEligible ?? false);
-  const [reason, setReason] = useState(
-    props.initialReason ?? "이 멘토의 구독 또는 개별 질문 이용 이력이 있는 학생만 작성 가능합니다."
-  );
+  // 208 정본: 같은 멘토 결제 성공 누적 2회 — 서버 응답(reason)이 오기 전 기본 안내.
+  const [reason, setReason] = useState(props.initialReason ?? REVIEW_ELIGIBILITY_REASON.NOT_ENOUGH_PAYMENTS(null));
   const [mode, setMode] = useState<ReviewEligibilityMode>(props.initialMode ?? "create");
   const [reviewId, setReviewId] = useState<string | null>(props.initialReviewId ?? null);
   const [canEdit, setCanEdit] = useState(props.initialCanEdit ?? false);

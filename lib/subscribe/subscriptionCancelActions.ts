@@ -4,10 +4,13 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requireRole } from "@/lib/auth/routeGuard";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
-import { rowsFromSupabaseData } from "@/lib/qna/safeSelect";
+import { createClient } from "@/lib/supabase/server";
 import { SUBSCRIPTIONS_SELECT, SUBSCRIPTIONS_TABLE } from "@/lib/subscribe/subscriptionsTable";
-import { computeProratedRefundEstimate } from "@/lib/subscribe/subscriptionRefundProration";
-import { hasSubscriptionUsageStartedForPair } from "@/lib/subscribe/subscriptionUsageStarted";
+import {
+  REFUND_REQUEST_CREATE_RPC,
+  REFUND_RPC_SCHEMA,
+  parseRefundRequestCreateResponse,
+} from "@/lib/subscribe/subscriptionRefundRpc";
 
 type Row = Record<string, unknown>;
 
@@ -26,15 +29,6 @@ function withMessage(path: string, key: "ok" | "error", message: string): string
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() ? value.trim() : null;
-}
-
-function numberValue(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return Math.trunc(value);
-  if (typeof value === "string" && value.trim()) {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? Math.trunc(parsed) : null;
-  }
-  return null;
 }
 
 function boolValue(value: unknown): boolean {
@@ -66,28 +60,6 @@ async function loadOwnedSubscription(admin: ReturnType<typeof createServiceRoleC
     return { row: null, error: "본인 구독만 처리할 수 있습니다." };
   }
   return { row, error: null as string | null };
-}
-
-// W4(C10): subscription_billing_events(064 — 정본 테이블·고정 컬럼) 조회 실패를 null("청구
-// 이력 없음" → 환불 0원 판정)로 삼키던 silent-catch 제거 — 오류를 error 필드로 전파한다.
-async function latestSucceededBillingEvent(
-  admin: ReturnType<typeof createServiceRoleClient>,
-  subscriptionId: string
-): Promise<{ row: Row | null; error: string | null }> {
-  const { data, error } = await admin
-    .from("subscription_billing_events")
-    .select("id, subscription_id, amount_cents, payment_id, period_start, period_end, billing_at, event_type, status")
-    .eq("subscription_id", subscriptionId)
-    .eq("status", "succeeded")
-    .in("event_type", ["initial", "renewal"])
-    .order("billing_at", { ascending: false })
-    .limit(1);
-
-  if (error) {
-    console.error("[latestSucceededBillingEvent]", error.message);
-    return { row: null, error: error.message };
-  }
-  return { row: (rowsFromSupabaseData(data)[0] as Row | undefined) ?? null, error: null };
 }
 
 export async function requestSubscriptionCancelAtPeriodEndAction(formData: FormData) {
@@ -172,86 +144,24 @@ export async function requestSubscriptionProratedRefundAction(formData: FormData
   if (!subscriptionId) {
     redirect(withMessage(REFUNDS_PATH, "error", "구독을 선택해 주세요."));
   }
-  // P1 ⑥ — 환불 신청 사유 필수
+  // P1 ⑥ — 환불 신청 사유 필수(서버 RPC 도 REASON_TOO_SHORT 로 같은 규칙을 강제한다)
   if (reason.length < 5) {
     redirect(withMessage(REFUNDS_PATH, "error", "환불 신청 사유를 5자 이상 입력해 주세요."));
   }
 
-  const admin = createServiceRoleClient();
-  const loaded = await loadOwnedSubscription(admin, subscriptionId, user.id);
-  if (!loaded.row) {
-    redirect(withMessage(REFUNDS_PATH, "error", loaded.error ?? "구독을 찾을 수 없습니다."));
+  // 웹 PR-2 §5-3: 환불 행 생성은 `api_app_v1.refund_request_create`(DB-4 200 · 앱 A-4b 와 같은 함수 · 같은 숫자).
+  // 소유·현재 구독·중복 신청·학원법 별표4 금액 산정을 RPC 가 한 트랜잭션에서 판정한다 — 웹은 service_role 로
+  // refunds 를 직접 쓰지 않는다. 세션 클라이언트(authenticated)로 호출.
+  const supabase = await createClient();
+  const { data, error } = await supabase
+    .schema(REFUND_RPC_SCHEMA)
+    .rpc(REFUND_REQUEST_CREATE_RPC, { p_subscription_id: subscriptionId, p_reason: reason });
+  if (error) {
+    console.error("[requestSubscriptionProratedRefundAction] refund_request_create", { userId: user.id, subscriptionId, message: error.message });
   }
-
-  const status = normalizeStatus(loaded.row.status);
-  if (!isCurrentSubscriptionStatus(status)) {
-    redirect(withMessage(REFUNDS_PATH, "error", "이미 종료되었거나 환불 신청할 수 없는 구독입니다."));
-  }
-
-  const { data: pending, error: pendingError } = await admin
-    .from("refunds")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("subscription_id", subscriptionId)
-    .eq("status", "pending")
-    .limit(1);
-  if (pendingError) {
-    redirect(withMessage(REFUNDS_PATH, "error", "환불 요청 스키마가 준비되지 않았습니다. SQL 069 적용을 확인해 주세요."));
-  }
-  if ((pending ?? []).length > 0) {
-    redirect(withMessage(REFUNDS_PATH, "error", "이미 검토 중인 환불 신청이 있습니다."));
-  }
-
-  const billingLoad = await latestSucceededBillingEvent(admin, subscriptionId);
-  if (billingLoad.error) {
-    // W4(C10): 인프라 오류를 "환불 예상액 없음" 도메인 판정으로 바꾸지 않는다 — 시스템 오류로 안내.
-    redirect(withMessage(REFUNDS_PATH, "error", "결제 이력을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."));
-  }
-  const billingEvent = billingLoad.row;
-  const periodStart = stringValue(loaded.row.current_period_start) ?? stringValue(billingEvent?.period_start);
-  const periodEnd = stringValue(loaded.row.current_period_end) ?? stringValue(billingEvent?.period_end);
-  const mentorId = stringValue(loaded.row.mentor_id);
-  // 학원법 별표4 — 이용 개시 여부(첫 질문 작성) 판정.
-  // 멘토 ID 미상 시(이상 데이터)는 보수적으로 usageStarted=true 처리.
-  const usageStarted = mentorId
-    ? await hasSubscriptionUsageStartedForPair(admin, {
-        studentId: user.id,
-        mentorId,
-        periodStartIso: periodStart,
-      })
-    : true;
-  const estimate = computeProratedRefundEstimate({
-    amountCents: numberValue(billingEvent?.amount_cents),
-    periodStartIso: periodStart,
-    periodEndIso: periodEnd,
-    usageStarted,
-    mode: "student_voluntary",
-  });
-
-  if (estimate.amountCents <= 0) {
-    const userMsg =
-      estimate.bracketReason === "ge_1_2"
-        ? "학원법 기준으로 기간 1/2를 경과하여 환불 가능 금액이 없습니다."
-        : "남은 이용 기간이 없거나 환불 예상액을 계산할 수 없습니다.";
-    redirect(withMessage(REFUNDS_PATH, "error", userMsg));
-  }
-
-  const paymentId = stringValue(billingEvent?.payment_id) ?? stringValue(loaded.row.payment_id);
-  // 정본 연결: 이 환불이 대응하는 current billing event(id)를 기록한다(150 FK).
-  const billingEventId = stringValue(billingEvent?.id) ?? stringValue(loaded.row.last_billing_event_id);
-  const { error: insertError } = await admin.from("refunds").insert({
-    user_id: user.id,
-    amount_cents: estimate.amountCents,
-    status: "pending",
-    payment_id: paymentId,
-    subscription_id: subscriptionId,
-    billing_event_id: billingEventId,
-    request_type: "subscription_prorated",
-    reason: reason || "학생 구독 잔여기간 환불 신청",
-  });
-
-  if (insertError) {
-    redirect(withMessage(REFUNDS_PATH, "error", "환불 신청을 저장하지 못했습니다. SQL 069 적용 상태를 확인해 주세요."));
+  const outcome = parseRefundRequestCreateResponse(data, error);
+  if (!outcome.ok) {
+    redirect(withMessage(REFUNDS_PATH, "error", outcome.message));
   }
 
   revalidatePath(REFUNDS_PATH);

@@ -1,27 +1,81 @@
-// POST /api/app-session/bootstrap 의 순수 코어 — 파싱·검증만 담당(supabase·next 미의존).
+// POST /api/app-session/bootstrap 의 순수 코어 — 파싱·검증·target 별 역할 규칙(supabase·next 미의존).
 //
 // 계약(앱↔웹):
-// - 입력: access_token · refresh_token · target(단일 enum: shortform_create)
+// - 입력: access_token · refresh_token · target(enum: shortform_create · identity_verify · guardian_consent)
 // - Content-Type: application/x-www-form-urlencoded(Android WebView postUrl 기본) 또는
 //   application/json 만 허용. JSON 단독 제한 금지 — Android POST 호환이 1순위다.
 // - 토큰은 URL·로그·응답 본문에 절대 싣지 않는다(redirect 대상은 서버 상수 경로뿐).
+// - target 별 역할 규칙(웹 PR-2 §6 · 앱 A-4c 소비):
+//     shortform_create = mentor(현행) · identity_verify = student·mentor · guardian_consent = student.
+//   완성 전(`profile_completed_at IS NULL` · DB-5 206) 계정은 세 target 모두 거부(strict 게이트 유지).
 
 /** 본문 크기 상한(UTF-8 바이트). Supabase JWT 2개 + target 이 넉넉히 들어가는 수준으로 제한. */
 export const APP_SESSION_BOOTSTRAP_MAX_BODY_BYTES = 16 * 1024;
 
 /**
  * target enum → 성공 redirect 경로(서버 상수). 결제·구독·충전 target 은 존재하지 않는다.
- * 값은 appSurfacePaths.APP_SHORTFORM_COMPOSE_PATH 와 동일해야 한다 — node --test 의
+ * shortform_create 값은 appSurfacePaths.APP_SHORTFORM_COMPOSE_PATH 와 동일해야 한다 — node --test 의
  * 확장자 해석 제약으로 리터럴 유지, 동일성은 계약 테스트가 회귀 방지한다.
+ * identity_verify · guardian_consent 는 기존 본인인증 온보딩 화면(루트 라우트)이다 — WebView 복귀 안내는
+ * `bootstrapTargetRedirectPath` 가 붙이는 `?src=app` 으로 켠다.
  */
 export const APP_SESSION_BOOTSTRAP_TARGETS = Object.freeze({
   shortform_create: "/app/community/shortform/new",
+  identity_verify: "/onboarding/verify",
+  guardian_consent: "/onboarding/guardian",
 } as const);
 
 export type AppSessionBootstrapTarget = keyof typeof APP_SESSION_BOOTSTRAP_TARGETS;
 
 export function isAppSessionBootstrapTarget(value: string): value is AppSessionBootstrapTarget {
   return Object.prototype.hasOwnProperty.call(APP_SESSION_BOOTSTRAP_TARGETS, value);
+}
+
+/** 온보딩 화면이 "앱으로 돌아가기" 안내를 켜는 쿼리(현행 A7 패턴 — 딥링크 스킴은 A-4c 가 보고). */
+export const APP_SESSION_BOOTSTRAP_APP_SOURCE_QUERY = "src=app";
+
+/** 성공 redirect 경로 — 온보딩 target 은 `?src=app` 을 붙인다(앱 표면 경로는 그대로). */
+export function bootstrapTargetRedirectPath(target: AppSessionBootstrapTarget): string {
+  const base = APP_SESSION_BOOTSTRAP_TARGETS[target];
+  if (target === "identity_verify" || target === "guardian_consent") {
+    return `${base}?${APP_SESSION_BOOTSTRAP_APP_SOURCE_QUERY}`;
+  }
+  return base;
+}
+
+export type BootstrapAllowedRole = "student" | "mentor";
+
+/** target 별 허용 역할(allowlist). admin 은 어느 target 도 없다. */
+export const APP_SESSION_BOOTSTRAP_TARGET_ROLES: Readonly<Record<AppSessionBootstrapTarget, readonly BootstrapAllowedRole[]>> =
+  Object.freeze({
+    shortform_create: ["mentor"],
+    identity_verify: ["student", "mentor"],
+    guardian_consent: ["student"],
+  });
+
+export type BootstrapProfileRow = { role?: unknown; profile_completed_at?: unknown };
+
+export type BootstrapTargetDecision = "ok" | "profile_unavailable" | "profile_incomplete" | "role_not_allowed";
+
+/**
+ * target 별 역할 규칙 순수 판정(strict · fail-closed).
+ * - 조회 실패·행 없음 → profile_unavailable
+ * - `profile_completed_at` 이 문자열이 아니거나 role 이 없음 → profile_incomplete (완성 전 계정은 세 target 모두 거부)
+ * - role 이 target allowlist 밖(대소문자 위조 포함) → role_not_allowed
+ */
+export function bootstrapTargetRoleDecision(
+  target: AppSessionBootstrapTarget,
+  profile: BootstrapProfileRow | null | undefined,
+  hadQueryError: boolean,
+): BootstrapTargetDecision {
+  if (hadQueryError || !profile) return "profile_unavailable";
+  const completedAt = profile.profile_completed_at;
+  const role = profile.role;
+  if (typeof completedAt !== "string" || completedAt.trim() === "" || typeof role !== "string" || role === "") {
+    return "profile_incomplete";
+  }
+  const allowed = APP_SESSION_BOOTSTRAP_TARGET_ROLES[target] as readonly string[];
+  return allowed.includes(role) ? "ok" : "role_not_allowed";
 }
 
 export type BootstrapBodyKind = "form" | "json";

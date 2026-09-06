@@ -2,10 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import "@/app/(public)/custom-request/landing.css";
 import { IndividualQuestionDetailView } from "@/components/individualQuestion/IndividualQuestionViews";
 import { requireRole } from "@/lib/auth/routeGuard";
-import {
-  fetchIndividualQuestionDetail,
-  fetchIndividualQuestionTransfer,
-} from "@/lib/individualQuestion/individualQuestionQueries";
+import { fetchIndividualQuestionDetail } from "@/lib/individualQuestion/individualQuestionQueries";
 import { createClient } from "@/lib/supabase/server";
 
 type PageProps = {
@@ -29,8 +26,6 @@ export default async function StudentIndividualQuestionDetailPage(props: PagePro
   if (error || !detail) notFound();
   if (detail.student_id !== user.id) redirect("/individual-questions");
 
-  const transfer = await fetchIndividualQuestionTransfer(supabase, questionId);
-
   const created = firstParam(sp.created);
   const resolved = firstParam(sp.resolved);
   const sent = firstParam(sp.sent);
@@ -52,7 +47,6 @@ export default async function StudentIndividualQuestionDetailPage(props: PagePro
       backLabel="내 개별 질문 목록"
       flash={flash}
       warning={warning}
-      transfer={transfer}
       justSent={Boolean(sent)}
     />
   );

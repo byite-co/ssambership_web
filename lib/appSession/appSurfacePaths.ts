@@ -21,6 +21,10 @@ export const APP_BRIDGE_ERROR_CODES = [
   "account_blocked",
   "bootstrap_failed",
   "invalid_request",
+  // 웹 PR-2 §6 — bootstrap target 별 역할 규칙(identity_verify · guardian_consent)
+  "role_not_allowed",
+  // 웹 PR-2 §6 — 프로필 완성 전(DB-5 206 profile_completed_at NULL) 계정은 세 target 모두 거부
+  "profile_incomplete",
 ] as const;
 export type AppBridgeErrorCode = (typeof APP_BRIDGE_ERROR_CODES)[number];
 

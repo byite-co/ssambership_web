@@ -11,6 +11,8 @@ import {
   planIdFromRow,
 } from "@/lib/subscribe/subscribePlanCatalog";
 import { mentorPlanCashKrw } from "@/lib/subscribe/mentorPlanPricing";
+import { planPriceGuidesByTier } from "@/lib/subscribe/planPriceStats";
+import { loadPlanPriceStatsCached } from "@/lib/subscribe/planPriceStatsServer";
 import { loadMentorCapUsage, wouldExceedCap } from "@/lib/subscribe/mentorCapService";
 import { USER_UI_LOAD_FAILED } from "@/lib/constants/userFacingMessages";
 import { mentorVerificationStatusAllowsActivity } from "@/lib/mentor/mentorVerificationGate";
@@ -74,11 +76,14 @@ export default async function StudentSubscribePage(props: Props) {
     );
   }
 
-  const capUsage = await loadMentorCapUsage(data.mentorId);
+  const [capUsage, planPriceStats] = await Promise.all([loadMentorCapUsage(data.mentorId), loadPlanPriceStatsCached()]);
+  // 웹 PR-2 §4: 평균가는 안내 전용 — 실제 결제 금액(cashKrw)은 mentor_plans 행 그대로다.
+  const priceGuides = planPriceGuidesByTier(planPriceStats);
   const plans: SubscribePlanOption[] = SUBSCRIBE_PLAN_CATALOG.map((catalog) => ({
     ...catalog,
     cashKrw: mentorPlanCashKrw(data.byTier[catalog.tier] as Record<string, unknown> | null, catalog.tier),
     planId: planIdFromRow(data.byTier[catalog.tier] as Record<string, unknown> | null),
+    priceGuideLabel: priceGuides[catalog.tier].kind === "catalog" ? null : `전체 멘토 ${priceGuides[catalog.tier].label}`,
   }));
   // cap 마감: 학생에겐 구체 수치 노출 금지 — 마감된 tier 목록(boolean)만 전달
   const closedTiers = SUBSCRIBE_PLAN_CATALOG.filter((c) => wouldExceedCap(capUsage, c.tier)).map(

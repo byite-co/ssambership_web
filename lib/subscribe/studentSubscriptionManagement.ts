@@ -20,14 +20,14 @@ import {
   weeklyQuestionResetLabel,
   type SubscriptionStatusTone,
 } from "@/lib/subscribe/subscriptionDisplay";
+import { formatCashFromCents, formatDateLabel, refundBracketLabelKo } from "@/lib/subscribe/subscriptionRefundDisplay";
 import {
-  computeProratedRefundEstimate,
-  formatCashFromCents,
-  formatDateLabel,
-  refundBracketLabelKo,
-  type ProratedRefundEstimate,
-} from "@/lib/subscribe/subscriptionRefundProration";
-import { bulkHasSubscriptionUsageStarted } from "@/lib/subscribe/subscriptionUsageStarted";
+  REFUND_ESTIMATE_RPC,
+  REFUND_RPC_SCHEMA,
+  parseRefundEstimateResponse,
+  unavailableRefundEstimate,
+  type SubscriptionRefundEstimateView,
+} from "@/lib/subscribe/subscriptionRefundRpc";
 
 type Row = Record<string, unknown>;
 
@@ -59,7 +59,11 @@ export type StudentSubscriptionManagementItem = {
   paymentId: string | null;
   latestBillingAmountCents: number | null;
   latestBillingAmountLabel: string;
-  refundEstimate: ProratedRefundEstimate;
+  /**
+   * 웹 PR-2 §5-3: `api_app_v1.refund_estimate`(SQL 정본 · 앱과 같은 숫자) 응답 — 구 TS 계산 폐기.
+   * `unavailable` 이면 금액 0 · 신청 불가(확인 불가는 열지 않는다).
+   */
+  refundEstimate: SubscriptionRefundEstimateView;
   refundEstimateLabel: string;
   /** 학원법 별표4 분기 사유(한글) — UI 안내용 */
   refundEstimateBracketLabel: string;
@@ -210,15 +214,23 @@ export async function loadStudentSubscriptionManagementList(
   const billingBySubscription = billingLoad.map;
   const pendingRefundBySubscription = pendingRefundLoad.map;
 
-  // 학원법 별표4 "이용 개시" 판정을 카드별로 한 번에 조회.
-  const usageStartedBySub = await bulkHasSubscriptionUsageStarted(
-    supabase,
-    rows.flatMap((row) => {
+  // 웹 PR-2 §5-3: 예상 환불액은 `api_app_v1.refund_estimate`(SQL 정본 · 이용 개시 판정 포함) — 현재 기간
+  // 구독(active·past_due)만 조회하고 나머지는 '해당 없음'(unavailable · 금액 0). 세션 클라이언트(authenticated).
+  const refundEstimateBySub = new Map<string, SubscriptionRefundEstimateView>();
+  await Promise.all(
+    rows.map(async (row) => {
       const subId = stringValue(row.id);
-      const mId = stringValue(row.mentor_id);
-      const billingEvent = subId ? billingBySubscription.get(subId) ?? null : null;
-      const periodStart = stringValue(row.current_period_start) ?? stringValue(billingEvent?.period_start);
-      return subId && mId ? [{ subscriptionId: subId, studentId, mentorId: mId, periodStartIso: periodStart }] : [];
+      if (!subId) return;
+      const status = normalizeStatus(row.status);
+      if (status !== "active" && status !== "past_due") {
+        refundEstimateBySub.set(subId, unavailableRefundEstimate());
+        return;
+      }
+      const { data, error } = await supabase.schema(REFUND_RPC_SCHEMA).rpc(REFUND_ESTIMATE_RPC, { p_subscription_id: subId });
+      if (error) {
+        console.error("[loadStudentSubscriptionManagementList] refund_estimate", { subscriptionId: subId, message: error.message });
+      }
+      refundEstimateBySub.set(subId, parseRefundEstimateResponse(data, error));
     })
   );
 
@@ -249,14 +261,7 @@ export async function loadStudentSubscriptionManagementList(
     const currentPlanRow = tier ? (planRowsByMentor.get(mentorId)?.[tier] ?? null) : null;
     const nextBillingAmountCents = tier ? mentorPlanDebitAmountCents(currentPlanRow, tier) : null;
     const nextBillingAmountLabel = nextBillingAmountCents == null ? null : formatCashFromCents(nextBillingAmountCents);
-    const usageStarted = usageStartedBySub.get(subscriptionId) ?? true;
-    const refundEstimate = computeProratedRefundEstimate({
-      amountCents,
-      periodStartIso: currentPeriodStart,
-      periodEndIso: currentPeriodEnd,
-      usageStarted,
-      mode: "student_voluntary",
-    });
+    const refundEstimate = refundEstimateBySub.get(subscriptionId) ?? unavailableRefundEstimate();
     const pendingRefundId = pendingRefundBySubscription.get(subscriptionId) ?? null;
     const canUsePeriod = status === "active" || status === "past_due";
 
@@ -272,7 +277,7 @@ export async function loadStudentSubscriptionManagementList(
       cancelAtPeriodEnd,
       canCancel: canUsePeriod && !cancelAtPeriodEnd,
       canUndoCancel: canUsePeriod && cancelAtPeriodEnd,
-      canRequestRefund: canUsePeriod && refundEstimate.amountCents > 0 && !pendingRefundId,
+      canRequestRefund: canUsePeriod && !refundEstimate.unavailable && refundEstimate.amountCents > 0 && !pendingRefundId,
       currentPeriodStart,
       currentPeriodEnd,
       nextBillingAt,
@@ -295,8 +300,10 @@ export async function loadStudentSubscriptionManagementList(
       latestBillingAmountCents: amountCents,
       latestBillingAmountLabel: amountCents == null ? "결제 금액 확인 필요" : formatCashFromCents(amountCents),
       refundEstimate,
-      refundEstimateLabel: formatCashFromCents(refundEstimate.amountCents),
-      refundEstimateBracketLabel: refundBracketLabelKo(refundEstimate.bracketReason),
+      refundEstimateLabel: refundEstimate.unavailable ? "확인 불가" : formatCashFromCents(refundEstimate.amountCents),
+      refundEstimateBracketLabel: refundEstimate.unavailable
+        ? "예상 환불액을 불러오지 못했습니다. 잠시 후 다시 확인해 주세요."
+        : refundBracketLabelKo(refundEstimate.bracketReason),
       pendingRefundId,
       resubscribeHref: `/subscribe?mentorId=${encodeURIComponent(mentorId)}${tier ? `&plan=${encodeURIComponent(tier)}` : ""}`,
     };

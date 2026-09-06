@@ -33,7 +33,7 @@ test("완료 브릿지 kind/result 는 서버 enum 으로 제한", () => {
 });
 
 test("오류 code enum — 미지 코드는 타입상 조합 불가, 판별자는 미지값 거부", () => {
-  for (const c of ["session_expired", "mentor_only", "account_blocked", "bootstrap_failed", "invalid_request"]) {
+  for (const c of ["session_expired", "mentor_only", "account_blocked", "bootstrap_failed", "invalid_request", "role_not_allowed", "profile_incomplete"]) {
     assert.equal(isAppBridgeErrorCode(c), true, c);
   }
   assert.equal(isAppBridgeErrorCode("weird"), false);

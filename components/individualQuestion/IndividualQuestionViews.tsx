@@ -246,15 +246,10 @@ export function IndividualQuestionDetailView(props: {
   actor: "student" | "mentor";
   flash?: string | null;
   warning?: string | null;
-  transfer?: { roomId: string | null; threadId: string | null; transferredAt?: string | null } | null;
   /** ?sent=1 복귀 — 내 메시지(텍스트·첨부) 전송 직후에만 대화 최하단 정렬. */
   justSent?: boolean;
 }) {
   const { detail, actor } = props;
-  const transferThreadHref =
-    props.transfer?.roomId && props.transfer?.threadId
-      ? `/question-room/${props.transfer.roomId}/thread/${props.transfer.threadId}`
-      : null;
   const counterpartName = actor === "student" ? detail.mentorName : detail.studentName;
   const counterpartLabel = actor === "student" ? (detail.question_type === "open" ? "답변 멘토" : "담당 멘토") : "학생";
   // 메시지 발신자 판별용 멘토 id(공개형은 claim된 멘토, 지정형은 지정 멘토). 질문 행에서만 읽어 RLS 영향 없음.
@@ -438,22 +433,6 @@ export function IndividualQuestionDetailView(props: {
         ) : null}
         {props.warning ? (
           <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-900">{props.warning}</p>
-        ) : null}
-
-        {props.transfer ? (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3">
-            <p className="text-sm font-bold text-blue-900">
-              이 개별 질문은 구독 질문방으로 이어졌어요. 이어서 대화하려면 구독 질문방에서 확인하세요.
-            </p>
-            {transferThreadHref ? (
-              <Link
-                href={transferThreadHref}
-                className="shrink-0 rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs font-extrabold text-blue-700 hover:bg-blue-100"
-              >
-                구독 질문방에서 보기 →
-              </Link>
-            ) : null}
-          </div>
         ) : null}
 
         {/* 질문 카드 — 본문·첨부 미리보기를 상단에 고정해 대화 중에도 보이게 */}

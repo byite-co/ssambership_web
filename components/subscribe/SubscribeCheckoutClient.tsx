@@ -8,6 +8,8 @@ import type { SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
 
 export type SubscribePlanOption = SubscribePlanCatalogItem & {
   planId: string | null;
+  /** 웹 PR-2 §4: 전체 멘토 평균가 안내("전체 멘토 평균 N원 / 월" · 표본 부족 "최저 N원부터") — 결제 금액 아님. null = 표시 안 함 */
+  priceGuideLabel?: string | null;
 };
 
 type Props = {
@@ -154,6 +156,9 @@ export function SubscribeCheckoutClient(props: Props) {
                 <p className="text-sm font-extrabold uppercase tracking-wide text-slate-500">{plan.label}</p>
                 <p className="mt-2 text-2xl font-black tabular-nums text-slate-900">{fmtCash(plan.cashKrw)}</p>
                 <p className="mt-1 text-xs text-slate-500">/ 월</p>
+                {plan.priceGuideLabel ? (
+                  <p className="mt-1 text-[11px] font-semibold text-slate-400">{plan.priceGuideLabel}</p>
+                ) : null}
                 <p className="mt-3 text-sm font-semibold text-slate-700">{plan.weeklyLabel}</p>
               </button>
             </li>

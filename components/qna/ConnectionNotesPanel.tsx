@@ -1,13 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Notebook, Plus, CalendarDays, MessagesSquare, Pencil, Trash2 } from "lucide-react";
+import { Notebook, Plus, CalendarDays, MessagesSquare } from "lucide-react";
 import { QuestionRoomNewNoteModal } from "@/components/qna/QuestionRoomNewNoteModal";
-import { FormSubmitButton } from "@/components/common/FormSubmitButton";
-import {
-  deleteConnectionNoteAction,
-  updateConnectionNoteAction,
-} from "@/lib/qna/questionRoomActions";
 import { partyUserIdFromRoomRow } from "@/lib/qna/questionRoomUiLabels";
 import { formatQuestionRoomDateTime } from "@/lib/qna/formatQuestionRoomDisplay";
 
@@ -39,59 +34,14 @@ function periodTogether(createdAt: unknown): string {
   return `${Math.floor(days / 30)}개월`;
 }
 
-type NoteCard = { id: string; body: string; dateLabel: string; authorLabel: string; editable: boolean };
+type NoteCard = { id: string; body: string; dateLabel: string; authorLabel: string };
 
+// 웹 PR-2 §5-1: 연결노트는 **작성·목록만** — 수정·삭제 UI 는 설계상 폐기(연결노트 누적 타임라인 개편안).
+// 정책(cn_update · cn_delete)은 DB-6 이 걷는다 — 이 PR 은 UI·서버 액션만 제거했다.
 // 렌더 중 컴포넌트 생성(중첩 정의) 금지 — 모듈 스코프로 호이스트하고 클로저 값은 props 로 받는다.
-// (중첩 정의는 부모 재렌더마다 컴포넌트 identity 가 바뀌어 편집 textarea 가 remount 되는 원인이었다.)
-function NoteItem(opts: {
-  card: NoteCard;
-  isStudent: boolean;
-  roomId: string;
-  threadId: string | null;
-  editing: boolean;
-  onStartEdit: (id: string) => void;
-  onCancelEdit: () => void;
-}) {
+function NoteItem(opts: { card: NoteCard; isStudent: boolean }) {
   const { card, isStudent } = opts;
   const accent = isStudent ? "border-blue-200 border-l-blue-600" : "border-emerald-200 border-l-emerald-600";
-
-  if (opts.editing) {
-    return (
-      <form
-        action={updateConnectionNoteAction}
-        className={`rounded-xl border border-l-[3px] bg-white px-3 py-3 ${accent}`}
-      >
-        <input type="hidden" name="noteId" value={card.id} />
-        <input type="hidden" name="roomId" value={opts.roomId} />
-        <input type="hidden" name="contextThreadId" value={opts.threadId ?? ""} />
-        <textarea
-          name="noteBody"
-          required
-          defaultValue={card.body}
-          rows={3}
-          className={`w-full rounded-lg border border-slate-200 px-3 py-2 text-[13px] leading-relaxed outline-none focus:ring-2 ${
-            isStudent ? "focus:border-blue-400 focus:ring-blue-100" : "focus:border-emerald-400 focus:ring-emerald-100"
-          }`}
-        />
-        <div className="mt-2 flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={() => opts.onCancelEdit()}
-            className="rounded-lg border border-slate-200 px-3 py-1.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50"
-          >
-            취소
-          </button>
-          <FormSubmitButton
-            idleLabel="저장"
-            pendingLabel="저장 중…"
-            className={`rounded-lg px-3 py-1.5 text-[11px] font-extrabold text-white ${
-              isStudent ? "bg-blue-600 hover:bg-blue-700" : "bg-emerald-600 hover:bg-emerald-700"
-            }`}
-          />
-        </div>
-      </form>
-    );
-  }
 
   return (
     <article className={`rounded-xl border border-l-[3px] bg-white px-3.5 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.06)] ${accent}`}>
@@ -101,33 +51,6 @@ function NoteItem(opts: {
           {card.authorLabel}
           {card.dateLabel ? <span className="text-slate-300"> · {card.dateLabel}</span> : null}
         </p>
-        {card.editable ? (
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => opts.onStartEdit(card.id)}
-              className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-bold text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-            >
-              <Pencil className="h-3 w-3" aria-hidden />수정
-            </button>
-            <form
-              action={deleteConnectionNoteAction}
-              onSubmit={(e) => {
-                if (!window.confirm("이 노트를 삭제할까요?")) e.preventDefault();
-              }}
-            >
-              <input type="hidden" name="noteId" value={card.id} />
-              <input type="hidden" name="roomId" value={opts.roomId} />
-              <input type="hidden" name="contextThreadId" value={opts.threadId ?? ""} />
-              <button
-                type="submit"
-                className="inline-flex items-center gap-1 rounded-md px-1.5 py-1 text-[11px] font-bold text-rose-500 hover:bg-rose-50"
-              >
-                <Trash2 className="h-3 w-3" aria-hidden />삭제
-              </button>
-            </form>
-          </div>
-        ) : null}
       </div>
     </article>
   );
@@ -138,16 +61,11 @@ function NoteColumn(opts: {
   title: string;
   cards: NoteCard[];
   viewerRole: "student" | "mentor";
-  roomId: string;
-  threadId: string | null;
-  editingId: string | null;
-  onStartEdit: (id: string) => void;
-  onCancelEdit: () => void;
   onAddNote: () => void;
 }) {
   const isStudent = opts.side === "student";
   // 연결노트는 (room, author) 당 1개 — DB unique(connection_notes_room_author_unique)와 정합.
-  // 내 노트가 이미 있으면 추가 버튼을 숨겨 중복 생성 진입 자체를 없앤다(수정·삭제로만 관리).
+  // 내 노트가 이미 있으면 추가 버튼을 숨겨 중복 생성 진입 자체를 없앤다.
   const canAdd = opts.viewerRole === opts.side && opts.cards.length === 0;
   return (
     <section className={`rounded-2xl border p-3.5 ${isStudent ? "border-blue-200 bg-blue-50" : "border-emerald-200 bg-emerald-50"}`}>
@@ -175,18 +93,7 @@ function NoteColumn(opts: {
             아직 노트가 없어요
           </p>
         ) : (
-          opts.cards.map((card) => (
-            <NoteItem
-              key={card.id}
-              card={card}
-              isStudent={isStudent}
-              roomId={opts.roomId}
-              threadId={opts.threadId}
-              editing={opts.editingId === card.id}
-              onStartEdit={opts.onStartEdit}
-              onCancelEdit={opts.onCancelEdit}
-            />
-          ))
+          opts.cards.map((card) => <NoteItem key={card.id} card={card} isStudent={isStudent} />)
         )}
       </div>
     </section>
@@ -208,7 +115,6 @@ export function ConnectionNotesPanel(props: {
 }) {
   const variant = props.variant ?? "desktop";
   const [newNoteOpen, setNewNoteOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
   const studentId = props.room ? partyUserIdFromRoomRow(props.room, "student") : null;
@@ -241,8 +147,6 @@ export function ConnectionNotesPanel(props: {
       body,
       dateLabel: formatQuestionRoomDateTime(n.updated_at ?? n.created_at) ?? "",
       authorLabel: side === "student" ? studentLabel : mentorLabel,
-      // 본인 author + id 가 실제 노트 id(레거시 author_id null 은 수정/삭제 불가)
-      editable: Boolean(aid && aid === props.currentUserId && typeof n.id === "string"),
     };
     (side === "student" ? studentNotes : mentorNotes).push(card);
   }
@@ -281,11 +185,6 @@ export function ConnectionNotesPanel(props: {
         title="학생의 노트"
         cards={studentNotes}
         viewerRole={props.viewerRole}
-        roomId={props.roomId}
-        threadId={props.threadId ?? null}
-        editingId={editingId}
-        onStartEdit={setEditingId}
-        onCancelEdit={() => setEditingId(null)}
         onAddNote={() => setNewNoteOpen(true)}
       />
       <NoteColumn
@@ -293,11 +192,6 @@ export function ConnectionNotesPanel(props: {
         title="멘토의 노트"
         cards={mentorNotes}
         viewerRole={props.viewerRole}
-        roomId={props.roomId}
-        threadId={props.threadId ?? null}
-        editingId={editingId}
-        onStartEdit={setEditingId}
-        onCancelEdit={() => setEditingId(null)}
         onAddNote={() => setNewNoteOpen(true)}
       />
     </div>

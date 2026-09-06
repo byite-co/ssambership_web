@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { getServerUserWithProfile } from "@/lib/auth/getServerUserWithProfile";
 import { getPostLoginPath, safeInternalNextPath } from "@/lib/auth/getPostLoginPath";
+import { profileCompletionGuard } from "@/lib/auth/profileCompletion";
 import type { AppRole, UserRow } from "@/lib/types/user";
 import type { User } from "@supabase/supabase-js";
 
@@ -28,31 +29,49 @@ function isAuthPathname(p: string): boolean {
   return false;
 }
 
-async function loginRedirectUrlForGuard(expectedRole: GuardRole): Promise<string> {
+async function guardReturnTo(): Promise<string | null> {
   const h = await headers();
   const raw = rawReturnToFromRequestHeaders(h);
   const pathOnly = raw ? (raw.split("?")[0] ?? raw) : null;
-  const returnTo = raw && pathOnly && !isAuthPathname(pathOnly) ? raw : null;
+  return raw && pathOnly && !isAuthPathname(pathOnly) ? raw : null;
+}
+
+async function loginRedirectUrlForGuard(expectedRole: GuardRole): Promise<string> {
+  const returnTo = await guardReturnTo();
   const base = loginPathFor(expectedRole);
   if (!returnTo) return base;
   return `${base}?${new URLSearchParams({ next: returnTo })}`;
 }
 
+/**
+ * DB-5(206) 완성 게이트: `profile_completed_at IS NULL`(role NULL) 세션은 역할 페이지 어디서든
+ * `/complete-profile?next=<복귀 경로>` 로 보낸다. 완성 전엔 DB 가 쓰기를 전부 거부하므로
+ * 여기서 먼저 막아 RLS 오류 화면이 뜨지 않게 한다. 반환은 역할이 확정된 프로필.
+ */
+async function requireCompletedProfile(profile: UserRow): Promise<UserRow & { role: AppRole }> {
+  const decision = profileCompletionGuard(profile, { next: await guardReturnTo() });
+  if (decision.kind === "incomplete") {
+    redirect(decision.redirectTo);
+  }
+  return { ...profile, role: decision.role };
+}
+
 export async function requireRole(role: GuardRole): Promise<{ user: User; profile: UserRow | null }> {
-  const { user, profile } = await getServerUserWithProfile();
+  const { user, profile: rawProfile } = await getServerUserWithProfile();
   if (!user) {
     redirect(await loginRedirectUrlForGuard(role));
   }
-  if (!profile) {
+  if (!rawProfile) {
     redirect(await loginRedirectUrlForGuard(role));
   }
+  const profile = await requireCompletedProfile(rawProfile);
   if (role === "admin") {
     if (profile.role !== "admin") {
       redirect(getPostLoginPath(profile.role));
     }
     return { user, profile };
   }
-  if (profile && profile.role !== role) {
+  if (profile.role !== role) {
     redirect(getPostLoginPath(profile.role));
   }
   return { user, profile };
@@ -60,10 +79,11 @@ export async function requireRole(role: GuardRole): Promise<{ user: User; profil
 
 /** 캐시 충전 — 학생·멘토 (관리자 제외) */
 export async function requireWalletChargeAccess(): Promise<{ user: User; profile: UserRow | null }> {
-  const { user, profile } = await getServerUserWithProfile();
+  const { user, profile: rawProfile } = await getServerUserWithProfile();
   if (!user) {
     redirect(await loginRedirectUrlForGuard("student"));
   }
+  const profile = rawProfile ? await requireCompletedProfile(rawProfile) : null;
   if (profile?.role === "admin") {
     redirect(getPostLoginPath("admin"));
   }
@@ -82,16 +102,17 @@ export async function requireQnaActor(): Promise<{
   profile: UserRow;
   actor: "student" | "mentor";
 }> {
-  const { user, profile, error } = await getServerUserWithProfile();
+  const { user, profile: rawProfile, error } = await getServerUserWithProfile();
   if (error) {
     redirect("/login?error=profile");
   }
   if (!user) {
     redirect(await loginRedirectUrlForGuard("student"));
   }
-  if (!profile) {
+  if (!rawProfile) {
     redirect("/login?error=profile");
   }
+  const profile = await requireCompletedProfile(rawProfile);
   if (profile.role === "student" || profile.role === "mentor") {
     return { user, profile, actor: profile.role };
   }
