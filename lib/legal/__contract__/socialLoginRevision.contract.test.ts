@@ -62,6 +62,20 @@ test("배선: 소셜 버튼은 게이트로 null 을 돌려준다 · 로그인 �
   assert.ok(read("app/signup/page.tsx").includes("<SocialLoginButtons"), "가입 화면 배선 변경");
 });
 
+test("평가 시점: 게이트는 빌드가 아니라 요청 시점 — /signup 세그먼트 force-dynamic(로그인 3페이지는 쿠키로 동적) · 게이트가 모듈 상수가 아닌 함수 호출", () => {
+  const layout = read("app/signup/layout.tsx");
+  assert.ok(layout.includes('export const dynamic = "force-dynamic";'), "/signup 이 정적 프리렌더로 돌아가면 게이트 값이 빌드 시점에 박힌다");
+  const buttons = read("components/auth/SocialLoginButtons.tsx");
+  assert.ok(buttons.includes("isSocialLoginRevisionEffective()"), "렌더마다 호출(요청 시점 평가)");
+  const fnIdx = buttons.indexOf("export function SocialLoginButtons");
+  const callIdx = buttons.indexOf("isSocialLoginRevisionEffective()");
+  assert.ok(fnIdx > 0 && callIdx > fnIdx, "모듈 스코프에서 한 번만 평가하면 안 된다(컴포넌트 본문 안에서 호출)");
+  // 방침 페이지는 날짜 게이트가 아니라 ACTIVE 상수(고지 확정) 스위치 — 시행일 전에도 개정 내용·시행일을 미리 보여준다(제12조 7일 사전 공지).
+  const privacy = read("app/(public)/legal/privacy/page.tsx");
+  assert.ok(!privacy.includes("isSocialLoginRevisionEffective"), "방침 페이지는 시행일 전에도 개정 고지를 보여야 한다(날짜 게이트 금지)");
+  assert.ok(read("app/(public)/layout.tsx").includes('export const dynamic = "force-dynamic";'), "(public) 레이아웃 동적 고정");
+});
+
 test("공식 에셋 3종: 파일 존재 · 경로·alt 고정 · 로고를 코드로 그리지 않는다 · 높이 48px 컨테이너", () => {
   const buttons = read("components/auth/SocialLoginButtons.tsx");
   const assets: Array<[string, string]> = [
