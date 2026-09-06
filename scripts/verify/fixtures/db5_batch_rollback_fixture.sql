@@ -11,8 +11,9 @@ create or replace function pg_temp.snap(p_key text) returns text language sql as
 -- 객체 부재
 select pg_temp.ok(not exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
                     where (n.nspname, p.proname) in (('public','plan_price_stats'),('api_app_v1','complete_profile'),('api_app_v1','create_individual_question_as_student_v3'),
-                                                     ('api_app_v1','review_eligibility_self'),('core_private','user_signup_provision_impl'),('core_private','review_eligibility_impl'),('public','user_profile_completed'))),
-                  'DB-5 신규 함수 7종 부재');
+                                                     ('api_app_v1','review_eligibility_self'),('core_private','user_signup_provision_impl'),('core_private','user_consent_signup_impl'),('core_private','review_eligibility_impl'),
+                                                     ('core_private','account_blocked_state'),('public','user_profile_completed'))),
+                  'DB-5 신규 함수 9종 부재');
 select pg_temp.ok(not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'users' and column_name = 'profile_completed_at'), 'users.profile_completed_at 부재');
 select pg_temp.ok((select is_nullable from information_schema.columns where table_schema = 'public' and table_name = 'users' and column_name = 'role') = 'NO', 'users.role NOT NULL 복원');
 select pg_temp.ok(not exists (select 1 from pg_constraint where conrelid = 'public.users'::regclass and conname = 'users_role_required_when_completed')
@@ -29,9 +30,10 @@ select pg_temp.ok(md5(pg_get_functiondef('public.handle_new_auth_user()'::regpro
 select pg_temp.ok(md5(pg_get_functiondef('public.enforce_users_role_guard()'::regprocedure)) = pg_temp.snap('fn_role_guard'), 'enforce_users_role_guard 원문 복원(119)');
 select pg_temp.ok(md5(pg_get_functiondef('public.check_review_eligibility(uuid,uuid)'::regprocedure)) = pg_temp.snap('fn_review'), 'check_review_eligibility 원문 복원(170)');
 select pg_temp.ok(md5(pg_get_functiondef('core_private.user_profile_update_self_impl(uuid,text,text)'::regprocedure)) = pg_temp.snap('fn_profile_impl'), 'user_profile_update_self_impl 원문 복원(20260803162257 D)');
-select pg_temp.ok(md5(pg_get_functiondef('public.handle_new_auth_user_consent_records()'::regprocedure)) = pg_temp.snap('fn_consent_trigger'), '동의 트리거 불변');
+select pg_temp.ok(md5(pg_get_functiondef('public.handle_new_auth_user_consent_records()'::regprocedure)) = pg_temp.snap('fn_consent_trigger'), '동의 트리거 187 원문 복원');
+select pg_temp.ok(md5(pg_get_functiondef('api_web_v1.user_marketing_consent_set_self(boolean)'::regprocedure)) = pg_temp.snap('fn_marketing'), '마케팅 동의 RPC 20260803162257 G 원문 복원');
 select pg_temp.ok(md5(pg_get_functiondef('api_app_v1.create_individual_question_as_student_v2(text,text,text,int,uuid,text,text)'::regprocedure)) = pg_temp.snap('fn_iq_v2')
-                  and md5(pg_get_functiondef('public.create_individual_question_as_student(text,text,text,int,uuid,text)'::regprocedure)) = pg_temp.snap('fn_iq_v1'), 'v1·v2 IQ 래퍼 md5 불변');
+                  and md5(pg_get_functiondef('public.create_individual_question_as_student(text,text,text,int,uuid,text)'::regprocedure)) = pg_temp.snap('fn_iq_v1'), 'v1 불변 · v2 204 원문 복원(md5)');
 select pg_temp.ok((select coalesce(with_check, '') from pg_policies where tablename = 'reviews' and policyname = 'reviews_insert_student') = pg_temp.snap('pol_reviews_insert'), 'reviews_insert_student 정책 불변');
 select pg_temp.ok((select md5(string_agg(tablename || '.' || policyname || '|' || cmd || '|' || array_to_string(roles, ',') || '|' || coalesce(qual, '') || '|' || coalesce(with_check, ''), E'\n' order by tablename, policyname))
                      from pg_policies where schemaname = 'public'
@@ -47,4 +49,5 @@ select pg_temp.ok((select count(*) from public.users where id in ('00000000-0000
 select pg_temp.ok((select count(*) from public.users where id = '00000000-0000-4000-8000-00000000d5d1' and nickname = '포워드닉' and grade_level = '고3' and terms_agreed_at is not null) = 1,
                   '데이터: D1 완성 값(닉네임·학년·약관) 유지');
 select pg_temp.ok((select count(*) from public.favorites where user_id = '00000000-0000-4000-8000-00000000d5d1') = 1, '데이터: D1 완성 후 찜 1건 유지');
+select pg_temp.ok((select count(*) from public.user_consent_records where user_id = '00000000-0000-4000-8000-00000000d5d1' and consent_type in ('terms','privacy') and source = 'signup') = 2, '데이터: D1 완성 시 동의 원장 2행 유지(후속 a)');
 \echo DB5 ROLLBACK FIXTURE PASS

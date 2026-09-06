@@ -124,6 +124,8 @@ insert into db5_check.snapshot (key, val) values
   ('fn_role_guard',    (select md5(pg_get_functiondef('public.enforce_users_role_guard()'::regprocedure)))),
   ('fn_review',        (select md5(pg_get_functiondef('public.check_review_eligibility(uuid,uuid)'::regprocedure)))),
   ('fn_profile_impl',  (select md5(pg_get_functiondef('core_private.user_profile_update_self_impl(uuid,text,text)'::regprocedure)))),
+  ('fn_marketing',     (select md5(pg_get_functiondef('api_web_v1.user_marketing_consent_set_self(boolean)'::regprocedure)))),
+  ('ucr_count',        (select count(*)::text from public.user_consent_records)),
   ('pol_reviews_insert', (select coalesce(with_check, '') from pg_policies where tablename = 'reviews' and policyname = 'reviews_insert_student')),
   ('pol18_md5',        (select md5(string_agg(tablename || '.' || policyname || '|' || cmd || '|' || array_to_string(roles, ',') || '|' || coalesce(qual, '') || '|' || coalesce(with_check, ''), E'\n' order by tablename, policyname))
                          from pg_policies where schemaname = 'public'
@@ -149,7 +151,9 @@ begin
      or (select val from db5_check.snapshot where key = 'fn_role_guard') <> '702ddc298e6892306e796cae22f60201'
      or (select val from db5_check.snapshot where key = 'fn_review') <> '7f458145b70b0eb239a0c67f265a4c93'
      or (select val from db5_check.snapshot where key = 'fn_iq_v2') <> 'aa8c27d2dcaa1c9cbfe5ae852f1c2dcc'
-     or (select val from db5_check.snapshot where key = 'fn_profile_impl') <> 'a0cb1b7f37b8195cc9ca370bfb5e90e7' then
+     or (select val from db5_check.snapshot where key = 'fn_profile_impl') <> 'a0cb1b7f37b8195cc9ca370bfb5e90e7'
+     or (select val from db5_check.snapshot where key = 'fn_consent_trigger') <> 'abc7c96e8d5707a6d8324a75d4b14815'
+     or (select val from db5_check.snapshot where key = 'fn_marketing') <> '9a84375f8ae7662f0f20f5ac76a4d2c4' then
     raise exception 'PRE: 트리거/가드/리뷰/v2 본문 md5 가 2026-09-06 운영 실측과 다르다';
   end if;
   if (select string_agg(plan_tier || '=' || amount_cents, ',' order by plan_tier) from public.mentor_plans where mentor_id = '00000000-0000-4000-8000-00000000d5a1') <> 'limited=2990000,premium=17490000,standard=8490000' then
@@ -164,7 +168,7 @@ begin
   if (select count(*) from public.subscription_billing_events where student_id = '00000000-0000-4000-8000-00000000d5b3' and mentor_id = '00000000-0000-4000-8000-00000000d5a1' and status = 'succeeded') <> 2 then
     raise exception 'PRE: S3 결제 성공 2회 아님';
   end if;
-  raise notice 'PRE 전제 OK — pack 118(DB-4 까지) · 멘토 승인 6 · 미승인 1 · 학생 6 · S3 결제 2회 · S4 결제 1회+IQ · S5 IQ 만 · S6 후기';
+  raise notice 'PRE 전제 OK — pack 118(DB-4 까지) · 멘토 승인 6 · 미승인 1 · 학생 6 · S3 결제 2회 · S4 결제 1회+IQ · S5 IQ 만 · S6 후기 · 동의 원장 % 행(이메일 가입 트리거 187)', (select val from db5_check.snapshot where key = 'ucr_count');
 end $$;
 
 commit;
@@ -220,3 +224,26 @@ reset role;
 insert into db5_check.snapshot (key, val) values ('pre_v2_banned', current_setting('db5.pre_v2_banned'))
 on conflict (key) do update set val = excluded.val;
 commit;
+
+-- (4) 마케팅 동의 RPC 현재 동작 — 정상 학생 S1 도 idempotency_key NOT NULL 로 실패한다(후속 d 근거 · ROLLBACK)
+begin;
+set local search_path to public;
+set local role authenticated;
+select set_config('request.jwt.claim.sub', '00000000-0000-4000-8000-00000000d5b1', true);
+select set_config('request.jwt.claims', '{"sub":"00000000-0000-4000-8000-00000000d5b1","role":"authenticated"}', true);
+do $$
+declare r text;
+begin
+  begin
+    perform api_web_v1.user_marketing_consent_set_self(true);
+    r := 'OK';
+  exception when others then
+    r := left(sqlerrm, 90);
+  end;
+  raise notice 'PRE 마케팅 동의 RPC(S1 정상 학생): %', r;
+  if r not like '%idempotency_key%' then
+    raise exception 'PRE: 마케팅 동의 RPC 가 idempotency_key NOT NULL 로 실패하지 않는다(%)', r;
+  end if;
+end $$;
+reset role;
+rollback;

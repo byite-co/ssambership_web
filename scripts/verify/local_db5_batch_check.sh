@@ -3,12 +3,12 @@
 #   오프라인 스크래치 PG16(UTF8)에서 실구동 검증한다. 운영·staging 에는 접속하지 않는다.
 #
 # 흐름:
-#   [0] platform stub → [1] pack 적용(DB-5 = 20260906100100~100400 제외 전부 = 운영 원장 118본 상태)
-#   → [2] pre fixture(운영 형태 재현 + 현재 동작 실측: app_role 없는 가입의 student 폴백 · 170 느슨한 자격 · v2 banned 결과)
-#   → [3] 205 → 208 순 적용 → [4] post fixture(A 평균가 3값·fallback · B 소셜/이메일 가입·완성 전 RLS · C 완성 RPC · D v3 · E 자격 · G 불변, 전부 rollback)
+#   [0] platform stub → [1] pack 적용(DB-5 = 20260906100100~100500 제외 전부 = 운영 원장 118본 상태)
+#   → [2] pre fixture(운영 형태 재현 + 현재 동작 실측: app_role 없는 가입의 student 폴백 · 170 느슨한 자격 · v2 banned 통과 · 마케팅 동의 RPC NOT NULL 실패)
+#   → [3] 205 → 209 순 적용 → [4] post fixture(A 평균가 3값·fallback · B 소셜/이메일 가입·완성 전 RLS · C 완성 RPC+동의 원장(후속 a) · D v3+정지 계정 차단(후속 b) · E 자격 · F 마케팅 동의 RPC(후속 d) · G 불변, 전부 rollback)
 #   → [4b] forward 기간 데이터(D1 소셜 가입 → complete_profile 완성 · 찜 1건 · D2 소셜 가입만 · COMMIT)
-#   → [5] rollback 208 → 207 → **206 은 D2(미완성 · role NULL)가 있어 게이트에서 중단**돼야 한다 → D2 완성 → 206 → 205 → rollback fixture
-#   → [6] 205~208 재적용 → post fixture 재실행 → [7] 구조 카운트.
+#   → [5] rollback 209 → 208 → 207 → **206 은 D2(미완성 · role NULL)가 있어 게이트에서 중단**돼야 한다 → D2 완성 → 206 → 205 → rollback fixture
+#   → [6] 205~209 재적용 → post fixture 재실행 → [7] 구조 카운트.
 #
 # 사용: scripts/verify/local_db5_batch_check.sh   (EVIDENCE_DIR 로 증적 경로 지정 가능)
 set -uo pipefail
@@ -20,7 +20,7 @@ REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 PACK="$REPO/supabase/migrations"
 FX="$REPO/scripts/verify/fixtures"
 RB="$REPO/supabase/rollback"
-DB5_VERSIONS=(20260906100100 20260906100200 20260906100300 20260906100400)
+DB5_VERSIONS=(20260906100100 20260906100200 20260906100300 20260906100400 20260906100500)
 EV="${EVIDENCE_DIR:-$(mktemp -d /tmp/db5-evidence-XXXX)}"
 mkdir -p "$EV"
 
@@ -66,7 +66,7 @@ rb_file(){ ls "$RB"/"$1"_*_rollback.sql; }
 echo "[0] platform stub"
 apply 00_stub "$REPO/scripts/verify/baseline/platform_stub.sql"
 
-echo "[1] pack 적용 — DB-5(20260906100100~100400) 이전 전부(DB-1~4 포함 = 운영 원장 118본 상태)"
+echo "[1] pack 적용 — DB-5(20260906100100~100500) 이전 전부(DB-1~4 포함 = 운영 원장 118본 상태)"
 n=0
 for f in $(ls "$PACK"/*.sql | sort); do
   is_db5 "$f" && continue
@@ -79,7 +79,7 @@ echo "[2] pre fixture (운영 형태 재현 + 현재 동작 실측)"
 apply 10_pre_fixture "$FX/db5_batch_pre_fixture.sql"
 grep -E "^(PRE|NOTICE)" "$EV/10_pre_fixture.log" | sed 's/^/     /' || true
 
-echo "[3] DB-5 적용: 205 → 206 → 207 → 208"
+echo "[3] DB-5 적용: 205 → 206 → 207 → 208 → 209"
 for v in "${DB5_VERSIONS[@]}"; do apply "20_forward_$v" "$(db5_file "$v")"; done
 
 echo "[4] post fixture (A~G assertion — 전부 rollback)"
@@ -115,7 +115,8 @@ SQL
 )"
 grep -E "NOTICE:  FWD" "$EV/35_forward_data.log" | sed 's/^/     /' | cut -c1-200 || true
 
-echo "[5] rollback: 208 → 207 → 206(게이트 중단 기대) → D2 완성 → 206 → 205 + 복원 assertion"
+echo "[5] rollback: 209 → 208 → 207 → 206(게이트 중단 기대) → D2 완성 → 206 → 205 + 복원 assertion"
+apply 40_rollback_20260906100500 "$(rb_file 20260906100500)"
 apply 40_rollback_20260906100400 "$(rb_file 20260906100400)"
 apply 40_rollback_20260906100300 "$(rb_file 20260906100300)"
 apply_expect_fail 41_rollback_206_blocked "$(rb_file 20260906100200)" "206_ROLLBACK_GATE"
@@ -139,7 +140,7 @@ apply 50_rollback_fixture "$FX/db5_batch_rollback_fixture.sql"
 grep -E "^(RB|NOTICE)" "$EV/50_rollback_fixture.log" | sed 's/^/     /' || true
 grep -q "DB5 ROLLBACK FIXTURE PASS" "$EV/50_rollback_fixture.log" || { echo "FAIL: ROLLBACK FIXTURE PASS 미확인"; exit 4; }
 
-echo "[6] 재적용 205 → 208 + post fixture 재실행"
+echo "[6] 재적용 205 → 209 + post fixture 재실행"
 for v in "${DB5_VERSIONS[@]}"; do apply "60_reapply_$v" "$(db5_file "$v")"; done
 apply 70_post_fixture_again "$FX/db5_batch_post_fixture.sql"
 grep -q "DB5 POST FIXTURE PASS" "$EV/70_post_fixture_again.log" || { echo "FAIL: 재적용 후 POST FIXTURE PASS 미확인"; exit 5; }

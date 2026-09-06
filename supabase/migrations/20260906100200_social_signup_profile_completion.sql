@@ -25,7 +25,11 @@
 --     BIRTHDATE_REQUIRED/INVALID(미래·1900 이전) · GRADE_LEVEL_TOO_LONG(20자) · 계정 게이트 ACCOUNT_BANNED/SUSPENDED/NOT_ACTIVE/DELETION_IN_PROGRESS · USER_NOT_FOUND
 --   · 수행 = 이메일 가입 트리거와 같은 결과(공유 impl): users 갱신(role · nickname=표시명 · birth_date · grade_level · terms/privacy_agreed_at=now() · marketing_agreed ·
 --     profile_completed_at=now()) · 멘토면 mentor_profiles(pending · 대학·학과 · 나머지 '(미입력)') + verification_logs. full_name 은 provider 이름 유지.
---     약관 동의 기록은 users 컬럼(정정 C — user_consent_records 는 쓰지 않는다).
+--     약관 동의 기록 = users 컬럼 + **동의 원장 `user_consent_records`**(후속 a · 정정 C 철회): 이메일 가입 트리거 187 이 남기는 행과 같은 모양 —
+--     consent_type terms/privacy(+marketing) · consent_actor 'user' · is_minor(만 14세 판정) · guardian_consent false · consent_version 'legal-placeholder-2026-06-20'(메타 없을 때의 187 기본값) ·
+--     source 'signup' · metadata {role, birth_date, age_gate_checked_at, verification_method} · idempotency_key 'signup:<uid>:<type>:<version>'(운영 실측 2026-09-06: 80명 189행 전부 이 모양).
+--     원장 로직은 `core_private.user_consent_signup_impl(p_user_id, p_meta, p_source)` **한 벌**: 프로비저닝 impl 이 호출(이메일 가입 트리거 경로 · complete_profile)하고,
+--     187 트리거 함수 본문은 같은 impl 위임으로 교체(멱등 키 충돌 → 무해 no-op · 트리거 부착 그대로 · 원문 md5 게이트 · rollback 원문 복원).
 --   · 만 14세 판정: KST 달력 오늘 < 생년월일+14년(187 과 같은 식) → is_minor true · next 'guardian_consent'(기존 보호자 인증 WebView 흐름) ·
 --     아니면 멘토 → 'identity_verification' · 그 외 'home'. 반환 {ok, contract_version, role, is_minor, next, nickname, profile_completed_at}.
 --   · SECURITY DEFINER · search_path '' · authenticated 만.
@@ -41,7 +45,7 @@
 --   자기 users 행 읽기(users_select_own)는 그대로 · complete_profile 은 이 파일이 연다. SELECT 정책은 바꾸지 않는다(공개 데이터는 anon 도 읽고, 본인 데이터는 없다).
 --
 -- Apply: 저장소 표준 경로(db-apply-pending). pack 등재: supabase/baseline/post_ledger_backfills/20260906100200_social_signup_profile_completion.sql
--- Rollback: supabase/rollback/20260906100200_social_signup_profile_completion_rollback.sql (트리거·가드 원문 복원 · 정책 15종 원문 복원 · 컬럼/CHECK 제거 ·
+-- Rollback: supabase/rollback/20260906100200_social_signup_profile_completion_rollback.sql (트리거·동의 트리거·가드·impl 원문 복원 · 정책 18종 원문 복원 · 컬럼/CHECK 제거 ·
 --   NOT NULL 복원 · impl 원문 복원 — role NULL 행(소셜 미완성)이 있으면 롤백 게이트가 중단한다)
 -- =============================================================================
 
@@ -83,6 +87,21 @@ begin
   if v_md5 <> '702ddc298e6892306e796cae22f60201' then
     raise exception '206_GATE: enforce_users_role_guard 본문 md5 불일치(119) — 현재 %', v_md5;
   end if;
+  select md5(pg_get_functiondef('public.handle_new_auth_user_consent_records()'::regprocedure)) into v_md5;
+  if v_md5 <> 'abc7c96e8d5707a6d8324a75d4b14815' then
+    raise exception '206_GATE: handle_new_auth_user_consent_records 본문 md5 불일치(187) — 현재 %', v_md5;
+  end if;
+  if not exists (select 1 from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'auth' and c.relname = 'users' and t.tgname = 'zz_on_auth_user_created_consent_records' and t.tgfoid = 'public.handle_new_auth_user_consent_records'::regproc) then
+    raise exception '206_GATE: zz_on_auth_user_created_consent_records 트리거 부재(087)';
+  end if;
+  if (select count(*) from information_schema.columns where table_schema = 'public' and table_name = 'user_consent_records'
+       and column_name in ('user_id','consent_type','consent_actor','is_minor','guardian_consent','consent_version','guardian_ref','agreed_at','source','metadata','idempotency_key')) <> 11
+     or not exists (select 1 from pg_constraint where conrelid = 'public.user_consent_records'::regclass and conname = 'user_consent_records_consent_type_check'
+                      and pg_get_constraintdef(oid) like '%''terms''%''privacy''%''marketing''%''minor_guardian_consent''%')
+     or not exists (select 1 from pg_constraint where conrelid = 'public.user_consent_records'::regclass and contype = 'u' and pg_get_constraintdef(oid) like '%idempotency_key%') then
+    raise exception '206_GATE: user_consent_records 형태(컬럼 11 · consent_type CHECK 4종 · idempotency_key UNIQUE) 불일치(087)';
+  end if;
   select md5(pg_get_functiondef('core_private.user_profile_update_self_impl(uuid,text,text)'::regprocedure)) into v_md5;
   if v_md5 <> 'a0cb1b7f37b8195cc9ca370bfb5e90e7' then
     raise exception '206_GATE: user_profile_update_self_impl 본문 md5 불일치(20260803162257 D) — 현재 %', v_md5;
@@ -110,7 +129,7 @@ begin
     raise exception '206_GATE: account_deletion_write_blocked 부재(151)';
   end if;
   if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-              where (n.nspname, p.proname) in (('api_app_v1', 'complete_profile'), ('core_private', 'user_signup_provision_impl'), ('public', 'user_profile_completed'))) then
+              where (n.nspname, p.proname) in (('api_app_v1', 'complete_profile'), ('core_private', 'user_signup_provision_impl'), ('core_private', 'user_consent_signup_impl'), ('public', 'user_profile_completed'))) then
     raise exception '206_GATE: 대상 함수가 이미 있다';
   end if;
   -- 정책 18종 원문 전제(cmd|roles|qual|with_check md5 · pack 118본 실측) — 다르면 원문 보존 복제가 어긋나므로 중단
@@ -182,6 +201,99 @@ revoke all on function public.user_profile_completed() from public;
 grant execute on function public.user_profile_completed() to anon, authenticated;
 
 -- -----------------------------------------------------------------------------
+-- B-3a. 동의 원장 공용 정본 (core_private — 187 트리거 본문의 인자화 · 외부 EXECUTE 0)
+--       p_meta 는 가입 메타(raw_user_meta_data) 와 같은 키 집합을 읽는다: app_role · birth_date · is_minor · consent_version · terms_agreed · privacy_agreed ·
+--       marketing_agreed · age_gate_checked_at · guardian_verification_method · guardian_consent · guardian_ref. 값·키 조립·멱등 키는 187 원문과 동일.
+-- -----------------------------------------------------------------------------
+create function core_private.user_consent_signup_impl(p_user_id uuid, p_meta jsonb, p_source text default 'signup')
+returns void
+language plpgsql
+security invoker
+set search_path to ''
+as $fn$
+declare
+  m jsonb := coalesce(p_meta, '{}'::jsonb);
+  v_role text;
+  v_birth_date date;
+  v_is_minor boolean := false;
+  v_version text;
+  v_agreed_at timestamptz := now();
+  v_metadata jsonb;
+  v_source text := coalesce(nullif(btrim(p_source), ''), 'signup');
+begin
+  if p_user_id is null then
+    raise exception 'USER_ID_REQUIRED' using errcode = '22023';
+  end if;
+  v_role := lower(coalesce(nullif(trim(m->>'app_role'), ''), 'student'));
+  v_version := coalesce(nullif(trim(m->>'consent_version'), ''), 'legal-placeholder-2026-06-20');
+
+  begin
+    v_birth_date := nullif(trim(m->>'birth_date'), '')::date;
+  exception when others then
+    v_birth_date := null;
+  end;
+
+  v_is_minor := coalesce(
+    nullif(trim(m->>'is_minor'), '')::boolean,
+    case when v_birth_date is not null
+         then ((now() at time zone 'Asia/Seoul')::date < (v_birth_date + interval '14 years')::date)
+         else false end
+  );
+
+  v_metadata := jsonb_build_object(
+    'role', v_role,
+    'birth_date', case when v_birth_date is not null then v_birth_date::text else null end,
+    'age_gate_checked_at', nullif(trim(m->>'age_gate_checked_at'), ''),
+    'verification_method', coalesce(nullif(trim(m->>'guardian_verification_method'), ''), 'legal_review_pending')
+  );
+
+  if (m->>'terms_agreed') = 'true' then
+    insert into public.user_consent_records (
+      user_id, consent_type, consent_actor, is_minor, guardian_consent,
+      consent_version, agreed_at, source, metadata, idempotency_key
+    ) values (
+      p_user_id, 'terms', 'user', v_is_minor, false,
+      v_version, v_agreed_at, v_source, v_metadata, 'signup:' || p_user_id::text || ':terms:' || v_version
+    ) on conflict (idempotency_key) do nothing;
+  end if;
+
+  if (m->>'privacy_agreed') = 'true' then
+    insert into public.user_consent_records (
+      user_id, consent_type, consent_actor, is_minor, guardian_consent,
+      consent_version, agreed_at, source, metadata, idempotency_key
+    ) values (
+      p_user_id, 'privacy', 'user', v_is_minor, false,
+      v_version, v_agreed_at, v_source, v_metadata, 'signup:' || p_user_id::text || ':privacy:' || v_version
+    ) on conflict (idempotency_key) do nothing;
+  end if;
+
+  if (m->>'marketing_agreed') = 'true' then
+    insert into public.user_consent_records (
+      user_id, consent_type, consent_actor, is_minor, guardian_consent,
+      consent_version, agreed_at, source, metadata, idempotency_key
+    ) values (
+      p_user_id, 'marketing', 'user', v_is_minor, false,
+      v_version, v_agreed_at, v_source, v_metadata, 'signup:' || p_user_id::text || ':marketing:' || v_version
+    ) on conflict (idempotency_key) do nothing;
+  end if;
+
+  if v_is_minor and (m->>'guardian_consent') = 'true' then
+    insert into public.user_consent_records (
+      user_id, consent_type, consent_actor, is_minor, guardian_consent,
+      consent_version, guardian_ref, agreed_at, source, metadata, idempotency_key
+    ) values (
+      p_user_id, 'minor_guardian_consent', 'guardian', true, true,
+      v_version, nullif(trim(m->>'guardian_ref'), ''), v_agreed_at, v_source, v_metadata,
+      'signup:' || p_user_id::text || ':minor_guardian_consent:' || v_version
+    ) on conflict (idempotency_key) do nothing;
+  end if;
+end
+$fn$;
+comment on function core_private.user_consent_signup_impl(uuid, jsonb, text) is
+  '206(DB-5 B-3a · 후속 a): 가입 동의 원장 정본 — 187 트리거 본문의 인자화(terms/privacy/marketing + 미성년 guardian · 멱등 키 signup:<uid>:<type>:<version>). user_signup_provision_impl(이메일 가입 · complete_profile) 과 zz 트리거가 공유. 외부 EXECUTE 0.';
+revoke all on function core_private.user_consent_signup_impl(uuid, jsonb, text) from public, anon, authenticated;
+
+-- -----------------------------------------------------------------------------
 -- B-3. 가입 프로비저닝 공용 정본 (core_private — 트리거 두 경로 + complete_profile 이 공유 · 외부 EXECUTE 0)
 --      본문은 122 트리거의 users upsert · mentor_profiles upsert · verification_logs 를 인자화한 것(의미 동일).
 -- -----------------------------------------------------------------------------
@@ -202,7 +314,8 @@ create function core_private.user_signup_provision_impl(
   p_teaching_subjects   text[],
   p_high_school_name    text,
   p_intro_line          text,
-  p_profile_completed_at timestamptz
+  p_profile_completed_at timestamptz,
+  p_consent_meta        jsonb           -- 동의 원장 입력(187 메타 키) · NULL = 원장 기록 없음(소셜 가입 시점)
 )
 returns void
 language plpgsql
@@ -275,11 +388,16 @@ begin
     insert into public.verification_logs (user_id, log_type, status, memo) values
       (p_user_id, 'mentor_verification', 'pending', 'sign-up');
   end if;
+
+  -- 동의 원장(후속 a): 이메일 가입 메타 또는 complete_profile 이 조립한 메타 → B-3a 정본(187 과 같은 행 · 멱등)
+  if p_consent_meta is not null then
+    perform core_private.user_consent_signup_impl(p_user_id, p_consent_meta, 'signup');
+  end if;
 end
 $fn$;
-comment on function core_private.user_signup_provision_impl(uuid, text, text, text, text, text, text, date, boolean, boolean, boolean, text, text, text[], text, text, timestamptz) is
-  '206(DB-5 B-3): 가입 프로비저닝 정본 — users upsert(+ 멘토면 mentor_profiles pending + verification_logs). handle_new_auth_user(이메일·소셜) 와 api_app_v1.complete_profile 이 공유. 외부 EXECUTE 0.';
-revoke all on function core_private.user_signup_provision_impl(uuid, text, text, text, text, text, text, date, boolean, boolean, boolean, text, text, text[], text, text, timestamptz) from public, anon, authenticated;
+comment on function core_private.user_signup_provision_impl(uuid, text, text, text, text, text, text, date, boolean, boolean, boolean, text, text, text[], text, text, timestamptz, jsonb) is
+  '206(DB-5 B-3): 가입 프로비저닝 정본 — users upsert(+ 멘토면 mentor_profiles pending + verification_logs) + 동의 원장(B-3a · p_consent_meta). handle_new_auth_user(이메일·소셜) 와 api_app_v1.complete_profile 이 공유. 외부 EXECUTE 0.';
+revoke all on function core_private.user_signup_provision_impl(uuid, text, text, text, text, text, text, date, boolean, boolean, boolean, text, text, text[], text, text, timestamptz, jsonb) from public, anon, authenticated;
 
 -- -----------------------------------------------------------------------------
 -- B-4. 가입 트리거 — app_role 유무로 분기 (헤더·속성은 122 와 동일: SECURITY DEFINER · search_path public)
@@ -314,7 +432,8 @@ begin
       null, null, null,
       false, false, false,
       null, null, null, null, null,
-      null);
+      null,
+      null);   -- 소셜: 가입 시점 동의 없음 → 원장 기록 없음(complete_profile 이 남긴다)
     return NEW;
   end if;
 
@@ -351,13 +470,30 @@ begin
     m->>'grade_level', m->>'student_status', bdate,
     (m->>'terms_agreed') = 'true', (m->>'privacy_agreed') = 'true', (m->>'marketing_agreed') = 'true',
     m->>'university_name', m->>'department_name', coalesce(subj, '{}'), m->>'high_school_name', m->>'intro_line',
-    now());
+    now(),
+    m);   -- 이메일: 가입 메타 그대로 → 동의 원장(187 과 같은 행 · zz 트리거는 멱등 no-op)
 
   return NEW;
 end;
 $$;
 comment on function public.handle_new_auth_user() is
-  '206(DB-5 B-4): auth.users INSERT → raw_user_meta_data ? ''app_role'' 이면 이메일 가입(122 정규화 · profile_completed_at now()), 아니면 소셜 가입(role NULL · profile_completed_at NULL · provider 이름 · 프로필 행 없음). 본문은 core_private.user_signup_provision_impl 공유.';
+  '206(DB-5 B-4): auth.users INSERT → raw_user_meta_data ? ''app_role'' 이면 이메일 가입(122 정규화 · profile_completed_at now() · 동의 원장), 아니면 소셜 가입(role NULL · profile_completed_at NULL · provider 이름 · 프로필 행 없음). 본문은 core_private.user_signup_provision_impl 공유.';
+
+-- B-4a. 187 동의 트리거 함수 — 본문을 B-3a 정본 위임으로 교체(헤더·속성 187 동일 · 트리거 부착 그대로 · 이메일 가입은 B-4 가 먼저 쓰므로 멱등 no-op)
+create or replace function public.handle_new_auth_user_consent_records()
+returns trigger
+language plpgsql
+security definer
+set search_path to 'public'
+as $function$
+begin
+  -- 206(DB-5 후속 a): 원장 로직은 core_private.user_consent_signup_impl 한 벌 — on_auth_user_created(handle_new_auth_user) 가 같은 멱등 키로 먼저 기록한다.
+  perform core_private.user_consent_signup_impl(new.id, coalesce(new.raw_user_meta_data, '{}'::jsonb), 'signup');
+  return new;
+end;
+$function$;
+comment on function public.handle_new_auth_user_consent_records() is
+  'Signup consent ledger trigger (087/187) — 206(DB-5 후속 a) 부터 core_private.user_consent_signup_impl 위임(멱등). 원문 로직은 그 impl 로 이동.';
 
 -- -----------------------------------------------------------------------------
 -- B-5. 119 role 가드 — 완성 전 행의 최초 역할 부여 전이만 추가 허용(그 외 원문 그대로)
@@ -608,7 +744,15 @@ begin
     case when v_role = 'mentor' then v_univ else null end,
     case when v_role = 'mentor' then v_dept else null end,
     null, null, null,
-    v_completed_at);
+    v_completed_at,
+    jsonb_build_object(                      -- 동의 원장 입력(187 메타 키 · 이메일 가입과 같은 행이 남는다)
+      'app_role', v_role,
+      'birth_date', p_birthdate::text,
+      'is_minor', v_minor::text,
+      'terms_agreed', 'true',
+      'privacy_agreed', 'true',
+      'marketing_agreed', case when coalesce(p_marketing_agreed, false) then 'true' else 'false' end
+    ));
 
   v_next := case when v_minor then 'guardian_consent'
                  when v_role = 'mentor' then 'identity_verification'
@@ -622,7 +766,7 @@ begin
 end
 $fn$;
 comment on function api_app_v1.complete_profile(text, text, date, boolean, boolean, text, text, text) is
-  '206(DB-5 C-1): 소셜 가입 후 프로필 완성 — profile_completed_at NULL 인 본인 행만(ALREADY_COMPLETED). 이메일 가입 트리거와 같은 결과(core_private.user_signup_provision_impl 공유). 만 14세 미만 → next guardian_consent · 멘토 → identity_verification · 그 외 home. TERMS_REQUIRED · GRADE_REQUIRED · UNIVERSITY_REQUIRED. authenticated 만.';
+  '206(DB-5 C-1): 소셜 가입 후 프로필 완성 — profile_completed_at NULL 인 본인 행만(ALREADY_COMPLETED). 이메일 가입 트리거와 같은 결과(core_private.user_signup_provision_impl 공유 · 동의 원장 terms/privacy/marketing 행 포함). 만 14세 미만 → next guardian_consent · 멘토 → identity_verification · 그 외 home. TERMS_REQUIRED · GRADE_REQUIRED · UNIVERSITY_REQUIRED. authenticated 만.';
 revoke all on function api_app_v1.complete_profile(text, text, date, boolean, boolean, text, text, text) from public, anon;
 grant execute on function api_app_v1.complete_profile(text, text, date, boolean, boolean, text, text, text) to authenticated;
 
@@ -808,8 +952,24 @@ begin
   if v_oid is null or has_function_privilege('anon', v_oid, 'EXECUTE') or not has_function_privilege('authenticated', v_oid, 'EXECUTE') or has_function_privilege('service_role', v_oid, 'EXECUTE') then
     raise exception '206_SELFCHECK: complete_profile identity/ACL 불일치(authenticated 만)';
   end if;
-  if (select prosrc from pg_proc where oid = v_oid) not like '%core_private.user_signup_provision_impl(%' or (select prosrc from pg_proc where oid = v_oid) like '%user_consent_records%' then
-    raise exception '206_SELFCHECK: complete_profile 이 impl 을 공유하지 않거나 consent 원장을 쓴다';
+  if (select prosrc from pg_proc where oid = v_oid) not like '%core_private.user_signup_provision_impl(%' or (select prosrc from pg_proc where oid = v_oid) like '%user_consent_records%'
+     or (select prosrc from pg_proc where oid = v_oid) not like '%''terms_agreed'', ''true''%' then
+    raise exception '206_SELFCHECK: complete_profile 이 impl 을 공유하지 않거나 원장을 직접 쓰거나 동의 메타를 넘기지 않는다';
+  end if;
+  -- 동의 원장 정본(B-3a) · 프로비저닝 impl 이 그것을 호출 · 187 트리거 함수는 위임으로 교체됐다
+  select p.oid into v_oid from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'core_private' and p.proname = 'user_consent_signup_impl';
+  if v_oid is null or has_function_privilege('anon', v_oid, 'EXECUTE') or has_function_privilege('authenticated', v_oid, 'EXECUTE') or has_function_privilege('service_role', v_oid, 'EXECUTE')
+     or (select prosrc from pg_proc where oid = v_oid) not like '%''signup:'' || p_user_id::text || '':terms:'' || v_version%' then
+    raise exception '206_SELFCHECK: user_consent_signup_impl 부재/외부 EXECUTE 잔존/멱등 키 형식 불일치';
+  end if;
+  if (select prosrc from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'core_private' and p.proname = 'user_signup_provision_impl') not like '%core_private.user_consent_signup_impl(%' then
+    raise exception '206_SELFCHECK: user_signup_provision_impl 이 동의 원장 정본을 호출하지 않는다';
+  end if;
+  if md5(pg_get_functiondef('public.handle_new_auth_user_consent_records()'::regprocedure)) = 'abc7c96e8d5707a6d8324a75d4b14815'
+     or (select prosrc from pg_proc where oid = 'public.handle_new_auth_user_consent_records()'::regprocedure) not like '%core_private.user_consent_signup_impl(%'
+     or not exists (select 1 from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace
+                     where n.nspname = 'auth' and c.relname = 'users' and t.tgname = 'zz_on_auth_user_created_consent_records' and t.tgfoid = 'public.handle_new_auth_user_consent_records'::regproc and t.tgenabled <> 'D') then
+    raise exception '206_SELFCHECK: 187 동의 트리거 위임 교체 실패 또는 부착 상태 변경';
   end if;
   -- 정책 18종: 이름·명령·역할 유지 + 완성 조건
   select count(*) into v_n from pg_policies pp

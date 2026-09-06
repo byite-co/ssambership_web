@@ -7,6 +7,7 @@
 --   ③ api_app_v1.complete_profile DROP → ④ public.enforce_users_role_guard() 를 119/라이브 원문(md5 702ddc29…)으로 복원
 --   ⑤ public.handle_new_auth_user() 를 122/20260717044250 라이브 원문(md5 297616fe…)으로 복원 → ⑥ core_private.user_signup_provision_impl DROP
 --   ⑥b core_private.user_profile_update_self_impl 을 20260803162257 D 라이브 원문(md5 a0cb1b7f…)으로 복원
+--   ⑥c public.handle_new_auth_user_consent_records() 를 187 라이브 원문(md5 abc7c96e…)으로 복원 → core_private.user_consent_signup_impl DROP(후속 a)
 --   ⑦ CHECK users_role_required_when_completed DROP → users.role NOT NULL 복원 → users.profile_completed_at DROP
 -- 전제(게이트): **role NULL 행(소셜 가입 후 미완성 사용자)이 0 이어야 한다.** 있으면 NOT NULL 복원이 불가능하므로 중단한다 — 오너가 그 사용자를
 --   complete_profile 로 완성시키거나 탈퇴 처리한 뒤 다시 실행한다(자동 삭제·임의 역할 부여는 하지 않는다).
@@ -291,7 +292,95 @@ end;
 $function$;
 
 -- ⑥ 공용 impl DROP (트리거·RPC 가 더 이상 참조하지 않는다)
-drop function if exists core_private.user_signup_provision_impl(uuid, text, text, text, text, text, text, date, boolean, boolean, boolean, text, text, text[], text, text, timestamptz);
+drop function if exists core_private.user_signup_provision_impl(uuid, text, text, text, text, text, text, date, boolean, boolean, boolean, text, text, text[], text, text, timestamptz, jsonb);
+
+-- ⑥c 187 동의 트리거 원문 복원 (라이브 pg_get_functiondef 원문 · md5 abc7c96e8d5707a6d8324a75d4b14815) → 동의 원장 impl DROP
+CREATE OR REPLACE FUNCTION public.handle_new_auth_user_consent_records()
+ RETURNS trigger
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO 'public'
+AS $function$
+declare
+  m jsonb;
+  v_role text;
+  v_birth_date date;
+  v_is_minor boolean := false;
+  v_version text;
+  v_agreed_at timestamptz := now();
+  v_metadata jsonb;
+begin
+  m := coalesce(new.raw_user_meta_data, '{}'::jsonb);
+  v_role := lower(coalesce(nullif(trim(m->>'app_role'), ''), 'student'));
+  v_version := coalesce(nullif(trim(m->>'consent_version'), ''), 'legal-placeholder-2026-06-20');
+
+  begin
+    v_birth_date := nullif(trim(m->>'birth_date'), '')::date;
+  exception when others then
+    v_birth_date := null;
+  end;
+
+  v_is_minor := coalesce(
+    nullif(trim(m->>'is_minor'), '')::boolean,
+    case when v_birth_date is not null
+         then ((now() at time zone 'Asia/Seoul')::date < (v_birth_date + interval '14 years')::date)
+         else false end
+  );
+
+  v_metadata := jsonb_build_object(
+    'role', v_role,
+    'birth_date', case when v_birth_date is not null then v_birth_date::text else null end,
+    'age_gate_checked_at', nullif(trim(m->>'age_gate_checked_at'), ''),
+    'verification_method', coalesce(nullif(trim(m->>'guardian_verification_method'), ''), 'legal_review_pending')
+  );
+
+  if (m->>'terms_agreed') = 'true' then
+    insert into public.user_consent_records (
+      user_id, consent_type, consent_actor, is_minor, guardian_consent,
+      consent_version, agreed_at, source, metadata, idempotency_key
+    ) values (
+      new.id, 'terms', 'user', v_is_minor, false,
+      v_version, v_agreed_at, 'signup', v_metadata, 'signup:' || new.id::text || ':terms:' || v_version
+    ) on conflict (idempotency_key) do nothing;
+  end if;
+
+  if (m->>'privacy_agreed') = 'true' then
+    insert into public.user_consent_records (
+      user_id, consent_type, consent_actor, is_minor, guardian_consent,
+      consent_version, agreed_at, source, metadata, idempotency_key
+    ) values (
+      new.id, 'privacy', 'user', v_is_minor, false,
+      v_version, v_agreed_at, 'signup', v_metadata, 'signup:' || new.id::text || ':privacy:' || v_version
+    ) on conflict (idempotency_key) do nothing;
+  end if;
+
+  if (m->>'marketing_agreed') = 'true' then
+    insert into public.user_consent_records (
+      user_id, consent_type, consent_actor, is_minor, guardian_consent,
+      consent_version, agreed_at, source, metadata, idempotency_key
+    ) values (
+      new.id, 'marketing', 'user', v_is_minor, false,
+      v_version, v_agreed_at, 'signup', v_metadata, 'signup:' || new.id::text || ':marketing:' || v_version
+    ) on conflict (idempotency_key) do nothing;
+  end if;
+
+  if v_is_minor and (m->>'guardian_consent') = 'true' then
+    insert into public.user_consent_records (
+      user_id, consent_type, consent_actor, is_minor, guardian_consent,
+      consent_version, guardian_ref, agreed_at, source, metadata, idempotency_key
+    ) values (
+      new.id, 'minor_guardian_consent', 'guardian', true, true,
+      v_version, nullif(trim(m->>'guardian_ref'), ''), v_agreed_at, 'signup', v_metadata,
+      'signup:' || new.id::text || ':minor_guardian_consent:' || v_version
+    ) on conflict (idempotency_key) do nothing;
+  end if;
+
+  return new;
+end;
+$function$;
+comment on function public.handle_new_auth_user_consent_records() is
+  'Signup consent ledger trigger. Stores terms/privacy/marketing and under-14 guardian consent skeleton from auth metadata.';
+drop function if exists core_private.user_consent_signup_impl(uuid, jsonb, text);
 
 -- ⑥b self 프로필 impl 원문 복원 (라이브 pg_get_functiondef 원문 · md5 a0cb1b7f37b8195cc9ca370bfb5e90e7)
 CREATE OR REPLACE FUNCTION core_private.user_profile_update_self_impl(p_user_id uuid, p_nickname text, p_grade_level text)
@@ -411,8 +500,11 @@ begin
     raise exception '206_ROLLBACK_SELFCHECK: user_profile_update_self_impl 원문 불일치';
   end if;
   if exists (select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
-              where (n.nspname, p.proname) in (('api_app_v1', 'complete_profile'), ('core_private', 'user_signup_provision_impl'), ('public', 'user_profile_completed'))) then
+              where (n.nspname, p.proname) in (('api_app_v1', 'complete_profile'), ('core_private', 'user_signup_provision_impl'), ('core_private', 'user_consent_signup_impl'), ('public', 'user_profile_completed'))) then
     raise exception '206_ROLLBACK_SELFCHECK: 함수 잔존';
+  end if;
+  if md5(pg_get_functiondef('public.handle_new_auth_user_consent_records()'::regprocedure)) <> 'abc7c96e8d5707a6d8324a75d4b14815' then
+    raise exception '206_ROLLBACK_SELFCHECK: handle_new_auth_user_consent_records 원문 불일치';
   end if;
   if exists (select 1 from pg_policies where schemaname = 'public' and (coalesce(qual, '') || coalesce(with_check, '')) like '%user_profile_completed()%') then
     raise exception '206_ROLLBACK_SELFCHECK: 완성 조건이 남은 정책 존재';

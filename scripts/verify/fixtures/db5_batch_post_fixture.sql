@@ -21,6 +21,15 @@ begin
   execute p_sql; return 'OK';
 exception when others then return left(sqlerrm, 100);
 end $$;
+-- 오류 메시지|PG_EXCEPTION_DETAIL (ACCOUNT_BLOCKED 의 상태값 확인용)
+create or replace function pg_temp.try_detail(p_sql text) returns text language plpgsql as $$
+declare d text;
+begin
+  execute p_sql; return 'OK';
+exception when others then
+  get stacked diagnostics d = pg_exception_detail;
+  return left(sqlerrm, 60) || '|' || coalesce(d, '');
+end $$;
 create or replace function pg_temp.snap(p_key text) returns text language sql as $$ select val from db5_check.snapshot where key = p_key $$;
 create temp table db5_res (key text primary key, val jsonb) on commit drop;
 grant select, insert, update on db5_res to authenticated;
@@ -63,11 +72,12 @@ end $$;
 \set c3 '''00000000-0000-4000-8000-00000000d5c3'''
 \set c4 '''00000000-0000-4000-8000-00000000d5c4'''
 \set c5 '''00000000-0000-4000-8000-00000000d5c5'''
+\set c6 '''00000000-0000-4000-8000-00000000d5c6'''
 \set rev6 '''00000000-0000-4000-8000-00000000d5f9'''
 
 -- ═══ 0. 적용 상태 · ACL ═══
 select pg_temp.ok((select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'api_app_v1') = 19, '0 api_app_v1 함수 19(16 + complete_profile · v3 · review_eligibility_self)');
-select pg_temp.ok((select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'core_private') = 10, '0 core_private 함수 10(8 + signup provision impl · review impl)');
+select pg_temp.ok((select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'core_private') = 12, '0 core_private 함수 12(8 + signup provision impl · consent impl · review impl · account gate)');
 select pg_temp.ok((select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public') = pg_temp.snap('fn_public_count')::int + 2, '0 public 함수 +2(plan_price_stats · user_profile_completed)');
 select pg_temp.ok((select count(*) from pg_policies where schemaname = 'public')::text = pg_temp.snap('policies_count'), '0 public 정책 수 불변(이름 유지 재생성)');
 select pg_temp.ok((select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'api_app_v1'
@@ -75,9 +85,9 @@ select pg_temp.ok((select count(*) from pg_proc p join pg_namespace n on n.oid =
                     and p.prosecdef and not has_function_privilege('anon', p.oid, 'EXECUTE') and has_function_privilege('authenticated', p.oid, 'EXECUTE')
                     and not has_function_privilege('service_role', p.oid, 'EXECUTE')) = 3, '0 api_app_v1 신규 3종 SECDEF · authenticated 만 · anon/service_role 0');
 select pg_temp.ok((select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'core_private'
-                    and p.proname in ('user_signup_provision_impl', 'review_eligibility_impl')
+                    and p.proname in ('user_signup_provision_impl', 'user_consent_signup_impl', 'review_eligibility_impl', 'account_blocked_state')
                     and not has_function_privilege('anon', p.oid, 'EXECUTE') and not has_function_privilege('authenticated', p.oid, 'EXECUTE')
-                    and not has_function_privilege('service_role', p.oid, 'EXECUTE')) = 2, '0 core_private 신규 2종 외부 EXECUTE 0');
+                    and not has_function_privilege('service_role', p.oid, 'EXECUTE')) = 4, '0 core_private 신규 4종 외부 EXECUTE 0');
 
 -- ═══ A. 요금제 평균가 (205) — 승인 6 · 활성 필터 · 100원 반올림 · 표본 5 경계 · 4 fallback ═══
 select pg_temp.ok((select row(sample_count, avg_won, min_won, max_won, fallback)::text from public.plan_price_stats() where plan_tier = 'limited') = '(6,32600,29900,40000,f)',
@@ -132,8 +142,13 @@ select pg_temp.ok((select role = 'mentor' and profile_completed_at is not null a
 select pg_temp.ok((select university_name = '서울대학교' and department_name = '수학과' and teaching_subjects = array['수학','물리'] and high_school_name = '검증고' and verification_status = 'pending'
                      from public.mentor_profiles where user_id = :c3)
                   and (select count(*) from public.verification_logs where user_id = :c3 and log_type = 'mentor_verification' and status = 'pending') = 1
+                  and (select count(*) from public.user_consent_records where user_id = :c3) = 2
                   and (select count(*) from public.user_consent_records where user_id = :c3 and consent_type in ('terms','privacy')) = 2,
-                  'B-2 이메일 멘토 가입: mentor_profiles pending(122 동일) · 인증 로그 1 · 동의 원장 2(zz 트리거 불변)');
+                  'B-2 이메일 멘토 가입: mentor_profiles pending(122 동일) · 인증 로그 1 · 동의 원장 정확히 2(impl 기록 · zz 트리거 멱등 no-op · 중복 0)');
+select pg_temp.ok((select count(distinct consent_actor || '|' || guardian_consent::text || '|' || consent_version || '|' || source || '|' || (select string_agg(k, ',' order by k) from jsonb_object_keys(metadata) k) || '|' || (idempotency_key = 'signup:' || user_id::text || ':' || consent_type || ':' || consent_version)::text) from public.user_consent_records where user_id = :c3) = 1
+                  and (select consent_actor || '|' || guardian_consent::text || '|' || consent_version || '|' || source || '|' || (select string_agg(k, ',' order by k) from jsonb_object_keys(metadata) k) || '|' || (idempotency_key = 'signup:' || user_id::text || ':' || consent_type || ':' || consent_version)::text from public.user_consent_records where user_id = :c3 limit 1) = 'user|false|legal-placeholder-2026-06-20|signup|age_gate_checked_at,birth_date,role,verification_method|true'
+                  and (select bool_and(metadata ->> 'role' = 'mentor' and metadata ->> 'birth_date' = '2000-01-01' and metadata ->> 'verification_method' = 'legal_review_pending' and not is_minor) from public.user_consent_records where user_id = :c3),
+                  'B-2 이메일 가입 원장 행 모양 = 187 원문(actor user · version 기본값 · source signup · metadata 4키 · 멱등 키 signup:<uid>:<type>:<version>)');
 select pg_temp.ok(pg_temp.try(format($q$ update public.users set profile_completed_at = now() where id = %L $q$, :c1::uuid)) like '%users_role_required_when_completed%', 'B-3 CHECK: role NULL 인 채 완성 시각만 채우기 거부');
 
 -- 완성 전 사용자(c1)의 접근 — 자기 users 행 읽기만 · 쓰기 전부 거부
@@ -185,7 +200,7 @@ select pg_temp.expect('C6', $q$ select api_app_v1.complete_profile('student', re
 select pg_temp.expect('C7', $q$ select api_app_v1.complete_profile('student', '소셜닉', null, true, false, '고1', null, null) $q$, 'BIRTHDATE_REQUIRED', 'C-1 생년월일 없음');
 select pg_temp.expect('C8', $q$ select api_app_v1.complete_profile('student', '소셜닉', (current_date + 1)::date, true, false, '고1', null, null) $q$, 'BIRTHDATE_INVALID', 'C-1 미래 생년월일');
 select pg_temp.expect('C9', $q$ select api_app_v1.complete_profile('student', '소셜닉', '2000-05-05', true, false, repeat('고', 21), null, null) $q$, 'GRADE_LEVEL_TOO_LONG', 'C-1 학년 21자');
-select pg_temp.ok((select role is null and profile_completed_at is null from public.users where id = :c1), 'C-1 실패 호출은 행을 바꾸지 않는다');
+select pg_temp.ok((select role is null and profile_completed_at is null from public.users where id = :c1) and (select count(*) from public.user_consent_records where user_id = :c1) = 0, 'C-1 실패 호출은 행·동의 원장을 바꾸지 않는다');
 -- 만 13세 학생 → guardian_consent
 select pg_temp.expect('C10', $q$ select api_app_v1.complete_profile('student', '소셜닉', ((now() at time zone 'Asia/Seoul')::date - interval '13 years')::date, true, true, '중1', null, null) $q$, 'OK', 'C-2 ★ 학생 완성(만 13세)');
 select pg_temp.ok((pg_temp.res('C10') ->> 'role') = 'student' and (pg_temp.res('C10') ->> 'is_minor')::boolean and (pg_temp.res('C10') ->> 'next') = 'guardian_consent' and (pg_temp.res('C10') ->> 'nickname') = '소셜닉',
@@ -193,14 +208,26 @@ select pg_temp.ok((pg_temp.res('C10') ->> 'role') = 'student' and (pg_temp.res('
 select pg_temp.ok((select role = 'student' and nickname = '소셜닉' and full_name = '카카오유저' and grade_level = '중1' and terms_agreed_at is not null and privacy_agreed_at is not null and marketing_agreed = true
                      and profile_completed_at is not null and birth_date = ((now() at time zone 'Asia/Seoul')::date - interval '13 years')::date from public.users where id = :c1),
                   'C-2 users 갱신: role · nickname(표시명) · full_name 유지(provider) · 학년 · 약관/개인정보 시각 · 마케팅 · 완성 시각 · 생년월일');
-select pg_temp.ok((select count(*) from public.user_consent_records where user_id = :c1) = 0 and (select count(*) from public.mentor_profiles where user_id = :c1) = 0,
-                  'C-2 동의 원장 미기록(정정 C — users 컬럼만) · 학생은 프로필 행 없음(student_profiles 부재)');
+select pg_temp.ok((select count(*) from public.mentor_profiles where user_id = :c1) = 0, 'C-2 학생은 프로필 행 없음(student_profiles 부재)');
+reset role;   -- 원장 대조는 서비스 시점(RLS 밖)에서 — c3 행과 비교
+select pg_temp.ok((select string_agg(consent_type, ',' order by consent_type) from public.user_consent_records where user_id = :c1) = 'marketing,privacy,terms'
+                  and (select count(distinct consent_actor || '|' || guardian_consent::text || '|' || consent_version || '|' || source || '|' || (select string_agg(k, ',' order by k) from jsonb_object_keys(metadata) k) || '|' || (idempotency_key = 'signup:' || user_id::text || ':' || consent_type || ':' || consent_version)::text) from public.user_consent_records where user_id = :c1) = 1
+                  and (select consent_actor || '|' || guardian_consent::text || '|' || consent_version || '|' || source || '|' || (select string_agg(k, ',' order by k) from jsonb_object_keys(metadata) k) || '|' || (idempotency_key = 'signup:' || user_id::text || ':' || consent_type || ':' || consent_version)::text from public.user_consent_records where user_id = :c1 limit 1) = (select consent_actor || '|' || guardian_consent::text || '|' || consent_version || '|' || source || '|' || (select string_agg(k, ',' order by k) from jsonb_object_keys(metadata) k) || '|' || (idempotency_key = 'signup:' || user_id::text || ':' || consent_type || ':' || consent_version)::text from public.user_consent_records where user_id = :c3 limit 1),
+                  'C-2 ★ 동의 원장(후속 a): terms · privacy · marketing 3행 — 이메일 가입(c3) 행과 같은 모양(actor · guardian false · version · source signup · metadata 4키 · 멱등 키 형식)');
+select pg_temp.ok((select bool_and(is_minor and metadata ->> 'role' = 'student' and metadata ->> 'birth_date' = ((now() at time zone 'Asia/Seoul')::date - interval '13 years')::date::text
+                                      and metadata ->> 'verification_method' = 'legal_review_pending' and metadata -> 'age_gate_checked_at' = 'null'::jsonb and agreed_at is not null)
+                     from public.user_consent_records where user_id = :c1), 'C-2 동의 원장 값: is_minor true(만 13세) · role student · birth_date · verification_method legal_review_pending');
+set local role authenticated;
+select pg_temp.as_user(:c1, 'authenticated');
 select pg_temp.expect('C11', $q$ select api_app_v1.complete_profile('student', '소셜닉', '2013-05-05', true, true, '중1', null, null) $q$, 'ALREADY_COMPLETED', 'C-2 두 번째 호출');
 select pg_temp.ok((pg_temp.res('C11') ->> 'role') = 'student', 'C-2 ALREADY_COMPLETED 는 현재 role 을 동봉');
 select pg_temp.ok(public.user_profile_completed(), 'C-2 완성 후 user_profile_completed() = true');
 select pg_temp.ok(pg_temp.try(format($q$ insert into public.favorites (user_id, mentor_id) values (%L, %L) $q$, :c1::uuid, :m1::uuid)) = 'OK', 'C-2 완성 후: favorites INSERT OK(같은 정책 · 완성 조건 통과)');
 select pg_temp.ok(pg_temp.try(format($q$ insert into public.content_reports (reporter_id, target_type, target_id, reason) values (%L, 'user', %L, '신고') $q$, :c1::uuid, :m1::uuid)) = 'OK', 'C-2 완성 후: content_reports INSERT OK');
 select pg_temp.ok(pg_temp.try($q$ select api_app_v1.user_profile_update_self_v2('닉변경', null, null) $q$) = 'OK', 'C-2 완성 후: user_profile_update_self_v2 OK(학생 게이트 통과)');
+reset role;
+select pg_temp.ok((select count(*) from public.user_consent_records where user_id = :c1) = 3, 'C-2 두 번째 호출(ALREADY_COMPLETED)은 원장을 늘리지 않는다');
+set local role authenticated;
 -- c2(이메일 없음) → 멘토 완성
 select pg_temp.as_user(:c2, 'authenticated');
 select pg_temp.expect('C12', $q$ select api_app_v1.complete_profile('mentor', '멘토닉2', '1999-01-01', true, false, null, '연세대학교', '경영학과') $q$, 'OK', 'C-3 ★ 멘토 완성(이메일 NULL 사용자)');
@@ -211,6 +238,8 @@ select pg_temp.ok((select role = 'mentor' and email is null and nickname = '멘�
                          from public.mentor_profiles where user_id = :c2)
                   and (select count(*) from public.verification_logs where user_id = :c2 and log_type = 'mentor_verification' and status = 'pending') = 1,
                   'C-3 mentor_profiles pending(이메일 가입 트리거와 같은 형태 · 특권 가드 미발화) · 인증 로그 1');
+select pg_temp.ok((select string_agg(consent_type, ',' order by consent_type) from public.user_consent_records where user_id = :c2) = 'privacy,terms'
+                  and (select bool_and(not is_minor and metadata ->> 'role' = 'mentor' and source = 'signup') from public.user_consent_records where user_id = :c2), 'C-3 동의 원장: terms · privacy 2행(마케팅 미동의 → 행 없음) · is_minor false · role mentor');
 select pg_temp.ok((select count(*) from public.mentor_plans where mentor_id = :c2) = 0, 'C-3 미승인 멘토 — 플랜 시드 없음(166 은 승인 시)');
 -- c4 성인 학생 → home · 이후 역할 변경 가드
 set local role authenticated;
@@ -218,6 +247,8 @@ select pg_temp.as_user(:c4, 'authenticated');
 select pg_temp.expect('C13', $q$ select api_app_v1.complete_profile('student', '구글닉', '2005-03-03', true, false, '재수생', null, null) $q$, 'OK', 'C-4 성인 학생 완성');
 select pg_temp.ok((pg_temp.res('C13') ->> 'next') = 'home' and (pg_temp.res('C13') ->> 'is_minor')::text = 'false', 'C-4 반환: next home');
 reset role;
+select pg_temp.ok((select count(*) from public.user_consent_records where user_id = :c4) = 2, 'C-4 동의 원장 2행');
+select pg_temp.ok((select count(*) from public.user_consent_records where user_id not in ('00000000-0000-4000-8000-00000000d5c1','00000000-0000-4000-8000-00000000d5c2','00000000-0000-4000-8000-00000000d5c3','00000000-0000-4000-8000-00000000d5c4','00000000-0000-4000-8000-00000000d5c5','00000000-0000-4000-8000-00000000d5c6','00000000-0000-4000-8000-00000000d5d1','00000000-0000-4000-8000-00000000d5d2'))::text = pg_temp.snap('ucr_count'), 'C-4 기존(백필) 사용자의 원장은 건드리지 않았다(행 수 불변)');
 -- 119 가드: 완성 전(NULL) → student/mentor 만 열렸다. 그 외 전이는 JWT 분기 원문 그대로(authenticated 세션은 거부)
 select pg_temp.as_user(:c4, 'authenticated');
 select pg_temp.ok(pg_temp.try(format($q$ update public.users set role = 'admin' where id = %L $q$, :c4::uuid)) like '%ROLE_CHANGE_FORBIDDEN%', 'C-5 119 가드: 완성된 student → admin 전이(authenticated JWT) 거부');
@@ -262,11 +293,49 @@ select pg_temp.iq('D4', $q$ select * from api_app_v1.create_individual_question_
 select pg_temp.ok((pg_temp.res('D4') ->> 'status') = 'open' and (pg_temp.res('D4') ->> 'topic') is null and (pg_temp.res('D4') ->> 'required_school_tier') is null, 'D-4 v2 그대로 동작(topic·자격 NULL)');
 select pg_temp.ok((select balance_cents from public.cash_wallets where user_id = :s1) = 30000000 - 500000 - 300000 - 100000, 'D-5 지갑: 홀드 3건(500,000 + 300,000 + 100,000) · 재호출 이중 홀드 0');
 select pg_temp.ok((select count(*) from public.cash_ledger where idempotency_key = 'iq_hold:' || (pg_temp.res('D1') ->> 'id')) = 1, 'D-5 홀드 원장 iq_hold 1건');
--- v2 가 거부하는 계정 상태는 v3 도 거부(동일 결과) — banned S2 (사전 실측값과 대조)
+-- ═══ D-6. 정지·차단·탈퇴 진행 계정 등록 차단(후속 b) — v2·v3 공통 판정 core_private.account_blocked_state ═══
+select pg_temp.ok(pg_temp.snap('pre_v2_banned') = 'OK', 'D-6 (근거) 보강 전 v2 는 banned 학생의 등록을 통과시켰다(사전 실측 OK)');
 select pg_temp.as_user(:s2, 'authenticated');
-select pg_temp.ok(pg_temp.try($q$ select * from api_app_v1.create_individual_question_as_student_v3('open', 't', 'b', 500000, null, 'iq3-banned', 'math_calculus', null, null, null) $q$) = pg_temp.snap('pre_v2_banned'),
-                  'D-6 banned 학생: v3 결과 = v2 사전 실측 결과(' || pg_temp.snap('pre_v2_banned') || ')');
+select pg_temp.ok(pg_temp.try_detail($q$ select * from api_app_v1.create_individual_question_as_student_v2('open', 't', 'b', 500000, null, 'iq2-banned', 'math_calculus') $q$) = 'ACCOUNT_BLOCKED|banned', 'D-6 ★ banned 학생 v2 → ACCOUNT_BLOCKED · detail banned');
+select pg_temp.ok(pg_temp.try_detail($q$ select * from api_app_v1.create_individual_question_as_student_v3('open', 't', 'b', 500000, null, 'iq3-banned', 'math_calculus', null, null, null) $q$) = 'ACCOUNT_BLOCKED|banned', 'D-6 ★ banned 학생 v3 → ACCOUNT_BLOCKED · detail banned');
+select pg_temp.ok(pg_temp.try($q$ select * from public.create_individual_question_as_student('open', 'v1', 'b', 100000, null, 'iq1-banned') $q$) = 'OK', 'D-6 (참고) v1 은 손대지 않았다 — banned 학생도 여전히 통과(호환 유지 · 앱 v1 미사용)');
 reset role;
+-- suspended: 무기한 · 미래 → 차단, 만료 → 통과(코어로 진행 · 지갑 없어 CASH_INSUFFICIENT)
+update public.users set status = 'suspended', suspended_until = null where id = :s5;
+set local role authenticated;
+select pg_temp.as_user(:s5, 'authenticated');
+select pg_temp.ok(pg_temp.try_detail($q$ select * from api_app_v1.create_individual_question_as_student_v2('open', 't', 'b', 500000, null, 'iq2-susp1', 'math_calculus') $q$) = 'ACCOUNT_BLOCKED|suspended', 'D-6 무기한 정지 v2 → ACCOUNT_BLOCKED|suspended');
+reset role;
+update public.users set suspended_until = now() + interval '1 day' where id = :s5;
+set local role authenticated;
+select pg_temp.as_user(:s5, 'authenticated');
+select pg_temp.ok(pg_temp.try_detail($q$ select * from api_app_v1.create_individual_question_as_student_v3('open', 't', 'b', 500000, null, 'iq3-susp2', 'math_calculus', null, null, null) $q$) = 'ACCOUNT_BLOCKED|suspended', 'D-6 기한 정지(미래) v3 → ACCOUNT_BLOCKED|suspended');
+reset role;
+update public.users set suspended_until = now() - interval '1 day' where id = :s5;
+set local role authenticated;
+select pg_temp.as_user(:s5, 'authenticated');
+select pg_temp.ok(pg_temp.try($q$ select * from api_app_v1.create_individual_question_as_student_v2('open', 't', 'b', 500000, null, 'iq2-susp3', 'math_calculus') $q$) like 'INDIVIDUAL_QUESTION_CREATE_FAILED:insufficient_cash%', 'D-6 만료된 정지 v2 → 게이트 통과(코어 CASH_INSUFFICIENT — 앱·웹 동일)');
+reset role;
+update public.users set status = 'active', suspended_until = null where id = :s5;
+-- deleted · 탈퇴 진행 중(locked) → 차단 · 탈퇴 대기(pending · 취소 가능) → 통과
+update public.users set status = 'deleted' where id = :s5;
+set local role authenticated;
+select pg_temp.as_user(:s5, 'authenticated');
+select pg_temp.ok(pg_temp.try_detail($q$ select * from api_app_v1.create_individual_question_as_student_v3('open', 't', 'b', 500000, null, 'iq3-del', 'math_calculus', null, null, null) $q$) = 'ACCOUNT_BLOCKED|deleted', 'D-6 deleted v3 → ACCOUNT_BLOCKED|deleted');
+reset role;
+update public.users set status = 'active' where id = :s5;
+insert into public.account_deletion_jobs (user_id, state) values (:s5, 'locked');
+set local role authenticated;
+select pg_temp.as_user(:s5, 'authenticated');
+select pg_temp.ok(pg_temp.try_detail($q$ select * from api_app_v1.create_individual_question_as_student_v2('open', 't', 'b', 500000, null, 'iq2-lock', 'math_calculus') $q$) = 'ACCOUNT_BLOCKED|deletion_in_progress'
+                  and pg_temp.try_detail($q$ select * from api_app_v1.create_individual_question_as_student_v3('open', 't', 'b', 500000, null, 'iq3-lock', 'math_calculus', null, null, null) $q$) = 'ACCOUNT_BLOCKED|deletion_in_progress', 'D-6 탈퇴 진행 중(locked) v2·v3 → ACCOUNT_BLOCKED|deletion_in_progress');
+reset role;
+update public.account_deletion_jobs set state = 'pending' where user_id = :s5;
+set local role authenticated;
+select pg_temp.as_user(:s5, 'authenticated');
+select pg_temp.ok(pg_temp.try($q$ select * from api_app_v1.create_individual_question_as_student_v3('open', 't', 'b', 500000, null, 'iq3-pend', 'math_calculus', null, null, null) $q$) like 'INDIVIDUAL_QUESTION_CREATE_FAILED:insufficient_cash%', 'D-6 탈퇴 대기(pending · 취소 가능 창) → 게이트 통과(앱 deletionPending 허용과 동일)');
+reset role;
+delete from public.account_deletion_jobs where user_id = :s5;
 select pg_temp.as_user(null, 'anon');
 select pg_temp.ok(pg_temp.try($q$ select * from api_app_v1.create_individual_question_as_student_v3('open', 't', 'b', 500000, null, 'iq3-nojwt', 'math_calculus', null, null, null) $q$) like 'AUTH_REQUIRED%', 'D-7 JWT 없음 → AUTH_REQUIRED');
 set local role anon;
@@ -309,16 +378,47 @@ select pg_temp.as_user(null, 'anon');
 select pg_temp.expect('E8', format($q$ select api_app_v1.review_eligibility_self(%L) $q$, :m1::uuid), 'AUTH_REQUIRED', 'E-6 JWT 없음');
 select pg_temp.ok((select coalesce(with_check, '') from pg_policies where tablename = 'reviews' and policyname = 'reviews_insert_student') = pg_temp.snap('pol_reviews_insert'), 'E-7 reviews_insert_student 정책 불변');
 
+-- ═══ F. 마케팅 동의 RPC (209 · 후속 d) — 모든 사용자 on/off 왕복 ═══
+set local role authenticated;
+select pg_temp.as_user(:s1, 'authenticated');
+select pg_temp.expect('F1', $q$ select api_web_v1.user_marketing_consent_set_self(true) $q$, 'OK', 'F-1 ★ 학생 S1 동의 on(보강 전엔 NOT NULL 로 실패 — 사전 실측)');
+select pg_temp.ok((select count(*) from public.user_consent_records where user_id = :s1 and source = 'self_rpc') = 1
+                  and (select consent_type || '|' || consent_actor || '|' || consent_version || '|' || (metadata ->> 'agreed') || '|' || (idempotency_key like 'self_rpc:' || :s1 || ':marketing:%')::text from public.user_consent_records where user_id = :s1 and source = 'self_rpc') = 'marketing|user|v1|true|true'
+                  and (select marketing_agreed from public.users where id = :s1), 'F-1 원장 1행(marketing · self_rpc · v1 · agreed true · 키 self_rpc:<uid>:marketing:<uuid>) · users.marketing_agreed true');
+select pg_temp.expect('F2', $q$ select api_web_v1.user_marketing_consent_set_self(false) $q$, 'OK', 'F-1 동의 off');
+select pg_temp.ok((select count(*) from public.user_consent_records where user_id = :s1 and source = 'self_rpc') = 2 and not (select marketing_agreed from public.users where id = :s1), 'F-1 off → 원장 append(2행 · 이력 보존) · 플래그 false');
+select pg_temp.expect('F3', $q$ select api_web_v1.user_marketing_consent_set_self(true) $q$, 'OK', 'F-1 다시 on');
+select pg_temp.ok((select count(*) from public.user_consent_records where user_id = :s1 and source = 'self_rpc') = 3 and (select count(distinct idempotency_key) from public.user_consent_records where user_id = :s1 and source = 'self_rpc') = 3, 'F-1 3행 · 멱등 키 전부 다름(UNIQUE 충돌 0)');
+select pg_temp.as_user(:m1, 'authenticated');
+select pg_temp.expect('F4', $q$ select api_web_v1.user_marketing_consent_set_self(true) $q$, 'OK', 'F-2 멘토 M1 on');
+select pg_temp.as_user(:c4, 'authenticated');
+select pg_temp.expect('F5', $q$ select api_web_v1.user_marketing_consent_set_self(false) $q$, 'OK', 'F-2 완성된 소셜 학생 c4 off');
+select pg_temp.as_user(:s2, 'authenticated');
+select pg_temp.ok(pg_temp.try($q$ select api_web_v1.user_marketing_consent_set_self(true) $q$) like 'ACCOUNT_BANNED%', 'F-3 banned → ACCOUNT_BANNED(원문 게이트 그대로)');
+reset role;
+insert into auth.users (instance_id, id, aud, role, email, raw_user_meta_data, created_at, updated_at) values
+  ('00000000-0000-0000-0000-000000000000', :c6, 'authenticated', 'authenticated', 'c6@test.local', '{"iss":"https://accounts.google.com","sub":"g6","name":"미완성","provider_id":"g6"}'::jsonb, now(), now());
+set local role authenticated;
+select pg_temp.as_user(:c6, 'authenticated');
+select pg_temp.expect('F6', $q$ select api_web_v1.user_marketing_consent_set_self(true) $q$, 'OK', 'F-4 (관찰 · DB-6 이월) 완성 전 사용자도 이 RPC 는 통과한다 — 원문 게이트가 role·완성을 보지 않음(후속 d 는 원인 컬럼만 고쳤다)');
+reset role;
+select pg_temp.as_user(null, 'anon');
+select pg_temp.ok(pg_temp.try($q$ select api_web_v1.user_marketing_consent_set_self(true) $q$) like 'AUTH_REQUIRED%', 'F-5 JWT 없음 → AUTH_REQUIRED');
+set local role anon;
+select pg_temp.ok(pg_temp.try($q$ select api_web_v1.user_marketing_consent_set_self(true) $q$) like '%permission denied%', 'F-5 anon EXECUTE 거부(ACL 불변)');
+reset role;
+
 -- ═══ G. 불변 ═══
 select pg_temp.ok(md5(pg_get_functiondef('public.create_individual_question_as_student(text,text,text,int,uuid,text)'::regprocedure)) = pg_temp.snap('fn_iq_v1')
-                  and md5(pg_get_functiondef('api_app_v1.create_individual_question_as_student_v2(text,text,text,int,uuid,text,text)'::regprocedure)) = pg_temp.snap('fn_iq_v2')
+                  and md5(pg_get_functiondef('api_app_v1.create_individual_question_as_student_v2(text,text,text,int,uuid,text,text)'::regprocedure)) <> pg_temp.snap('fn_iq_v2')
                   and md5(pg_get_functiondef('public.create_individual_question_with_hold_v2(uuid,text,uuid,text,text,text,text,int,text,text,text)'::regprocedure)) = pg_temp.snap('fn_iq_core_v2'),
-                  'G-1 v1 · v2 · 코어 v2 md5 불변');
-select pg_temp.ok(md5(pg_get_functiondef('api_web_v1.subscription_checkout_confirm_v2(uuid,uuid,integer,text)'::regprocedure)) = pg_temp.snap('fn_f12')
-                  and md5(pg_get_functiondef('public.handle_new_auth_user_consent_records()'::regprocedure)) = pg_temp.snap('fn_consent_trigger'), 'G-1 F12 · 동의 트리거 md5 불변');
+                  'G-1 v1 · 코어 v2 md5 불변 · v2 는 계정 검사 1곳만 추가(md5 변경)');
+select pg_temp.ok(md5(pg_get_functiondef('api_web_v1.subscription_checkout_confirm_v2(uuid,uuid,integer,text)'::regprocedure)) = pg_temp.snap('fn_f12'), 'G-1 F12 md5 불변');
 select pg_temp.ok(md5(pg_get_functiondef('public.handle_new_auth_user()'::regprocedure)) <> pg_temp.snap('fn_trigger')
                   and md5(pg_get_functiondef('public.enforce_users_role_guard()'::regprocedure)) <> pg_temp.snap('fn_role_guard')
-                  and md5(pg_get_functiondef('public.check_review_eligibility(uuid,uuid)'::regprocedure)) <> pg_temp.snap('fn_review'), 'G-2 교체 대상 3종(트리거 · 가드 · 리뷰 자격)은 본문이 바뀌었다');
+                  and md5(pg_get_functiondef('public.check_review_eligibility(uuid,uuid)'::regprocedure)) <> pg_temp.snap('fn_review')
+                  and md5(pg_get_functiondef('public.handle_new_auth_user_consent_records()'::regprocedure)) <> pg_temp.snap('fn_consent_trigger')
+                  and md5(pg_get_functiondef('api_web_v1.user_marketing_consent_set_self(boolean)'::regprocedure)) <> pg_temp.snap('fn_marketing'), 'G-2 교체 대상 5종(가입 트리거 · 동의 트리거(위임) · 가드 · 리뷰 자격 · 마케팅 RPC)은 본문이 바뀌었다');
 select pg_temp.ok((select count(*) from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'api_web_v1')::text = pg_temp.snap('fn_web_count')
                   and (select count(*) from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r')::text = pg_temp.snap('tables_count'), 'G-3 api_web_v1 함수 수 · 테이블 수 불변');
 select pg_temp.ok((select count(*) from pg_policies where schemaname = 'public' and (coalesce(qual, '') || coalesce(with_check, '')) like '%user_profile_completed()%') = 18, 'G-4 완성 조건 정책 정확히 18');
