@@ -3,9 +3,10 @@ import Link from "next/link";
 import { SearchX } from "lucide-react";
 import type { MentorsListFilters } from "@/lib/mentor/mentorsListSearchParams";
 import type { MentorSchoolFilter, MentorTypeFilter } from "@/lib/mentor/mentorsListSearchParams";
-import { filtersToHrefRecord, mentorsListHref } from "@/lib/mentor/mentorsListSearchParams";
+import { filtersToHrefRecord } from "@/lib/mentor/mentorsListSearchParams";
 import type { PublicMentorsListResult } from "@/lib/mentor/publicMentorsListQueries";
 import { MentorGrid } from "@/components/mentor/MentorGrid";
+import { MentorListPagination } from "@/components/mentor/MentorListPagination";
 import { MentorsListFilterSidebar } from "@/components/mentor/MentorsListFilterSidebar";
 import { MentorsListSidebar } from "@/components/mentor/MentorsListSidebar";
 import { MentorsListTopFilterBar } from "@/components/mentor/MentorsListTopFilterBar";
@@ -145,6 +146,7 @@ export function MentorsListBody(props: {
             </div>
           ) : (
             <>
+              {/* 서버가 자른 페이지(12장)를 전부 렌더 — 클라이언트 슬라이스 없음(2단계 · 2026-09-06) */}
               <MentorGrid
                 cards={list.cards}
                 favoriteIds={favoriteSet}
@@ -152,30 +154,14 @@ export function MentorsListBody(props: {
                 view={filters.view}
               />
 
-              {list.hasMore ? (
-                <div className="mt-6">
-                  <Link
-                    href={mentorsListHref(hrefBase, { page: String(list.page + 1) })}
-                    className="flex min-h-[48px] w-full items-center justify-center rounded-xl border-2 border-dashed border-[#2563EB]/40 bg-blue-50/50 text-sm font-extrabold text-[#2563EB] transition hover:bg-blue-50"
-                  >
-                    더 많은 멘토 보기
-                  </Link>
-                </div>
-              ) : null}
-
-              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
-                {list.page > 1 ? (
-                  <Link
-                    href={mentorsListHref(hrefBase, { page: String(list.page - 1) })}
-                    className="min-h-[44px] rounded-xl border border-slate-200 bg-white px-5 text-sm font-extrabold text-slate-800 hover:bg-slate-50"
-                  >
-                    이전
-                  </Link>
-                ) : null}
-                <span className="text-sm font-bold text-slate-500">
-                  {list.page} / {Math.max(1, Math.ceil(list.totalCount / list.pageSize))}
-                </span>
-              </div>
+              {/* 페이지 이동은 이 하나뿐: ‹ 이전 · N / M · 다음 › (1페이지에서도 표시 · 비활성 aria-disabled + 회색) */}
+              <MentorListPagination
+                hrefBase={hrefBase}
+                page={list.page}
+                pageSize={list.pageSize}
+                totalCount={list.totalCount}
+                className="mt-6"
+              />
             </>
           )}
           </>
