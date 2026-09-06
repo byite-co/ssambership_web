@@ -2,17 +2,22 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { LegalDocLayout, LegalList, LegalSection } from "@/components/legal/LegalDocLayout";
 import { COMPANY, PROCESSORS } from "@/lib/legal/companyInfo";
+import {
+  SOCIAL_LOGIN_REVISION_ACTIVE as SOCIAL_LOGIN_REVISION_ACTIVE_SHARED,
+  SOCIAL_LOGIN_REVISION_EFFECTIVE_DATE_LABEL,
+} from "@/lib/legal/socialLoginRevision";
 
 export const metadata = {
   title: "개인정보처리방침",
   description: "쌤버십 개인정보처리방침입니다.",
 };
 
-// 소셜 로그인(카카오·구글·애플) 도입 고지 개정의 시행일 — **오너가 채운다**(시행일 = 소셜 로그인 버튼 공개일 이전 · 제12조 7일 사전 공지).
-// 빈 문자열이면 아래 소셜 로그인 관련 조항·개정 이력은 렌더되지 않고 직전 개정(2026-09-01) 상태 그대로 표시된다(초안 · 법무 확정 전).
-// 값 예: "2026년 9월 20일". 동의 원장 버전(`MINOR_CONSENT_VERSION` · legal-placeholder-2026-06-20) 승격은 법무 확정 후 별도 작업.
-const REVISION_SOCIAL_LOGIN_EFFECTIVE_DATE: string = "";
-const SOCIAL_LOGIN_REVISION_ACTIVE = REVISION_SOCIAL_LOGIN_EFFECTIVE_DATE.trim() !== "";
+// 소셜 로그인(카카오·구글·애플) 도입 고지 개정의 시행일 — 정본은 `lib/legal/socialLoginRevision.ts`(오너 확정 2026-09-13).
+// 같은 상수를 `components/auth/SocialLoginButtons.tsx` 가 노출 게이트로 쓴다(시행일 전엔 버튼 미노출 · 제12조 7일 사전 공지).
+// ACTIVE 가 false(시행일 미확정)면 아래 소셜 로그인 관련 조항·개정 이력은 렌더되지 않고 직전 개정(2026-09-01) 상태 그대로 표시된다.
+// 동의 원장 버전(`MINOR_CONSENT_VERSION` · legal-placeholder-2026-06-20) 승격은 법무 확정 후 별도 작업.
+const REVISION_SOCIAL_LOGIN_EFFECTIVE_DATE: string = SOCIAL_LOGIN_REVISION_EFFECTIVE_DATE_LABEL;
+const SOCIAL_LOGIN_REVISION_ACTIVE = SOCIAL_LOGIN_REVISION_ACTIVE_SHARED;
 // 직전 개정(앱 푸시 알림 도입 고지)의 시행일 — 오너 확정(2026-08-27): 실가입자 없음(데모 계정만)에 따라 제12조 7일 사전 공지 기간 미적용.
 const REVISION_2026_09_01 = "2026년 9월 1일";
 // 그 전 개정(휴대폰 본인인증 도입) 시행일 — 제12조 이력 표기 전용.
