@@ -4,7 +4,7 @@
 -- forward: supabase/sql/206_social_signup_profile_completion.sql
 -- 되돌리는 것(역순):
 --   ① 정책 18종을 pack 118본 원문(pg_policies 원문 그대로)으로 복원 → ② public.user_profile_completed() DROP
---   ③ api_app_v1.complete_profile DROP → ④ public.enforce_users_role_guard() 를 119/라이브 원문(md5 702ddc29…)으로 복원
+--   ③ api_app_v1.complete_profile DROP → ④ public.enforce_users_role_guard() 를 119 운영 원문(CRLF 그대로 · md5 b0fe6f75… — pack LF 재생값 702ddc29… 가 아니다)으로 복원
 --   ⑤ public.handle_new_auth_user() 를 122/20260717044250 라이브 원문(md5 297616fe…)으로 복원 → ⑥ core_private.user_signup_provision_impl DROP
 --   ⑥b core_private.user_profile_update_self_impl 을 20260803162257 D 라이브 원문(md5 a0cb1b7f…)으로 복원
 --   ⑥c public.handle_new_auth_user_consent_records() 를 187 라이브 원문(md5 abc7c96e…)으로 복원 → core_private.user_consent_signup_impl DROP(후속 a)
@@ -148,7 +148,7 @@ drop function if exists public.user_profile_completed();
 -- ③ 프로필 완성 RPC DROP
 drop function if exists api_app_v1.complete_profile(text, text, date, boolean, boolean, text, text, text);
 
--- ④ 119 role 가드 원문 복원 (라이브 pg_get_functiondef 원문 · md5 702ddc298e6892306e796cae22f60201)
+-- ④ 119 role 가드 원문 복원 (운영 pg_get_functiondef 원문 · prosrc 줄바꿈 CRLF 그대로 · md5 b0fe6f758260c82ab3c342951cba6dc0 — 2026-09-06 운영 실측 · 편집기 자동 변환 금지)
 CREATE OR REPLACE FUNCTION public.enforce_users_role_guard()
  RETURNS trigger
  LANGUAGE plpgsql
@@ -493,7 +493,7 @@ begin
   if md5(pg_get_functiondef('public.handle_new_auth_user()'::regprocedure)) <> '297616fe4e28f0dbda3b24244763a917' then
     raise exception '206_ROLLBACK_SELFCHECK: handle_new_auth_user 원문 불일치';
   end if;
-  if md5(pg_get_functiondef('public.enforce_users_role_guard()'::regprocedure)) <> '702ddc298e6892306e796cae22f60201' then
+  if md5(pg_get_functiondef('public.enforce_users_role_guard()'::regprocedure)) <> 'b0fe6f758260c82ab3c342951cba6dc0' then
     raise exception '206_ROLLBACK_SELFCHECK: enforce_users_role_guard 원문 불일치';
   end if;
   if md5(pg_get_functiondef('core_private.user_profile_update_self_impl(uuid,text,text)'::regprocedure)) <> 'a0cb1b7f37b8195cc9ca370bfb5e90e7' then
