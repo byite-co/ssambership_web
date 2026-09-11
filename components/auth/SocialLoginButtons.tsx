@@ -8,7 +8,7 @@ import { isSocialLoginRevisionEffective } from "@/lib/legal/socialLoginRevision"
 /**
  * 소셜 로그인 3종(카카오 · 구글 · 애플) — `supabase.auth.signInWithOAuth` (PKCE · 콜백 `/auth/callback`).
  *
- * 노출 게이트: 개인정보처리방침 소셜 개정 **시행일(`lib/legal/socialLoginRevision.ts` · 2026-09-13 KST) 전에는 렌더하지
+ * 노출 게이트: 개인정보처리방침 소셜 개정 **시행일(`lib/legal/socialLoginRevision.ts` · 2026-09-11 KST) 전에는 렌더하지
  * 않는다**(null) — 방침 페이지와 같은 상수를 본다(제12조 7일 사전 공지). 로그인·가입 화면의 나머지 동작은 영향 0.
  *
  * 브랜드 버튼은 **공식 배포 에셋만** 쓴다(로고를 코드로 그리지 않는다 · `public/auth/`):
