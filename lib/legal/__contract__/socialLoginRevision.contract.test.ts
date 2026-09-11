@@ -1,4 +1,4 @@
-// 계약 테스트: 개인정보처리방침 소셜 로그인 개정 시행일(2026-09-13 KST) — 방침 페이지와 소셜 버튼 게이트의 단일 소스.
+// 계약 테스트: 개인정보처리방침 소셜 로그인 개정 시행일(2026-09-11 KST) — 방침 페이지와 소셜 버튼 게이트의 단일 소스.
 // 실행: node --test --experimental-strip-types lib/legal/__contract__/socialLoginRevision.contract.test.ts
 //
 // 고정하는 것: (1) 시행 전 미노출 · 시행 후 노출(KST 달력 경계 포함) (2) ISO ↔ 표기 라벨 파생 (3) 배선 —
@@ -22,22 +22,22 @@ import {
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
-test("시행일 상수: 2026-09-13(KST) · 표기 라벨은 ISO 에서 파생 · ACTIVE", () => {
-  assert.equal(SOCIAL_LOGIN_REVISION_EFFECTIVE_DATE_ISO, "2026-09-13");
-  assert.equal(SOCIAL_LOGIN_REVISION_EFFECTIVE_DATE_LABEL, "2026년 9월 13일");
+test("시행일 상수: 2026-09-11(KST) · 표기 라벨은 ISO 에서 파생 · ACTIVE", () => {
+  assert.equal(SOCIAL_LOGIN_REVISION_EFFECTIVE_DATE_ISO, "2026-09-11");
+  assert.equal(SOCIAL_LOGIN_REVISION_EFFECTIVE_DATE_LABEL, "2026년 9월 11일");
   assert.equal(formatRevisionDateLabel("2026-09-01"), "2026년 9월 1일");
   assert.equal(SOCIAL_LOGIN_REVISION_ACTIVE, true);
 });
 
 test("시행 전 미노출: 시행일 전날 KST 23:59:59 까지 false", () => {
   assert.equal(isSocialLoginRevisionEffective(new Date("2026-09-06T03:00:00Z")), false, "착수일(2026-09-06)");
-  assert.equal(isSocialLoginRevisionEffective(new Date("2026-09-12T14:59:59Z")), false, "09-12 23:59:59 KST");
-  assert.equal(kstCalendarDate(new Date("2026-09-12T14:59:59Z")), "2026-09-12");
+  assert.equal(isSocialLoginRevisionEffective(new Date("2026-09-10T14:59:59Z")), false, "09-10 23:59:59 KST");
+  assert.equal(kstCalendarDate(new Date("2026-09-10T14:59:59Z")), "2026-09-10");
 });
 
 test("시행 후 노출: 시행일 KST 0시부터 true(UTC 로는 전날 15:00)", () => {
-  assert.equal(isSocialLoginRevisionEffective(new Date("2026-09-12T15:00:00Z")), true, "09-13 00:00:00 KST");
-  assert.equal(kstCalendarDate(new Date("2026-09-12T15:00:00Z")), "2026-09-13");
+  assert.equal(isSocialLoginRevisionEffective(new Date("2026-09-10T15:00:00Z")), true, "09-11 00:00:00 KST");
+  assert.equal(kstCalendarDate(new Date("2026-09-10T15:00:00Z")), "2026-09-11");
   assert.equal(isSocialLoginRevisionEffective(new Date("2026-09-13T12:00:00Z")), true);
   assert.equal(isSocialLoginRevisionEffective(new Date("2027-01-01T00:00:00Z")), true);
 });
@@ -49,7 +49,7 @@ test("배선: 방침 페이지는 공용 상수(라벨·ACTIVE)를 쓰고 로컬
   assert.ok(!page.includes('REVISION_SOCIAL_LOGIN_EFFECTIVE_DATE: string = ""'), "오너 입력용 빈 문자열 상수가 되살아남");
   assert.ok(page.includes("const SOCIAL_LOGIN_REVISION_ACTIVE = SOCIAL_LOGIN_REVISION_ACTIVE_SHARED;"), "ACTIVE 스위치가 공용 값이 아님");
   // 단일 소스: 소셜 개정 시행일 리터럴은 lib/legal/socialLoginRevision.ts 한 곳뿐(#133 의 직접 리터럴 방식 재유입 금지).
-  assert.ok(!page.includes("2026년 9월 13일") && !page.includes("2026-09-13"), "방침 페이지에 소셜 개정 시행일 리터럴이 남아 있다");
+  assert.ok(!page.includes("2026년 9월 11일") && !page.includes("2026-09-11"), "방침 페이지에 소셜 개정 시행일 리터럴이 남아 있다");
 });
 
 test("배선: 소셜 버튼은 게이트로 null 을 돌려준다 · 로그인 폼·가입 화면 배선은 그대로", () => {

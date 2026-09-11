@@ -3,14 +3,13 @@
  *
  * 두 소비처가 같은 값을 본다:
  *  - `app/(public)/legal/privacy/page.tsx`: 시행일 표기 · 제12조 개정 이력 · 소셜 관련 조항 노출(ACTIVE)
- *  - `components/auth/SocialLoginButtons.tsx`: 시행일 **전에는 버튼을 렌더하지 않는다**(제12조 7일 사전 공지 —
- *    방침 개정 배포 → 7일 → 버튼 공개 순서를 코드가 강제)
+ *  - `components/auth/SocialLoginButtons.tsx`: 시행일 **전에는 버튼을 렌더하지 않는다**
  *
  * 날짜는 KST 달력일 기준(한국 표준시는 DST 없음 · UTC+9 고정). 순수 모듈 — next·supabase 미의존(계약 테스트 공용).
  */
 
-/** 시행일(ISO · KST 달력일). 오너 확정 2026-09-06. */
-export const SOCIAL_LOGIN_REVISION_EFFECTIVE_DATE_ISO = "2026-09-13";
+/** 시행일(ISO · KST 달력일). 오너 확정 2026-09-06(2026-09-13) → 2026-09-11 앞당김(2026-09-11 · 선택지 B). */
+export const SOCIAL_LOGIN_REVISION_EFFECTIVE_DATE_ISO = "2026-09-11";
 
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
