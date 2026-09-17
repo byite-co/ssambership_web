@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist_Mono } from "next/font/google";
+import GoogleTag from "@/components/analytics/GoogleTag";
 import { siteUrl } from "@/lib/seo/siteUrl";
 import "./globals.css";
 
@@ -42,6 +43,9 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
+// <GoogleTag /> 는 Google Ads 기본 태그 — 운영 배포에서만 렌더(lib/analytics/googleTag.ts 게이트).
+// 이 파일에서는 블록 주석(별표 닫힘 토큰)을 쓰지 않는다: seoRoutes 계약 테스트의 주석
+// 제거기가 위 "/legal/*" 문자열을 블록 주석 시작으로 오인해 첫 닫힘 토큰까지 지워 버린다.
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -54,6 +58,7 @@ export default function RootLayout({
       style={{ colorScheme: "light" }}
     >
       <body className="min-h-full flex flex-col">{children}</body>
+      <GoogleTag />
     </html>
   );
 }
