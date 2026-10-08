@@ -149,6 +149,16 @@ jobs:
           bash scripts/verify/baseline/verify_local_stack_state.sh
       - name: subscription failures and API compatibility
         run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f scripts/verify/fixtures/subscription_boundaries.sql
+      - name: subscription adversarial regressions
+        run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f scripts/verify/fixtures/subscription_review_regressions.sql
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - name: real TypeScript renewal batch fairness
+        run: |
+          npm ci --ignore-scripts
+          node scripts/verify/subscription_batch_fairness.mjs
       - name: concurrent renewal debits
         run: python3 scripts/verify/subscription_concurrency.py
       - name: stack 정리

@@ -21,21 +21,21 @@
 1. 금융 migration → hardening migration → 웹 PR 배포 순서. 기존 RPC를 DROP하거나 인자를 변경하지 않는다.
 2. 교체할 기존 함수와 뷰는 실측 원문 MD5 gate로 다른 작업의 변경을 탐지한다. 불일치면 migration 전체 중단; gate 값을 임의 갱신해서 덮어쓰지 않는다.
 3. staging에 MCP로 적용하면 할당된 원장 version/statements를 같은 세션에서 canonical `post_ledger_backfills`로 역수입하고 pack/manifest를 재생성한다.
-4. 웹 코드에는 DB가 소유할 event 생성/상태 보정/금액 결정을 다시 넣지 않는다. 기존 v2/앱은 같은 구현을 사용하므로 웹 롤아웃 중에도 최초 이벤트가 원자적으로 기록된다.
+4. 웹 코드에는 DB가 소유할 event 생성/상태 보정/금액 결정을 다시 넣지 않는다. 기존 v2/앱은 같은 구현을 사용한다. 최초 이벤트는 결제별 키·unique index로 식별하고 금융 필드는 불변이다. 구형 웹의 중복 initial INSERT는 0행으로 종료되며 직접 billing pointer UPDATE는 기존 포인터를 보존한다. 도메인 definer RPC의 포인터 변경은 정상 동작한다.
 
 ## 운영 확인
 
 `scripts/verify/subscription_invariants.sql`은 read-only다. 결과 5개가 모두 0이어야 한다. 이벤트 모수를 함께 확인한다. 실제 갱신 0건인 staging에서 위반 0만으로 동시성/실패 원자성을 검증했다고 보지 않는다.
 
 - 새 가격 조회/plan binding 실패: `price_unavailable`, 차감·성공 이벤트 없음.
-- 사전고지 이후 플랜 가격 변경: `price_changed_since_notice`, 자동 차감 중단. 임의로 notice marker를 삭제하거나 금액을 고치지 않는다. 운영자가 가격/고지 이력을 확인한 후 재고지·적용 시점을 결정해야 한다.
+- 사전고지 이후 플랜 가격 변경: `price_changed_since_notice`, 자동 차감 중단. 임의로 notice marker를 삭제하거나 금액을 고치지 않는다. 실패 이벤트와 `past_due` 전환을 함께 기록하고 기존 2일 유예를 적용한다. 재시도는 유예를 연장하지 않는다. 유예 내 binding/기존 고지 가격이 복구되면 재시도할 수 있고, 해결되지 않으면 terminal RPC로 만료된다. 변경된 가격의 신규 이용은 웹에서 새로 동의·구독한다.
 - `is_active=false`는 신규 가입만 제한하며 기존 구독 갱신은 허용한다.
 - terminal invariant는 현재 기간과 같은 이벤트를 비교한다. 과거 terminal 이벤트가 보존된 정상 재구독을 오류로 세지 않는다.
 - 앱 재빌드가 없으므로 신규 오류 코드별 한국어 앱 문구 추가와 앱 artifact quota CI 변경은 포함하지 않는다.
 
 ## 검증과 되돌리기
 
-로컬 PostgreSQL 17 호환 엔진에서 전체 125본 pack, 실제 실패 trigger와 계약 fixture, rollback 후 재적용을 검증한다. 로컬 엔진은 기존 플랫폼 stub을 쓰고 pgcrypto 설치 선언만 제외하므로 최종 PG17/Supabase 검증은 GitHub의 기존 CLI runner가 담당한다.
+로컬 PostgreSQL 17 호환 엔진에서 전체 126본 pack, 실제 실패 trigger와 계약 fixture, rollback 후 재적용을 검증한다. 로컬 엔진은 기존 플랫폼 stub을 쓰고 pgcrypto 설치 선언만 제외하므로 최종 PG17/Supabase 검증은 GitHub의 기존 CLI runner가 담당한다.
 
 - `scripts/verify/fixtures/subscription_boundaries.sql`: 테스트 데이터와 강제 실패 트리거는 모두 ROLLBACK. 원장/지갑/결제/방/구독, 재생/재구독, 웹/앱 오류 코드, anon directory 필터를 실제 실행한다.
 - `scripts/verify/subscription_concurrency.py`: 폐기 가능한 로컬 Supabase만 사용. A의 미커밋 갱신에 B가 실제 advisory lock 대기함을 관측하고, 이후 성공 재생과 차감 정확히 1회를 확인한다.
@@ -50,3 +50,15 @@
 - Security Advisor의 definer view ERROR와 mutable search_path 5개 경고는 사라졌다. 나머지 definer 함수 호출 경고(anon 37, authenticated 119)와 service-only RLS 무정책 INFO 17은 별도 분류 대상이다.
 - [PG17 전체 pack·실패·2세션 갱신 CI](https://github.com/byite-co/ssambership_web/actions/runs/37708299266), [웹 lint·tsc·1,244 계약 테스트](https://github.com/byite-co/ssambership_web/actions/runs/37708299298): 모두 성공.
 - PR #138에서 웹 호출부와 정확한 staging 원장 version을 함께 관리한다. 웹 main 병합/서비스 배포는 아직 수행하지 않았다.
+
+## 적대적 검토 후속 수정
+
+- 가격 차단은 `renewal_failed/failed` 이벤트와 `past_due` 전환을 원자 처리한다. 차감은 0이며 캐시 부족용 알림은 발행하지 않는다. 최초 유예 만료 뒤 정상 terminal 전이를 거친다.
+- `claim_subscription_renewal_batch`는 가장 오래 전에 선택한 due 구독을 우선하고 `FOR UPDATE SKIP LOCKED`로 선택 시간을 커밋한다. 후속 RPC 오류나 작업 중단이 있어도 같은 50건이 계속 앞을 점유하지 않는다. 각 금융 RPC의 잠금·멱등·상태 재검증은 그대로 적용된다.
+- 최초 이벤트 키는 `sub_initial:<subscription_id>:<payment_id>`다. 기존 이벤트는 키만 변경하며 중복 payment 이력이 있으면 migration을 중단한다. 과거 이벤트를 삭제하거나 합치지 않는다.
+- 결제 후 지연된 구형 웹의 event upsert 및 별도 포인터 UPDATE를 실제 `service_role`로 검증한다. 최초 이벤트 복구 기간은 원본 debit의 `created_at`과 당시 checkout의 KST 1개월 규칙을 사용하며 현재 구독 기간을 참조하지 않는다.
+- `subscription_review_regressions.sql`: 두 pending intent → A 확정 → B 확정 → 지연된 A 후속 쓰기, 갱신 후 최초 이벤트 복구, 정상 가격 변경 API, 미결제 질문 차단, 유예 불연장·만료, 상태 실패 시 이벤트 rollback.
+- `subscription_batch_fairness.mjs`: 실제 TS 배치와 DB를 연결한다. 막힌 50건 뒤 정상 1건이 다음 배치에서 갱신되고, 미해결 50건은 유예 후 만료됨을 검증한다.
+- 후속 rollback은 웹의 claim 호출을 먼저 되돌린 뒤 적용한다. 기존 금융 데이터와 결제별 키는 보존하며, 최초 금융/hardening migration의 rollback보다 먼저 실행한다.
+
+- staging 후속 적용: `20261008020145_subscription_review_fixes`, 원장 MD5 `ae057f98ec9e80496b4bbbf547e0dcee`. 로컬 기존 1,244 계약 테스트·lint·typecheck, 전체 pack·회귀 SQL, 실제 TS 51건 배치, rollback 후 재적용을 통과했다.

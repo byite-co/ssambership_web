@@ -102,7 +102,7 @@ select pg_temp.check_ok(pg_temp.result('missing_price')->>'code'='price_unavaila
 update public.subscriptions set plan_id=(select id from public.mentor_plans where mentor_id='00000000-0000-4000-8000-00000000f002' and plan_tier='limited') where id=(select id from renewal);
 insert into results select 'bad_binding',to_jsonb(r) from renewal s cross join lateral public.process_subscription_renewal_v2(s.id,s.current_period_end,s.key,now()) r;
 select pg_temp.check_ok(pg_temp.result('bad_binding')->>'code'='price_unavailable','plan binding fails closed');
-select pg_temp.check_ok(not exists(select 1 from public.subscription_billing_events where idempotency_key=(select key from renewal)) and not exists(select 1 from public.cash_ledger where idempotency_key=(select key from renewal)),'price errors create no successful event or ledger');
+select pg_temp.check_ok(not exists(select 1 from public.subscription_billing_events where idempotency_key=(select key from renewal) and status='succeeded') and not exists(select 1 from public.cash_ledger where idempotency_key=(select key from renewal)),'price errors create no successful event or ledger');
 select pg_temp.check_ok((select to_jsonb(balance_cents)=pg_temp.result('wallet_before') from public.cash_wallets where user_id='00000000-0000-4000-8000-00000000f003'),'price errors debit zero');
 update public.subscriptions set plan_id=(select plan_id from renewal) where id=(select id from renewal);
 update public.mentor_plans set is_active=false where id=(select plan_id from renewal);

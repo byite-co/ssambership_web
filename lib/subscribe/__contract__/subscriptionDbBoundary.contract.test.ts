@@ -10,6 +10,7 @@ test("renewal orchestration cannot decide a debit amount or write financial tabl
   assert.doesNotMatch(batch, /fetchPlansForMentor|resolveRenewalAmountCents|p_amount_cents|recommendedPrice/i);
   assert.doesNotMatch(batch, /\.(insert|upsert|update|delete)\s*\(/);
   assert.match(batch, /rpc\("process_subscription_renewal_v2"/);
+  assert.match(batch, /rpc\("claim_subscription_renewal_batch"/);
   assert.match(batch, /rpc\("record_subscription_renewal_notice"/);
   assert.match(batch, /rpc\("finalize_subscription_terminal_transition"/);
 });

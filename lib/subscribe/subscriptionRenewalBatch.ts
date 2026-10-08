@@ -5,7 +5,6 @@ import { SUBSCRIPTIONS_SELECT, SUBSCRIPTIONS_TABLE } from "@/lib/subscribe/subsc
 
 type Row = Record<string, unknown>;
 
-const RENEWABLE_STATUSES = ["active", "past_due"] as const;
 const DEFAULT_BATCH_LIMIT = 50;
 const MAX_BATCH_LIMIT = 100;
 const DEFAULT_RENEWAL_NOTICE_DAYS = 3;
@@ -199,13 +198,11 @@ export async function runSubscriptionRenewalBatch(
     }
   }
 
-  const { data, error } = await supabase
-    .from(SUBSCRIPTIONS_TABLE)
-    .select(SUBSCRIPTIONS_SELECT)
-    .lte("next_billing_at", atIso)
-    .in("status", RENEWABLE_STATUSES)
-    .order("next_billing_at", { ascending: true })
-    .limit(batchLimitFromEnv());
+  // DB selection rotates past previously attempted rows, even if a later RPC fails.
+  const { data, error } = await supabase.rpc("claim_subscription_renewal_batch", {
+    p_at: atIso,
+    p_limit: batchLimitFromEnv(),
+  });
 
   if (error) {
     summary.errors.push({ subscriptionId: null, code: "query_failed", message: error.message });
