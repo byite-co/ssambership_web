@@ -40,3 +40,13 @@
 - `scripts/verify/fixtures/subscription_boundaries.sql`: 테스트 데이터와 강제 실패 트리거는 모두 ROLLBACK. 원장/지갑/결제/방/구독, 재생/재구독, 웹/앱 오류 코드, anon directory 필터를 실제 실행한다.
 - `scripts/verify/subscription_concurrency.py`: 폐기 가능한 로컬 Supabase만 사용. A의 미커밋 갱신에 B가 실제 advisory lock 대기함을 관측하고, 이후 성공 재생과 차감 정확히 1회를 확인한다.
 - rollback은 웹 호출부를 먼저 되돌린 뒤 hardening → financial 순서로 실행한다. 성공 결제·원장·이벤트 데이터는 지우지 않는다. hardening rollback은 의도적으로 종전 ACL/뷰 보안 설정까지 복원하므로 긴급 복구에만 사용한다.
+
+## staging 반영 결과 (2026-10-08 UTC)
+
+- `20261008003644_subscription_financial_boundaries`: 적용 완료, 원장 원문 MD5 `4c8dc202f0177ef2e6fc3407139dddf0`와 canonical 파일 일치.
+- `20261008003700_subscription_compatible_hardening`: 적용 완료, 원장 원문 MD5 `a5550a7b7fa14ea94b1cd931eb79ab70`와 canonical 파일 일치.
+- 정합성 5개 모두 위반 0. 실제 데이터 모수는 initial succeeded 1건, renewal/terminal 0건이다. 실패·동시성은 CI의 합성 데이터로 별도 검증했다.
+- 공개 디렉터리 17컬럼/75행, invoker view, anon SELECT 및 projection EXECUTE 유지. 신규 금융 RPC는 anon/authenticated EXECUTE 0, trigger 직접 EXECUTE도 0. 실제 anon 역할에서 목록 75행, users/mentor_profiles/인증 원본 행은 모두 0건을 확인했다.
+- Security Advisor의 definer view ERROR와 mutable search_path 5개 경고는 사라졌다. 나머지 definer 함수 호출 경고(anon 37, authenticated 119)와 service-only RLS 무정책 INFO 17은 별도 분류 대상이다.
+- [PG17 전체 pack·실패·2세션 갱신 CI](https://github.com/byite-co/ssambership_web/actions/runs/37708299266), [웹 lint·tsc·1,244 계약 테스트](https://github.com/byite-co/ssambership_web/actions/runs/37708299298): 모두 성공.
+- PR #138에서 웹 호출부와 정확한 staging 원장 version을 함께 관리한다. 웹 main 병합/서비스 배포는 아직 수행하지 않았다.
