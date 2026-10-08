@@ -36,6 +36,14 @@ export function qnaRpcErrorToUserMessage(
       return "로그인 정보가 만료되었어요. 다시 로그인해 주세요.";
     case "TITLE_REQUIRED":
       return "질문 제목을 입력해 주세요.";
+    case "TITLE_TOO_LONG":
+      return "질문 제목은 120자 이하로 입력해 주세요.";
+    case "TOPIC_TOO_LONG":
+      return "질문 주제는 80자 이하로 입력해 주세요.";
+    case "MESSAGE_TOO_LONG":
+      return "메시지는 10,000자 이하로 입력해 주세요.";
+    case "SUBJECT_INVALID":
+      return "목록에서 과목을 다시 선택해 주세요.";
     case "BODY_REQUIRED":
       return "메시지 내용을 입력해 주세요.";
     case "STORAGE_PATH_REQUIRED":

@@ -5,6 +5,8 @@ name: web checks
 # tsc 는 tsconfig include(**/*.ts — app/lib/components/hooks/e2e/scripts 등 저장소 전역)를 검사한다.
 # 부모 프로젝트에 접속하지 않는다. secret 을 사용하지 않는다.
 on:
+  push:
+    branches: [main]
   pull_request:
     paths:
       - '**/*.ts'

@@ -64,6 +64,7 @@ jobs:
           python3 scripts/verify/baseline/scan_repo_secrets.py
       - uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: native-migration-pack-static-${{ github.sha }}
           path: |
@@ -146,11 +147,16 @@ jobs:
           if grep -q -- '--local' cli-list-help.txt; then LIST_FLAGS="--local"; fi
           supabase migration list ${LIST_FLAGS} 2>&1 | tee migration-list.txt
           bash scripts/verify/baseline/verify_local_stack_state.sh
+      - name: subscription failures and API compatibility
+        run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -v ON_ERROR_STOP=1 -f scripts/verify/fixtures/subscription_boundaries.sql
+      - name: concurrent renewal debits
+        run: python3 scripts/verify/subscription_concurrency.py
       - name: stack 정리
         if: always()
         run: supabase stop --no-backup || true
       - uses: actions/upload-artifact@v4
         if: always()
+        continue-on-error: true
         with:
           name: native-migration-pack-pg17-${{ github.sha }}
           path: |

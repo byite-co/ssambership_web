@@ -11,7 +11,6 @@ import {
   SUBSCRIPTIONS_ORDER_COLUMN,
   SUBSCRIPTIONS_SELECT,
   SUBSCRIPTIONS_TABLE,
-  addMonthsClampedKst,
 } from "@/lib/subscribe/subscriptionsTable";
 import { createServiceRoleClient } from "@/lib/supabase/admin";
 import { loadMentorCapUsage, wouldExceedCap } from "@/lib/subscribe/mentorCapService";
@@ -59,137 +58,6 @@ export async function findActiveSubscriptionForPair(
     }
   }
   return { active: null, error: null };
-}
-
-/** DB `record_subscription_cash_debit`: idempotency_key = 'sub_debit_' || payment_id */
-function subscriptionCashDebitIdempotencyKey(paymentId: string): string {
-  return `sub_debit_${paymentId}`;
-}
-
-// (W4 C10: isSchemaNotReadyError 제거 — 42P01/42703/PGRST204/205 를 "로그 억제" 신호로
-//  쓰던 분기를 폐기했다. billing event 기록은 best-effort 지만 모든 실패를 로그로 남긴다.)
-
-function isoFromUnknown(value: unknown): string | null {
-  if (typeof value !== "string" || !value.trim()) return null;
-  const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return null;
-  return d.toISOString();
-}
-
-function fallbackPeriodEndIso(periodStartIso: string): string {
-  return addMonthsClampedKst(new Date(periodStartIso), 1).toISOString();
-}
-
-function positiveIntegerFromUnknown(value: unknown): number | null {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
-  return Math.trunc(value);
-}
-
-async function recordInitialSubscriptionBillingEvent(args: {
-  subscriptionId: string | null;
-  studentId: string;
-  mentorId: string;
-  paymentId: string;
-  planTier: SubscribePlanTier;
-  amountCents?: number | null;
-}): Promise<void> {
-  const subscriptionId = args.subscriptionId?.trim();
-  if (!subscriptionId) return;
-
-  const admin = createServiceRoleClient();
-  const { data: subscriptionRow, error: subError } = await admin
-    .from(SUBSCRIPTIONS_TABLE)
-    .select(
-      "id, student_id, mentor_id, payment_id, plan_tier, plan_id, created_at, started_at, current_period_start, current_period_end"
-    )
-    .eq("id", subscriptionId)
-    .maybeSingle();
-
-  if (subError || !subscriptionRow) {
-    console.error("[recordInitialSubscriptionBillingEvent] subscription select failed", {
-      subscriptionId,
-      error: subError,
-    });
-    return;
-  }
-
-  const s = subscriptionRow as Row;
-  const ledgerKey = subscriptionCashDebitIdempotencyKey(args.paymentId);
-  const { data: ledgerRow, error: ledgerError } = await admin
-    .from("cash_ledger")
-    .select("id, delta_cents, created_at")
-    .eq("idempotency_key", ledgerKey)
-    .maybeSingle();
-  if (ledgerError) {
-    console.warn("[recordInitialSubscriptionBillingEvent] ledger lookup failed", {
-      subscriptionId,
-      ledgerKey,
-      error: ledgerError,
-    });
-  }
-
-  const ledger = (ledgerRow as Row | null) ?? null;
-  const periodStart =
-    isoFromUnknown(s.current_period_start) ??
-    isoFromUnknown(s.started_at) ??
-    isoFromUnknown(s.created_at) ??
-    new Date().toISOString();
-  const periodEnd = isoFromUnknown(s.current_period_end) ?? fallbackPeriodEndIso(periodStart);
-  const ledgerAmount =
-    typeof ledger?.delta_cents === "number" && Number.isFinite(ledger.delta_cents)
-      ? Math.abs(Math.trunc(ledger.delta_cents))
-      : null;
-  const amountCents = positiveIntegerFromUnknown(args.amountCents) ?? ledgerAmount;
-
-  const payload: Row = {
-    subscription_id: subscriptionId,
-    student_id: String(s.student_id ?? args.studentId),
-    mentor_id: String(s.mentor_id ?? args.mentorId),
-    event_type: "initial",
-    status: "succeeded",
-    period_start: periodStart,
-    period_end: periodEnd,
-    billing_at: isoFromUnknown(ledger?.created_at) ?? isoFromUnknown(s.created_at) ?? new Date().toISOString(),
-    amount_cents: amountCents,
-    plan_tier: String(s.plan_tier ?? args.planTier),
-    plan_id: typeof s.plan_id === "string" && s.plan_id.trim() ? s.plan_id : null,
-    idempotency_key: `sub_initial:${subscriptionId}`,
-    ledger_id: typeof ledger?.id === "string" ? ledger.id : null,
-    payment_id: String(s.payment_id ?? args.paymentId),
-    processed_at: isoFromUnknown(ledger?.created_at) ?? new Date().toISOString(),
-  };
-
-  const { data: eventRow, error: eventError } = await admin
-    .from("subscription_billing_events")
-    .upsert(payload, { onConflict: "idempotency_key" })
-    .select("id")
-    .maybeSingle();
-
-  if (eventError || !eventRow) {
-    console.error("[recordInitialSubscriptionBillingEvent] event upsert failed", {
-      subscriptionId,
-      error: eventError,
-    });
-    return;
-  }
-
-  const eventId = String((eventRow as Row).id ?? "");
-  if (!eventId) return;
-
-  const { error: linkError } = await admin
-    .from(SUBSCRIPTIONS_TABLE)
-    .update({
-      last_billing_event_id: eventId,
-      last_payment_id: args.paymentId,
-    })
-    .eq("id", subscriptionId);
-  if (linkError) {
-    console.error("[recordInitialSubscriptionBillingEvent] subscription link update failed", {
-      subscriptionId,
-      eventId,
-      error: linkError,
-    });
-  }
 }
 
 // (removed dead helpers: insertSubscriptionRow / markPaymentSucceeded / tryDeleteSubscriptionById /
@@ -457,7 +325,7 @@ export async function finalizeSubscriptionCashWalletCheckout(
 }
 
 /**
- * 구독 checkout 확정 — S2-2 W3(C8): F12 `api_web_v1.subscription_checkout_confirm_v2`
+ * 구독 checkout 확정 — S2-2 W3(C8): F12 `api_web_v1.subscription_checkout_confirm_v3`
  * (service_role 전용) 단일 호출로 전환(계약 §7 F12 · §17 #15).
  *
  * - `expectedAmountCents` 는 **학생이 결제 화면에서 실제로 본 금액**(cents)이다. 확정 직전
@@ -486,7 +354,7 @@ export async function finalizeSubscriptionCheckout(
     cashWallet?: boolean;
   }
 ): Promise<CompleteResult> {
-  const { studentId, paymentId, mentorId, planTier, expectedAmountCents, cashWallet } = args;
+  const { studentId, paymentId, mentorId, expectedAmountCents, cashWallet } = args;
 
   // 결제 행은 정본 payments 테이블에서 세션 클라이언트(RLS)로 읽는다 — 소유권 경계는 웹 책임.
   const { data: payRow, error: pe } = await supabase
@@ -542,7 +410,7 @@ export async function finalizeSubscriptionCheckout(
   }
 
   const admin = createServiceRoleClient();
-  const res = await callApiWebV1Rpc(admin, "subscription_checkout_confirm_v2", {
+  const res = await callApiWebV1Rpc(admin, "subscription_checkout_confirm_v3", {
     p_payment_id: paymentId,
     p_plan_id: planId,
     p_expected_amount_cents: expected,
@@ -552,7 +420,7 @@ export async function finalizeSubscriptionCheckout(
   if (!res.ok) {
     if (res.message !== null) {
       // 전송·전파 오류(timeout 포함): 실패 확정이 아니다 — 보상성 처리 없이 재시도 안내만.
-      console.error("[finalizeSubscriptionCheckout] subscription_checkout_confirm_v2 transport", {
+      console.error("[finalizeSubscriptionCheckout] subscription_checkout_confirm_v3 transport", {
         code: res.code,
         paymentId,
       });
@@ -564,7 +432,7 @@ export async function finalizeSubscriptionCheckout(
     }
     // envelope 확정 거부 — anomaly_id 는 운영 진단용으로 로그에만 보존(사용자 미노출).
     const anomalyId = res.detail && typeof res.detail.anomaly_id === "string" ? res.detail.anomaly_id : null;
-    console.error("[finalizeSubscriptionCheckout] subscription_checkout_confirm_v2 rejected", {
+    console.error("[finalizeSubscriptionCheckout] subscription_checkout_confirm_v3 rejected", {
       code: res.code,
       anomalyId,
       paymentId,
@@ -581,19 +449,6 @@ export async function finalizeSubscriptionCheckout(
   const idempotent = res.row.idempotent === true;
   if (!subId) {
     return { ok: false, error: "구독 확정 결과를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.", code: "db" };
-  }
-
-  if (!idempotent) {
-    // 신규 확정에만 초기 billing event 를 기록한다(재생에서 last_payment_id 를 P 로
-    // 되돌리는 stale 갱신 금지 — 최신 결제 정본은 subscriptions.last_payment_id).
-    await recordInitialSubscriptionBillingEvent({
-      subscriptionId: subId,
-      studentId,
-      paymentId,
-      mentorId,
-      planTier,
-      amountCents: expected,
-    });
   }
 
   // 웹 PR-2 §5-2: 구독 확정 부수효과였던 "released 개별질문 → 질문방 이전"은 설계상 폐기됐다
