@@ -35,11 +35,12 @@ export type SubscriptionRenewalBatchSummary = {
   errors: Array<{ subscriptionId: string | null; code: string; message: string }>;
 };
 
-function isoFromUnknown(value: unknown): string | null {
+function timestampFromUnknown(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString();
+  // PostgreSQL keeps microseconds; Date.toISOString() would silently truncate them.
+  return value.trim();
 }
 
 function boolFromUnknown(value: unknown): boolean {
@@ -77,14 +78,14 @@ async function finalizeTerminalTransition(
   atIso: string
 ): Promise<boolean> {
   const subscriptionId = getSubscriptionId(row);
-  const periodEnd = isoFromUnknown(row.current_period_end);
+  const periodEnd = timestampFromUnknown(row.current_period_end);
   if (!subscriptionId || !periodEnd) return false;
   const prefix = transition === "cancel_at_period_end" ? "sub_cancel" : "sub_expired";
   const { data, error } = await supabase.rpc("finalize_subscription_terminal_transition", {
     p_subscription_id: subscriptionId,
     p_transition: transition,
     p_at: atIso,
-    p_idempotency_key: `${prefix}:${subscriptionId}:${periodEnd.slice(0, 10)}`,
+    p_idempotency_key: `${prefix}:${subscriptionId}:${new Date(periodEnd).toISOString().slice(0, 10)}`,
   });
   if (error || !data || data.ok !== true) {
     console.error("[subscriptionRenewal] terminal transition failed", {
@@ -101,7 +102,7 @@ async function sendPreRenewalNotice(
   atIso: string
 ): Promise<{ code: "sent" | "already" | "skipped"; message?: string }> {
   const subscriptionId = getSubscriptionId(row);
-  const periodEnd = isoFromUnknown(row.current_period_end);
+  const periodEnd = timestampFromUnknown(row.current_period_end);
   if (!subscriptionId || !periodEnd) return { code: "skipped", message: "missing_subscription_period" };
   // The DB resolves the bound plan and writes the marker under the same lock/transaction.
   const { data, error } = await supabase.rpc("record_subscription_renewal_notice", {
@@ -121,9 +122,9 @@ async function processRenewal(
   const subscriptionId = getSubscriptionId(row);
   if (!subscriptionId) return { code: "skipped", message: "missing_subscription_id" };
 
-  const periodEnd = isoFromUnknown(row.current_period_end);
+  const periodEnd = timestampFromUnknown(row.current_period_end);
   if (!periodEnd) return { code: "skipped", message: "missing_subscription_period" };
-  const idempotencyKey = `sub_renewal:${subscriptionId}:${periodEnd.slice(0, 10)}`;
+  const idempotencyKey = `sub_renewal:${subscriptionId}:${new Date(periodEnd).toISOString().slice(0, 10)}`;
 
   const { data, error } = await supabase.rpc("process_subscription_renewal_v2", {
     p_subscription_id: subscriptionId,
@@ -215,7 +216,7 @@ export async function runSubscriptionRenewalBatch(
   for (const row of rows) {
     const subscriptionId = getSubscriptionId(row);
     const status = normalizeStatus(row.status);
-    const graceUntil = isoFromUnknown(row.grace_until);
+    const graceUntil = timestampFromUnknown(row.grace_until);
 
     if (boolFromUnknown(row.cancel_at_period_end)) {
       if (await finalizeTerminalTransition(supabase, row, "cancel_at_period_end", atIso)) summary.canceled += 1;

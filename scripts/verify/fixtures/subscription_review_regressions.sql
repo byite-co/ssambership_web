@@ -72,17 +72,28 @@ select pg_temp.check_ok((select s.payment_id=s.last_payment_id and e.payment_id=
 select pg_temp.check_ok(pg_temp.error_of($q$update public.subscription_billing_events set amount_cents=1 where payment_id='00000000-0000-4000-8000-00000000f203' and event_type='initial'$q$)='INITIAL_BILLING_EVENT_IMMUTABLE','initial financial fields immutable');
 
 -- Legacy missing-event replay after renewal: period comes from the original debit.
-update public.subscriptions set current_period_start=((now()-interval '1 hour') at time zone 'Asia/Seoul'-interval '1 month') at time zone 'Asia/Seoul',
- current_period_end=now()-interval '1 hour',next_billing_at=now()-interval '1 hour'
+update public.subscriptions set current_period_start=((date_trunc('milliseconds',now()-interval '1 hour')+interval '321 microseconds') at time zone 'Asia/Seoul'-interval '1 month') at time zone 'Asia/Seoul',
+ current_period_end=date_trunc('milliseconds',now()-interval '1 hour')+interval '321 microseconds',next_billing_at=date_trunc('milliseconds',now()-interval '1 hour')+interval '321 microseconds'
  where id=(pg_temp.result('initial')->>'subscription_id')::uuid;
-update public.cash_ledger set created_at=((now()-interval '1 hour') at time zone 'Asia/Seoul'-interval '1 month') at time zone 'Asia/Seoul'
+update public.cash_ledger set created_at=((date_trunc('milliseconds',now()-interval '1 hour')+interval '321 microseconds') at time zone 'Asia/Seoul'-interval '1 month') at time zone 'Asia/Seoul'
  where idempotency_key='sub_debit_00000000-0000-4000-8000-00000000f203';
 create temp table original_period as select current_period_start,current_period_end from public.subscriptions where id=(pg_temp.result('initial')->>'subscription_id')::uuid;
 set local role service_role;
-insert into results select 'renewed',to_jsonb(r) from public.subscriptions s cross join lateral public.process_subscription_renewal_v2(s.id,s.current_period_end,
+insert into results select 'renewed',to_jsonb(r) from public.subscriptions s cross join lateral public.process_subscription_renewal(s.id,date_trunc('milliseconds',s.current_period_end),100,
  'sub_renewal:'||s.id||':'||to_char(s.current_period_end at time zone 'UTC','YYYY-MM-DD'),now()) r where s.id=(pg_temp.result('initial')->>'subscription_id')::uuid;
 reset role;
 select pg_temp.check_ok(pg_temp.result('renewed')->>'code'='succeeded','real renewal before repair');
+insert into results select 'millisecond_replay',to_jsonb(r) from public.subscriptions s cross join original_period o cross join lateral
+ public.process_subscription_renewal_v2(s.id,date_trunc('milliseconds',o.current_period_end),
+ 'sub_renewal:'||s.id||':'||to_char(o.current_period_end at time zone 'UTC','YYYY-MM-DD'),now()) r
+ where s.id=(pg_temp.result('initial')->>'subscription_id')::uuid;
+select pg_temp.check_ok(pg_temp.result('millisecond_replay')->>'code'='already_succeeded','legacy millisecond replay is idempotent');
+select pg_temp.check_ok((select e.period_start=o.current_period_end from public.subscription_billing_events e cross join original_period o
+ where e.id=(pg_temp.result('renewed')->>'billing_event_id')::uuid),'DB microseconds preserved in renewed period');
+select pg_temp.check_ok(pg_temp.error_of($q$select public.process_subscription_renewal_v2(s.id,date_trunc('milliseconds',o.current_period_end)+interval '1 millisecond',
+ 'sub_renewal:'||s.id||':'||to_char(o.current_period_end at time zone 'UTC','YYYY-MM-DD'),now()) from public.subscriptions s cross join original_period o
+ where s.id=(pg_temp.result('initial')->>'subscription_id')::uuid$q$)='BILLING_EVENT_BINDING_MISMATCH','a different millisecond is not accepted as a replay');
+
 delete from public.subscription_billing_events where payment_id='00000000-0000-4000-8000-00000000f203' and event_type='initial';
 set local role service_role;
 insert into results select 'repaired',api_web_v1.subscription_checkout_confirm_v3('00000000-0000-4000-8000-00000000f203',
@@ -97,7 +108,7 @@ select pg_temp.check_ok((select last_billing_event_id=(pg_temp.result('renewed')
 update public.users set created_at=now()-interval '50 days' where id='00000000-0000-4000-8000-00000000f003';
 update public.subscriptions set current_period_start=now()-interval '40 days',current_period_end=now()-interval '10 days',next_billing_at=now()-interval '10 days'
  where id=(pg_temp.result('initial')->>'subscription_id')::uuid;
-insert into results select 'notice',public.record_subscription_renewal_notice(id,current_period_end,now()-interval '13 days') from public.subscriptions where id=(pg_temp.result('initial')->>'subscription_id')::uuid;
+insert into results select 'notice',public.record_subscription_renewal_notice(id,date_trunc('milliseconds',current_period_end),now()-interval '13 days') from public.subscriptions where id=(pg_temp.result('initial')->>'subscription_id')::uuid;
 select pg_temp.check_ok(pg_temp.result('notice')->>'code'='sent','notice precedes price edit');
 select pg_temp.as_user('00000000-0000-4000-8000-00000000f001');
 set local role authenticated;

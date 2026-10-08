@@ -23,6 +23,7 @@ export async function verifyBatchFairness(query) {
   const tables = loadTs('lib/subscribe/subscriptionsTable.ts',{});
   const {runSubscriptionRenewalBatch} = loadTs('lib/subscribe/subscriptionRenewalBatch.ts', {'server-only':{},'@/lib/subscribe/subscriptionsTable':tables});
   const attempts = [];
+  const periods = new Map((await query('select id,current_period_end from public.subscriptions')).map(s=>[s.id,s.current_period_end]));
   class Select {
     constructor(table) {assert.equal(table, 'subscriptions');this.where=[];this.columns='*';}
     select(columns) {this.columns=columns;return this;}
@@ -36,7 +37,10 @@ export async function verifyBatchFairness(query) {
   const client={from:table=>new Select(table),rpc:async(name,args)=>{
     assert.ok(['process_subscription_renewal_v2','record_subscription_renewal_notice','finalize_subscription_terminal_transition','claim_subscription_renewal_batch'].includes(name));
     const params=Object.entries(args).map(([k,v])=>`${k} => ${literal(v)}`).join(',');
-    if (name==='process_subscription_renewal_v2') attempts.push(args.p_subscription_id);
+    if (name==='process_subscription_renewal_v2') {
+      attempts.push(args.p_subscription_id);
+      assert.equal(args.p_period_end,periods.get(args.p_subscription_id),'TS must preserve the DB timestamp, including microseconds');
+    }
     const isSet=name==='process_subscription_renewal_v2'||name==='claim_subscription_renewal_batch';
     const rows=await query(isSet?`select * from public.${name}(${params})`:`select public.${name}(${params}) as result`);
     return {data:isSet?rows:rows[0].result,error:null};
@@ -45,9 +49,10 @@ export async function verifyBatchFairness(query) {
   const healthy=(await query("select id from public.subscriptions where mentor_id='00000000-0000-4000-8000-00000000f002'"))[0].id;
   const first=await runSubscriptionRenewalBatch(client,at);
   assert.equal(first.scanned,50);assert.equal(first.renewed,0);assert.equal(first.skipped,50);
+  assert.ok(first.errors.every(e=>e.message.startsWith('price_changed_since_notice:')),JSON.stringify(first));
   assert.equal(attempts.includes(healthy),false);
   const second=await runSubscriptionRenewalBatch(client,at);
-  assert.equal(second.scanned,50);assert.equal(second.renewed,1);
+  assert.equal(second.scanned,50);assert.equal(second.renewed,1,JSON.stringify(second));
   assert.ok(attempts.includes(healthy));
   const overdue=new Date(at.getTime()+3*86400000);
   const third=await runSubscriptionRenewalBatch(client,overdue);

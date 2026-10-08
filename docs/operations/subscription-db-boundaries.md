@@ -35,7 +35,7 @@
 
 ## 검증과 되돌리기
 
-로컬 PostgreSQL 17 호환 엔진에서 전체 126본 pack, 실제 실패 trigger와 계약 fixture, rollback 후 재적용을 검증한다. 로컬 엔진은 기존 플랫폼 stub을 쓰고 pgcrypto 설치 선언만 제외하므로 최종 PG17/Supabase 검증은 GitHub의 기존 CLI runner가 담당한다.
+로컬 PostgreSQL 17 호환 엔진에서 전체 127본 pack, 실제 실패 trigger와 계약 fixture, rollback 후 재적용을 검증한다. 로컬 엔진은 기존 플랫폼 stub을 쓰고 pgcrypto 설치 선언만 제외하므로 최종 PG17/Supabase 검증은 GitHub의 기존 CLI runner가 담당한다.
 
 - `scripts/verify/fixtures/subscription_boundaries.sql`: 테스트 데이터와 강제 실패 트리거는 모두 ROLLBACK. 원장/지갑/결제/방/구독, 재생/재구독, 웹/앱 오류 코드, anon directory 필터를 실제 실행한다.
 - `scripts/verify/subscription_concurrency.py`: 폐기 가능한 로컬 Supabase만 사용. A의 미커밋 갱신에 B가 실제 advisory lock 대기함을 관측하고, 이후 성공 재생과 차감 정확히 1회를 확인한다.
@@ -62,3 +62,6 @@
 - 후속 rollback은 웹의 claim 호출을 먼저 되돌린 뒤 적용한다. 기존 금융 데이터와 결제별 키는 보존하며, 최초 금융/hardening migration의 rollback보다 먼저 실행한다.
 
 - staging 후속 적용: `20261008020145_subscription_review_fixes`, 원장 MD5 `ae057f98ec9e80496b4bbbf547e0dcee`. 로컬 기존 1,244 계약 테스트·lint·typecheck, 전체 pack·회귀 SQL, 실제 TS 51건 배치, rollback 후 재적용을 통과했다.
+
+- PG17의 실제 TS 배치 검사에서 DB 마이크로초 → JS 밀리초 정규화로 정상 갱신까지 거부되는 문제가 추가로 검출됐다. 웹은 DB 시각을 원형으로 보내며 키의 날짜만 UTC로 변환한다. DB는 구형 웹의 동일 밀리초 값을 잠근 원본 시각으로 결속하고 저장 기간을 반올림하지 않는다. 다른 밀리초는 기존대로 거부한다.
+- 정밀도 후속 staging 적용: `20261008021536_subscription_timestamp_compatibility`, 원장 MD5 `ee56fca10119d1e3661d8c6dbdfc943b`. fixture에 321µs를 명시하여 호환 엔진에서도 재현되도록 했고, 구형 RPC·성공 재생·원본 기간 보존·다른 기간 거부를 검증한다. rollback은 정밀도 → review_fixes → 기존 financial/hardening의 역순을 따른다(웹 호출부를 먼저 되돌린다).

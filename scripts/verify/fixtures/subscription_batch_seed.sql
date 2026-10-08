@@ -61,11 +61,11 @@ begin
   perform pg_temp.check_ok((r->>'ok')::boolean,'seed checkout '||i||' '||r::text);
  end loop;
 end $$;
-update public.subscriptions set current_period_start=now()-interval '40 days',current_period_end=now()-interval '10 days',next_billing_at=now()-interval '10 days'
+update public.subscriptions set current_period_start=now()-interval '40 days',current_period_end=date_trunc('milliseconds',now()-interval '10 days')+interval '321 microseconds',next_billing_at=date_trunc('milliseconds',now()-interval '10 days')+interval '321 microseconds'
  where mentor_id='00000000-0000-4000-8000-00000000f001';
 select public.record_subscription_renewal_notice(id,current_period_end,now()-interval '13 days')
  from public.subscriptions where mentor_id='00000000-0000-4000-8000-00000000f001';
-update public.subscriptions set current_period_start=now()-interval '35 days',current_period_end=now()-interval '5 days',next_billing_at=now()-interval '5 days'
+update public.subscriptions set current_period_start=now()-interval '35 days',current_period_end=date_trunc('milliseconds',now()-interval '5 days')+interval '321 microseconds',next_billing_at=date_trunc('milliseconds',now()-interval '5 days')+interval '321 microseconds'
  where mentor_id='00000000-0000-4000-8000-00000000f002';
 select pg_temp.as_user('00000000-0000-4000-8000-00000000f001');
 set local role authenticated;
