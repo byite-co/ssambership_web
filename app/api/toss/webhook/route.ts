@@ -132,9 +132,30 @@ export async function POST(req: NextRequest) {
   const rawBody = await req.text();
   const signature = readTossWebhookSignatureHeader(req.headers);
 
-  if (!verifyTossWebhookSignature(rawBody, signature)) {
-    console.error("[toss/webhook] invalid signature");
-    return NextResponse.json({ error: "invalid_signature" }, { status: 401 });
+  // 서명 정책 — Toss 공식 문서(reference/using-api/webhook-events) 기준.
+  //
+  //   "`tosspayments-webhook-signature` 는 `payout.changed` 와 `seller.changed`
+  //    웹훅 헤더에만 포함됩니다."
+  //
+  // 즉 결제 이벤트(PAYMENT_STATUS_CHANGED · DEPOSIT_CALLBACK · CANCEL_STATUS_CHANGED …)
+  // 에는 서명 헤더가 **아예 오지 않는다**. 서명을 무조건 요구하던 기존 구현은 이 경로를
+  // 구조적으로 항상 401 로 막았다(실측: admin_action_logs 의 webhook_recovery 행 0건 —
+  // 이 라우트가 한 번도 결제를 처리한 적이 없다).
+  //
+  // 그래서 서명은 **있을 때만** 검증한다:
+  //   * 헤더가 있으면(payout/seller 계열, 또는 Toss 가 향후 결제에도 붙이면) 반드시 통과해야 한다.
+  //   * 헤더가 없으면 통과시키되, 이 페이로드는 **신뢰하지 않는다**.
+  //
+  // 서명이 없는 이벤트의 진짜 보안 모델은 아래 verifyWebhookPaymentWithToss 다 —
+  // 적립 전에 우리 secret key 로 Toss 에 재조회해 status·orderId·paymentKey·금액을
+  // 전부 대조한다. 위조 페이로드로는 "Toss 에 실재하고 DONE 이며 금액까지 일치하는 결제"
+  // 밖에 만들 수 없고, 그건 어차피 정상 적립 대상이며 F11 멱등키가 이중 적립을 막는다.
+  // 페이로드만으로 돈이 움직이는 경로는 없다.
+  if (signature) {
+    if (!verifyTossWebhookSignature(rawBody, signature)) {
+      console.error("[toss/webhook] invalid signature (header present)");
+      return NextResponse.json({ error: "invalid_signature" }, { status: 401 });
+    }
   }
 
   let event: TossPaymentWebhookEvent;
