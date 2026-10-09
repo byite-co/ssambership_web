@@ -1,0 +1,65 @@
+name: approved d4c2bf2 initial migration only
+
+# LOCAL REGISTRATION DRAFT: do not publish until the scoped GitHub change is approved.
+# The historical pending-all, repair, and observation workflows are not changed.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-adoption-repair-parent
+  cancel-in-progress: false
+
+jobs:
+  apply:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'byite-co/ssambership_web' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment: supabase-db-adoption
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify fixed handoff and executor
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          python3 scripts/operations/d4c2bf2/verify_payload.py
+          python3 scripts/operations/d4c2bf2/test_gates.py
+      - name: Prepare immutable runtime and approved CLI
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 scripts/operations/d4c2bf2/prepare_cli.py "$RUNNER_TEMP/d4c2bf2-tools"
+          docker build --network=none --platform linux/amd64 \
+            --build-context "cli-tools=$RUNNER_TEMP/d4c2bf2-tools" \
+            -t "ssambership-d4c2bf2:$GITHUB_SHA" \
+            scripts/operations/d4c2bf2
+      - name: Existing approval gates, live preflight, one apply, postchecks
+        shell: bash
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+          EXPECTED_MANIFEST_SHA256: 3be2d5d48896abefcf5b3b5d9494d3bbabcf94fe3f8716328cb8b7bc1b6cc8ac
+        run: |
+          set -euo pipefail
+          mkdir -m 700 "$RUNNER_TEMP/d4c2bf2-work" "$RUNNER_TEMP/d4c2bf2-summary"
+          docker run --rm --pull=never --platform linux/amd64 \
+            --read-only --cap-drop=ALL --security-opt=no-new-privileges \
+            --user "$(id -u):$(id -g)" --tmpfs /tmp:rw,nosuid,size=32m \
+            --mount "type=bind,src=$RUNNER_TEMP/d4c2bf2-work,dst=/work" \
+            --mount "type=bind,src=$RUNNER_TEMP/d4c2bf2-summary,dst=/evidence" \
+            --env SUPABASE_DB_URL --env EXPECTED_MANIFEST_SHA256 \
+            --env GITHUB_EVENT_NAME --env GITHUB_REF --env GITHUB_REPOSITORY \
+            --env GITHUB_RUN_ATTEMPT \
+            "ssambership-d4c2bf2:$GITHUB_SHA"
+      - name: Retain sanitized result only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: d4c2bf2-result-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/d4c2bf2-summary/result.json
+          if-no-files-found: ignore
+          retention-days: 7
