@@ -1,0 +1,12 @@
+{
+  "platform": "linux/amd64",
+  "postgres_image": "postgres@sha256:74935e72241653ca55e0414067e6d8763aceb8a810eb51b452253ec3dcfc4336",
+  "python_image": "python@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c",
+  "postgresql_client_package": "postgresql-client-18=18.6-1.pgdg13+2",
+  "libpq_package": "libpq5=18.6-1.pgdg13+2",
+  "psql_path": "/usr/lib/postgresql/18/bin/psql",
+  "libpq_path": "/usr/lib/x86_64-linux-gnu/libpq.so.5",
+  "python_path": "/usr/local/bin/python3",
+  "expected_major": 18,
+  "reason": "The pinned PostgreSQL image supplies matching client and libpq 18.6 packages. Python is copied from a pinned Debian trixie image of the same architecture. PostgreSQL 18 client protocol supports the observed PostgreSQL 17 server; SQL remains unchanged."
+}

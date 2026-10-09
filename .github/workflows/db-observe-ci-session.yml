@@ -1,6 +1,6 @@
 name: db observe CI session (read only)
 
-# LOCAL DRAFT ONLY: publication and dispatch have not been authorized/executed.
+# v3 LOCAL DRAFT ONLY: do not publish or dispatch during local verification.
 # No apply/repair mode or arbitrary SQL/ref/connection input.
 on:
   workflow_dispatch:
@@ -16,26 +16,28 @@ jobs:
   observe:
     if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.repository == 'byite-co/ssambership_web'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     environment: supabase-db-adoption
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Verify reviewed source and installed client
+      - name: Verify reviewed source and build pinned observation toolchain
         shell: bash
         run: |
           set -euo pipefail
           test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
-          command -v psql >/dev/null
-          psql --version
+          docker build --platform linux/amd64 --network=none \
+            --file scripts/verify/staging_ci_observation/toolchain.Dockerfile \
+            --tag "ssambership-ci-observer:$GITHUB_SHA" \
+            scripts/verify/staging_ci_observation
       - name: Observe the Environment connection without writes
         shell: bash
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
         run: |
           set -euo pipefail
-          python3 scripts/verify/staging_ci_observation/observe.py --output "$RUNNER_TEMP/staging-ci-observation-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          bash scripts/verify/staging_ci_observation/run-container.sh "$RUNNER_TEMP/staging-ci-observation-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
       - name: Retain observation or sanitized failure evidence
         if: always()
         uses: actions/upload-artifact@v4

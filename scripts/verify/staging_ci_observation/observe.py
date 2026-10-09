@@ -2,7 +2,6 @@
 """Fixed, read-only CI observation. No migration CLI or arbitrary SQL input."""
 import argparse
 import ctypes
-import ctypes.util
 import datetime
 import hashlib
 import json
@@ -16,6 +15,9 @@ from urllib.parse import parse_qs, unquote, urlsplit
 PROJECT = 'lbeqxarxothkmzqvpudy'
 SQL_SHA256 = 'ba366062942c37a380664d82b5987323ca80bdbfe53470a10a3230d55600140e'
 SQL_FILE = Path(__file__).with_name('snapshot.sql')
+PSQL_FILE = Path('/usr/lib/postgresql/18/bin/psql')
+LIBPQ_FILE = Path('/usr/lib/x86_64-linux-gnu/libpq.so.5')
+TOOLCHAIN_FILE = Path(__file__).with_name('toolchain.json')
 
 class ObservationError(Exception):
     pass
@@ -69,10 +71,12 @@ def libpq_environment(url):
     class Option(ctypes.Structure):
         _fields_=[(name,ctypes.c_char_p) for name in
             ('keyword','envvar','compiled','val','label','dispchar')]+[('dispsize',ctypes.c_int)]
-    name=ctypes.util.find_library('pq')
-    if not name:
+    if not LIBPQ_FILE.is_file():
         raise ObservationError('LIBPQ_PARSER_UNAVAILABLE')
-    lib=ctypes.CDLL(name)
+    try:
+        lib=ctypes.CDLL(str(LIBPQ_FILE.resolve(strict=True)))
+    except OSError:
+        raise ObservationError('LIBPQ_PARSER_UNAVAILABLE') from None
     lib.PQconninfoParse.argtypes=[ctypes.c_char_p,ctypes.POINTER(ctypes.c_char_p)]
     lib.PQconninfoParse.restype=ctypes.POINTER(Option)
     lib.PQconninfoFree.argtypes=[ctypes.POINTER(Option)]
@@ -131,10 +135,28 @@ def collect(output, env, run=subprocess.run):
             raise ObservationError('ENVIRONMENT_SECRET_MISSING')
         mode, markers = check_target(url)
         manifest['endpoint_check'] = mode
+        # Fixed, reviewed paths inside the digest-pinned toolchain image. Never
+        # search runner PATH or ldconfig for either client or parser.
+        if not PSQL_FILE.is_file() or not os.access(PSQL_FILE, os.X_OK):
+            raise ObservationError('PSQL_CLIENT_UNAVAILABLE')
+        if not LIBPQ_FILE.is_file():
+            raise ObservationError('LIBPQ_PARSER_UNAVAILABLE')
+        manifest['toolchain'] = {
+            'selection':json.loads(TOOLCHAIN_FILE.read_text()),
+            'selection_sha256':hashlib.sha256(TOOLCHAIN_FILE.read_bytes()).hexdigest(),
+            'psql_path':str(PSQL_FILE.resolve(strict=True)),
+            'psql_sha256':hashlib.sha256(PSQL_FILE.read_bytes()).hexdigest(),
+            'libpq_path':str(LIBPQ_FILE.resolve(strict=True)),
+            'libpq_sha256':hashlib.sha256(LIBPQ_FILE.read_bytes()).hexdigest(),
+            'python_path':str(Path(sys.executable).resolve()),
+            'python_version':sys.version.split()[0]}
         # Interpret the exact URI with libpq; never put it on argv. Avoid
         # unrelated PG*/service-file defaults inherited from the CI process.
         parsed,libpq_version=libpq_environment(url)
-        child = {k:env[k] for k in ('PATH','LANG','LC_ALL','TZ') if k in env}
+        child = {k:env[k] for k in ('LANG','LC_ALL','TZ') if k in env}
+        # The same SONAME directory is used by ctypes and the psql loader.
+        # No LD_PRELOAD / LD_LIBRARY_PATH from the caller is inherited.
+        child['LD_LIBRARY_PATH'] = str(LIBPQ_FILE.parent)
         child.update(PGCONNECT_TIMEOUT='10',PGOPTIONS='-c default_transaction_read_only=on')
         child.update(parsed)
         manifest['probe_only_overrides'] = {'PGCONNECT_TIMEOUT':'10',
@@ -144,12 +166,12 @@ def collect(output, env, run=subprocess.run):
             'uri_semantics_preserved_by_native_libpq_parser':True,
             'explicit_uri_options_win_over_probe_defaults':True}
         manifest['libpq_parser_version']=libpq_version
-        manifest['client'] = run(['psql','--version'],capture_output=True,text=True,
+        manifest['client'] = run([str(PSQL_FILE),'--version'],capture_output=True,text=True,
                                 timeout=10,check=True,env={k:v for k,v in child.items() if not k.startswith('PG')}).stdout.strip()
         version=re.search(r'PostgreSQL\) (\d+)\.',manifest['client'])
         if not version or int(version.group(1))!=libpq_version//10000:
             raise ObservationError('LIBPQ_PSQL_MAJOR_MISMATCH')
-        command = ['psql','-X','-qAt','--no-password','-v','ON_ERROR_STOP=1','-v','VERBOSITY=sqlstate']
+        command = [str(PSQL_FILE),'-X','-qAt','--no-password','-v','ON_ERROR_STOP=1','-v','VERBOSITY=sqlstate']
         manifest['db_client_invocations'] = 1
         result = run(command, input=raw_sql.decode(),capture_output=True,text=True,
                      timeout=60,env=child)
