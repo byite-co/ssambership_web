@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Local executor gate tests only; no DB/network/financial regression claims."""
 import copy, importlib.util, pathlib, unittest
+from unittest.mock import patch
 root=pathlib.Path(__file__).resolve().parent
 spec=importlib.util.spec_from_file_location('executor_under_test',root/'run.py')
 m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)
@@ -67,5 +68,18 @@ class Gates(unittest.TestCase):
     def test_non_client_ssl_evidence_is_refused(self):
         for rows in [['pg_stat_ssl|true'],['SSL connection (protocol TLSv1.3)'],['SSL Connection|false','SSL Protocol|TLSv1.3','SSL Cipher|fixture']]:
             with self.assertRaises(m.Refuse):m.check_client_tls(rows)
+    def test_complete_multiline_sql_json_is_parsed(self):
+        # PostgreSQL json_agg(record) uses physical newlines between records.
+        raw='{"outbox":[{"status":"failed","count":1},\n {"status":"sent","count":1}]}\n'
+        with patch.object(m,'psql_output',return_value=raw):
+            self.assertEqual(len(m.psql_json('fixture',{},'DRAIN')['outbox']),2)
+    def test_truncated_or_extra_json_is_rejected_without_raw_error(self):
+        for raw in ['{"private_fixture":','{}\n{}','']:
+            with patch.object(m,'psql_output',return_value=raw):
+                with self.assertRaises(m.Refuse) as ctx:m.psql_json('fixture',{},'DRAIN')
+                self.assertEqual(str(ctx.exception),'JSON_RESPONSE_INVALID_DRAIN')
+    def test_unicode_is_preserved_without_splitlines(self):
+        with patch.object(m,'psql_output',return_value='{"text":"a\u2028b\u2029c"}\n'):
+            self.assertEqual(m.psql_json('fixture',{},'DRAIN')['text'],'a\u2028b\u2029c')
 
 if __name__=='__main__':unittest.main()

@@ -5,7 +5,7 @@ No SQL/connection/ref input, no repair/recovery mode, no raw DB output upload.
 The only maintenance writes are stopping/restoring the two recorded cron jobs.
 """
 import ctypes as C
-import hashlib, json, os, pathlib, pty, re, select, shutil, subprocess, sys, time
+import hashlib, json, os, pathlib, pty, re, select, shutil, subprocess, sys, termios, time
 from urllib.parse import parse_qsl, urlsplit
 
 ROOT=pathlib.Path(__file__).resolve().parent
@@ -104,11 +104,24 @@ def connection_environment():
     env.update(pg);env.update(PGCONNECT_TIMEOUT='10',PGAPPNAME='d4c2bf2-cloud-preflight',SUPABASE_HOME='/work/cli-state',SUPABASE_TELEMETRY_DISABLED='1',SUPABASE_NO_KEYRING='1',TERM='xterm-256color',LC_ALL='C',LANG='C')
     return value,env
 
-def psql(sql,env,readonly=True):
+def psql_output(sql,env,readonly=True):
     if readonly:sql='BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;\n'+sql+'\nROLLBACK;'
     proc=subprocess.run([PSQL,'-X','-qAt','-w','-v','ON_ERROR_STOP=1'],input=sql.encode(),capture_output=True,env=env,timeout=180)
     require(proc.returncode==0,'READONLY_SQL_FAILED' if readonly else 'MAINTENANCE_SQL_FAILED')
-    return proc.stdout.decode().splitlines()
+    return proc.stdout.decode()
+
+def psql(sql,env,readonly=True):
+    return psql_output(sql,env,readonly).splitlines()
+
+def psql_json(sql,env,stage,readonly=True):
+    # A single SQL row may contain multiple physical lines (notably json_agg
+    # of composite records). Parse the whole value, never stdout's first line.
+    # json.loads also rejects truncation or a second JSON document. Do not
+    # include raw SQL, stdout, or decoder messages in the public artifact.
+    try:data=json.loads(psql_output(sql,env,readonly))
+    except (ValueError,UnicodeError):raise Refuse('JSON_RESPONSE_INVALID_'+stage) from None
+    require(isinstance(data,dict),'JSON_OBJECT_REQUIRED_'+stage)
+    return data
 
 def snapshot(env,label):
     rows=psql(collect_readiness_snapshot.sql(),env,readonly=False)
@@ -148,12 +161,16 @@ def check_drain(data,cron_active):
     require(all(x['owner']=='postgres' and x['active'] is cron_active for x in data['cron']),'CRON_STATE_MISMATCH')
 
 def drain(env,cron_active):
-    data=json.loads(psql(DRAIN,env)[0]);check_drain(data,cron_active)
+    data=psql_json(DRAIN,env,'DRAIN');check_drain(data,cron_active)
     event('DRAIN_CLEAR',cron_active=cron_active,fingerprint_sha256=sha(json.dumps(data['fingerprint'],sort_keys=True).encode()))
     return data
 
 def cron(env,active):
     flag='true' if active else 'false'
+    # A connection/response failure can occur after COMMIT. Persist the possible
+    # maintenance change before sending SQL; only a confirmed restore clears it.
+    SUMMARY['cron_changed']=True
+    event('CRON_RESTORE_ATTEMPT' if active else 'CRON_STOP_ATTEMPT')
     # Fixed inventory/owner validated immediately before this transaction; no unschedule or role changes.
     sql="BEGIN; SET LOCAL lock_timeout='4s'; SELECT cron.alter_job(jobid,active := "+flag+") FROM cron.job WHERE jobname IN ('nice_auth_token_sweep_daily','subscription_settlement_refresh_hourly') AND username='postgres'; COMMIT;"
     rows=psql(sql,env,readonly=False);require(len(rows)==2,'CRON_CHANGE_COUNT_MISMATCH')
@@ -184,8 +201,7 @@ def check_client_tls(rows):
     return {'ssl_in_use':True,'protocol':fields['SSL Protocol'],'cipher':fields['SSL Cipher']}
 
 def check_context(env):
-    out=psql((ROOT/'sql/execution_context_snapshot.sql').read_text(),env,readonly=False)
-    require(len(out)==1,'CONTEXT_SNAPSHOT_INCOMPLETE');c=json.loads(out[0])
+    c=psql_json((ROOT/'sql/execution_context_snapshot.sql').read_text(),env,'CONTEXT',readonly=False)
     require(c['session_user']==c['current_user']=='postgres' and c['role']['superuser'] is False and c['role']['bypass_rls'] is True,'EXECUTOR_IDENTITY_MISMATCH')
     require('supautils' in (c.get('session_preload_libraries') or '')+(c.get('shared_preload_libraries') or ''),'SUPAUTILS_NOT_LOADED')
     require('storage.objects' in json.loads(c['supautils_policy_grants']).get('postgres',[]),'STORAGE_POLICY_GRANT_MISSING')
@@ -217,6 +233,10 @@ def apply_once(project,uri,env):
     event('APPLY_STARTING_ONCE')
     pid,fd=pty.fork()
     if pid==0:
+        # A fresh PTY in a non-interactive runner has a 0x0 window. The CLI
+        # wraps even ANSI bytes at zero width, destroying the exact prompt.
+        # Match the 40x120 terminal used in the approved CLI prompt evidence.
+        termios.tcsetwinsize(0,(40,120))
         os.execve(str(CLI),[str(CLI),'--agent','no','db','push','--db-url',uri,'--workdir',str(project)],env)
     buffer=b'';accepted=False;started=time.monotonic();code=None;last_monitor=started;cancel_sent=False
     try:
@@ -232,7 +252,7 @@ def apply_once(project,uri,env):
                 elif decision in ['reject','unexpected-apply']:
                     os.write(fd,b'\x03');cancel_sent=True;event('UNEXPECTED_CLI_MODE_CANCEL_SENT')
             if time.monotonic()-started>60 and not accepted and not cancel_sent:
-                os.write(fd,b'\x03');cancel_sent=True
+                os.write(fd,b'\x03');cancel_sent=True;event('CLI_PROMPT_TIMEOUT_CANCEL_SENT')
             if accepted and not cancel_sent and time.monotonic()-last_monitor>=5:
                 last_monitor=time.monotonic()
                 try:
@@ -259,7 +279,7 @@ def postcheck(env,baseline,expected,historical):
     require([r for r in platform['migration_history'] if r['version']!=VERSION]==historical,'HISTORICAL_LEDGER_CHANGED')
     state=psql((ROOT/'sql/release_state.sql').read_text(),env,readonly=False)
     require(len(state)==3 and state[0]=='t' and state[1].split('|')[:9]==['t',VERSION,'2','170006','290','99','89','98','t'] and state[2]=='t|postgres|f|f|f','RELEASE_STATE_MISMATCH')
-    saved=json.loads(psql('SELECT baseline_catalog FROM core_private.integration_release_state;',env)[0])
+    saved=psql_json('SELECT baseline_catalog FROM core_private.integration_release_state;',env,'RECORDED_BASELINE')
     require(saved==baseline,'RECORDED_BASELINE_MISMATCH')
     rpc=psql((ROOT/'sql/rpc_check.sql').read_text(),env,readonly=False)
     require(len(rpc)==72 and all(x.endswith('|t') for x in rpc),'RPC_CONTRACT_MISMATCH')
@@ -284,8 +304,8 @@ def main():
     SUMMARY['schema_state']='BASELINE_VERIFIED'
     initial=drain(env,True)
     dry_run(project,uri,env)
-    cron(env,False)
     try:
+        cron(env,False)
         first=drain(env,False)
         for _ in range(10):time.sleep(30);event('DRAIN_WAIT_PROGRESS')
         second=drain(env,False)
@@ -297,7 +317,7 @@ def main():
         code,accepted=apply_once(project,uri,env)
         if code==0 and accepted:
             postcheck(env,baseline,expected,historical)
-            require(json.loads(psql(DRAIN,env)[0])['pending_paysync']==0,'POST_PENDING_PAYMENT_REVIEW_REQUIRED')
+            require(psql_json(DRAIN,env,'POST_DRAIN')['pending_paysync']==0,'POST_PENDING_PAYMENT_REVIEW_REQUIRED')
             cron(env,True)
             event('COMPLETE',customer_activation='HOLD')
             return
