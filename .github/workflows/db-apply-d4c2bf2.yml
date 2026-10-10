@@ -47,7 +47,7 @@ jobs:
         shell: bash
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          EXPECTED_MANIFEST_SHA256: d26b9fc7b33675a19e1117b350fb1002d7c08fbb4fad1752c5a31c37425ce746
+          EXPECTED_MANIFEST_SHA256: 2f6e34b614be676821791c4b4732de687d338c9916632e20879e28b947563e76
         run: |
           set -euo pipefail
           mkdir -m 700 "$RUNNER_TEMP/d4c2bf2-work" "$RUNNER_TEMP/d4c2bf2-summary"

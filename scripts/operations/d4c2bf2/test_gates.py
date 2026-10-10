@@ -54,5 +54,18 @@ class Gates(unittest.TestCase):
     def test_non_uri_or_fragment_is_refused(self):
         for value in ['host=example user=postgres','postgresql://u:p@host:5432/db#sslmode=require']:
             with self.assertRaises(m.Refuse):m.require_tls_uri(value)
+    def test_psql18_client_tls_metadata(self):
+        rows=['Database|fixture','SSL Connection|true','SSL Protocol|TLSv1.3','SSL Cipher|TLS_AES_256_GCM_SHA384']
+        self.assertTrue(m.check_client_tls(rows)['ssl_in_use'])
+    def test_plain_connection_metadata_is_refused(self):
+        with self.assertRaises(m.Refuse):m.check_client_tls(['SSL Connection|false'])
+    def test_protocol_or_cipher_missing_is_refused(self):
+        for rows in [['SSL Connection|true'],['SSL Connection|true','SSL Protocol|TLSv1.3'],['SSL Connection|true','SSL Protocol|unknown','SSL Cipher|unknown']]:
+            with self.assertRaises(m.Refuse):m.check_client_tls(rows)
+    def test_duplicate_ssl_metadata_is_refused(self):
+        with self.assertRaises(m.Refuse):m.check_client_tls(['SSL Connection|false','SSL Connection|true','SSL Protocol|TLSv1.3','SSL Cipher|fixture'])
+    def test_non_client_ssl_evidence_is_refused(self):
+        for rows in [['pg_stat_ssl|true'],['SSL connection (protocol TLSv1.3)'],['SSL Connection|false','SSL Protocol|TLSv1.3','SSL Cipher|fixture']]:
+            with self.assertRaises(m.Refuse):m.check_client_tls(rows)
 
 if __name__=='__main__':unittest.main()

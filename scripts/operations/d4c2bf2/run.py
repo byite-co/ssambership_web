@@ -168,6 +168,21 @@ def check_history(platform,count,latest):
         rows=[x for x in history if x['version']==VERSION]
         require(len(rows)==1 and rows[0]['name']=='staging_integration' and len(rows[0]['statements'])==213 and rows[0].get('created_by') is None,'APPLIED_HISTORY_ROW_MISMATCH')
 
+def check_client_tls(rows):
+    # PostgreSQL 18 \conninfo emits an unaligned Parameter|Value table.
+    # These fields are populated by PQsslInUse/PQsslAttribute on this client,
+    # not by pg_stat_ssl on the pooler's backend connection.
+    fields={}
+    for row in rows:
+        key,separator,value=row.partition('|')
+        if key in ['SSL Connection','SSL Protocol','SSL Cipher']:
+            require(separator and key not in fields,'CLIENT_TLS_PROOF_AMBIGUOUS')
+            fields[key]=value
+    require(fields.get('SSL Connection')=='true','CLIENT_TLS_NOT_PROVEN')
+    require(fields.get('SSL Protocol') in ['TLSv1.2','TLSv1.3'],'CLIENT_TLS_PROTOCOL_NOT_PROVEN')
+    require(bool(fields.get('SSL Cipher')) and fields['SSL Cipher'] not in ['unknown','none'],'CLIENT_TLS_CIPHER_NOT_PROVEN')
+    return {'ssl_in_use':True,'protocol':fields['SSL Protocol'],'cipher':fields['SSL Cipher']}
+
 def check_context(env):
     out=psql((ROOT/'sql/execution_context_snapshot.sql').read_text(),env,readonly=False)
     require(len(out)==1,'CONTEXT_SNAPSHOT_INCOMPLETE');c=json.loads(out[0])
@@ -177,8 +192,8 @@ def check_context(env):
     result=psql("SELECT NOT pg_has_role(current_user,'supabase_admin','MEMBER'), has_database_privilege(current_user,current_database(),'CREATE');",env)
     require(result==['t|t'],'EXECUTOR_PRIVILEGE_MISMATCH')
     ssl=psql('\\conninfo',env)
-    require(any('SSL connection' in x for x in ssl),'CLIENT_TLS_NOT_PROVEN')
-    event('CONTEXT_AND_CLIENT_TLS_PASS')
+    proof=check_client_tls(ssl)
+    event('CONTEXT_AND_CLIENT_TLS_PASS',**proof)
 
 def dry_run(project,uri,env):
     p=subprocess.run([str(CLI),'--agent','no','--output-format','json','db','push','--db-url',uri,'--workdir',str(project),'--dry-run'],env=env,capture_output=True,timeout=120)
