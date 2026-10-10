@@ -38,11 +38,16 @@ jobs:
             --build-context "cli-tools=$RUNNER_TEMP/d4c2bf2-tools" \
             -t "ssambership-d4c2bf2:$GITHUB_SHA" \
             scripts/operations/d4c2bf2
+          docker run --rm --network=none --read-only --cap-drop=ALL \
+            --security-opt=no-new-privileges --user "$(id -u):$(id -g)" \
+            --tmpfs /tmp:rw,nosuid,size=32m --entrypoint /usr/local/bin/python3 \
+            "ssambership-d4c2bf2:$GITHUB_SHA" \
+            -I -B /opt/executor/test_tls_runtime.py
       - name: Existing approval gates, live preflight, one apply, postchecks
         shell: bash
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
-          EXPECTED_MANIFEST_SHA256: 3be2d5d48896abefcf5b3b5d9494d3bbabcf94fe3f8716328cb8b7bc1b6cc8ac
+          EXPECTED_MANIFEST_SHA256: d26b9fc7b33675a19e1117b350fb1002d7c08fbb4fad1752c5a31c37425ce746
         run: |
           set -euo pipefail
           mkdir -m 700 "$RUNNER_TEMP/d4c2bf2-work" "$RUNNER_TEMP/d4c2bf2-summary"

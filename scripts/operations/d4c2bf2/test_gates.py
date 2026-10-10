@@ -37,5 +37,22 @@ class Gates(unittest.TestCase):
         self.assertEqual(m.prompt_ready(b'Do you want to push these migrations'),'wait')
     def test_wrong_history_count_blocks(self):
         with self.assertRaises(m.Refuse):m.check_history({'migration_history':[]},127,'20261008021536')
+    def test_missing_tls_gets_explicit_requirement_without_reencoding(self):
+        uri='postgresql://u:p%40%3F%26%23@host:5432/db?application_name=a%20b&connect_timeout=10'
+        self.assertEqual(m.require_tls_uri(uri),uri+'&sslmode=require')
+    def test_plain_uri_gets_requirement(self):
+        uri='postgresql://u:p@host:5432/db'
+        self.assertEqual(m.require_tls_uri(uri),uri+'?sslmode=require')
+    def test_stronger_existing_tls_is_preserved(self):
+        for mode in ['require','verify-ca','verify-full']:
+            uri='postgresql://u:p@host:5432/db?sslmode='+mode+'&application_name=a%20b'
+            self.assertEqual(m.require_tls_uri(uri),uri)
+    def test_weak_empty_or_duplicate_tls_is_refused(self):
+        for query in ['sslmode=disable','sslmode=allow','sslmode=prefer','sslmode=','sslmode=require&sslmode=disable','sslmode=verify-full&sslmode=require']:
+            with self.subTest(query=query),self.assertRaises(m.Refuse):
+                m.require_tls_uri('postgresql://u:p@host:5432/db?'+query)
+    def test_non_uri_or_fragment_is_refused(self):
+        for value in ['host=example user=postgres','postgresql://u:p@host:5432/db#sslmode=require']:
+            with self.assertRaises(m.Refuse):m.require_tls_uri(value)
 
 if __name__=='__main__':unittest.main()

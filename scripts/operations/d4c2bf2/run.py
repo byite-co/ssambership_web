@@ -6,6 +6,7 @@ The only maintenance writes are stopping/restoring the two recorded cron jobs.
 """
 import ctypes as C
 import hashlib, json, os, pathlib, pty, re, select, shutil, subprocess, sys, time
+from urllib.parse import parse_qsl, urlsplit
 
 ROOT=pathlib.Path(__file__).resolve().parent
 sys.path.insert(0,str(ROOT/'lib'))
@@ -61,9 +62,23 @@ def verify_files():
 class PQOption(C.Structure):
     _fields_=[(x,C.c_char_p) for x in ['keyword','envvar','compiled','val','label','dispchar']]+[('dispsize',C.c_int)]
 
+def require_tls_uri(value):
+    """Make the safe default explicit without changing an existing URI option."""
+    parsed=urlsplit(value)
+    require(parsed.scheme in ['postgresql','postgres'] and not parsed.fragment,'INVALID_DB_URI')
+    modes=[v for k,v in parse_qsl(parsed.query,keep_blank_values=True) if k=='sslmode']
+    require(len(modes)<=1,'DUPLICATE_TLS_OPTIONS')
+    if modes:
+        require(modes[0] in ['require','verify-ca','verify-full'],'EXPLICIT_TLS_REQUIRED')
+        return value
+    separator='&' if '?' in value else '?'
+    if value.endswith(('?','&')):separator=''
+    return value+separator+'sslmode=require'
+
 def connection_environment():
     value=os.environ.get('SUPABASE_DB_URL','')
     require(bool(value),'DB_BINDING_MISSING')
+    value=require_tls_uri(value)
     # Do not silently accept a different destination, service file, role option or TLS downgrade.
     pq=C.CDLL(LIBPQ)
     pq.PQlibVersion.restype=C.c_int
