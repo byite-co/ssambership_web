@@ -1,14 +1,10 @@
 import "server-only";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { fetchPlansForMentor } from "@/lib/mentor/publicMentorBundle";
-import { mentorPlanDebitAmountCents } from "@/lib/subscribe/mentorPlanPricing";
-import { assignPlansByTier, isSubscribePlanTier, type SubscribePlanTier } from "@/lib/subscribe/subscribePageQueries";
 import { SUBSCRIPTIONS_SELECT, SUBSCRIPTIONS_TABLE } from "@/lib/subscribe/subscriptionsTable";
 
 type Row = Record<string, unknown>;
 
-const RENEWABLE_STATUSES = ["active", "past_due"] as const;
 const DEFAULT_BATCH_LIMIT = 50;
 const MAX_BATCH_LIMIT = 100;
 const DEFAULT_RENEWAL_NOTICE_DAYS = 3;
@@ -39,11 +35,12 @@ export type SubscriptionRenewalBatchSummary = {
   errors: Array<{ subscriptionId: string | null; code: string; message: string }>;
 };
 
-function isoFromUnknown(value: unknown): string | null {
+function timestampFromUnknown(value: unknown): string | null {
   if (typeof value !== "string" || !value.trim()) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
-  return date.toISOString();
+  // PostgreSQL keeps microseconds; Date.toISOString() would silently truncate them.
+  return value.trim();
 }
 
 function boolFromUnknown(value: unknown): boolean {
@@ -52,15 +49,6 @@ function boolFromUnknown(value: unknown): boolean {
 
 function normalizeStatus(value: unknown): string {
   return String(value ?? "").trim().toLowerCase();
-}
-
-function periodKeyFromRow(row: Row): string {
-  return (
-    isoFromUnknown(row.current_period_end) ??
-    isoFromUnknown(row.next_billing_at) ??
-    isoFromUnknown(row.updated_at) ??
-    new Date().toISOString()
-  ).slice(0, 10);
 }
 
 function batchLimitFromEnv(): number {
@@ -79,208 +67,33 @@ function getSubscriptionId(row: Row): string | null {
   return typeof row.id === "string" && row.id.trim() ? row.id : null;
 }
 
-function getUserId(row: Row, key: "student_id" | "mentor_id"): string | null {
-  const value = row[key];
-  return typeof value === "string" && value.trim() ? value : null;
-}
-
-function getTier(row: Row): SubscribePlanTier | null {
-  return isSubscribePlanTier(row.plan_tier) ? row.plan_tier : null;
-}
-
 function addDaysUtc(value: Date, days: number): Date {
   return new Date(value.getTime() + days * 24 * 60 * 60 * 1000);
 }
 
-function isDuplicateKeyError(error: unknown): boolean {
-  const maybe = error as { code?: string; message?: string } | null;
-  const message = maybe?.message ?? "";
-  return maybe?.code === "23505" || /duplicate key|unique constraint/i.test(message);
-}
-
-async function upsertTerminalBillingEvent(
-  supabase: SupabaseClient,
-  args: {
-    row: Row;
-    eventType: "canceled" | "expired";
-    idempotencyKey: string;
-    atIso: string;
-  }
-): Promise<string | null> {
-  const subscriptionId = getSubscriptionId(args.row);
-  const studentId = getUserId(args.row, "student_id");
-  const mentorId = getUserId(args.row, "mentor_id");
-  if (!subscriptionId || !studentId || !mentorId) return null;
-
-  const payload: Row = {
-    subscription_id: subscriptionId,
-    student_id: studentId,
-    mentor_id: mentorId,
-    event_type: args.eventType,
-    status: "succeeded",
-    period_start: isoFromUnknown(args.row.current_period_start),
-    period_end: isoFromUnknown(args.row.current_period_end),
-    billing_at: args.atIso,
-    amount_cents: null,
-    plan_tier: typeof args.row.plan_tier === "string" ? args.row.plan_tier : null,
-    plan_id: typeof args.row.plan_id === "string" ? args.row.plan_id : null,
-    idempotency_key: args.idempotencyKey,
-    created_at: args.atIso,
-    processed_at: args.atIso,
-  };
-
-  const { data, error } = await supabase
-    .from("subscription_billing_events")
-    .upsert(payload, { onConflict: "idempotency_key" })
-    .select("id")
-    .maybeSingle();
-
-  if (error) {
-    console.error("[subscriptionRenewal] terminal event upsert failed", {
-      subscriptionId,
-      eventType: args.eventType,
-      error: error.message,
-    });
-    return null;
-  }
-
-  const id = (data as Row | null)?.id;
-  return typeof id === "string" ? id : null;
-}
-
-async function markCanceledAtPeriodEnd(
+async function finalizeTerminalTransition(
   supabase: SupabaseClient,
   row: Row,
+  transition: "cancel_at_period_end" | "grace_expired",
   atIso: string
 ): Promise<boolean> {
   const subscriptionId = getSubscriptionId(row);
-  if (!subscriptionId) return false;
-  // D-ST-16: 사용자 자발 해지(예약 만료)는 'canceled' 로 기록한다. 미납 만료(markExpired)의
-  // 'expired' 와 event_type 으로 구분되어야 환불·정산·CS 분석에서 오분류되지 않는다.
-  // ('canceled' 는 064 event_type CHECK 에 포함된 허용값이다.)
-  const eventId = await upsertTerminalBillingEvent(supabase, {
-    row,
-    eventType: "canceled",
-    idempotencyKey: `sub_cancel:${subscriptionId}:${periodKeyFromRow(row)}`,
-    atIso,
+  const periodEnd = timestampFromUnknown(row.current_period_end);
+  if (!subscriptionId || !periodEnd) return false;
+  const prefix = transition === "cancel_at_period_end" ? "sub_cancel" : "sub_expired";
+  const { data, error } = await supabase.rpc("finalize_subscription_terminal_transition", {
+    p_subscription_id: subscriptionId,
+    p_transition: transition,
+    p_at: atIso,
+    p_idempotency_key: `${prefix}:${subscriptionId}:${new Date(periodEnd).toISOString().slice(0, 10)}`,
   });
-
-  const patch: Row = {
-    status: "expired",
-    canceled_at: atIso,
-    expired_at: atIso,
-    next_billing_at: null,
-    updated_at: atIso,
-  };
-  if (eventId) patch.last_billing_event_id = eventId;
-
-  // 만료 알림은 157 트리거(subscriptions status→expired 전이)가 도메인 write 와 원자적으로 발행한다.
-  const { error } = await supabase.from(SUBSCRIPTIONS_TABLE).update(patch).eq("id", subscriptionId);
-  if (error) {
-    console.error("[subscriptionRenewal] cancel transition failed", { subscriptionId, error: error.message });
-    return false;
-  }
-  return true;
-}
-
-async function markExpired(
-  supabase: SupabaseClient,
-  row: Row,
-  atIso: string
-): Promise<boolean> {
-  const subscriptionId = getSubscriptionId(row);
-  if (!subscriptionId) return false;
-  const eventId = await upsertTerminalBillingEvent(supabase, {
-    row,
-    eventType: "expired",
-    idempotencyKey: `sub_expired:${subscriptionId}:${periodKeyFromRow(row)}`,
-    atIso,
-  });
-
-  const patch: Row = {
-    status: "expired",
-    expired_at: atIso,
-    next_billing_at: null,
-    updated_at: atIso,
-  };
-  if (eventId) patch.last_billing_event_id = eventId;
-
-  // 만료 알림은 157 트리거(subscriptions status→expired 전이)가 도메인 write 와 원자적으로 발행한다.
-  const { error } = await supabase.from(SUBSCRIPTIONS_TABLE).update(patch).eq("id", subscriptionId);
-  if (error) {
-    console.error("[subscriptionRenewal] expire transition failed", { subscriptionId, error: error.message });
-    return false;
-  }
-  return true;
-}
-
-async function resolveRenewalAmountCents(
-  supabase: SupabaseClient,
-  row: Row
-): Promise<{ ok: true; amountCents: number } | { ok: false; error: string }> {
-  const tier = getTier(row);
-  const mentorId = getUserId(row, "mentor_id");
-  if (!tier) return { ok: false, error: "invalid_plan_tier" };
-  if (!mentorId) return { ok: false, error: "missing_mentor_id" };
-
-  const plans = await fetchPlansForMentor(supabase, mentorId);
-  if (plans.error) {
-    console.warn("[subscriptionRenewal] plan fetch failed; using tier fallback if possible", {
-      mentorId,
-      tier,
-      error: plans.error,
+  if (error || !data || data.ok !== true) {
+    console.error("[subscriptionRenewal] terminal transition failed", {
+      subscriptionId, code: error?.message ?? data?.code ?? "empty_rpc_result",
     });
+    return false;
   }
-  const { byTier } = assignPlansByTier(plans.rows);
-  const amountCents = mentorPlanDebitAmountCents(byTier[tier], tier);
-  if (!Number.isFinite(amountCents) || amountCents <= 0) {
-    return { ok: false, error: "invalid_amount" };
-  }
-  return { ok: true, amountCents };
-}
-
-async function insertPreRenewalNoticeMarker(
-  supabase: SupabaseClient,
-  args: {
-    row: Row;
-    amountCents: number;
-    idempotencyKey: string;
-    atIso: string;
-  }
-): Promise<"inserted" | "duplicate" | "failed"> {
-  const subscriptionId = getSubscriptionId(args.row);
-  const studentId = getUserId(args.row, "student_id");
-  const mentorId = getUserId(args.row, "mentor_id");
-  if (!subscriptionId || !studentId || !mentorId) return "failed";
-
-  const payload: Row = {
-    subscription_id: subscriptionId,
-    student_id: studentId,
-    mentor_id: mentorId,
-    event_type: "renewal",
-    status: "skipped",
-    period_start: isoFromUnknown(args.row.current_period_start),
-    period_end: isoFromUnknown(args.row.current_period_end),
-    billing_at: isoFromUnknown(args.row.next_billing_at) ?? args.atIso,
-    amount_cents: args.amountCents,
-    plan_tier: typeof args.row.plan_tier === "string" ? args.row.plan_tier : null,
-    plan_id: typeof args.row.plan_id === "string" ? args.row.plan_id : null,
-    idempotency_key: args.idempotencyKey,
-    failure_code: "pre_renewal_notice_sent",
-    failure_message: "pre-renewal notice marker",
-    attempt_count: 0,
-    created_at: args.atIso,
-    processed_at: args.atIso,
-  };
-
-  const { error } = await supabase.from("subscription_billing_events").insert(payload);
-  if (!error) return "inserted";
-  if (isDuplicateKeyError(error)) return "duplicate";
-  console.error("[subscriptionRenewal] pre-renewal notice marker failed", {
-    subscriptionId,
-    error: error.message,
-  });
-  return "failed";
+  return true;
 }
 
 async function sendPreRenewalNotice(
@@ -289,27 +102,16 @@ async function sendPreRenewalNotice(
   atIso: string
 ): Promise<{ code: "sent" | "already" | "skipped"; message?: string }> {
   const subscriptionId = getSubscriptionId(row);
-  if (!subscriptionId) return { code: "skipped", message: "missing_subscription_id" };
-
-  const price = await resolveRenewalAmountCents(supabase, row);
-  if (!price.ok) return { code: "skipped", message: price.error };
-
-  const nextBillingAt = isoFromUnknown(row.next_billing_at);
-  const periodEnd = isoFromUnknown(row.current_period_end) ?? nextBillingAt;
-  if (!nextBillingAt || !periodEnd) {
-    return { code: "skipped", message: "missing_billing_date" };
-  }
-
-  // 예고 알림은 157 트리거(마커 INSERT)가 도메인 write 와 원자적으로 발행한다.
-  const marker = await insertPreRenewalNoticeMarker(supabase, {
-    row,
-    amountCents: price.amountCents,
-    idempotencyKey: `sub_renewal_notice:${subscriptionId}:${periodEnd.slice(0, 10)}`,
-    atIso,
+  const periodEnd = timestampFromUnknown(row.current_period_end);
+  if (!subscriptionId || !periodEnd) return { code: "skipped", message: "missing_subscription_period" };
+  // The DB resolves the bound plan and writes the marker under the same lock/transaction.
+  const { data, error } = await supabase.rpc("record_subscription_renewal_notice", {
+    p_subscription_id: subscriptionId, p_period_end: periodEnd, p_at: atIso,
   });
-  if (marker === "duplicate") return { code: "already" };
-  if (marker === "failed") return { code: "skipped", message: "notice_marker_failed" };
-  return { code: "sent" };
+  if (error || !data || data.ok !== true) {
+    return { code: "skipped", message: error?.message ?? data?.code ?? "empty_rpc_result" };
+  }
+  return { code: data.code === "sent" ? "sent" : "already" };
 }
 
 async function processRenewal(
@@ -320,16 +122,13 @@ async function processRenewal(
   const subscriptionId = getSubscriptionId(row);
   if (!subscriptionId) return { code: "skipped", message: "missing_subscription_id" };
 
-  const price = await resolveRenewalAmountCents(supabase, row);
-  if (!price.ok) return { code: "skipped", message: price.error };
+  const periodEnd = timestampFromUnknown(row.current_period_end);
+  if (!periodEnd) return { code: "skipped", message: "missing_subscription_period" };
+  const idempotencyKey = `sub_renewal:${subscriptionId}:${new Date(periodEnd).toISOString().slice(0, 10)}`;
 
-  const periodEnd = isoFromUnknown(row.current_period_end) ?? isoFromUnknown(row.next_billing_at) ?? atIso;
-  const idempotencyKey = `sub_renewal:${subscriptionId}:${periodEnd.slice(0, 10)}`;
-
-  const { data, error } = await supabase.rpc("process_subscription_renewal", {
+  const { data, error } = await supabase.rpc("process_subscription_renewal_v2", {
     p_subscription_id: subscriptionId,
     p_period_end: periodEnd,
-    p_amount_cents: price.amountCents,
     p_idempotency_key: idempotencyKey,
     p_processed_at: atIso,
   });
@@ -400,13 +199,11 @@ export async function runSubscriptionRenewalBatch(
     }
   }
 
-  const { data, error } = await supabase
-    .from(SUBSCRIPTIONS_TABLE)
-    .select(SUBSCRIPTIONS_SELECT)
-    .lte("next_billing_at", atIso)
-    .in("status", RENEWABLE_STATUSES)
-    .order("next_billing_at", { ascending: true })
-    .limit(batchLimitFromEnv());
+  // DB selection rotates past previously attempted rows, even if a later RPC fails.
+  const { data, error } = await supabase.rpc("claim_subscription_renewal_batch", {
+    p_at: atIso,
+    p_limit: batchLimitFromEnv(),
+  });
 
   if (error) {
     summary.errors.push({ subscriptionId: null, code: "query_failed", message: error.message });
@@ -419,10 +216,10 @@ export async function runSubscriptionRenewalBatch(
   for (const row of rows) {
     const subscriptionId = getSubscriptionId(row);
     const status = normalizeStatus(row.status);
-    const graceUntil = isoFromUnknown(row.grace_until);
+    const graceUntil = timestampFromUnknown(row.grace_until);
 
     if (boolFromUnknown(row.cancel_at_period_end)) {
-      if (await markCanceledAtPeriodEnd(supabase, row, atIso)) summary.canceled += 1;
+      if (await finalizeTerminalTransition(supabase, row, "cancel_at_period_end", atIso)) summary.canceled += 1;
       else {
         summary.skipped += 1;
         summary.errors.push({ subscriptionId, code: "cancel_failed", message: "cancel transition failed" });
@@ -431,7 +228,7 @@ export async function runSubscriptionRenewalBatch(
     }
 
     if (status === "past_due" && graceUntil && new Date(graceUntil).getTime() <= at.getTime()) {
-      if (await markExpired(supabase, row, atIso)) summary.expired += 1;
+      if (await finalizeTerminalTransition(supabase, row, "grace_expired", atIso)) summary.expired += 1;
       else {
         summary.skipped += 1;
         summary.errors.push({ subscriptionId, code: "expire_failed", message: "expire transition failed" });
@@ -464,7 +261,7 @@ export async function runSubscriptionRenewalBatch(
 /**
  * P1 ① — 캐시 충전 직후 past_due 구독 즉시 복구.
  * 충전 성공 후 그 학생의 past_due 구독을 찾아 한 번씩 갱신 RPC 를 호출한다.
- * (검증된 process_subscription_renewal 멱등 로직 그대로 사용. 잔액이 부족하면 past_due 유지)
+ * (검증된 process_subscription_renewal_v2 멱등 로직 그대로 사용. 잔액이 부족하면 past_due 유지)
  */
 export async function recoverPastDueSubscriptionsForStudent(
   supabase: SupabaseClient,

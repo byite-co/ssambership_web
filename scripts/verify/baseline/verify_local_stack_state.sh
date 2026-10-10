@@ -53,7 +53,9 @@ echo "open_transactions=$OPEN"
 [ "$OPEN" = "0" ] || bad "idle in transaction $OPEN 건 — baseline 내부 BEGIN/COMMIT 누수 의심"
 
 echo "=== [4] 구조 카운트"
-# 기대치는 123본 pack(생성기 122 + PR60 1) 기준
+# 2026-10 구독 경계: public RPC +4, core_private +3 (billing/checkout/directory), api_web_v1 +1.
+# 126본: public +1 batch claim, core_private +3 (renewal block + initial event/link guards).
+# 이전 기대치는 123본 pack(생성기 122 + PR60 1) 기준
 # (tables=84 functions=230 policies=175 buckets=13)이며, PG16 스크래치 재생 실측
 # (scripts/verify/local_db5_batch_check.sh [7])과 일치한다.
 # (프로덕션 원장은 118본 — 20260906100100~100500 미적용 상태다. DB-4 6본은 2026-09-05 적용 완료.)
@@ -144,7 +146,7 @@ count_check(){ # count_check <label> <expected> <sql>
 }
 count_check tables 84 "select count(*) from pg_class c join pg_namespace n on n.oid=c.relnamespace
                        where n.nspname='public' and c.relkind='r'"
-count_check functions 230 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+count_check functions 235 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace
                            where n.nspname='public'"
 count_check policies 175 "select count(*) from pg_policies where schemaname='public'"
 count_check buckets 13 "select count(*) from storage.buckets"
@@ -155,7 +157,7 @@ count_check realtime_messages_policies 2 "select count(*) from pg_policies where
 
 echo "=== [4c] api_app_v1 · core_private 함수 census (DB-4 20260905100100~100600 앱 래퍼 10 + 환불 impl 1 · DB-5 20260906100200/100300/100400 +3 · core_private impl +4)"
 count_check api_app_v1_functions 19 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='api_app_v1'"
-count_check core_private_functions 12 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='core_private'"
+count_check core_private_functions 18 "select count(*) from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='core_private'"
 q "select p.proname||'|anon='||has_function_privilege('anon',p.oid,'EXECUTE')::text
      ||'|auth='||has_function_privilege('authenticated',p.oid,'EXECUTE')::text
      ||'|svc='||has_function_privilege('service_role',p.oid,'EXECUTE')::text

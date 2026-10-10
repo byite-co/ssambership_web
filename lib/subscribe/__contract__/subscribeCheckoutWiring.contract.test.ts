@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 // S2-2 W3(C8) 배선 회귀 방지(소스 스캔 tripwire).
-// 구독 checkout 확정은 F12 subscription_checkout_confirm_v2 단일 호출이 정본이고,
+// 구독 checkout 확정은 F12 subscription_checkout_confirm_v3 단일 호출이 정본이고,
 // 레거시 confirm 직접 호출·JS 방 생성·SUB/PAY_TABLES 확정 경로 프로빙은 금지다(W3 §8).
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
@@ -13,7 +13,7 @@ const read = (rel: string) => readFileSync(join(ROOT, rel), "utf8");
 
 test("W3(C8): 확정은 F12 단일 호출 — 레거시 confirm 직접 호출 0", () => {
   const svc = read("lib/subscribe/subscribeCheckoutService.ts");
-  assert.ok(svc.includes('"subscription_checkout_confirm_v2"'), "F12 호출이 없음");
+  assert.ok(svc.includes('"subscription_checkout_confirm_v3"'), "F12 호출이 없음");
   assert.ok(svc.includes("callApiWebV1Rpc"), "공용 envelope helper 미사용(임의 parser 중복 금지 — W3 §9)");
   assert.ok(!svc.includes('rpc("confirm_subscription_checkout"'), "레거시 confirm_subscription_checkout 직접 호출이 부활함");
   // 기존 안정 멱등키 유지(재시도마다 새 키 금지).

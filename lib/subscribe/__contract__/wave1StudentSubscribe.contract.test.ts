@@ -31,12 +31,9 @@ test("D-ST-12: /subscribe 로더의 영구 빈 프로모션 스텁 제거", () =
   assert.ok(!q.includes("emptyPromotionsLoad"), "프로모션 스텁(emptyPromotionsLoad)이 잔존함");
 });
 
-test("D-ST-16: 해지 예약 만료는 'canceled', 미납 만료는 'expired' 로 구분 기록한다", () => {
+test("D-ST-16: 종료 사유를 원자 DB 전이에 전달한다", () => {
   const q = read("lib/subscribe/subscriptionRenewalBatch.ts");
-  const cancelFn = q.slice(
-    q.indexOf("async function markCanceledAtPeriodEnd"),
-    q.indexOf("async function markExpired"),
-  );
-  assert.ok(cancelFn.length > 0, "markCanceledAtPeriodEnd 를 찾지 못함");
-  assert.ok(cancelFn.includes('eventType: "canceled"'), "해지 예약 만료가 여전히 'expired' 로 기록됨");
+  assert.ok(q.includes('"finalize_subscription_terminal_transition"'));
+  assert.ok(q.includes('finalizeTerminalTransition(supabase, row, "cancel_at_period_end", atIso)'));
+  assert.ok(q.includes('finalizeTerminalTransition(supabase, row, "grace_expired", atIso)'));
 });
